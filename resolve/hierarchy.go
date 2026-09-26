@@ -4,10 +4,7 @@
 package resolve
 
 import (
-	"encoding/xml"
 	"fmt"
-	"io"
-	"os"
 	"sort"
 
 	"github.com/okaiser/go-panos-schema/config"
@@ -28,13 +25,12 @@ type Hierarchy struct {
 
 // NewHierarchy reads the device-group tree from a configuration.
 func NewHierarchy(cfg *config.Config) (*Hierarchy, error) {
-	parents, err := readParentDg(cfg.Path())
-	if err != nil {
-		return nil, err
+	h := &Hierarchy{
+		parent:   readParentDg(cfg.Root()),
+		children: map[string][]string{},
 	}
-	h := &Hierarchy{parent: parents, children: map[string][]string{}}
 	seen := map[string]bool{}
-	for dg, p := range parents {
+	for dg, p := range h.parent {
 		seen[dg] = true
 		if p == "" {
 			continue
@@ -43,7 +39,7 @@ func NewHierarchy(cfg *config.Config) (*Hierarchy, error) {
 		h.children[p] = append(h.children[p], dg)
 	}
 	for dg := range seen {
-		if parents[dg] == "" {
+		if h.parent[dg] == "" {
 			h.roots = append(h.roots, dg)
 		}
 	}
@@ -107,82 +103,13 @@ func (h *Hierarchy) Chain(dg string) []config.Scope {
 // readParentDg reads /config/readonly/devices/entry/device-group/entry/parent-dg.
 // A device group with no parent-dg maps to the empty string, so roots are known.
 //
-// Only the readonly section at the top level counts. A template's nested config
-// can hold its own readonly section, which describes that template, not the
-// Panorama device groups.
-func readParentDg(path string) (map[string]string, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, fmt.Errorf("resolve: open %s: %w", path, err)
-	}
-	defer func() { _ = f.Close() }()
-
+// The path is matched exactly. A template's nested configuration can hold its own
+// readonly section, which describes that template rather than the Panorama device
+// groups.
+func readParentDg(root *config.Element) map[string]string {
 	out := map[string]string{}
-	dec := xml.NewDecoder(f)
-	var elems []string
-	inConfig := false
-
-	for {
-		tok, terr := dec.Token()
-		if terr == io.EOF {
-			return out, nil
-		}
-		if terr != nil {
-			return nil, fmt.Errorf("resolve: read %s: %w", path, terr)
-		}
-		switch tv := tok.(type) {
-		case xml.StartElement:
-			if !inConfig {
-				if tv.Name.Local != "config" {
-					continue
-				}
-				inConfig = true
-			}
-			elems = append(elems, tv.Name.Local)
-
-			// Match exactly /config/readonly/devices/entry/device-group/entry.
-			if !atTopLevelReadonlyDeviceGroupEntry(elems) {
-				continue
-			}
-			name := ""
-			for _, a := range tv.Attr {
-				if a.Name.Local == "name" {
-					name = a.Value
-				}
-			}
-			var e struct {
-				ParentDg string `xml:"parent-dg"`
-			}
-			if err := dec.DecodeElement(&e, &tv); err != nil {
-				return nil, fmt.Errorf("resolve: read parent-dg for %q: %w", name, err)
-			}
-			out[name] = e.ParentDg
-			elems = elems[:len(elems)-1]
-		case xml.EndElement:
-			if !inConfig || len(elems) == 0 {
-				continue
-			}
-			elems = elems[:len(elems)-1]
-			if len(elems) == 0 {
-				return out, nil
-			}
-		}
+	for _, e := range root.Find("readonly", "devices", "entry", "device-group", "entry") {
+		out[e.Attr("name")] = e.Child("parent-dg").TextOr("")
 	}
-}
-
-// wantParentDgPath is the only place a device group's parent is recorded.
-var wantParentDgPath = []string{
-	"config", "readonly", "devices", "entry", "device-group", "entry",
-}
-
-func atTopLevelReadonlyDeviceGroupEntry(elems []string) bool {
-	if len(elems) != len(wantParentDgPath) {
-		return false
-	}
-	for i := range elems {
-		if elems[i] != wantParentDgPath[i] {
-			return false
-		}
-	}
-	return true
+	return out
 }

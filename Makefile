@@ -92,8 +92,11 @@ config/schemadigest: $(DIGEST_DIR)
 generate: build-local config/schemadigest ## Regenerate the config model from the committed digests
 	$(BIN_DIR)/$(BINARY) generate -digest $(DIGEST_DIR) -out config
 
+# Only the generated model is checked. config/ also holds hand-written code, and
+# diffing the whole directory would report ordinary edits as generator drift.
+GENERATED := config/v*/
 generate-check: generate ## Fail if the committed model differs from a fresh run
-	@git diff --exit-code -- config || { \
+	@git diff --exit-code -- $(GENERATED) || { \
 		echo "The generated model is stale. Run 'make generate' and commit the result."; \
 		exit 1; \
 	}

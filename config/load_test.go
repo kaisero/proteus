@@ -70,3 +70,42 @@ func TestLoadRejectsAFileWithNoConfigElement(t *testing.T) {
 		t.Fatal("want an error for a file with no <config> element")
 	}
 }
+
+func TestConfigAccessors(t *testing.T) {
+	cfg, _, err := Load("../testdata/config/panorama-lab.xml")
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Path() != "../testdata/config/panorama-lab.xml" {
+		t.Errorf("Path = %q", cfg.Path())
+	}
+	if cfg.Digest() == nil {
+		t.Error("Digest must return the schema root")
+	}
+	root := cfg.Root()
+	if root == nil || root.Name != "config" {
+		t.Fatalf("Root = %v, want the config element", root)
+	}
+	if root.Child("devices") == nil {
+		t.Error("the root must carry the parsed tree")
+	}
+}
+
+// The schema is decoded once per process and shared, so two loads of the same
+// version get the same schema.
+func TestSchemaIsSharedBetweenLoads(t *testing.T) {
+	a, _, err := Load("../testdata/config/panorama-lab.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _, err := Load("../testdata/config/panorama-lab-wrapped.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a.Digest() != b.Digest() {
+		t.Error("two configurations of the same version must share one decoded schema")
+	}
+	if a.Root() == b.Root() {
+		t.Error("but each keeps its own parsed tree")
+	}
+}

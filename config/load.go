@@ -1,11 +1,10 @@
 package config
 
 import (
-	"encoding/xml"
 	"fmt"
-	"io"
 	"os"
 	"strings"
+	"sync"
 
 	"github.com/okaiser/go-panos-schema/internal/digest"
 	"github.com/okaiser/go-panos-schema/internal/schema"
@@ -30,14 +29,19 @@ func (p Platform) String() string {
 // supported lists the PAN-OS versions this build carries a digest for.
 var supported = []string{"11.2.0"}
 
-// Config is a loaded configuration: the file, the schema that describes it, and
-// the facts read from the root element. It is immutable once loaded.
+// Config is a loaded configuration: the parsed file, the schema that describes it,
+// and the facts read from the root element. It is immutable once loaded.
+//
+// The file is parsed once, here. Every reader in resolve and index works on the
+// element tree rather than reopening the path, because reading per query cost 17
+// parses for a single index build.
 type Config struct {
 	path          string
 	version       string
 	detailVersion string
 	platform      Platform
-	root          *schema.Node
+	schema        *loadedSchema
+	root          *Element
 }
 
 // Version returns the schema version from the config root, e.g. 11.2.0.
@@ -53,7 +57,10 @@ func (c *Config) Platform() Platform { return c.platform }
 func (c *Config) Path() string { return c.path }
 
 // Digest returns the schema root that describes this configuration.
-func (c *Config) Digest() *schema.Node { return c.root }
+func (c *Config) Digest() *schema.Node { return c.schema.root }
+
+// Root returns the parsed config element. It is read-only.
+func (c *Config) Root() *Element { return c.root }
 
 // Load reads a configuration file and the schema digest that describes it.
 //
@@ -68,74 +75,67 @@ func Load(path string) (*Config, Report, error) {
 	}
 	defer func() { _ = f.Close() }()
 
-	version, detail, platform, err := sniff(f)
+	root, err := parseTree(f)
 	if err != nil {
 		return nil, rep, fmt.Errorf("config: %s: %w", path, err)
 	}
+	version := root.Attr("version")
+	if version == "" {
+		return nil, rep, fmt.Errorf("config: %s: the <config> element has no version attribute", path)
+	}
+	platform := platformOf(root)
 
-	root, err := loadDigest(version, platform)
+	sch, err := loadDigest(version, platform)
 	if err != nil {
 		return nil, rep, err
 	}
 	return &Config{
-		path: path, version: version, detailVersion: detail,
-		platform: platform, root: root,
+		path: path, version: version, detailVersion: root.Attr("detail-version"),
+		platform: platform, schema: sch, root: root,
 	}, rep, nil
 }
 
-// sniff reads the root element and the first marker that names the platform.
+// platformOf reports whether a configuration came from a firewall or Panorama.
 //
 // Panorama writes device-group, template and template-stack under devices/entry;
-// a firewall writes vsys. The first of those to appear decides.
-func sniff(r io.Reader) (version, detail string, platform Platform, err error) {
-	dec := xml.NewDecoder(r)
-	inConfig := false
-	for {
-		tok, terr := dec.Token()
-		if terr == io.EOF {
-			break
-		}
-		if terr != nil {
-			return "", "", 0, fmt.Errorf("read: %w", terr)
-		}
-		se, ok := tok.(xml.StartElement)
-		if !ok {
-			continue
-		}
-		if !inConfig {
-			if se.Name.Local != "config" {
-				continue
+// a firewall writes vsys. A configuration with neither is a firewall with nothing
+// configured.
+func platformOf(root *Element) Platform {
+	for _, d := range root.Find("devices", "entry") {
+		for _, marker := range []string{"device-group", "template", "template-stack"} {
+			if d.Child(marker) != nil {
+				return Panorama
 			}
-			inConfig = true
-			for _, a := range se.Attr {
-				switch a.Name.Local {
-				case "version":
-					version = a.Value
-				case "detail-version":
-					detail = a.Value
-				}
-			}
-			if version == "" {
-				return "", "", 0, fmt.Errorf("the <config> element has no version attribute")
-			}
-			continue
-		}
-		switch se.Name.Local {
-		case "device-group", "template", "template-stack":
-			return version, detail, Panorama, nil
-		case "vsys":
-			return version, detail, Firewall, nil
 		}
 	}
-	if !inConfig {
-		return "", "", 0, fmt.Errorf("no <config> element found")
-	}
-	// A configuration with neither marker is a firewall with nothing configured.
-	return version, detail, Firewall, nil
+	return Firewall
 }
 
-func loadDigest(version string, platform Platform) (*schema.Node, error) {
+// loadedSchema is a decoded digest and the reference table derived from it.
+//
+// Both are immutable and both are expensive: decoding a digest costs about 40 ms,
+// and building the reference table walks all 2,291 entry arrays for about 15 ms.
+// Neither depends on a configuration file, so both are computed once per process
+// and shared by every Config that uses that schema.
+type loadedSchema struct {
+	root *schema.Node
+	refs refTable
+}
+
+var (
+	schemaMu    sync.Mutex
+	schemaCache = map[string]*loadedSchema{}
+)
+
+func loadDigest(version string, platform Platform) (*loadedSchema, error) {
 	name := digest.Filename(platform.String(), version)
+
+	schemaMu.Lock()
+	defer schemaMu.Unlock()
+	if ls, ok := schemaCache[name]; ok {
+		return ls, nil
+	}
+
 	f, err := digestFS.Open("schemadigest/" + name)
 	if err != nil {
 		return nil, fmt.Errorf("config: no schema for PAN-OS %s %s; this build supports %s",
@@ -146,5 +146,7 @@ func loadDigest(version string, platform Platform) (*schema.Node, error) {
 	if err != nil {
 		return nil, fmt.Errorf("config: read digest %s: %w", name, err)
 	}
-	return d.Root, nil
+	ls := &loadedSchema{root: d.Root, refs: buildRefTable(d.Root)}
+	schemaCache[name] = ls
+	return ls, nil
 }

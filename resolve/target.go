@@ -1,10 +1,7 @@
 package resolve
 
 import (
-	"encoding/xml"
 	"fmt"
-	"io"
-	"os"
 	"sort"
 
 	"github.com/okaiser/go-panos-schema/config"
@@ -17,7 +14,7 @@ import (
 // effective policies. Observed on Panorama 11.2.7-h1: serial 007900000000004 had
 // vsys3 in at-ktn and vsys2 in at-ooe.
 type Target struct {
-	path          string
+	root          *config.Element
 	serial        string
 	vsys          string
 	deviceGroup   string
@@ -53,14 +50,11 @@ func Targets(cfg *config.Config) ([]*Target, error) {
 	if err != nil {
 		return nil, err
 	}
-	assign, stacks, err := readAssignments(cfg.Path())
-	if err != nil {
-		return nil, err
-	}
+	assign, stacks := readAssignments(cfg.Root())
 	out := make([]*Target, 0, len(assign))
 	for k, dg := range assign {
 		out = append(out, &Target{
-			path:          cfg.Path(),
+			root:          cfg.Root(),
 			serial:        k.serial,
 			vsys:          k.vsys,
 			deviceGroup:   dg,
@@ -108,109 +102,33 @@ type devKey struct{ serial, vsys string }
 // A device entry without a vsys child is a single-vsys firewall, recorded as
 // vsys1, which is what PAN-OS calls it.
 //
-// Only the top-level sections count. A template's nested config and the readonly
-// section both contain device-group elements of their own.
-func readAssignments(path string) (map[devKey]string, map[string]string, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, nil, fmt.Errorf("resolve: open %s: %w", path, err)
-	}
-	defer func() { _ = f.Close() }()
-
-	type devices struct {
-		Entry []struct {
-			Name string `xml:"name,attr"`
-			Vsys struct {
-				Entry []struct {
-					Name string `xml:"name,attr"`
-				} `xml:"entry"`
-			} `xml:"vsys"`
-		} `xml:"entry"`
-	}
-
+// Both paths are matched exactly. A template's nested configuration and the
+// readonly section each hold device-group elements of their own, and counting
+// those would invent device groups that do not exist.
+func readAssignments(root *config.Element) (map[devKey]string, map[string]string) {
 	assign := map[devKey]string{}
 	stacks := map[string]string{}
-	dec := xml.NewDecoder(f)
-	var elems []string
-	inConfig := false
 
-	for {
-		tok, terr := dec.Token()
-		if terr == io.EOF {
-			return assign, stacks, nil
-		}
-		if terr != nil {
-			return nil, nil, fmt.Errorf("resolve: read %s: %w", path, terr)
-		}
-		switch tv := tok.(type) {
-		case xml.StartElement:
-			if !inConfig {
-				if tv.Name.Local != "config" {
-					continue
-				}
-				inConfig = true
-			}
-			elems = append(elems, tv.Name.Local)
-
-			container, ok := topLevelContainer(elems)
-			if !ok {
+	for _, dg := range root.Find("devices", "entry", "device-group", "entry") {
+		name := dg.Attr("name")
+		for _, dev := range dg.Find("devices", "entry") {
+			serial := dev.Attr("name")
+			vsyses := dev.Find("vsys", "entry")
+			if len(vsyses) == 0 {
+				assign[devKey{serial, "vsys1"}] = name
 				continue
 			}
-			name := ""
-			for _, a := range tv.Attr {
-				if a.Name.Local == "name" {
-					name = a.Value
-				}
-			}
-			var e struct {
-				Devices devices `xml:"devices"`
-			}
-			if err := dec.DecodeElement(&e, &tv); err != nil {
-				return nil, nil, fmt.Errorf("resolve: read %s %q: %w", container, name, err)
-			}
-			for _, d := range e.Devices.Entry {
-				switch container {
-				case "device-group":
-					if len(d.Vsys.Entry) == 0 {
-						assign[devKey{d.Name, "vsys1"}] = name
-						continue
-					}
-					for _, v := range d.Vsys.Entry {
-						assign[devKey{d.Name, v.Name}] = name
-					}
-				case "template-stack":
-					stacks[d.Name] = name
-				}
-			}
-			elems = elems[:len(elems)-1]
-		case xml.EndElement:
-			if !inConfig || len(elems) == 0 {
-				continue
-			}
-			elems = elems[:len(elems)-1]
-			if len(elems) == 0 {
-				return assign, stacks, nil
+			for _, v := range vsyses {
+				assign[devKey{serial, v.Attr("name")}] = name
 			}
 		}
 	}
-}
-
-// topLevelContainer reports whether the element just opened is an entry of a
-// top-level device-group or template-stack, i.e. the path is exactly
-// /config/devices/entry/<container>/entry.
-func topLevelContainer(elems []string) (string, bool) {
-	if len(elems) != 5 {
-		return "", false
+	for _, ts := range root.Find("devices", "entry", "template-stack", "entry") {
+		for _, dev := range ts.Find("devices", "entry") {
+			stacks[dev.Attr("name")] = ts.Attr("name")
+		}
 	}
-	if elems[0] != "config" || elems[1] != "devices" || elems[2] != "entry" ||
-		elems[4] != "entry" {
-		return "", false
-	}
-	switch elems[3] {
-	case "device-group", "template-stack":
-		return elems[3], true
-	}
-	return "", false
+	return assign, stacks
 }
 
 func dedup(in []string) []string {
