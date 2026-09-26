@@ -9,6 +9,10 @@ HOST ?=
 SCHEMA_DIR := schemas
 DIGEST_DIR := schemadigest
 
+# PAN-OS config version the schemas in $(SCHEMA_DIR) came from, e.g. 11.2.0.
+# Read it from the <config version="..."> attribute of a config from that device.
+PANOS_VERSION ?=
+
 # Pinned dev-tool versions (CI installs the same ones; keep in sync with .github).
 GOLANGCI_VERSION    := v2.13.1
 GOFUMPT_VERSION     := v0.11.0
@@ -20,7 +24,8 @@ GOFUMPT     := $(GOBIN)/gofumpt
 GOVULNCHECK := $(GOBIN)/govulncheck
 
 .PHONY: help tools fmt fmt-check vet lint test test-race cover test-cov \
-        vuln tidy-check gate ci build build-local generate schema-digest schema-pull hooks clean
+        vuln tidy-check gate ci build build-local generate generate-check schema-digest \
+        schema-pull hooks clean
 
 help: ## Show this help
 	@grep -hE '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | sort | \
@@ -70,15 +75,22 @@ tidy-check: ## Fail if go.mod/go.sum are not tidy
 
 gate: tidy-check lint test ## Fast pre-commit gate (tidy + lint + unit tests)
 
-ci: tidy-check lint test-race test-cov build vuln ## Everything CI runs
+ci: tidy-check lint test-race test-cov generate-check build vuln ## Everything CI runs
 
 ## --- generate / build ---
 
-schema-digest: build-local ## Build committed digests from the vendor XML in $(SCHEMA_DIR)
-	$(BIN_DIR)/$(BINARY) digest -schema $(SCHEMA_DIR) -out $(DIGEST_DIR)
+schema-digest: build-local ## Build committed digests from $(SCHEMA_DIR) (PANOS_VERSION=x.y.z)
+	@test -n "$(PANOS_VERSION)" || { echo "usage: make schema-digest PANOS_VERSION=11.2.0"; exit 1; }
+	$(BIN_DIR)/$(BINARY) digest -schema $(SCHEMA_DIR) -out $(DIGEST_DIR) -version $(PANOS_VERSION)
 
 generate: build-local ## Regenerate the config model from the committed digests
 	$(BIN_DIR)/$(BINARY) generate -digest $(DIGEST_DIR) -out config
+
+generate-check: generate ## Fail if the committed model differs from a fresh run
+	@git diff --exit-code -- config || { \
+		echo "The generated model is stale. Run 'make generate' and commit the result."; \
+		exit 1; \
+	}
 
 schema-pull: ## Copy schema.xml/cms-schema.xml/opschema.xml off a PAN-OS host (HOST=user@host)
 	@test -n "$(HOST)" || { echo "usage: make schema-pull HOST=user@host"; exit 1; }
