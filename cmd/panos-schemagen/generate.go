@@ -9,7 +9,6 @@ import (
 
 	"github.com/okaiser/go-panos-schema/internal/codegen"
 	"github.com/okaiser/go-panos-schema/internal/digest"
-	"github.com/okaiser/go-panos-schema/internal/schema"
 )
 
 // versionPackage turns a config version into a Go package directory: 11.2.0
@@ -46,9 +45,9 @@ func runGenerate(digestDir, outDir string) error {
 			return fmt.Errorf("read %s: %w", path, rerr)
 		}
 
-		groups := schema.GroupByShape(schema.EntryTypes(d.Root))
-		names := codegen.Names(groups)
-		src := codegen.Emit(codegen.ModelPackage, names, groups)
+		shapes := codegen.AllShapes(d.Root)
+		names := codegen.Names(shapes)
+		src := codegen.Emit(codegen.ModelPackage, d.Root, names, shapes)
 
 		pretty, ferr := format.Source([]byte(src))
 		if ferr != nil {

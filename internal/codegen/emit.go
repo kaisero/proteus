@@ -8,10 +8,8 @@ import (
 	"github.com/okaiser/go-panos-schema/internal/schema"
 )
 
-const maxInlineDepth = 12
-
 // Emit renders every generated type as one Go package.
-func Emit(pkg string, names []TypeName, groups map[string][]*schema.Node) string {
+func Emit(pkg string, root *schema.Node, names []TypeName, shapes Shapes) string {
 	byFP := make(map[string]TypeName, len(names))
 	for _, n := range names {
 		byFP[n.Fingerprint] = n
@@ -26,41 +24,60 @@ func Emit(pkg string, names []TypeName, groups map[string][]*schema.Node) string
 	sb.WriteString("type RawNode struct {\n\tXMLName xml.Name\n\tAttrs   []xml.Attr `xml:\",any,attr\"`\n")
 	sb.WriteString("\tText    []byte     `xml:\",chardata\"`\n\tNodes   []RawNode  `xml:\",any\"`\n}\n\n")
 
+	writeRoot(&sb, root, byFP)
+
 	sorted := append([]TypeName{}, names...)
 	sort.Slice(sorted, func(i, j int) bool { return sorted[i].Canonical < sorted[j].Canonical })
 
 	for _, tn := range sorted {
-		seq := groups[tn.Fingerprint][0].EntrySequence()
-		fmt.Fprintf(&sb, "// %s is reached by %d config path(s). Shallowest: %s\ntype %s struct {\n",
-			tn.Canonical, len(tn.Paths), tn.Shallowest, tn.Canonical)
-		writeFields(&sb, seq, tn.Canonical, byFP)
+		var seq *schema.Node
+		if tn.Kind == KindEntry {
+			seq = shapes.Entry[tn.Fingerprint][0].EntrySequence()
+		} else {
+			seq = shapes.Inline[tn.Fingerprint][0]
+		}
+		fmt.Fprintf(&sb, "// %s is the %s shape reached by %d config path(s). Shallowest: %s\ntype %s struct {\n",
+			tn.Canonical, tn.Kind, len(tn.Paths), tn.Shallowest, tn.Canonical)
+		if tn.Kind == KindEntry {
+			sb.WriteString("\tName string `xml:\"name,attr\"`\n")
+		}
+		writeFields(&sb, seq, byFP)
 		fmt.Fprintf(&sb, "\t%s []RawNode `xml:\",any\"`\n}\n\n", ReservedUntyped)
-		fmt.Fprintf(&sb, "// %sList is an entry-keyed list of %s.\ntype %sList struct {\n\tEntry []%s `xml:\"entry\"`\n}\n\n",
-			tn.Canonical, tn.Canonical, tn.Canonical, tn.Canonical)
+
+		if tn.Kind == KindEntry {
+			fmt.Fprintf(&sb, "// %sList is an entry-keyed list of %s.\ntype %sList struct {\n\tEntry []%s `xml:\"entry\"`\n}\n\n",
+				tn.Canonical, tn.Canonical, tn.Canonical, tn.Canonical)
+		}
 		for _, a := range tn.Aliases {
 			fmt.Fprintf(&sb, "// %s names the same shape as %s.\ntype %s = %s\n\n", a, tn.Canonical, a, tn.Canonical)
-			fmt.Fprintf(&sb, "// %sList names the same shape as %sList.\ntype %sList = %sList\n\n",
-				a, tn.Canonical, a, tn.Canonical)
+			if tn.Kind == KindEntry {
+				fmt.Fprintf(&sb, "// %sList names the same shape as %sList.\ntype %sList = %sList\n\n",
+					a, tn.Canonical, a, tn.Canonical)
+			}
 		}
-	}
-
-	emittedInline := map[string]bool{}
-	for _, tn := range sorted {
-		seq := groups[tn.Fingerprint][0].EntrySequence()
-		writeInline(&sb, tn.Canonical, seq, byFP, emittedInline, 0)
 	}
 	return sb.String()
 }
 
+// writeRoot emits the Config type. /config is a sequence, and five of its six
+// children are sequences too, so an entry-array walk alone emits none of them and
+// the model cannot load a file.
+func writeRoot(sb *strings.Builder, root *schema.Node, byFP map[string]TypeName) {
+	sb.WriteString("// Config is the root of a PAN-OS or Panorama configuration.\n")
+	sb.WriteString("type Config struct {\n")
+	sb.WriteString("\tVersion string `xml:\"version,attr\"`\n")
+	sb.WriteString("\tDetailVersion string `xml:\"detail-version,attr\"`\n")
+	sb.WriteString("\tUrlDB string `xml:\"urldb,attr\"`\n")
+	writeFields(sb, root, byFP)
+	fmt.Fprintf(sb, "\t%s []RawNode `xml:\",any\"`\n}\n\n", ReservedUntyped)
+}
+
 // writeFields renders one struct's fields. Choice and union wrappers are already
 // flattened by schema.Node.Fields.
-func writeFields(sb *strings.Builder, seq *schema.Node, owner string, byFP map[string]TypeName) {
-	used := map[string]bool{ReservedUntyped: true}
-	for _, f := range seq.Fields() {
-		if f.Kind == schema.KindAttrReq && f.Name == "name" {
-			sb.WriteString("\tName string `xml:\"name,attr\"`\n")
-			used["Name"] = true
-		}
+func writeFields(sb *strings.Builder, seq *schema.Node, byFP map[string]TypeName) {
+	used := map[string]bool{
+		ReservedUntyped: true, "Name": true,
+		"Version": true, "DetailVersion": true, "UrlDB": true,
 	}
 	for _, f := range seq.Fields() {
 		if f.Name == "" || f.Name == "member" {
@@ -82,42 +99,13 @@ func writeFields(sb *strings.Builder, seq *schema.Node, owner string, byFP map[s
 		case f.Kind == schema.KindArray && f.IsMemberList():
 			fmt.Fprintf(sb, "\t%s *MemberList `xml:%q`\n", field, tag)
 		case f.Kind == schema.KindSequence:
-			if child := byFP[schema.Fingerprint(f)]; child.Canonical != "" {
-				fmt.Fprintf(sb, "\t%s *%s `xml:%q`\n", field, child.Canonical, tag)
-				continue
+			child := byFP[schema.Fingerprint(f)]
+			if child.Canonical == "" {
+				continue // an empty sequence the schema describes no fields for
 			}
-			fmt.Fprintf(sb, "\t%s *%s `xml:%q`\n", field, inlineName(owner, field), tag)
+			fmt.Fprintf(sb, "\t%s *%s `xml:%q`\n", field, child.Canonical, tag)
 		case f.Kind == schema.KindElement:
 			fmt.Fprintf(sb, "\t%s %s `xml:%q`\n", field, GoLeafType(f.Type), tag)
 		}
-	}
-}
-
-// inlineName names a sequence that is not itself an entry type, so it has no
-// shape group of its own.
-func inlineName(owner, field string) string { return owner + field }
-
-func writeInline(sb *strings.Builder, owner string, seq *schema.Node,
-	byFP map[string]TypeName, done map[string]bool, depth int,
-) {
-	if depth > maxInlineDepth {
-		return
-	}
-	for _, f := range seq.Fields() {
-		if f.Kind != schema.KindSequence || f.Name == "" {
-			continue
-		}
-		if byFP[schema.Fingerprint(f)].Canonical != "" {
-			continue // an entry type already covers this shape
-		}
-		name := inlineName(owner, Pascal(f.Name))
-		if done[name] {
-			continue
-		}
-		done[name] = true
-		fmt.Fprintf(sb, "// %s is an inline sequence under %s.\ntype %s struct {\n", name, owner, name)
-		writeFields(sb, f, name, byFP)
-		fmt.Fprintf(sb, "\t%s []RawNode `xml:\",any\"`\n}\n\n", ReservedUntyped)
-		writeInline(sb, name, f, byFP, done, depth+1)
 	}
 }

@@ -24,8 +24,7 @@ func fixtureRoot(t *testing.T) *schema.Node {
 
 func names(t *testing.T) []TypeName {
 	t.Helper()
-	root := fixtureRoot(t)
-	return Names(schema.GroupByShape(schema.EntryTypes(root)))
+	return Names(AllShapes(fixtureRoot(t)))
 }
 
 func byCanonical(ns []TypeName, want string) *TypeName {

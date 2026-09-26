@@ -96,6 +96,11 @@
         </array>
       </sequence>
     </sequence>
+    <sequence name="saved-log-query" optional="yes">
+      <sequence name="config" optional="yes">
+        <element name="query" optional="yes" type="string" maxlen="2047"/>
+      </sequence>
+    </sequence>
     <array name="headers" optional="yes">
       <sequence name="entry">
         <attr-req name="name" type="string" maxlen="63"/>

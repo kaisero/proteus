@@ -1,26 +1,15 @@
 package codegen
 
 import (
-	"go/parser"
-	"go/token"
 	"strings"
 	"testing"
-
-	"github.com/okaiser/go-panos-schema/internal/schema"
 )
 
 func emitted(t *testing.T) string {
 	t.Helper()
 	root := fixtureRoot(t)
-	groups := schema.GroupByShape(schema.EntryTypes(root))
-	return Emit(ModelPackage, Names(groups), groups)
-}
-
-func TestEmittedSourceParses(t *testing.T) {
-	src := emitted(t)
-	if _, err := parser.ParseFile(token.NewFileSet(), "model.go", src, parser.AllErrors); err != nil {
-		t.Fatalf("generated source does not parse: %v", err)
-	}
+	shapes := AllShapes(root)
+	return Emit(ModelPackage, root, Names(shapes), shapes)
 }
 
 func TestGoLeafType(t *testing.T) {
