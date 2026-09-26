@@ -1,0 +1,56 @@
+# golangci-lint v2 configuration for go-panos-schema.
+# Run: make lint   (or: golangci-lint run)
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  # Keep the standard set (errcheck, govet, ineffassign, staticcheck, unused)
+  # and add a curated strict set on top.
+  enable:
+    - gosec
+    - revive
+    - gocritic
+    - misspell
+    - bodyclose
+    - unconvert
+    - unparam
+  settings:
+    errcheck:
+      # Writes to an in-memory buffer or to stdout cannot be usefully handled.
+      exclude-functions:
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln
+        - io.WriteString
+        - (*bytes.Buffer).WriteString
+    gosec:
+      excludes:
+        - G304 # file path from a variable — the whole library reads schema and config paths the caller supplies
+  exclusions:
+    generated: lax
+    rules:
+      # Tests craft malformed schema and config fragments on purpose.
+      - path: _test\.go
+        linters:
+          - gosec
+          - errcheck
+          - unparam
+      # Generated model code is machine output; it is checked by the generator's
+      # own tests, not by style linters.
+      - path: ^config/
+        linters:
+          - revive
+          - gocritic
+          - misspell
+          - unparam
+
+formatters:
+  enable:
+    - gofumpt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/okaiser/go-panos-schema

@@ -1,0 +1,22 @@
+version: 2
+# Integration happens on develop, so updates target that branch (default is
+# main). Enable "Dependabot security updates" in the repo settings too — that is
+# separate from the version updates configured here.
+updates:
+  - package-ecosystem: "gomod"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    target-branch: "develop"
+    groups:
+      go-dependencies:
+        patterns: ["*"]
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    target-branch: "develop"
+    groups:
+      github-actions:
+        patterns: ["*"]

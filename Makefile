@@ -1,0 +1,104 @@
+BINARY  := panos-schemagen
+PKG     := ./cmd/panos-schemagen
+BIN_DIR := bin
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+LDFLAGS := -s -w -X main.version=$(VERSION)
+
+# Host to pull a PAN-OS schema from, e.g. make schema-pull HOST=labadmin@10.0.0.5
+HOST ?=
+SCHEMA_DIR := schemas
+DIGEST_DIR := schemadigest
+
+# Pinned dev-tool versions (CI installs the same ones; keep in sync with .github).
+GOLANGCI_VERSION    := v2.13.1
+GOFUMPT_VERSION     := v0.11.0
+GOVULNCHECK_VERSION := latest
+
+GOBIN       := $(shell go env GOPATH)/bin
+GOLANGCI    := $(GOBIN)/golangci-lint
+GOFUMPT     := $(GOBIN)/gofumpt
+GOVULNCHECK := $(GOBIN)/govulncheck
+
+.PHONY: help tools fmt fmt-check vet lint test test-race cover test-cov \
+        vuln tidy-check gate ci build build-local generate schema-digest schema-pull hooks clean
+
+help: ## Show this help
+	@grep -hE '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | sort | \
+		awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
+
+## --- dev tools ---
+
+tools: ## Install pinned dev tools (golangci-lint, gofumpt, govulncheck)
+	go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_VERSION)
+	go install mvdan.cc/gofumpt@$(GOFUMPT_VERSION)
+	go install golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION)
+
+## --- checks ---
+
+fmt: ## Format the code (gofumpt + goimports, via golangci-lint)
+	$(GOLANGCI) fmt
+
+fmt-check: ## Fail if the code is not formatted
+	$(GOLANGCI) fmt --diff
+
+vet: ## go vet
+	go vet ./...
+
+lint: ## Run golangci-lint (linters + formatting check)
+	$(GOLANGCI) run
+
+test: ## Run unit tests
+	go test ./...
+
+test-race: ## Run unit tests with the race detector
+	go test -race ./...
+
+cover: ## Run tests and print a coverage summary (report-only, no gate)
+	go test -coverprofile=coverage.out ./...
+	@go tool cover -func=coverage.out | tail -1
+
+test-cov: ## Run tests and fail if a package drops below its coverage floor
+	@bash scripts/coverage-gate.sh coverage-floors.txt
+
+vuln: ## Scan dependencies for known vulnerabilities
+	$(GOVULNCHECK) ./...
+
+tidy-check: ## Fail if go.mod/go.sum are not tidy
+	go mod tidy -diff
+
+## --- aggregates ---
+
+gate: tidy-check lint test ## Fast pre-commit gate (tidy + lint + unit tests)
+
+ci: tidy-check lint test-race test-cov build vuln ## Everything CI runs
+
+## --- generate / build ---
+
+schema-digest: build-local ## Build committed digests from the vendor XML in $(SCHEMA_DIR)
+	$(BIN_DIR)/$(BINARY) digest -schema $(SCHEMA_DIR) -out $(DIGEST_DIR)
+
+generate: build-local ## Regenerate the config model from the committed digests
+	$(BIN_DIR)/$(BINARY) generate -digest $(DIGEST_DIR) -out config
+
+schema-pull: ## Copy schema.xml/cms-schema.xml/opschema.xml off a PAN-OS host (HOST=user@host)
+	@test -n "$(HOST)" || { echo "usage: make schema-pull HOST=user@host"; exit 1; }
+	@mkdir -p $(SCHEMA_DIR)
+	scp $(HOST):/opt/pancfg/mgmt/factory/schema.xml $(SCHEMA_DIR)/
+	scp $(HOST):/opt/pancfg/mgmt/factory/cms-schema.xml $(SCHEMA_DIR)/
+	scp $(HOST):/opt/pancfg/mgmt/factory/opschema.xml $(SCHEMA_DIR)/
+	@echo "schemas in $(SCHEMA_DIR)/ — these are vendor files, see ARCHITECTURE.md before committing them"
+
+build: ## Cross-compile a static linux/amd64 generator binary
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags '$(LDFLAGS)' -o $(BIN_DIR)/$(BINARY) $(PKG)
+
+build-local: ## Native build for local use
+	CGO_ENABLED=0 go build -ldflags '$(LDFLAGS)' -o $(BIN_DIR)/$(BINARY) $(PKG)
+
+## --- misc ---
+
+hooks: ## Enable the git pre-commit hook (runs `make gate`)
+	git config core.hooksPath .githooks
+	@echo "pre-commit hook enabled (core.hooksPath=.githooks)"
+
+clean: ## Remove build artifacts
+	rm -rf $(BIN_DIR) coverage.out

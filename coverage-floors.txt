@@ -1,0 +1,11 @@
+# Per-package statement-coverage floors, enforced by scripts/coverage-gate.sh.
+#
+# A floor records what a package already achieves. Raise a floor when you raise
+# the coverage. NEVER lower one: the floor is what stops a change from quietly
+# deleting the tests that earned it.
+#
+# The file is deliberately empty of entries. This repository has no
+# implementation yet, only the skeleton and the standards. Add one line per
+# package as each package gains its first test, in the form:
+#
+#   github.com/okaiser/go-panos-schema/internal/schema  82.0
