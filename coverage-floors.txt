@@ -9,3 +9,5 @@
 # package as each package gains its first test, in the form:
 #
 #   github.com/okaiser/go-panos-schema/internal/schema  82.0
+
+github.com/okaiser/go-panos-schema/internal/schema  70.9
