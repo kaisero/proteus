@@ -5,46 +5,116 @@ import (
 	"strings"
 )
 
-// Reference is one declared target of a field: the kind of object it may name,
-// and where that object lives.
+// TargetForm is what a memberof declaration actually names.
 //
-// Targets come from the schema's memberof declarations. Observed forms:
-//
-//	#config/shared/address/entry/@name                        config object
-//	##/predefined/region/entry/@name                          predefined content
-//	#config/shared/address/entry[not(ip-wildcard)]/@name       conditional
-//	#myentry(template)/variable/entry[type/ip-netmask]/@name   template variable
-//	string('vlan')                                            a literal, not a reference
-type Reference struct {
-	Field      string // the field declaring the reference, e.g. source
-	Scope      string // shared, or empty when the scope is implied by context
-	Kind       string // address, address-group, region, ...
-	Target     string // the raw declaration, kept for diagnostics
-	Predicate  string // XPath predicate, when the target is conditional
-	Predefined bool   // the target is predefined content, not configuration
-	Template   bool   // the target is a template or template-stack variable
+// Counted over the 13,120 declarations in cms-schema.xml: 4,605 objects, 2,128
+// predefined, 2,482 template variables, 1,302 rule fields, 2,476 expressions and
+// 127 unrecognised. Only the first two are index edges.
+type TargetForm int
+
+// The forms a memberof declaration takes.
+const (
+	FormUnknown     TargetForm = iota // unrecognised, and counted so it cannot grow unnoticed
+	FormObject                        // #config/<scope>/<kind>/entry/@name
+	FormPredefined                    // ##/predefined/<kind>/entry/@name
+	FormTemplateVar                   // #myentry(template)/variable/entry/@name
+	FormRuleField                     // ##/…/*/rules/entry/<field>/member
+	FormExpression                    // string(…) or substring(…): computed, not a reference
+)
+
+var formNames = map[TargetForm]string{
+	FormUnknown: "unknown", FormObject: "object", FormPredefined: "predefined",
+	FormTemplateVar: "template-variable", FormRuleField: "rule-field",
+	FormExpression: "expression",
 }
 
-// ParseTarget turns one memberof declaration into a Reference. A literal such as
-// string('vlan') is not a reference and returns an error.
+func (f TargetForm) String() string {
+	if s, ok := formNames[f]; ok {
+		return s
+	}
+	return "unknown"
+}
+
+// ClassifyTarget decides what a raw memberof declaration names.
+//
+// A path-shaped target always starts with #. A computed expression never does:
+// they begin string( or substring(, and 1,710 of the latter would slip past a
+// leading-string( check. Testing the prefix rather than looking for parentheses
+// also keeps a conditional reference intact, because its predicate contains
+// them: #config/shared/address/entry[not(ip-wildcard)]/@name.
+func ClassifyTarget(raw string) TargetForm {
+	s := strings.TrimSpace(raw)
+	if s == "" {
+		return FormUnknown
+	}
+	if !strings.HasPrefix(s, "#") {
+		if strings.ContainsAny(s, "()") {
+			return FormExpression
+		}
+		return FormUnknown
+	}
+	switch {
+	case strings.HasPrefix(s, "#myentry("):
+		return FormTemplateVar
+	case strings.Contains(withoutPredicate(s), "*"):
+		return FormRuleField
+	case strings.HasPrefix(s, "##"):
+		return FormPredefined
+	default:
+		return FormObject
+	}
+}
+
+// withoutPredicate removes any [..] predicate, so a wildcard inside one is not
+// mistaken for a rule-field target.
+func withoutPredicate(s string) string {
+	for {
+		i := strings.Index(s, "[")
+		if i < 0 {
+			return s
+		}
+		j := strings.Index(s[i:], "]")
+		if j < 0 {
+			return s[:i]
+		}
+		s = s[:i] + s[i+j+1:]
+	}
+}
+
+// Reference is one declared target of a field: the kind of object it may name,
+// and where that object lives.
+type Reference struct {
+	Field      string     // the field declaring the reference, e.g. source
+	Scope      string     // shared, or empty when the scope is implied by context
+	Kind       string     // address, address-group, region, ...
+	Target     string     // the raw declaration, kept for diagnostics
+	Predicate  string     // XPath predicate, when the target is conditional
+	Form       TargetForm // what the declaration names
+	Predefined bool       // the target is predefined content, not configuration
+	Template   bool       // the target is a template or template-stack variable
+}
+
+// ParseTarget turns one memberof declaration into a Reference. Only an object or
+// predefined target is a reference; every other form returns an error naming what
+// it is, so a caller can count the forms rather than guess.
 func ParseTarget(raw string) (Reference, error) {
-	ref := Reference{Target: raw}
+	form := ClassifyTarget(raw)
+	ref := Reference{Target: raw, Form: form}
+	switch form {
+	case FormObject, FormPredefined:
+	default:
+		ref.Template = form == FormTemplateVar
+		return ref, fmt.Errorf("schema: %q is a %s, not an object reference", raw, form)
+	}
+	ref.Predefined = form == FormPredefined
+
 	s := strings.TrimSpace(raw)
 	switch {
-	case s == "":
-		return ref, fmt.Errorf("schema: empty reference target")
-	case strings.HasPrefix(s, "string("):
-		return ref, fmt.Errorf("schema: %q is a literal, not a reference", raw)
-	case strings.HasPrefix(s, "#myentry("):
-		ref.Template = true
-		s = s[strings.Index(s, ")")+1:]
 	case strings.HasPrefix(s, "##/"):
-		ref.Predefined = true
 		s = s[2:]
 	case strings.HasPrefix(s, "#config"):
 		s = s[len("#config"):]
 	case strings.HasPrefix(s, "##"):
-		ref.Predefined = true
 		s = s[2:]
 	case strings.HasPrefix(s, "#"):
 		s = s[1:]
@@ -77,23 +147,38 @@ func ParseTarget(raw string) (Reference, error) {
 	return ref, nil
 }
 
-// References returns every reference a subtree declares, with the declaring field
-// recorded. Literals are skipped. Order follows the schema, so a caller sees the
-// targets in the order PAN-OS lists them.
-func References(n *Node) []Reference {
-	var out []Reference
+// FieldRefs is one field and the object kinds it may name.
+type FieldRefs struct {
+	Field      string
+	Candidates []string // in the order the schema lists them
+	Predefined []bool   // Predefined[i] reports whether Candidates[i] is predefined content
+}
+
+// References returns the reference fields of a subtree, grouped by field.
+//
+// A field usually has more than one candidate: of 2,420 reference fields in
+// cms-schema.xml, 919 declare two or more and the worst declares 31. A single
+// resolved kind cannot be known from the schema alone, so the caller gets the
+// candidates and resolves against the scope.
+func References(n *Node) []FieldRefs {
+	var out []FieldRefs
 	for _, field := range n.Fields() {
-		fieldName := field.Name
+		fr := FieldRefs{Field: field.Name}
+		seen := map[string]bool{}
 		field.Walk(func(cur *Node) {
 			for _, raw := range cur.MemberOf {
 				ref, err := ParseTarget(raw)
-				if err != nil {
+				if err != nil || seen[ref.Kind] {
 					continue
 				}
-				ref.Field = fieldName
-				out = append(out, ref)
+				seen[ref.Kind] = true
+				fr.Candidates = append(fr.Candidates, ref.Kind)
+				fr.Predefined = append(fr.Predefined, ref.Predefined)
 			}
 		})
+		if len(fr.Candidates) > 0 {
+			out = append(out, fr)
+		}
 	}
 	return out
 }
