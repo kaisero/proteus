@@ -11,8 +11,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **A Go model of the PAN-OS configuration, generated from the schema PAN-OS
   itself ships.** Point the generator at a firewall or Panorama schema and it
-  produces typed Go structs for every configuration object, 506 of them for
-  Panorama and 454 for a firewall, so a tool can read a configuration file
-  without hand-writing any of that structure.
+  produces typed Go structs for every configuration object, so a tool can read a
+  configuration without hand-writing any of that structure. Loading a whole
+  configuration file arrives in the next release; for now the types cover
+  individual objects.
 - **Repository skeleton.** Project layout, build and lint configuration, CI, and
   the mandatory rules that govern the library.
