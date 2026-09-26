@@ -1,0 +1,57 @@
+<config version="11.2.0" urldb="paloaltonetworks" detail-version="11.2.7">
+  <shared>
+    <pre-rulebase><security><rules>
+      <entry name="shared-pre-1"><action>allow</action>
+        <source><member>any</member></source></entry>
+    </rules></security></pre-rulebase>
+    <post-rulebase><security><rules>
+      <entry name="shared-post-1"><action>deny</action>
+        <source><member>any</member></source></entry>
+    </rules></security></post-rulebase>
+  </shared>
+  <devices>
+    <entry name="localhost.localdomain">
+      <device-group>
+        <entry name="top">
+          <pre-rulebase><security><rules>
+            <entry name="top-pre"><action>allow</action></entry>
+          </rules></security></pre-rulebase>
+          <post-rulebase><security><rules>
+            <entry name="top-post"><action>deny</action></entry>
+          </rules></security></post-rulebase>
+        </entry>
+        <entry name="middle">
+          <pre-rulebase><security><rules>
+            <entry name="middle-pre"><action>allow</action></entry>
+          </rules></security></pre-rulebase>
+          <post-rulebase><security><rules>
+            <entry name="middle-post"><action>deny</action></entry>
+          </rules></security></post-rulebase>
+        </entry>
+        <entry name="leaf">
+          <devices>
+            <entry name="001122334455"><vsys><entry name="vsys1"/></vsys></entry>
+          </devices>
+          <pre-rulebase><security><rules>
+            <entry name="leaf-pre-1"><action>allow</action></entry>
+            <entry name="leaf-pre-2"><action>allow</action><disabled>yes</disabled></entry>
+          </rules></security></pre-rulebase>
+          <post-rulebase><security><rules>
+            <entry name="leaf-post"><action>deny</action></entry>
+          </rules></security></post-rulebase>
+        </entry>
+      </device-group>
+    </entry>
+  </devices>
+  <readonly>
+    <devices>
+      <entry name="localhost.localdomain">
+        <device-group>
+          <entry name="top"><id>1</id></entry>
+          <entry name="middle"><parent-dg>top</parent-dg><id>2</id></entry>
+          <entry name="leaf"><parent-dg>middle</parent-dg><id>3</id></entry>
+        </device-group>
+      </entry>
+    </devices>
+  </readonly>
+</config>
