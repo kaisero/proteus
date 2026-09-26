@@ -10,4 +10,4 @@
 #
 #   github.com/okaiser/go-panos-schema/internal/schema  82.0
 
-github.com/okaiser/go-panos-schema/internal/schema  70.9
+github.com/okaiser/go-panos-schema/internal/schema  83.9
