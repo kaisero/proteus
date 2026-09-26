@@ -116,3 +116,58 @@ func TestMergedRulesExcludeSiblings(t *testing.T) {
 		t.Errorf("source = %v, want [corp-location]", got)
 	}
 }
+
+// A device group with no firewall assigned still has an effective policy: the
+// device group determines it, not the firewall.
+func TestRulesForDeviceGroupWithoutAFirewall(t *testing.T) {
+	cfg := mergeLab(t)
+	// middle has no devices in the fixture.
+	got, err := RulesForDeviceGroup(cfg, "middle", Security)
+	if err != nil {
+		t.Fatalf("RulesForDeviceGroup: %v", err)
+	}
+	want := []string{
+		"shared-pre-1", "top-pre", "middle-pre",
+		"middle-post", "top-post", "shared-post-1",
+	}
+	names := make([]string, len(got))
+	for i, r := range got {
+		names[i] = r.Name
+	}
+	if len(names) != len(want) {
+		t.Fatalf("got %v\nwant %v", names, want)
+	}
+	for i := range want {
+		if names[i] != want[i] {
+			t.Errorf("position %d: got %q, want %q", i+1, names[i], want[i])
+		}
+	}
+	// The leaf's rules must not appear: a parent does not inherit from a child.
+	for _, n := range names {
+		if n == "leaf-pre-1" || n == "leaf-post" {
+			t.Errorf("%s is a descendant's rule and must not appear", n)
+		}
+	}
+}
+
+func TestRulesForDeviceGroupRejectsACycle(t *testing.T) {
+	cfg, _, err := config.Load("../testdata/config/panorama-cycle.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := RulesForDeviceGroup(cfg, "a", Security); err == nil {
+		t.Error("a cyclic hierarchy must be an error")
+	}
+}
+
+// The NAT rulebase reads through the same path.
+func TestMergedNatRulebaseIsEmptyInTheFixture(t *testing.T) {
+	tg, _ := TargetFor(mergeLab(t), "001122334455", "vsys1")
+	got, err := tg.Rules(NAT)
+	if err != nil {
+		t.Fatalf("Rules(NAT): %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("the merge fixture has no NAT rules, got %d", len(got))
+	}
+}

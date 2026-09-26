@@ -219,3 +219,17 @@ func atRulesEntry(elems, entries []string, sc config.Scope, rulebase string, rb 
 		return false
 	}
 }
+
+// RulesForDeviceGroup returns the effective policy of a device group, whether or
+// not a firewall is assigned to it.
+//
+// Every firewall in a device group inherits the same merged Panorama policy, so
+// the device group, not the firewall, is what determines it.
+func RulesForDeviceGroup(cfg *config.Config, dg string, rb Rulebase) ([]Rule, error) {
+	h, err := NewHierarchy(cfg)
+	if err != nil {
+		return nil, err
+	}
+	t := &Target{path: cfg.Path(), deviceGroup: dg, chain: h.Chain(dg)}
+	return t.Rules(rb)
+}
