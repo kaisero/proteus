@@ -4,3 +4,6 @@
 # Vendor schema files pulled off an appliance. Redistribution is unresolved,
 # so they stay out of git until that question is answered. See ARCHITECTURE.md.
 /schemas/
+
+# Copied in from schemadigest/ for go:embed; the originals are committed.
+/config/schemadigest/

@@ -83,7 +83,13 @@ schema-digest: build-local ## Build committed digests from $(SCHEMA_DIR) (PANOS_
 	@test -n "$(PANOS_VERSION)" || { echo "usage: make schema-digest PANOS_VERSION=11.2.0"; exit 1; }
 	$(BIN_DIR)/$(BINARY) digest -schema $(SCHEMA_DIR) -out $(DIGEST_DIR) -version $(PANOS_VERSION)
 
-generate: build-local ## Regenerate the config model from the committed digests
+# go:embed cannot reach outside a package directory, so the digests are copied in.
+# The originals in $(DIGEST_DIR) are the committed ones.
+config/schemadigest: $(DIGEST_DIR)
+	@mkdir -p config/schemadigest
+	cp $(DIGEST_DIR)/*.json.gz config/schemadigest/
+
+generate: build-local config/schemadigest ## Regenerate the config model from the committed digests
 	$(BIN_DIR)/$(BINARY) generate -digest $(DIGEST_DIR) -out config
 
 generate-check: generate ## Fail if the committed model differs from a fresh run

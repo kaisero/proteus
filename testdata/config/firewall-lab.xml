@@ -1,0 +1,34 @@
+<config version="11.2.0" urldb="paloaltonetworks" detail-version="11.2.5">
+  <shared/>
+  <devices>
+    <entry name="localhost.localdomain">
+      <vsys>
+        <entry name="vsys1">
+          <address>
+            <entry name="net-home"><ip-netmask>198.18.1.0/24</ip-netmask></entry>
+            <entry name="net-labor"><ip-netmask>198.18.0.0/15</ip-netmask></entry>
+            <entry name="dc01"><ip-netmask>198.18.10.100</ip-netmask></entry>
+          </address>
+          <rulebase>
+            <security>
+              <rules>
+                <entry name="identity-redistribution">
+                  <source><member>any</member></source>
+                  <destination><member>10.10.0.0/24</member></destination>
+                  <application><member>any</member></application>
+                  <action>allow</action>
+                </entry>
+                <entry name="dc-to-home">
+                  <source><member>dc01</member></source>
+                  <destination><member>net-home</member></destination>
+                  <application><member>ssl</member></application>
+                  <action>allow</action>
+                </entry>
+              </rules>
+            </security>
+          </rulebase>
+        </entry>
+      </vsys>
+    </entry>
+  </devices>
+</config>

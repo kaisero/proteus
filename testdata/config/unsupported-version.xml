@@ -1,0 +1,4 @@
+<config version="9.1.0" urldb="paloaltonetworks" detail-version="9.1.14">
+  <shared/>
+  <devices><entry name="localhost.localdomain"><vsys><entry name="vsys1"/></vsys></entry></devices>
+</config>

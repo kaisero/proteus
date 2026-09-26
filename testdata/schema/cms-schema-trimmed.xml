@@ -194,6 +194,31 @@
         <sequence name="entry">
           <attr-req name="name" type="string" maxlen="63"/>
           <element name="description" optional="yes" type="string" maxlen="255"/>
+          <!-- A template embeds a whole firewall configuration, nested <config>
+               and all. That is why the real Panorama schema is twice the size of
+               the firewall one, and why a streaming walk must not stop at the
+               first </config> it meets. A template carries network and device
+               settings, not policy objects. -->
+          <sequence name="config" optional="yes">
+            <sequence name="devices" optional="yes">
+              <sequence name="entry">
+                <attr-req name="name" type="string" maxlen="64"/>
+                <array name="vsys" optional="yes">
+                  <sequence name="entry">
+                    <attr-req name="name" type="string" maxlen="31"/>
+                    <array name="authentication-profile" optional="yes">
+                      <sequence name="entry">
+                        <attr-req name="name" type="string" maxlen="31"/>
+                        <array name="allow-list" optional="yes">
+                          <element name="member" type="string" maxlen="255"/>
+                        </array>
+                      </sequence>
+                    </array>
+                  </sequence>
+                </array>
+              </sequence>
+            </sequence>
+          </sequence>
         </sequence>
       </array>
       <array name="template-stack" optional="yes">

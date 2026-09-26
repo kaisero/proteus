@@ -21,6 +21,24 @@
   </shared>
   <devices>
     <entry name="localhost.localdomain">
+      <template>
+        <entry name="t_vsys01">
+          <config>
+            <devices>
+              <entry name="localhost.localdomain">
+                <vsys>
+                  <entry name="vsys1">
+                    <authentication-profile>
+                      <entry name="tpl-auth"/>
+                    </authentication-profile>
+                  </entry>
+                </vsys>
+              </entry>
+            </devices>
+          </config>
+        </entry>
+        <entry name="t_corp"/>
+      </template>
       <device-group>
         <entry name="vsys01"/>
         <entry name="at-ktn">
@@ -74,10 +92,6 @@
           </address>
         </entry>
       </device-group>
-      <template>
-        <entry name="t_vsys01"/>
-        <entry name="t_corp"/>
-      </template>
       <template-stack>
         <entry name="s_vsys01">
           <templates><member>t_vsys01</member></templates>
