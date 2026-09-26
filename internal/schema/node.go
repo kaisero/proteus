@@ -31,26 +31,30 @@ func (k Kind) String() string {
 }
 
 // Node is one grammar construct. A Node is read-only once parsed.
+//
+// The JSON tags are short because the whole tree is serialised into the
+// committed digest, where size matters. Parent is not serialised; digest.Read
+// rebuilds it.
 type Node struct {
-	Kind     Kind
-	Name     string
-	Type     string // schema leaf type: string, bool, enum, rangedint, float, ...
-	Optional bool
-	Default  string
-	MaxLen   int
-	Min      string
-	Max      string
-	Help     string
-	Regex    string
-	SubType  string
+	Kind     Kind   `json:"k"`
+	Name     string `json:"n,omitempty"`
+	Type     string `json:"t,omitempty"` // string, bool, enum, rangedint, float, ...
+	Optional bool   `json:"o,omitempty"`
+	Default  string `json:"d,omitempty"`
+	MaxLen   int    `json:"ml,omitempty"`
+	Min      string `json:"mn,omitempty"`
+	Max      string `json:"mx,omitempty"`
+	Help     string `json:"h,omitempty"`
+	Regex    string `json:"rx,omitempty"`
+	SubType  string `json:"st,omitempty"`
 
-	EnumValues []string // permitted values, when Type is enum
-	MemberOf   []string // reference targets declared on this node
+	EnumValues []string `json:"ev,omitempty"` // permitted values, when Type is enum
+	MemberOf   []string `json:"mo,omitempty"` // reference targets declared here
 
 	memberOfTarget string // memberof given as an attribute rather than text
 
-	Children []*Node
-	Parent   *Node
+	Children []*Node `json:"c,omitempty"`
+	Parent   *Node   `json:"-"`
 }
 
 // Path returns the config xpath of the node, built from named ancestors.

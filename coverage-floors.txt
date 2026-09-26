@@ -11,3 +11,4 @@
 #   github.com/okaiser/go-panos-schema/internal/schema  82.0
 
 github.com/okaiser/go-panos-schema/internal/schema  83.9
+github.com/okaiser/go-panos-schema/internal/digest  71.1
