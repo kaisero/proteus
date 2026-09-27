@@ -23,10 +23,9 @@ import (
 //
 // It is an inference, not a reading, and it has real limits which it reports rather
 // than hides. Routes learned by BGP or OSPF are not in the file. An interface in no
-// zone places nothing. On Panorama the network configuration lives in a template, so a
-// device-group scope has no zones at all. And a firewall decides a source zone by the
-// interface a packet actually arrived on, which is why the device's own
-// test security-policy-match takes the zone as an argument instead of working it out.
+// zone places nothing. And a firewall decides a source zone by the interface a
+// packet actually arrived on, which is why the device's own test
+// security-policy-match takes the zone as an argument instead of working it out.
 type zoneResolver struct {
 	scope config.Scope
 	table *bart.Table[[]Hit]
@@ -145,8 +144,8 @@ func (r *zoneResolver) resolve(value string, p Providers) ([]Hit, []Unresolved, 
 		return nil, []Unresolved{{
 			Value: value,
 			Kind:  kindZone,
-			Reason: "this scope defines no zones. On Panorama they live in a template, not in " +
-				"a device group, so an address cannot be placed in a zone from here",
+			Reason: "this scope defines no zones, so an address cannot be placed in a " +
+				"zone from its configuration",
 		}}, true
 	}
 
@@ -243,8 +242,8 @@ func (r *zoneResolver) fromSnapshot(value string, addr netip.Addr, loc ZoneLocat
 
 // keepVsys drops placements from another vsys, and reports how many.
 //
-// A device group scope keeps everything: a snapshot comes from one firewall, and which
-// vsys of it a device group corresponds to is not knowable from here.
+// The shared scope keeps everything: a snapshot comes from one firewall, and shared
+// belongs to none of its vsys.
 func keepVsys(ps []ZonePlacement, sc config.Scope) ([]ZonePlacement, int) {
 	if sc.Sort != config.ScopeVsys {
 		return ps, 0

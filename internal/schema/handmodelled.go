@@ -10,17 +10,10 @@ type HandModel struct {
 
 // handModelled is the complete list. Adding an entry is a deliberate act: every
 // other field in the library comes from the schema (R1).
-var handModelled = []HandModel{
-	{
-		Path: "/config/readonly/devices/entry/device-group/entry/parent-dg",
-		Reason: "The schema declares /config/readonly as an empty skip-validation " +
-			"sequence and describes nothing inside it. parent-dg is the only " +
-			"source of the device-group hierarchy, and it survives both " +
-			"type=config&action=show and type=export&category=configuration. " +
-			"Observed on Panorama 11.2.7-h1.",
-		Owner: "resolve",
-	},
-}
+//
+// It is empty. The one entry there was, /config/readonly/.../parent-dg, held the
+// Panorama device-group hierarchy and left with Panorama support.
+var handModelled = []HandModel{}
 
 // HandModelled returns the registered hand-modelled nodes.
 func HandModelled() []HandModel {

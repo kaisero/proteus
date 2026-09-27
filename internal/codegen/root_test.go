@@ -29,7 +29,7 @@ func TestConfigRootIsEmitted(t *testing.T) {
 }
 
 // The schema declares readonly as empty, so its generated type is empty too.
-// parent-dg is hand-modelled in resolve, not here. See AGENTS.md R8.
+// parent-dg is not modelled anywhere; see AGENTS.md R8.
 func TestReadonlyTypeIsEmpty(t *testing.T) {
 	shapes, ns := allShapes(t)
 	src := Emit(ModelPackage, fixtureRoot(t), ns, shapes)

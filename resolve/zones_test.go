@@ -130,13 +130,3 @@ func TestZonesInScopeOnAVsysWithNone(t *testing.T) {
 		t.Errorf("got %d zones in vsys3, want none: %+v", len(zones), zones)
 	}
 }
-
-// A broken hierarchy is reported rather than answered with an empty list.
-func TestZonesInScopeReportsABrokenHierarchy(t *testing.T) {
-	cfg := loadT(t, "../testdata/config/panorama-cycle.xml")
-	sc := config.Scope{Sort: config.ScopeDeviceGroup, Name: "dg1"}
-
-	if _, err := ZonesInScope(cfg, sc); err == nil {
-		t.Error("a cyclic hierarchy was not reported")
-	}
-}

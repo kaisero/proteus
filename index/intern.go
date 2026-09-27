@@ -3,7 +3,7 @@
 // rule-field bitmaps.
 //
 // Every index belongs to one scope. A name means different things in different
-// scopes, so a global index merges sibling device groups and returns answers that
+// scopes, so a global index merges sibling vsys and returns answers that
 // are wrong rather than incomplete. See AGENTS.md R5 and R10.
 package index
 

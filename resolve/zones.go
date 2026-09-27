@@ -38,14 +38,10 @@ var zoneModes = []string{"layer3", "layer2", "virtual-wire", "tap", "external"}
 // ZonesInScope returns the zones visible in a scope, with the interfaces assigned to
 // each.
 //
-// On Panorama a zone is defined in a template rather than in a device group, so a
-// device-group scope normally has none. That is a fact about where PAN-OS keeps
-// network configuration, not a failure to look.
+// A vsys that defines no zones has none, and that is an answer rather than an
+// error.
 func ZonesInScope(cfg *config.Config, sc config.Scope) ([]Zone, error) {
-	entries, err := entriesInScope(cfg, sc, "zone")
-	if err != nil {
-		return nil, err
-	}
+	entries := entriesInScope(cfg, sc, "zone")
 	out := make([]Zone, 0, len(entries))
 	for _, e := range entries {
 		z := Zone{Name: e.name, Scope: e.scope}

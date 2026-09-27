@@ -35,34 +35,12 @@ func TestLiveConfigLoads(t *testing.T) {
 		t.Log("untyped: none")
 	}
 
-	h, err := resolve.NewHierarchy(cfg)
-	if err != nil {
-		t.Fatalf("NewHierarchy: %v", err)
-	}
-	for _, root := range h.Roots() {
-		logTree(t, h, root, 1)
-	}
-
-	// Every device group has an effective policy, whether or not a firewall is
-	// assigned to it. A sibling root's rules must never appear in another's.
-	for _, dg := range allDeviceGroups(h) {
-		rules, err := resolve.RulesForDeviceGroup(cfg, dg, resolve.Security)
-		if err != nil {
-			t.Fatalf("RulesForDeviceGroup %s: %v", dg, err)
-		}
-		names := make([]string, len(rules))
-		for i, r := range rules {
-			names[i] = r.Name + " (" + r.Layer.String() + ")"
-		}
-		t.Logf("dg %-12s effective policy: %v", dg, names)
-	}
-
 	tgs, err := resolve.Targets(cfg)
 	if err != nil {
 		t.Fatalf("Targets: %v", err)
 	}
 	if len(tgs) == 0 {
-		t.Log("no firewall is assigned to a device group")
+		t.Log("the configuration defines no vsys")
 	}
 	for _, tg := range tgs {
 		rules, err := tg.Rules(resolve.Security)
@@ -73,8 +51,8 @@ func TestLiveConfigLoads(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Objects for %s/%s: %v", tg.Serial(), tg.Vsys(), err)
 		}
-		t.Logf("%s/%s -> dg %s (stack %s): %d effective rules, %d visible addresses",
-			tg.Serial(), tg.Vsys(), tg.DeviceGroup(), tg.TemplateStack(), len(rules), len(objs))
+		t.Logf("%s/%s: %d rules, %d visible addresses",
+			tg.Serial(), tg.Vsys(), len(rules), len(objs))
 		for _, r := range rules {
 			t.Logf("    %2d. [%-11s %-18s] %-22s src=%v dst=%v",
 				r.Position, r.Layer, r.Scope, r.Name, r.Fields["source"], r.Fields["destination"])
@@ -92,33 +70,5 @@ func TestLiveConfigLoads(t *testing.T) {
 			}
 			t.Logf("    %-24s referenced %d time(s), in groups %v", o.Name, len(refs), groups)
 		}
-	}
-}
-
-// allDeviceGroups returns every device group in the tree, roots first.
-func allDeviceGroups(h *resolve.Hierarchy) []string {
-	var out []string
-	var walk func(string)
-	walk = func(dg string) {
-		out = append(out, dg)
-		for _, c := range h.Children(dg) {
-			walk(c)
-		}
-	}
-	for _, r := range h.Roots() {
-		walk(r)
-	}
-	return out
-}
-
-func logTree(t *testing.T, h *resolve.Hierarchy, dg string, depth int) {
-	t.Helper()
-	indent := ""
-	for range depth {
-		indent += "  "
-	}
-	t.Logf("%s%s", indent, dg)
-	for _, c := range h.Children(dg) {
-		logTree(t, h, c, depth+1)
 	}
 }

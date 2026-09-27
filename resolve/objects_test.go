@@ -309,16 +309,3 @@ func TestObjectValueReadsEveryForm(t *testing.T) {
 		}
 	}
 }
-
-// A scope whose inheritance chain cannot be built is reported, by both readers.
-func TestObjectReadersReportABrokenHierarchy(t *testing.T) {
-	cfg := loadT(t, "../testdata/config/panorama-cycle.xml")
-	sc := config.Scope{Sort: config.ScopeDeviceGroup, Name: "dg1"}
-
-	if _, err := ObjectsInScope(cfg, sc, "address"); err == nil {
-		t.Error("ObjectsInScope did not report a cyclic hierarchy")
-	}
-	if _, err := ObjectsAt(cfg, sc, "user", []string{"local-user-database", "user"}); err == nil {
-		t.Error("ObjectsAt did not report a cyclic hierarchy")
-	}
-}

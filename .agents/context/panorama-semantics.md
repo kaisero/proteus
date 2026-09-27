@@ -87,7 +87,6 @@ possibly a zone of its own.
 <!-- GENERATED:api ./resolve -->
 ```go
 type FIBRoute struct{ ... }
-type Hierarchy struct{ ... }
 type InterfaceAddress struct{ ... }
 type InterfaceState struct{ ... }
 type Layer int
@@ -106,27 +105,20 @@ type Zone struct{ ... }
 func (f *TagFilter) Match(tags []string) bool
 func (f *TagFilter) String() string
 func (f *TagFilter) Tags() []string
-func (h *Hierarchy) Chain(dg string) []config.Scope
-func (h *Hierarchy) Children(dg string) []string
-func (h *Hierarchy) ParentOf(dg string) (string, bool)
-func (h *Hierarchy) Roots() []string
 func (l Layer) String() string
 func (p URLPattern) Match(url string) bool
 func (p URLPattern) Raw() string
 func (r Rulebase) String() string
 func (t *Target) Chain() []config.Scope
-func (t *Target) DeviceGroup() string
 func (t *Target) Objects(kind string) ([]Object, error)
 func (t *Target) ResolveGroup(name string) (Members, error)
 func (t *Target) Rules(rb Rulebase) ([]Rule, error)
 func (t *Target) Scope() config.Scope
 func (t *Target) Serial() string
-func (t *Target) TemplateStack() string
 func (t *Target) Vsys() string
 func DynamicRoutingProtocols(cfg *config.Config) []string
 func GroupInScope(cfg *config.Config, sc config.Scope, name string) (Members, error)
 func InterfaceAddresses(cfg *config.Config) ([]InterfaceAddress, error)
-func NewHierarchy(cfg *config.Config) (*Hierarchy, error)
 func ObjectsAt(cfg *config.Config, sc config.Scope, kind string, within []string) ([]Object, error)
 func ObjectsInScope(cfg *config.Config, sc config.Scope, kind string) ([]Object, error)
 func ParseTagFilter(raw string) (*TagFilter, error)
@@ -134,9 +126,8 @@ func ParseURLPattern(member string) (URLPattern, error)
 func ProfileGroupsInScope(cfg *config.Config, sc config.Scope) ([]ProfileGroup, error)
 func ReadFIBRoutes(b []byte) ([]FIBRoute, error)
 func ReadInterfaceStates(b []byte) ([]InterfaceState, error)
-func RulesForDeviceGroup(cfg *config.Config, dg string, rb Rulebase) ([]Rule, error)
 func StaticRoutes(cfg *config.Config) ([]StaticRoute, error)
-func TargetFor(cfg *config.Config, serial, vsys string) (*Target, error)
+func TargetFor(cfg *config.Config, device, vsys string) (*Target, error)
 func Targets(cfg *config.Config) ([]*Target, error)
 func URLFilteringProfilesInScope(cfg *config.Config, sc config.Scope) ([]URLFilteringProfile, error)
 func Vsyses(cfg *config.Config) ([]string, error)

@@ -155,13 +155,6 @@ func TestDisabledRulesAreMasked(t *testing.T) {
 	}
 }
 
-func TestForRejectsAnUnknownDeviceGroup(t *testing.T) {
-	cfg, _, _ := config.Load("../testdata/config/panorama-lab.xml")
-	if _, err := For(cfg, config.Scope{Sort: config.ScopeDeviceGroup, Name: "nope"}); err == nil {
-		t.Error("an unknown device group must be an error")
-	}
-}
-
 // A firewall's vsys is a policy scope like a device group, and its own rulebase is
 // part of the effective policy.
 func TestIndexForAFirewallVsys(t *testing.T) {

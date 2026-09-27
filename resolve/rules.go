@@ -25,16 +25,13 @@ type Layer int
 
 // The layers a firewall evaluates, in order.
 const (
-	LayerSharedPre Layer = iota
-	LayerDeviceGroupPre
-	LayerLocal // rules defined on the firewall itself, never in a Panorama config
-	LayerDeviceGroupPost
-	LayerSharedPost
+	LayerSharedPre  Layer = iota // pushed from Panorama, before the firewall's own
+	LayerLocal                   // the vsys's own rulebase
+	LayerSharedPost              // pushed from Panorama, after the firewall's own
 )
 
 var layerNames = map[Layer]string{
-	LayerSharedPre: "shared-pre", LayerDeviceGroupPre: "dg-pre", LayerLocal: "local",
-	LayerDeviceGroupPost: "dg-post", LayerSharedPost: "shared-post",
+	LayerSharedPre: "shared-pre", LayerLocal: "local", LayerSharedPost: "shared-post",
 }
 
 func (l Layer) String() string { return layerNames[l] }
@@ -60,51 +57,25 @@ type Rule struct {
 	Profiles      map[string][]string
 }
 
-// Rules returns the target's effective policy in evaluation order.
+// Rules returns the target's policy in evaluation order: shared pre-rules, then
+// the vsys's own rulebase, then shared post-rules, then the defaults.
 //
-// Shared pre-rules, then device-group pre-rules from root to leaf, then the
-// firewall's own rules, then device-group post-rules from leaf to root, then
-// shared post-rules, then the defaults. A Panorama configuration holds no local
-// rules, so that layer is empty here.
-//
-// Source: PAN-OS documentation, "Device Group Policies".
+// Source: PAN-OS documentation, "Device Group Policies". Where a Panorama-managed
+// firewall keeps pushed rules is not yet observed on a device: the 11.2.0
+// firewall schema declares no pre-rulebase at all, and /config/panorama as an
+// empty node. See docs/specs/2026-09-27-panos-analyst-scope.md §5.3.
 func (t *Target) Rules(rb Rulebase) ([]Rule, error) {
-	chain := t.Chain() // shared, then root to leaf
-
+	shared := config.Scope{Sort: config.ScopeShared}
 	var out []Rule
-	for _, sc := range chain {
-		rs := readRules(t.root, sc, "pre-rulebase", rb)
-		layer := LayerDeviceGroupPre
-		if sc.Sort == config.ScopeShared {
-			layer = LayerSharedPre
-		}
+	add := func(rs []Rule, layer Layer) {
 		for _, r := range rs {
 			r.Layer = layer
 			out = append(out, r)
 		}
 	}
-	// A firewall's own rules sit in the plain rulebase, between any pushed
-	// pre-rules and any pushed post-rules. A Panorama configuration has none, so
-	// this layer is simply empty there.
-	for _, sc := range chain {
-		for _, r := range readRules(t.root, sc, "rulebase", rb) {
-			r.Layer = LayerLocal
-			out = append(out, r)
-		}
-	}
-
-	for i := len(chain) - 1; i >= 0; i-- {
-		sc := chain[i]
-		rs := readRules(t.root, sc, "post-rulebase", rb)
-		layer := LayerDeviceGroupPost
-		if sc.Sort == config.ScopeShared {
-			layer = LayerSharedPost
-		}
-		for _, r := range rs {
-			r.Layer = layer
-			out = append(out, r)
-		}
-	}
+	add(readRules(t.root, shared, "pre-rulebase", rb), LayerSharedPre)
+	add(readRules(t.root, t.Scope(), "rulebase", rb), LayerLocal)
+	add(readRules(t.root, shared, "post-rulebase", rb), LayerSharedPost)
 	for i := range out {
 		out[i].Position = i + 1
 	}
@@ -112,14 +83,11 @@ func (t *Target) Rules(rb Rulebase) ([]Rule, error) {
 }
 
 // rulebaseContainer names where a scope's rulebase lives, as a path under
-// /config. The path is matched exactly, so a template's nested configuration
-// cannot contribute rules to a device group.
+// /config. The path is matched exactly.
 func rulebaseContainer(sc config.Scope) ([]string, bool) {
 	switch sc.Sort {
 	case config.ScopeShared:
 		return []string{"shared"}, true
-	case config.ScopeDeviceGroup:
-		return []string{"devices", "entry", "device-group", "entry"}, true
 	case config.ScopeVsys:
 		return []string{"devices", "entry", "vsys", "entry"}, true
 	default:
@@ -177,18 +145,4 @@ func memberLists(e *config.Element) map[string][]string {
 		out[f.Name] = m
 	}
 	return out
-}
-
-// RulesForDeviceGroup returns the effective policy of a device group, whether or
-// not a firewall is assigned to it.
-//
-// Every firewall in a device group inherits the same merged Panorama policy, so
-// the device group, not the firewall, is what determines it.
-func RulesForDeviceGroup(cfg *config.Config, dg string, rb Rulebase) ([]Rule, error) {
-	h, err := NewHierarchy(cfg)
-	if err != nil {
-		return nil, err
-	}
-	t := &Target{cfg: cfg, root: cfg.Root(), deviceGroup: dg, chain: h.Chain(dg)}
-	return t.Rules(rb)
 }

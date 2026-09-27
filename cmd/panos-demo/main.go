@@ -158,8 +158,7 @@ func sectionSchema(cfg *config.Config) {
 	fmt.Println("  object counts, per scope in the file")
 	for _, container := range append(
 		root.Find("shared"),
-		append(root.Find("devices", "entry", "device-group", "entry"),
-			root.Find("devices", "entry", "vsys", "entry")...)...) {
+		root.Find("devices", "entry", "vsys", "entry")...) {
 		name := container.Attr("name")
 		if name == "" {
 			name = container.Name
@@ -178,35 +177,13 @@ func sectionSchema(cfg *config.Config) {
 
 func sectionHierarchy(cfg *config.Config) error {
 	heading(3, "Scopes in this configuration")
-
-	if cfg.Platform() == config.Firewall {
-		vs, err := resolve.Vsyses(cfg)
-		if err != nil {
-			return err
-		}
-		fmt.Printf("  a firewall, with %d vsys: %v\n", len(vs), vs)
-		why("a firewall has no device groups; each vsys is its own policy scope")
-		return nil
-	}
-
-	h, err := resolve.NewHierarchy(cfg)
+	vs, err := resolve.Vsyses(cfg)
 	if err != nil {
 		return err
 	}
-	why("a device group's parent is recorded only at /config/readonly/.../parent-dg,")
-	why("and the schema describes that node as empty, so it is modelled by hand")
-	fmt.Println("  device-group tree")
-	for _, r := range h.Roots() {
-		printTree(h, r, 2)
-	}
+	fmt.Printf("  %d vsys: %v\n", len(vs), vs)
+	why("each vsys is its own policy scope, and every vsys sees shared")
 	return nil
-}
-
-func printTree(h *resolve.Hierarchy, dg string, depth int) {
-	fmt.Printf("  %s%s\n", strings.Repeat("  ", depth), dg)
-	for _, c := range h.Children(dg) {
-		printTree(h, c, depth+1)
-	}
 }
 
 func sectionTargets(cfg *config.Config) ([]*resolve.Target, error) {
@@ -215,16 +192,10 @@ func sectionTargets(cfg *config.Config) ([]*resolve.Target, error) {
 	if err != nil {
 		return nil, err
 	}
-	why("the key is serial and vsys, never serial alone: a multi-vsys firewall can")
-	why("have each vsys in a different device group, which is a different policy")
+	why("the key is device and vsys: a multi-vsys firewall holds one policy per vsys")
 	fmt.Printf("  %d target(s)\n", len(tgs))
 	for _, tg := range tgs {
-		dg := tg.DeviceGroup()
-		if dg == "" {
-			dg = "(none, a firewall vsys)"
-		}
-		fmt.Printf("    %-18s %-8s -> %-20s stack %s\n",
-			tg.Serial(), tg.Vsys(), dg, orNone(tg.TemplateStack()))
+		fmt.Printf("    %-22s %s\n", tg.Serial(), tg.Vsys())
 		why("    inherits from %s", scopeList(tg.Chain()))
 	}
 	return tgs, nil
@@ -232,8 +203,7 @@ func sectionTargets(cfg *config.Config) ([]*resolve.Target, error) {
 
 func sectionPolicy(tg *resolve.Target) error {
 	heading(5, "Effective policy for "+tg.Serial()+"/"+tg.Vsys())
-	why("order: shared pre, device-group pre from root to leaf, the firewall's own")
-	why("rules, device-group post from leaf to root, shared post, then the defaults")
+	why("order: shared pre, the vsys's own rules, shared post, then the defaults")
 	why("source: PAN-OS documentation, Device Group Policies")
 
 	rules, err := tg.Rules(resolve.Security)
@@ -317,7 +287,7 @@ func sectionGroups(cfg *config.Config, tg *resolve.Target) error {
 func sectionIndex(cfg *config.Config, tg *resolve.Target) (*index.Index, error) {
 	heading(8, "Building the index for "+tg.Scope().String())
 	why("an index belongs to one scope, because a name means different things in")
-	why("different scopes; building it globally would merge sibling device groups")
+	why("different scopes; building it globally would merge sibling vsys")
 
 	start := time.Now()
 	idx, err := index.For(cfg, tg.Scope())
@@ -485,7 +455,6 @@ func sectionCaveats(idx *index.Index) {
 	fmt.Println("    so the device may pick a different rule than the address match does")
 	fmt.Println("  - group members registered at runtime by User-ID or VM monitoring")
 	fmt.Println("    are not in a configuration file, so they are missing")
-	fmt.Println("  - template variables are not resolved")
 	fmt.Println("  - NAT rules are read but translated addresses are not resolved")
 }
 

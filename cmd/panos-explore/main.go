@@ -1,17 +1,17 @@
-// Command panos-explore answers questions about a PAN-OS or Panorama
+// Command panos-explore answers questions about a PAN-OS firewall
 // configuration file, so the library can be tried without writing any Go.
 //
 // Usage:
 //
 //	panos-explore info      <config.xml>
 //	panos-explore groups    <config.xml>
-//	panos-explore target    <config.xml> <serial> <vsys>
+//	panos-explore target    <config.xml> <device> <vsys>
 //	panos-explore lookup    <config.xml> <scope> <value>
 //	panos-explore whereused <config.xml> <scope> <name>
 //	panos-explore simulate  <config.xml> <scope> <source> <destination>
 //	panos-explore group     <config.xml> <scope> <name>
 //
-// A scope is shared, vsys:<name> or dg:<name>. A value is an IP address, a
+// A scope is shared or vsys:<name>. A value is an IP address, a
 // prefix, or an object name.
 package main
 
@@ -81,7 +81,7 @@ func usage() {
 	fmt.Fprint(os.Stderr, `usage:
   panos-explore info      <config.xml>
   panos-explore groups    <config.xml>
-  panos-explore target    <config.xml> <serial> <vsys>
+  panos-explore target    <config.xml> <device> <vsys>
   panos-explore lookup    <config.xml> <scope> <value>
   panos-explore reaches   <config.xml> <scope> <field> <value>
   panos-explore search    <config.xml> <scope> <substring>
@@ -90,7 +90,7 @@ func usage() {
   panos-explore simulate  <config.xml> <scope> <source> <destination> [from-zone to-zone]
   panos-explore group     <config.xml> <scope> <name>
 
-A scope is shared, vsys:<name> or dg:<name>.
+A scope is shared or vsys:<name>.
 A field is source, destination, category, application, service, from, to,
 source-user or tag.
 
@@ -126,65 +126,33 @@ func withConfig(args []string, extra int, fn func(*config.Config, []string) erro
 }
 
 func cmdInfo(cfg *config.Config, _ []string) error {
-	h, err := resolve.NewHierarchy(cfg)
-	if err != nil {
-		return err
-	}
-	fmt.Println("device-group tree")
-	for _, root := range h.Roots() {
-		printTree(h, root, 1)
-	}
-
 	tgs, err := resolve.Targets(cfg)
 	if err != nil {
 		return err
 	}
-	fmt.Printf("\nfirewalls (%d), keyed by serial and vsys\n", len(tgs))
-	if len(tgs) == 0 {
-		fmt.Println("  none assigned to a device group")
-	}
+	fmt.Printf("vsys (%d), keyed by device and vsys\n", len(tgs))
 	for _, tg := range tgs {
 		rules, err := tg.Rules(resolve.Security)
 		if err != nil {
 			return err
 		}
-		fmt.Printf("  %s / %-8s -> %-20s stack %-12s %d effective rules\n",
-			tg.Serial(), tg.Vsys(), tg.DeviceGroup(), tg.TemplateStack(), len(rules))
+		fmt.Printf("  %s / %-8s %d rules\n", tg.Serial(), tg.Vsys(), len(rules))
 	}
 	return nil
 }
 
-func printTree(h *resolve.Hierarchy, dg string, depth int) {
-	fmt.Printf("  %s%s\n", strings.Repeat("  ", depth), dg)
-	for _, c := range h.Children(dg) {
-		printTree(h, c, depth+1)
-	}
-}
-
 func cmdGroups(cfg *config.Config, _ []string) error {
-	h, err := resolve.NewHierarchy(cfg)
+	tgs, err := resolve.Targets(cfg)
 	if err != nil {
 		return err
 	}
-	var all []string
-	var walk func(string)
-	walk = func(dg string) {
-		all = append(all, dg)
-		for _, c := range h.Children(dg) {
-			walk(c)
-		}
-	}
-	for _, r := range h.Roots() {
-		walk(r)
-	}
-
-	fmt.Println("effective policy per device group")
-	for _, dg := range all {
-		rules, err := resolve.RulesForDeviceGroup(cfg, dg, resolve.Security)
+	fmt.Println("policy per vsys")
+	for _, tg := range tgs {
+		rules, err := tg.Rules(resolve.Security)
 		if err != nil {
 			return err
 		}
-		fmt.Printf("\n  %s (%d rules)\n", dg, len(rules))
+		fmt.Printf("\n  %s (%d rules)\n", tg.Vsys(), len(rules))
 		for _, r := range rules {
 			fmt.Printf("    %2d. [%-11s %-16s] %-24s src=%v dst=%v\n",
 				r.Position, r.Layer, r.Scope, r.Name, r.Fields["source"], r.Fields["destination"])
@@ -199,8 +167,6 @@ func cmdTarget(cfg *config.Config, args []string) error {
 		return err
 	}
 	fmt.Printf("%s / %s\n", tg.Serial(), tg.Vsys())
-	fmt.Printf("  device group   %s\n", tg.DeviceGroup())
-	fmt.Printf("  template stack %s\n", tg.TemplateStack())
 	fmt.Printf("  inherits from  %s\n\n", scopeList(tg.Chain()))
 
 	rules, err := tg.Rules(resolve.Security)

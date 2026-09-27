@@ -27,10 +27,7 @@ type ProfileGroup struct {
 // URLFilteringProfilesInScope returns the url-filtering profiles visible in a scope,
 // a descendant definition shadowing an ancestor's of the same name.
 func URLFilteringProfilesInScope(cfg *config.Config, sc config.Scope) ([]URLFilteringProfile, error) {
-	entries, err := entriesInScope(cfg, sc, "url-filtering")
-	if err != nil {
-		return nil, err
-	}
+	entries := entriesInScope(cfg, sc, "url-filtering")
 	out := make([]URLFilteringProfile, 0, len(entries))
 	for _, e := range entries {
 		out = append(out, URLFilteringProfile{
@@ -44,10 +41,7 @@ func URLFilteringProfilesInScope(cfg *config.Config, sc config.Scope) ([]URLFilt
 
 // ProfileGroupsInScope returns the security profile groups visible in a scope.
 func ProfileGroupsInScope(cfg *config.Config, sc config.Scope) ([]ProfileGroup, error) {
-	entries, err := entriesInScope(cfg, sc, "profile-group")
-	if err != nil {
-		return nil, err
-	}
+	entries := entriesInScope(cfg, sc, "profile-group")
 	out := make([]ProfileGroup, 0, len(entries))
 	for _, e := range entries {
 		out = append(out, ProfileGroup{
@@ -71,13 +65,9 @@ type scopedEntry struct {
 //
 // Object does not fit here: these entries carry several lists rather than one value,
 // and flattening them to a single string would lose which list a category sits in.
-// The visibility rules are the same ones Objects uses — shared first, then root to
-// leaf, a later definition replacing an earlier one.
-func entriesInScope(cfg *config.Config, sc config.Scope, kind string) ([]scopedEntry, error) {
-	chain, err := chainFor(cfg, sc)
-	if err != nil {
-		return nil, err
-	}
+// The visibility rules are the same ones Objects uses — shared first, then the vsys, a later definition replacing an earlier one.
+func entriesInScope(cfg *config.Config, sc config.Scope, kind string) []scopedEntry {
+	chain := chainFor(sc)
 	within := cfg.KindContainer(kind)
 	if within == nil {
 		within = []string{kind}
@@ -108,5 +98,5 @@ func entriesInScope(cfg *config.Config, sc config.Scope, kind string) ([]scopedE
 	for _, n := range order {
 		out = append(out, byName[n])
 	}
-	return out, nil
+	return out
 }

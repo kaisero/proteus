@@ -104,20 +104,6 @@ func TestRulesReadProfileSettings(t *testing.T) {
 	}
 }
 
-// A device-group scope needs the hierarchy, so a hierarchy that cannot be built is
-// reported rather than answered with an empty list.
-func TestProfileReadersReportABrokenHierarchy(t *testing.T) {
-	cfg := loadT(t, "../testdata/config/panorama-cycle.xml")
-	sc := config.Scope{Sort: config.ScopeDeviceGroup, Name: "dg1"}
-
-	if _, err := URLFilteringProfilesInScope(cfg, sc); err == nil {
-		t.Error("a cyclic device-group hierarchy was not reported")
-	}
-	if _, err := ProfileGroupsInScope(cfg, sc); err == nil {
-		t.Error("a cyclic device-group hierarchy was not reported")
-	}
-}
-
 // Shared profiles are visible in a vsys, and a vsys's own definition replaces a
 // shared one of the same name.
 func TestURLFilteringProfilesShadowShared(t *testing.T) {

@@ -27,16 +27,12 @@ func (t *Target) ResolveGroup(name string) (Members, error) {
 
 // GroupInScope returns the membership of an address group as seen in one scope.
 //
-// The same shared group resolves differently in different device groups, because
-// only the visible scope contributes members. Observed on Panorama 11.2.7-h1:
-// corp-location is 10.124.0.0/16 in host_1_directory and 10.125.0.0/16 in its
-// sibling corp-graz. See AGENTS.md R5.
+// The same shared group resolves differently in different vsys, because only
+// shared and the vsys itself contribute members. First observed on Panorama
+// 11.2.7-h1: corp-location was 10.124.0.0/16 in one device group and
+// 10.125.0.0/16 in its sibling. See AGENTS.md R5.
 func GroupInScope(cfg *config.Config, sc config.Scope, name string) (Members, error) {
-	chain, err := chainFor(cfg, sc)
-	if err != nil {
-		return Members{}, err
-	}
-	return resolveGroup(cfg, chain, name)
+	return resolveGroup(cfg, chainFor(sc), name)
 }
 
 func resolveGroup(cfg *config.Config, chain []config.Scope, name string) (Members, error) {

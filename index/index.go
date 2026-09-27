@@ -49,9 +49,8 @@ var (
 // For returns the index for a scope, building it on first call and returning the
 // cached instance afterwards.
 //
-// Rule bitmaps key on the device group rather than on (serial, vsys), because
-// merged Panorama policy is identical for every firewall in the same device group.
-// That bounds the cache to the number of device groups.
+// Rule bitmaps key on the vsys: each vsys has its own rulebase, so the cache is
+// bounded by the number of vsys.
 func For(cfg *config.Config, sc config.Scope) (*Index, error) {
 	key := cacheKey{path: cfg.Path(), scope: sc.String()}
 
@@ -200,16 +199,12 @@ func build(cfg *config.Config, sc config.Scope) (*Index, error) {
 	}, nil
 }
 
-// rulesForScope returns the effective policy of a scope.
-//
-// A device group has one, and so does a firewall's vsys: its own rulebase, wrapped
-// in whatever pre and post rules were pushed to it. Shared has none of its own,
-// because shared rules are a layer of another scope's policy rather than a policy
-// in their own right, and a template carries no rules at all.
+// rulesForScope returns the policy of a scope. A vsys has one: its own rulebase,
+// wrapped in whatever shared pre and post rules were pushed to it. Shared has
+// none of its own, because shared rules are a layer of a vsys's policy rather than
+// a policy in their own right.
 func rulesForScope(cfg *config.Config, sc config.Scope) ([]resolve.Rule, error) {
-	switch sc.Sort {
-	case config.ScopeDeviceGroup, config.ScopeVsys:
-	default:
+	if sc.Sort != config.ScopeVsys {
 		return nil, nil
 	}
 	tgs, err := resolve.Targets(cfg)
@@ -221,27 +216,7 @@ func rulesForScope(cfg *config.Config, sc config.Scope) ([]resolve.Rule, error) 
 			return tg.Rules(resolve.Security)
 		}
 	}
-	if sc.Sort == config.ScopeVsys {
-		return nil, fmt.Errorf("index: no vsys named %q", sc.Name)
-	}
-	// A device group with no firewall assigned still has a policy. Build a target
-	// for it directly.
-	h, err := resolve.NewHierarchy(cfg)
-	if err != nil {
-		return nil, err
-	}
-	found := false
-	for _, r := range h.Roots() {
-		if r == sc.Name {
-			found = true
-		}
-	}
-	if !found {
-		if _, ok := h.ParentOf(sc.Name); !ok {
-			return nil, fmt.Errorf("index: no device group named %q", sc.Name)
-		}
-	}
-	return resolve.RulesForDeviceGroup(cfg, sc.Name, resolve.Security)
+	return nil, fmt.Errorf("index: no vsys named %q", sc.Name)
 }
 
 // clearCache drops every built index. Tests and benchmarks use it to measure a

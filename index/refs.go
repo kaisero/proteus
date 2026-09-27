@@ -8,7 +8,7 @@ import "github.com/okaiser/panos-analyst/config"
 // cms-schema.xml, 1,034 declare two or more and the worst declares 153, so the
 // schema alone cannot say which kind a target is. The counts are pinned by
 // TestReferenceFieldCensus. From is an instance path, because two
-// device groups can each hold an object of the same name.
+// vsys can each hold an object of the same name.
 type Ref struct {
 	Scope      config.Scope
 	From       string

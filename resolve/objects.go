@@ -29,10 +29,7 @@ func (t *Target) Objects(kind string) ([]Object, error) {
 // ObjectsInScope returns the objects of one kind visible in a scope and its
 // ancestors.
 func ObjectsInScope(cfg *config.Config, sc config.Scope, kind string) ([]Object, error) {
-	chain, err := chainFor(cfg, sc)
-	if err != nil {
-		return nil, err
-	}
+	chain := chainFor(sc)
 	return objectsInChain(cfg, chain, kind, nil), nil
 }
 
@@ -43,30 +40,20 @@ func ObjectsInScope(cfg *config.Config, sc config.Scope, kind string) ([]Object,
 // and directly under a vsys, and they are different things. A caller that means one of
 // them has to say which.
 func ObjectsAt(cfg *config.Config, sc config.Scope, kind string, within []string) ([]Object, error) {
-	chain, err := chainFor(cfg, sc)
-	if err != nil {
-		return nil, err
-	}
+	chain := chainFor(sc)
 	return objectsInChain(cfg, chain, kind, within), nil
 }
 
 // chainFor returns the scopes a scope inherits from, shared first.
-func chainFor(cfg *config.Config, sc config.Scope) ([]config.Scope, error) {
-	if sc.Sort == config.ScopeDeviceGroup {
-		h, err := NewHierarchy(cfg)
-		if err != nil {
-			return nil, err
-		}
-		return h.Chain(sc.Name), nil
-	}
+func chainFor(sc config.Scope) []config.Scope {
 	chain := []config.Scope{{Sort: config.ScopeShared}}
 	if sc.Sort != config.ScopeShared {
 		chain = append(chain, sc)
 	}
-	return chain, nil
+	return chain
 }
 
-// objectsInChain walks the chain root to leaf, so a later definition replaces an
+// objectsInChain walks the chain shared first, so a later definition replaces an
 // earlier one and the replacement is recorded.
 func objectsInChain(cfg *config.Config, chain []config.Scope, kind string, within []string) []Object {
 	// Where a kind sits under a scope comes from the schema: most are direct
@@ -104,8 +91,6 @@ func scopeContainer(sc config.Scope) ([]string, bool) {
 	switch sc.Sort {
 	case config.ScopeShared:
 		return []string{"shared"}, true
-	case config.ScopeDeviceGroup:
-		return []string{"devices", "entry", "device-group", "entry"}, true
 	case config.ScopeVsys:
 		return []string{"devices", "entry", "vsys", "entry"}, true
 	default:
@@ -115,8 +100,7 @@ func scopeContainer(sc config.Scope) ([]string, bool) {
 
 // readObjects reads one scope's objects of one kind.
 //
-// The container path is matched exactly, so a template's nested configuration
-// cannot contribute objects to a device group.
+// The container path is matched exactly.
 func readObjects(root *config.Element, sc config.Scope, kind string, within []string) []Object {
 	path, ok := scopeContainer(sc)
 	if !ok {

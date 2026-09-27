@@ -32,17 +32,6 @@ func TestVsysesFromAFirewall(t *testing.T) {
 	}
 }
 
-// A Panorama configuration has no vsys of its own.
-func TestVsysesOnPanoramaIsEmpty(t *testing.T) {
-	got, err := Vsyses(lab(t))
-	if err != nil {
-		t.Fatalf("Vsyses: %v", err)
-	}
-	if len(got) != 0 {
-		t.Errorf("got %v, want none", got)
-	}
-}
-
 // A firewall's own rules sit in the plain rulebase, not pre or post, and they
 // evaluate after any pushed pre-rules and before any pushed post-rules.
 func TestFirewallRuleOrderIncludesTheLocalLayer(t *testing.T) {
@@ -62,9 +51,6 @@ func TestFirewallRuleOrderIncludesTheLocalLayer(t *testing.T) {
 	}
 	if vsys1 == nil {
 		t.Fatal("vsys1 not found")
-	}
-	if vsys1.DeviceGroup() != "" {
-		t.Errorf("a firewall vsys has no device group, got %q", vsys1.DeviceGroup())
 	}
 	if got := vsys1.Scope().String(); got != "vsys:vsys1" {
 		t.Errorf("scope = %q, want vsys:vsys1", got)
