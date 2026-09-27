@@ -9,7 +9,7 @@ import (
 
 func siblingIndex(t *testing.T, vsys string) *Index {
 	t.Helper()
-	return indexOfVsys(t, "../testdata/config/firewall-siblings.xml", vsys)
+	return indexOf(t, "../testdata/config/firewall-siblings.xml", vsys)
 }
 
 // R10. The edge list spans the file, so this is the test that the indexes built

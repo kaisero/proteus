@@ -7,7 +7,7 @@ import "testing"
 // profile group and one naming the profile directly. A category-field-only answer
 // reports nothing about any of them.
 func TestProfileUsesFindsBothPathsByCategoryName(t *testing.T) {
-	idx := indexOfVsys(t, "../testdata/config/firewall-urlprofile.xml", "vsys1")
+	idx := indexOf(t, "../testdata/config/firewall-urlprofile.xml", "vsys1")
 
 	uses := idx.ProfileUses("demo-category")
 	if len(uses) != 2 {
@@ -45,7 +45,7 @@ func TestProfileUsesFindsBothPathsByCategoryName(t *testing.T) {
 // A URL reaches the profile path through the category covering it, and the path
 // reports which member matched.
 func TestProfileUsesFindsPathsByURL(t *testing.T) {
-	idx := indexOfVsys(t, "../testdata/config/firewall-urlprofile.xml", "vsys1")
+	idx := indexOf(t, "../testdata/config/firewall-urlprofile.xml", "vsys1")
 
 	for url, wantVia := range map[string]string{
 		"example.com/this/is/a/very/long/url/i/need/to/match": "example.com/this/is/a/very/long/url/i/need/to/match",
@@ -69,7 +69,7 @@ func TestProfileUsesFindsPathsByURL(t *testing.T) {
 
 // A URL no category covers reaches no profile.
 func TestProfileUsesIgnoresAnUnrelatedURL(t *testing.T) {
-	idx := indexOfVsys(t, "../testdata/config/firewall-urlprofile.xml", "vsys1")
+	idx := indexOf(t, "../testdata/config/firewall-urlprofile.xml", "vsys1")
 
 	if uses := idx.ProfileUses("unrelated.example.org"); len(uses) != 0 {
 		t.Errorf("got %d paths, want none: %+v", len(uses), uses)
@@ -80,7 +80,7 @@ func TestProfileUsesIgnoresAnUnrelatedURL(t *testing.T) {
 // every URL anyway; what the profile then does is not modelled, and the rule bitmaps
 // must not gain entries from a profile.
 func TestProfileUsesDoNotChangeMatching(t *testing.T) {
-	idx := indexOfVsys(t, "../testdata/config/firewall-urlprofile.xml", "vsys1")
+	idx := indexOf(t, "../testdata/config/firewall-urlprofile.xml", "vsys1")
 
 	// no-profile has category any, so it matches; it has no profile path.
 	rules, _ := idx.Candidates(Category, "x.flagged.example.com")
@@ -91,7 +91,7 @@ func TestProfileUsesDoNotChangeMatching(t *testing.T) {
 
 // A keyword in an action list is not a category.
 func TestProfileUsesSkipsKeywords(t *testing.T) {
-	idx := indexOfVsys(t, "../testdata/config/firewall-urlprofile.xml", "vsys1")
+	idx := indexOf(t, "../testdata/config/firewall-urlprofile.xml", "vsys1")
 
 	if uses := idx.ProfileUses("any"); len(uses) != 0 {
 		t.Errorf("the allow list holds \"any\", which is not a category: %+v", uses)

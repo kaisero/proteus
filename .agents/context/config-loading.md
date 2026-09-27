@@ -106,7 +106,6 @@ type Config struct{ ... }
 type Element struct{ ... }
 type Event struct{ ... }
 type EventKind int
-type Platform int
 type Report struct{ ... }
 type Scope struct{ ... }
 type ScopeSort int
@@ -118,7 +117,6 @@ func (c *Config) FieldKinds(suffix string) map[string][]string
 func (c *Config) KindContainer(kind string) []string
 func (c *Config) KindContainers(kind string) [][]string
 func (c *Config) Path() string
-func (c *Config) Platform() Platform
 func (c *Config) Root() *Element
 func (c *Config) Version() string
 func (c *Config) Walk(fn func(Event) bool) error
@@ -131,7 +129,6 @@ func (e *Element) InstancePath() string
 func (e *Element) Members() []string
 func (e *Element) SchemaPath() string
 func (e *Element) TextOr(fallback string) string
-func (p Platform) String() string
 func (r Report) HasUnknown() bool
 func (r Report) String() string
 func (s Scope) String() string

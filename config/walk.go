@@ -137,25 +137,16 @@ func emitRefs(entry *Element, rt refTable, scope Scope, fn func(Event) bool, sto
 
 // scopeOf reports the scope an element introduces, if it introduces one.
 //
-// shared is a scope by itself. The others name their scope with the entry
-// beneath them, so the scope changes at the entry, not at the container.
+// shared is a scope by itself. A vsys names its scope with the entry beneath it,
+// so the scope changes at the entry, not at the container.
 func scopeOf(e *Element) (Scope, bool) {
 	if e.Name == "shared" {
 		return Scope{Sort: ScopeShared}, true
 	}
-	if e.Name != "entry" || e.Parent == nil {
+	if e.Name != "entry" || e.Parent == nil || e.Parent.Name != "vsys" {
 		return Scope{}, false
 	}
-	sort, ok := map[string]ScopeSort{
-		"vsys":           ScopeVsys,
-		"device-group":   ScopeDeviceGroup,
-		"template":       ScopeTemplate,
-		"template-stack": ScopeTemplateStack,
-	}[e.Parent.Name]
-	if !ok {
-		return Scope{}, false
-	}
-	return Scope{Sort: sort, Name: e.Attr("name")}, true
+	return Scope{Sort: ScopeVsys, Name: e.Attr("name")}, true
 }
 
 // FieldKinds returns the object kinds each reference field may name, for every
@@ -164,8 +155,8 @@ func scopeOf(e *Element) (Scope, bool) {
 // This comes from the schema, not from the configuration, because a field the
 // configuration leaves at "any" yields no walk event: a rulebase whose every rule
 // has "source any" would otherwise look as though source names nothing. Kinds from
-// several matching arrays are merged, so one call covers a firewall's rulebase and
-// a Panorama pre- and post-rulebase alike.
+// several matching arrays are merged, so one call covers every rules array the
+// suffix matches.
 func (c *Config) FieldKinds(suffix string) map[string][]string {
 	out := map[string][]string{}
 	seen := map[string]map[string]bool{}
@@ -196,7 +187,6 @@ func (c *Config) FieldKinds(suffix string) map[string][]string {
 var scopeAnchors = []string{
 	"/config/shared/",
 	"/config/devices/entry/vsys/entry/",
-	"/config/devices/entry/device-group/entry/",
 }
 
 // KindContainer returns the path from a scope container down to a kind's entry

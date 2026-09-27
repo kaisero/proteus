@@ -9,7 +9,7 @@ import (
 
 func zonesIndex(t *testing.T) *Index {
 	t.Helper()
-	return indexOfVsys(t, "../testdata/config/firewall-zones.xml", "vsys1")
+	return indexOf(t, "../testdata/config/firewall-zones.xml", "vsys1")
 }
 
 func zoneNames(rep Report) map[string]string {
@@ -143,7 +143,7 @@ func TestZoneResolverIgnoresADefaultRouteWithNoZone(t *testing.T) {
 
 // A vsys with no zones says so rather than returning nothing silently.
 func TestZoneResolverSaysWhenAScopeHasNoZones(t *testing.T) {
-	idx := indexOfVsys(t, "../testdata/config/firewall-multivsys.xml", "vsys3")
+	idx := indexOf(t, "../testdata/config/firewall-multivsys.xml", "vsys3")
 
 	_, rep := idx.Candidates(FromZone, "10.0.0.1")
 	var told bool
@@ -184,7 +184,7 @@ func TestZoneResolverAcceptsAPrefix(t *testing.T) {
 // Two interfaces in the same zone both place their prefixes, and one prefix reachable
 // through two zones reports both rather than choosing.
 func TestZoneResolverReportsEveryZoneForAPrefix(t *testing.T) {
-	idx := indexOfVsys(t, "../testdata/config/firewall-zones-shared.xml", "vsys1")
+	idx := indexOf(t, "../testdata/config/firewall-zones-shared.xml", "vsys1")
 
 	_, rep := idx.Candidates(FromZone, "10.50.0.5")
 	got := zoneNames(rep)
@@ -223,7 +223,7 @@ func TestZoneResolverSearch(t *testing.T) {
 // A snapshot is authoritative. Where it answers, the configuration is not consulted,
 // and the answer names the route that decided it.
 func TestZoneResolverPrefersTheSnapshot(t *testing.T) {
-	idx := indexOfVsys(t, "../testdata/config/firewall-zones.xml", "vsys1")
+	idx := indexOf(t, "../testdata/config/firewall-zones.xml", "vsys1")
 	v := idx.With(Providers{Zones: zoneSnap(t)})
 
 	// 198.18.0.5 is placed by the snapshot and by nothing in this configuration.
@@ -251,7 +251,7 @@ func TestZoneResolverPrefersTheSnapshot(t *testing.T) {
 // leaves 10.1.0.50 unplaceable by the snapshot while the configuration still places it
 // in "inside", which is exactly the case that must not fall back.
 func TestZoneResolverDoesNotFallBackWhenASnapshotIsPresent(t *testing.T) {
-	idx := indexOfVsys(t, "../testdata/config/firewall-zones.xml", "vsys1")
+	idx := indexOf(t, "../testdata/config/firewall-zones.xml", "vsys1")
 
 	// The configuration can answer on its own.
 	if _, rep := idx.Candidates(FromZone, "10.1.0.50"); zoneNames(rep)["inside"] == "" {
@@ -284,7 +284,7 @@ func TestZoneResolverDoesNotFallBackWhenASnapshotIsPresent(t *testing.T) {
 // the firewall was told, and on a real device it was reasoning from a default route
 // that had since been replaced.
 func TestZoneResolverAlwaysReportsAConfigurationAnswer(t *testing.T) {
-	idx := indexOfVsys(t, "../testdata/config/firewall-zones.xml", "vsys1")
+	idx := indexOf(t, "../testdata/config/firewall-zones.xml", "vsys1")
 
 	_, rep := idx.Candidates(FromZone, "10.1.0.50")
 	if len(zoneNames(rep)) == 0 {
@@ -303,7 +303,7 @@ func TestZoneResolverAlwaysReportsAConfigurationAnswer(t *testing.T) {
 
 // Several routers covering one address is reported, not resolved by picking one.
 func TestZoneResolverReportsRouterAmbiguity(t *testing.T) {
-	idx := indexOfVsys(t, "../testdata/config/firewall-zones.xml", "vsys1")
+	idx := indexOf(t, "../testdata/config/firewall-zones.xml", "vsys1")
 	v := idx.With(Providers{Zones: zoneSnap(t)})
 
 	_, rep := v.Candidates(FromZone, "198.19.11.5")
@@ -324,7 +324,7 @@ func TestZoneResolverReportsRouterAmbiguity(t *testing.T) {
 // A zone is visible only inside the vsys that defines it, so a snapshot of a
 // multi-vsys firewall must not leak zones across a scope boundary.
 func TestZoneResolverFiltersByVsys(t *testing.T) {
-	idx := indexOfVsys(t, "../testdata/config/firewall-zones.xml", "vsys1")
+	idx := indexOf(t, "../testdata/config/firewall-zones.xml", "vsys1")
 
 	// The same forwarding table, but every interface belongs to vsys 2.
 	other := zoneSnap(t)
@@ -356,7 +356,7 @@ func TestZoneResolverFiltersByVsys(t *testing.T) {
 // The resolver surfaces an unrouted interface, so an empty answer explains itself
 // rather than looking like "this address is nowhere".
 func TestZoneResolverSurfacesUnroutedInterfaces(t *testing.T) {
-	idx := indexOfVsys(t, "../testdata/config/firewall-zones.xml", "vsys1")
+	idx := indexOf(t, "../testdata/config/firewall-zones.xml", "vsys1")
 	snap := zoneSnap(t)
 	snap.FIBXML = strings.Replace(snap.FIBXML,
 		"<interface>ethernet1/1</interface>", "<interface>tunnel.99</interface>", 1)
@@ -405,7 +405,7 @@ func TestZoneResolverHandlesAnUnnamedRouter(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	idx := indexOfVsys(t, "../testdata/config/firewall-zones.xml", "vsys1")
+	idx := indexOf(t, "../testdata/config/firewall-zones.xml", "vsys1")
 
 	_, rep := idx.With(Providers{Zones: snap}).Candidates(FromZone, "10.1.2.3")
 	if zoneNames(rep)["a"] == "" {

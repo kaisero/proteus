@@ -33,13 +33,22 @@ func TestLoadWrappedConfig(t *testing.T) {
 	}
 }
 
-func TestLoadDetectsFirewall(t *testing.T) {
+// A Panorama configuration is refused by name, not loaded against the wrong
+// schema. panos-analyst reads each firewall's own configuration.
+func TestLoadRejectsPanorama(t *testing.T) {
+	_, _, err := Load("../testdata/config/panorama-rejected.xml")
+	if err == nil {
+		t.Fatal("a Panorama configuration must be an error")
+	}
+	if !strings.Contains(err.Error(), "Panorama") {
+		t.Errorf("the error must say it is a Panorama configuration, got: %v", err)
+	}
+}
+
+func TestLoadReadsAFirewall(t *testing.T) {
 	cfg, _, err := Load("../testdata/config/firewall-lab.xml")
 	if err != nil {
 		t.Fatalf("Load: %v", err)
-	}
-	if cfg.Platform() != Firewall {
-		t.Errorf("platform = %v, want Firewall", cfg.Platform())
 	}
 	if cfg.DetailVersion() != "11.2.5" {
 		t.Errorf("detail version = %q, want 11.2.5", cfg.DetailVersion())

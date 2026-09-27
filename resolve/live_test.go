@@ -28,7 +28,7 @@ func TestLiveConfigLoads(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	t.Logf("PAN-OS %s (%s), %s", cfg.Version(), cfg.DetailVersion(), cfg.Platform())
+	t.Logf("PAN-OS %s (%s)", cfg.Version(), cfg.DetailVersion())
 	if rep.HasUnknown() {
 		t.Logf("untyped: %s", rep)
 	} else {

@@ -13,25 +13,15 @@ type ScopeSort int
 const (
 	ScopeShared ScopeSort = iota
 	ScopeVsys
-	ScopeDeviceGroup
-	ScopeTemplate
-	ScopeTemplateStack
-	ScopeConfig // outside any of the above, e.g. mgt-config
+	ScopeConfig // outside any vsys, e.g. mgt-config
 )
 
 var scopePrefix = map[ScopeSort]string{
-	ScopeShared: "shared", ScopeVsys: "vsys", ScopeDeviceGroup: "dg",
-	ScopeTemplate: "tpl", ScopeTemplateStack: "tplstack", ScopeConfig: "config",
+	ScopeShared: "shared", ScopeVsys: "vsys", ScopeConfig: "config",
 }
 
 // scopeNeedsName reports whether a scope of this sort is named.
-func scopeNeedsName(s ScopeSort) bool {
-	switch s {
-	case ScopeVsys, ScopeDeviceGroup, ScopeTemplate, ScopeTemplateStack:
-		return true
-	}
-	return false
-}
+func scopeNeedsName(s ScopeSort) bool { return s == ScopeVsys }
 
 // Scope names where a configuration element lives. A name means different things
 // in different scopes, so nothing in this library resolves a name without one.
@@ -49,7 +39,7 @@ func (s Scope) String() string {
 	return p + ":" + s.Name
 }
 
-// ParseScope reads a scope string such as dg:Branch-EMEA.
+// ParseScope reads a scope string such as vsys:vsys1.
 func ParseScope(s string) (Scope, error) {
 	head, name, hasName := strings.Cut(s, ":")
 	for sort, prefix := range scopePrefix {

@@ -1,4 +1,4 @@
-// Package config loads a PAN-OS or Panorama configuration and reads it two ways.
+// Package config loads a PAN-OS firewall configuration and reads it two ways.
 //
 // The generated types in the versioned subpackages give a caller typed access:
 // unmarshal a file into a Config and walk the structs. Walk gives resolve and

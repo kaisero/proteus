@@ -11,7 +11,7 @@ import (
 
 func liveLikeIndex(t *testing.T, vsys string) *Index {
 	t.Helper()
-	return indexOfVsys(t, "../testdata/config/firewall-literals.xml", vsys)
+	return indexOf(t, "../testdata/config/firewall-literals.xml", vsys)
 }
 
 // A rule can name an address directly instead of naming an object. An address
@@ -124,7 +124,7 @@ var _ = config.ScopeShared
 // reports ztnac-to-lab, rule 3, whose source is any. Address-only matching reported
 // lab-to-internet, rule 8.
 func TestRulesWithAnyIsNeededForAFirstMatch(t *testing.T) {
-	idx := indexOfVsys(t, "../testdata/config/firewall-anyrule.xml", "vsys1")
+	idx := indexOf(t, "../testdata/config/firewall-anyrule.xml", "vsys1")
 	rules := idx.Rules()
 
 	src := netip.MustParseAddr("198.18.0.5")
@@ -166,7 +166,7 @@ func TestRulesWithAnyIsNeededForAFirstMatch(t *testing.T) {
 // any must not leak into the object-name path, or every address would match
 // every rule through the interner.
 func TestAnyIsNotAnObjectEdge(t *testing.T) {
-	idx := indexOfVsys(t, "../testdata/config/firewall-anyrule.xml", "vsys1")
+	idx := indexOf(t, "../testdata/config/firewall-anyrule.xml", "vsys1")
 	if refs := idx.Refs("any"); len(refs) != 0 {
 		t.Errorf("any must not be a reference edge, got %d", len(refs))
 	}

@@ -117,7 +117,7 @@ func sectionLoad(path string) (*config.Config, error) {
 	heading(1, "Loading the configuration")
 	why("a configuration arrives bare from an export, or wrapped in")
 	why("<response><result> from the XML API; both are accepted")
-	why("the version and platform are read from the <config> element itself")
+	why("the version is read from the <config> element itself; a Panorama file is refused")
 
 	start := time.Now()
 	cfg, rep, err := config.Load(path)
@@ -134,7 +134,6 @@ func sectionLoad(path string) (*config.Config, error) {
 
 	fmt.Printf("  file        %s\n", path)
 	fmt.Printf("  version     %s (patch %s)\n", cfg.Version(), cfg.DetailVersion())
-	fmt.Printf("  platform    %s\n", cfg.Platform())
 	fmt.Printf("  load time   %v first, %v second\n",
 		first.Round(time.Microsecond), second.Round(time.Microsecond))
 	why("the first load decodes the schema digest and builds the reference table;")

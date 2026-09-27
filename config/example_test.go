@@ -13,10 +13,10 @@ func Example() {
 		fmt.Println("load:", err)
 		return
 	}
-	fmt.Printf("PAN-OS %s (%s), %s\n", cfg.Version(), cfg.DetailVersion(), cfg.Platform())
+	fmt.Printf("PAN-OS %s (%s)\n", cfg.Version(), cfg.DetailVersion())
 	fmt.Printf("untyped elements: %d\n", len(rep.Untyped))
 	// Output:
-	// PAN-OS 11.2.0 (11.2.5), firewall
+	// PAN-OS 11.2.0 (11.2.5)
 	// untyped elements: 0
 }
 

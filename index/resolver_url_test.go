@@ -9,7 +9,7 @@ import (
 // those hold is in Palo Alto's cloud rather than the configuration. Guessing would
 // be worse than saying so.
 func TestURLResolverReportsACategoryMatchCategory(t *testing.T) {
-	idx := indexOfVsys(t, "../testdata/config/firewall-urlcat-edge.xml", "vsys1")
+	idx := indexOf(t, "../testdata/config/firewall-urlcat-edge.xml", "vsys1")
 
 	_, rep := idx.Candidates(Category, "anything.example.com")
 
@@ -30,7 +30,7 @@ func TestURLResolverReportsACategoryMatchCategory(t *testing.T) {
 // A member the parser cannot read contributes no match and is reported, the way an
 // unreadable tag filter already is. The rest of the category still works.
 func TestURLResolverReportsAnUnreadableMemberAndKeepsTheRest(t *testing.T) {
-	idx := indexOfVsys(t, "../testdata/config/firewall-urlcat-edge.xml", "vsys1")
+	idx := indexOf(t, "../testdata/config/firewall-urlcat-edge.xml", "vsys1")
 
 	rules, rep := idx.Candidates(Category, "good.example.com")
 
@@ -54,7 +54,7 @@ func TestURLResolverReportsAnUnreadableMemberAndKeepsTheRest(t *testing.T) {
 // A bare word is a name, not a URL. Matching it as a URL would report every category
 // whose members happen to share a token.
 func TestURLResolverIgnoresAValueWithNoDotOrSlash(t *testing.T) {
-	idx := indexOfVsys(t, "../testdata/config/firewall-urlcat-edge.xml", "vsys1")
+	idx := indexOf(t, "../testdata/config/firewall-urlcat-edge.xml", "vsys1")
 
 	_, rep := idx.Candidates(Category, "cat-bad-member")
 	if len(rep.Hits) != 0 {

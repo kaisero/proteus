@@ -115,9 +115,9 @@ func withConfig(args []string, extra int, fn func(*config.Config, []string) erro
 	if err != nil {
 		return err
 	}
-	fmt.Printf("loaded %s in %v: PAN-OS %s (%s), %s\n",
+	fmt.Printf("loaded %s in %v: PAN-OS %s (%s)\n",
 		args[0], time.Since(start).Round(time.Microsecond),
-		cfg.Version(), cfg.DetailVersion(), cfg.Platform())
+		cfg.Version(), cfg.DetailVersion())
 	if rep.HasUnknown() {
 		fmt.Printf("  note: %s\n", rep)
 	}

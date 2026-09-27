@@ -7,7 +7,7 @@ import (
 
 func appsIndex(t *testing.T) *Index {
 	t.Helper()
-	return indexOfVsys(t, "../testdata/config/firewall-apps.xml", "vsys1")
+	return indexOf(t, "../testdata/config/firewall-apps.xml", "vsys1")
 }
 
 // A custom application is in the file, and the group holding it resolves through the

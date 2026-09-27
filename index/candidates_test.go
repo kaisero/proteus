@@ -12,7 +12,7 @@ import (
 // field being "any". Forgetting one of the four is the mistake this exists to
 // prevent.
 func TestCandidatesForCoversAllFourPaths(t *testing.T) {
-	idx := indexOfVsys(t, "../testdata/config/firewall-paths.xml", "vsys1")
+	idx := indexOf(t, "../testdata/config/firewall-paths.xml", "vsys1")
 	rules := idx.Rules()
 	names := func(b *roaring.Bitmap) map[string]bool {
 		out := map[string]bool{}
@@ -41,7 +41,7 @@ func TestCandidatesForCoversAllFourPaths(t *testing.T) {
 // A name has three of the four paths: itself, its groups, and any. A literal
 // cannot apply, because a name is not an address.
 func TestCandidatesForNameCoversNameGroupsAndAny(t *testing.T) {
-	idx := indexOfVsys(t, "../testdata/config/firewall-paths.xml", "vsys1")
+	idx := indexOf(t, "../testdata/config/firewall-paths.xml", "vsys1")
 	rules := idx.Rules()
 	got := map[string]bool{}
 	for it := idx.CandidatesForName(Source, "h-1").Iterator(); it.HasNext(); {
@@ -60,7 +60,7 @@ func TestCandidatesForNameCoversNameGroupsAndAny(t *testing.T) {
 // The composition a consumer writes: two sides, intersect, drop disabled, take the
 // lowest bit. The library supplies the sides and nothing more.
 func TestComposingSidesGivesTheDeviceAnswer(t *testing.T) {
-	idx := indexOfVsys(t, "../testdata/config/firewall-anyrule.xml", "vsys1")
+	idx := indexOf(t, "../testdata/config/firewall-anyrule.xml", "vsys1")
 	src := idx.CandidatesFor(Source, netip.MustParseAddr("198.18.0.5"))
 	dst := idx.CandidatesFor(Destination, netip.MustParseAddr("198.18.1.5"))
 	cand := roaring.And(src, dst)
@@ -76,7 +76,7 @@ func TestComposingSidesGivesTheDeviceAnswer(t *testing.T) {
 }
 
 func TestCandidatesForUnknownAddressIsEmptyExceptAny(t *testing.T) {
-	idx := indexOfVsys(t, "../testdata/config/firewall-paths.xml", "vsys1")
+	idx := indexOf(t, "../testdata/config/firewall-paths.xml", "vsys1")
 	rules := idx.Rules()
 	got := map[string]bool{}
 	for it := idx.CandidatesFor(Destination, netip.MustParseAddr("203.0.113.1")).Iterator(); it.HasNext(); {
@@ -106,7 +106,7 @@ func keys(m map[string]bool) []string {
 // A prefix reaches a rule through an overlapping object, a group holding one, an
 // overlapping literal, or a field of any.
 func TestCandidatesForPrefix(t *testing.T) {
-	idx := indexOfVsys(t, "../testdata/config/firewall-paths.xml", "vsys1")
+	idx := indexOf(t, "../testdata/config/firewall-paths.xml", "vsys1")
 	rules := idx.Rules()
 	got := map[string]bool{}
 	// 10.1.1.0/24 contains h-1 at 10.1.1.1 and overlaps the literal 10.1.0.0/16.
@@ -126,7 +126,7 @@ func TestCandidatesForPrefix(t *testing.T) {
 // A prefix covering nothing but reached by an any-rule still finds that rule, and
 // nothing else.
 func TestCandidatesForPrefixOnlyAny(t *testing.T) {
-	idx := indexOfVsys(t, "../testdata/config/firewall-paths.xml", "vsys1")
+	idx := indexOf(t, "../testdata/config/firewall-paths.xml", "vsys1")
 	rules := idx.Rules()
 	got := map[string]bool{}
 	for it := idx.CandidatesForPrefix(Source, netip.MustParsePrefix("203.0.113.0/24")).Iterator(); it.HasNext(); {
@@ -145,7 +145,7 @@ func TestCandidatesForPrefixOnlyAny(t *testing.T) {
 // A name that does not exist reaches only the any-rules, and interning it must not
 // corrupt the table for later lookups.
 func TestCandidatesForUnknownName(t *testing.T) {
-	idx := indexOfVsys(t, "../testdata/config/firewall-paths.xml", "vsys1")
+	idx := indexOf(t, "../testdata/config/firewall-paths.xml", "vsys1")
 	before := idx.Interner().Len()
 	rules := idx.Rules()
 	got := map[string]bool{}

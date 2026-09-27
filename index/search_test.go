@@ -9,7 +9,7 @@ import (
 // 31 characters and one of its members at 255, so a long URL cannot appear in the name
 // of the category holding it. Searching the values is the only way to find it.
 func TestSearchValuesFindsALongURLByFragment(t *testing.T) {
-	idx := indexOfVsys(t, "../testdata/config/firewall-urlcat.xml", "vsys1")
+	idx := indexOf(t, "../testdata/config/firewall-urlcat.xml", "vsys1")
 
 	hits := idx.SearchValues("azureapps")
 	if len(hits) != 1 {
@@ -29,7 +29,7 @@ func TestSearchValuesFindsALongURLByFragment(t *testing.T) {
 
 // Searching is case-insensitive, because a human typing a URL does not match case.
 func TestSearchValuesIgnoresCase(t *testing.T) {
-	idx := indexOfVsys(t, "../testdata/config/firewall-urlcat.xml", "vsys1")
+	idx := indexOf(t, "../testdata/config/firewall-urlcat.xml", "vsys1")
 
 	if got := len(idx.SearchValues("AZUREAPPS")); got != 1 {
 		t.Errorf("got %d hits for an upper-case fragment, want 1", got)
@@ -38,7 +38,7 @@ func TestSearchValuesIgnoresCase(t *testing.T) {
 
 // Searching spans value spaces, so an address fragment works too.
 func TestSearchValuesFindsAddressesAndFQDNs(t *testing.T) {
-	idx := indexOfVsys(t, "../testdata/config/firewall-urlcat.xml", "vsys1")
+	idx := indexOf(t, "../testdata/config/firewall-urlcat.xml", "vsys1")
 
 	if got := idx.SearchValues("198.18"); len(got) == 0 {
 		t.Error("an address fragment found nothing")
@@ -53,7 +53,7 @@ func TestSearchValuesFindsAddressesAndFQDNs(t *testing.T) {
 // the category here; a match does not, and that difference is the reason the two are
 // separate calls.
 func TestSearchValuesIsNotMatching(t *testing.T) {
-	idx := indexOfVsys(t, "../testdata/config/firewall-urlcat.xml", "vsys1")
+	idx := indexOf(t, "../testdata/config/firewall-urlcat.xml", "vsys1")
 
 	const trap = "wildcard-example.com"
 	if got := len(idx.SearchValues(trap)); got == 0 {
@@ -67,7 +67,7 @@ func TestSearchValuesIsNotMatching(t *testing.T) {
 
 // An empty or blank search returns nothing rather than everything.
 func TestSearchValuesRejectsAnEmptyFragment(t *testing.T) {
-	idx := indexOfVsys(t, "../testdata/config/firewall-urlcat.xml", "vsys1")
+	idx := indexOf(t, "../testdata/config/firewall-urlcat.xml", "vsys1")
 
 	for _, q := range []string{"", "   "} {
 		if got := idx.SearchValues(q); got != nil {
@@ -80,7 +80,7 @@ func TestSearchValuesRejectsAnEmptyFragment(t *testing.T) {
 // more than once. The results are ordered by name and then by the value that
 // matched, so the output is stable.
 func TestSearchValuesOrdersSeveralHitsOnOneObject(t *testing.T) {
-	idx := indexOfVsys(t, "../testdata/config/firewall-urlcat.xml", "vsys1")
+	idx := indexOf(t, "../testdata/config/firewall-urlcat.xml", "vsys1")
 
 	hits := idx.SearchValues("198.18.5.")
 	if len(hits) < 2 {

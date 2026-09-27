@@ -12,7 +12,7 @@ import (
 
 func labIndex(t *testing.T) *Index {
 	t.Helper()
-	return indexOfVsys(t, "../testdata/config/firewall-multivsys.xml", "vsys1")
+	return indexOf(t, "../testdata/config/firewall-multivsys.xml", "vsys1")
 }
 
 func TestIndexIsCachedPerScope(t *testing.T) {
@@ -61,7 +61,7 @@ func TestContainingIsScopeBound(t *testing.T) {
 	for _, m := range idx.Containing(netip.MustParseAddr("10.125.0.1")) {
 		t.Errorf("a Graz object leaked into the Vienna index: %s", m.Name)
 	}
-	graz := indexOfVsys(t, "../testdata/config/firewall-multivsys.xml", "vsys2")
+	graz := indexOf(t, "../testdata/config/firewall-multivsys.xml", "vsys2")
 	found := false
 	for _, m := range graz.Containing(netip.MustParseAddr("10.125.0.1")) {
 		if m.Name == "corp-dc-graz" {
@@ -142,7 +142,7 @@ func TestFirstMatchThroughNestedGroups(t *testing.T) {
 }
 
 func TestDisabledRulesAreMasked(t *testing.T) {
-	idx := indexOfVsys(t, "../testdata/config/firewall-lab.xml", "vsys1")
+	idx := indexOf(t, "../testdata/config/firewall-lab.xml", "vsys1")
 	mask := idx.Disabled()
 	if mask.IsEmpty() {
 		t.Fatal("tagged-out is disabled in the fixture")

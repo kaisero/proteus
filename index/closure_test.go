@@ -6,8 +6,8 @@ import (
 	"github.com/okaiser/panos-analyst/config"
 )
 
-// indexOfVsys builds an index for a firewall's vsys rather than a device group.
-func indexOfVsys(t *testing.T, path, vsys string) *Index {
+// indexOf builds an index for one vsys of a configuration file.
+func indexOf(t *testing.T, path, vsys string) *Index {
 	t.Helper()
 	cfg, _, err := config.Load(path)
 	if err != nil {
@@ -22,7 +22,7 @@ func indexOfVsys(t *testing.T, path, vsys string) *Index {
 
 func nestedIndex(t *testing.T) *Index {
 	t.Helper()
-	return indexOfVsys(t, "../testdata/config/firewall-nested-groups.xml", "vsys1")
+	return indexOf(t, "../testdata/config/firewall-nested-groups.xml", "vsys1")
 }
 
 func TestGroupsOfIsTransitive(t *testing.T) {
@@ -53,7 +53,7 @@ func TestMembersOfIsTransitive(t *testing.T) {
 
 // A cycle must not hang or overflow. The membership is still reported.
 func TestClosureSurvivesACycle(t *testing.T) {
-	idx := indexOfVsys(t, "../testdata/config/firewall-cyclic-groups.xml", "vsys1")
+	idx := indexOf(t, "../testdata/config/firewall-cyclic-groups.xml", "vsys1")
 	if got := idx.GroupsOf("h-1"); len(got) == 0 {
 		t.Error("a cyclic group definition still has members")
 	}
@@ -90,7 +90,7 @@ func TestDynamicGroupExtendsTheChain(t *testing.T) {
 // And the same dynamic group resolves differently in a sibling vsys, so the
 // closure is scope-bound like everything else.
 func TestDynamicClosureIsScopeBound(t *testing.T) {
-	graz := indexOfVsys(t, "../testdata/config/firewall-multivsys.xml", "vsys2")
+	graz := indexOf(t, "../testdata/config/firewall-multivsys.xml", "vsys2")
 	if got := graz.MembersOf("corp-location"); len(got) != 1 || got[0] != "corp-location-graz" {
 		t.Errorf("in vsys2 the group holds %v, want [corp-location-graz]", got)
 	}
@@ -102,7 +102,7 @@ func TestDynamicClosureIsScopeBound(t *testing.T) {
 // A dynamic group whose filter cannot be read has no members in the index, and the
 // index says which group that is rather than leaving the caller to notice.
 func TestUnparsedFiltersAreReported(t *testing.T) {
-	idx := indexOfVsys(t, "../testdata/config/firewall-badfilter.xml", "vsys1")
+	idx := indexOf(t, "../testdata/config/firewall-badfilter.xml", "vsys1")
 	got := idx.UnparsedFilters()
 	if len(got) != 1 || got[0].Group != "g-bad" {
 		t.Fatalf("UnparsedFilters = %+v, want just g-bad", got)

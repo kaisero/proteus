@@ -1,0 +1,9 @@
+<config version="11.2.0" urldb="paloaltonetworks" detail-version="11.2.7">
+  <devices>
+    <entry name="localhost.localdomain">
+      <device-group>
+        <entry name="dg1"/>
+      </device-group>
+    </entry>
+  </devices>
+</config>

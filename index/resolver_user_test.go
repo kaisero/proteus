@@ -9,7 +9,7 @@ import (
 
 func usersIndex(t *testing.T) *Index {
 	t.Helper()
-	return indexOfVsys(t, "../testdata/config/firewall-users.xml", "vsys1")
+	return indexOf(t, "../testdata/config/firewall-users.xml", "vsys1")
 }
 
 func snapshot(t *testing.T) *UserSnapshot {

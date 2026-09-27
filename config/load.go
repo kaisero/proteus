@@ -10,22 +10,6 @@ import (
 	"github.com/okaiser/panos-analyst/internal/schema"
 )
 
-// Platform is the kind of device a configuration came from.
-type Platform int
-
-// The platforms a configuration can describe.
-const (
-	Firewall Platform = iota
-	Panorama
-)
-
-func (p Platform) String() string {
-	if p == Panorama {
-		return "panorama"
-	}
-	return "firewall"
-}
-
 // supported lists the PAN-OS versions this build carries a digest for.
 var supported = []string{"11.2.0"}
 
@@ -39,7 +23,6 @@ type Config struct {
 	path          string
 	version       string
 	detailVersion string
-	platform      Platform
 	schema        *loadedSchema
 	root          *Element
 }
@@ -49,9 +32,6 @@ func (c *Config) Version() string { return c.version }
 
 // DetailVersion returns the patch level from the config root, e.g. 11.2.7.
 func (c *Config) DetailVersion() string { return c.detailVersion }
-
-// Platform reports whether the configuration came from a firewall or Panorama.
-func (c *Config) Platform() Platform { return c.platform }
 
 // Path returns the file the configuration was loaded from.
 func (c *Config) Path() string { return c.path }
@@ -83,32 +63,34 @@ func Load(path string) (*Config, Report, error) {
 	if version == "" {
 		return nil, rep, fmt.Errorf("config: %s: the <config> element has no version attribute", path)
 	}
-	platform := platformOf(root)
+	if isPanorama(root) {
+		return nil, rep, fmt.Errorf("config: %s is a Panorama configuration; "+
+			"panos-analyst reads each firewall's own configuration", path)
+	}
 
-	sch, err := loadDigest(version, platform)
+	sch, err := loadDigest(version)
 	if err != nil {
 		return nil, rep, err
 	}
 	return &Config{
 		path: path, version: version, detailVersion: root.Attr("detail-version"),
-		platform: platform, schema: sch, root: root,
+		schema: sch, root: root,
 	}, rep, nil
 }
 
-// platformOf reports whether a configuration came from a firewall or Panorama.
+// isPanorama reports whether a configuration came from Panorama.
 //
 // Panorama writes device-group, template and template-stack under devices/entry;
-// a firewall writes vsys. A configuration with neither is a firewall with nothing
-// configured.
-func platformOf(root *Element) Platform {
+// a firewall writes vsys. Observed on Panorama 11.2.7-h1.
+func isPanorama(root *Element) bool {
 	for _, d := range root.Find("devices", "entry") {
 		for _, marker := range []string{"device-group", "template", "template-stack"} {
 			if d.Child(marker) != nil {
-				return Panorama
+				return true
 			}
 		}
 	}
-	return Firewall
+	return false
 }
 
 // loadedSchema is a decoded digest and the reference table derived from it.
@@ -128,8 +110,8 @@ var (
 	schemaCache = map[string]*loadedSchema{}
 )
 
-func loadDigest(version string, platform Platform) (*loadedSchema, error) {
-	name := digest.Filename(platform.String(), version)
+func loadDigest(version string) (*loadedSchema, error) {
+	name := digest.Filename(digest.PlatformFirewall, version)
 
 	schemaMu.Lock()
 	defer schemaMu.Unlock()
@@ -139,8 +121,8 @@ func loadDigest(version string, platform Platform) (*loadedSchema, error) {
 
 	f, err := digestFS.Open("schemadigest/" + name)
 	if err != nil {
-		return nil, fmt.Errorf("config: no schema for PAN-OS %s %s; this build supports %s",
-			version, platform, strings.Join(supported, ", "))
+		return nil, fmt.Errorf("config: no schema for PAN-OS %s; this build supports %s",
+			version, strings.Join(supported, ", "))
 	}
 	defer func() { _ = f.Close() }()
 	d, err := digest.Read(f)
