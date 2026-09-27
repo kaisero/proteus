@@ -463,6 +463,20 @@ func sectionSimulate(idx *index.Index, addr netip.Addr, objs []resolve.Object) {
 
 func sectionCaveats(idx *index.Index) {
 	heading(12, "What this answer does not cover")
+
+	// A value the index cannot resolve must not come back as a bare rule list.
+	// Demonstrated with a URL, because a rulebase using custom URL categories is
+	// exactly where this used to mislead: the rules whose category is "any" came
+	// back and looked like the answer.
+	probe := "superlong.example.azureapps.microsoft.com"
+	rules, unresolved := idx.Candidates(index.Category, probe)
+	fmt.Printf("  asking which rules a URL reaches: %s\n", probe)
+	fmt.Printf("    %d rule(s) returned\n", rules.GetCardinality())
+	for _, u := range unresolved {
+		fmt.Printf("    INCOMPLETE: %s\n", u)
+	}
+	fmt.Println()
+
 	for _, u := range idx.UnparsedFilters() {
 		fmt.Printf("  dynamic group %s: filter %s could not be read (%s)\n",
 			u.Group, u.Filter, u.Reason)

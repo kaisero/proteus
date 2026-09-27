@@ -363,8 +363,9 @@ func cmdSimulate(cfg *config.Config, args []string) error {
 
 	// One call per side. The library knows the four ways a rule field can reach a
 	// value; the verdict below is this command's part.
-	srcRules := candidates(idx, index.Source, args[1])
-	dstRules := candidates(idx, index.Destination, args[2])
+	srcRules, srcUn := idx.Candidates(index.Source, args[1])
+	dstRules, dstUn := idx.Candidates(index.Destination, args[2])
+	warn(append(srcUn, dstUn...))
 	cand := roaring.And(srcRules, dstRules)
 	cand.AndNot(idx.Disabled())
 	if cand.IsEmpty() {
@@ -386,16 +387,19 @@ func cmdSimulate(cfg *config.Config, args []string) error {
 	return nil
 }
 
-// candidates asks the library for one side of a match, reading the argument as an
-// address, a prefix, or an object name.
-func candidates(idx *index.Index, f index.Field, value string) *roaring.Bitmap {
-	if addr, err := netip.ParseAddr(value); err == nil {
-		return idx.CandidatesFor(f, addr)
+// warn prints what the library could not evaluate.
+//
+// An incomplete answer is printed before the result, not after it, because the
+// result on its own looks complete.
+func warn(us []index.Unresolved) {
+	if len(us) == 0 {
+		return
 	}
-	if p, err := netip.ParsePrefix(value); err == nil {
-		return idx.CandidatesForPrefix(f, p)
+	fmt.Println("INCOMPLETE: this answer is missing matches.")
+	for _, u := range us {
+		fmt.Printf("  %s\n", u)
 	}
-	return idx.CandidatesForName(f, value)
+	fmt.Println()
 }
 
 func scopeList(ss []config.Scope) string {

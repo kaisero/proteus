@@ -1,0 +1,45 @@
+<config version="11.2.0" urldb="paloaltonetworks" detail-version="11.2.5">
+  <shared/>
+  <devices>
+    <entry name="localhost.localdomain">
+      <vsys>
+        <entry name="vsys1">
+          <address>
+            <entry name="net-labor"><ip-netmask>198.18.0.0/15</ip-netmask></entry>
+          </address>
+          <profiles>
+            <custom-url-category>
+              <entry name="custom-azuresite-group">
+                <list>
+                  <member>superlong.example.azureapps.microsoft.com</member>
+                  <member>*.wildcard-example.com</member>
+                </list>
+                <type>URL List</type>
+              </entry>
+            </custom-url-category>
+          </profiles>
+          <rulebase>
+            <security>
+              <rules>
+                <entry name="any-category-early">
+                  <source><member>any</member></source>
+                  <destination><member>any</member></destination>
+                  <application><member>any</member></application>
+                  <category><member>any</member></category>
+                  <action>allow</action>
+                </entry>
+                <entry name="URL-Example">
+                  <source><member>any</member></source>
+                  <destination><member>any</member></destination>
+                  <application><member>any</member></application>
+                  <category><member>custom-azuresite-group</member></category>
+                  <action>allow</action>
+                </entry>
+              </rules>
+            </security>
+          </rulebase>
+        </entry>
+      </vsys>
+    </entry>
+  </devices>
+</config>
