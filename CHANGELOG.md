@@ -17,6 +17,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   there, so a field that accepts an address, a region and an external list is asked
   of each rather than treated as an address field. Addresses answer exactly as
   before; other value spaces arrive behind the same seam.
+- **Custom URL category members are parsed the way a firewall writes them.** A
+  member is matched by tokens, not by substring: `wildcard-example.com` does not
+  cover `wildcard-example.com.evil.net`. The host must match in full and the path
+  matches as a prefix, `*` takes one or more tokens and `^` exactly one, and a
+  pattern a firewall would refuse is refused here with the reason.
 - **Objects nested under a sub-container are visible.** A custom URL category, and
   every security profile, lives under `profiles/` rather than directly under its
   scope, so the library found none of them. Where a kind sits now comes from the
