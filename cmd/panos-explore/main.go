@@ -48,6 +48,8 @@ func main() {
 		err = withConfig(args, 2, cmdTarget)
 	case "lookup":
 		err = withConfig(args, 2, cmdLookup)
+	case "reaches":
+		err = withConfig(args, 3, cmdReaches)
 	case "whereused":
 		err = withConfig(args, 2, cmdWhereUsed)
 	case "simulate":
@@ -72,11 +74,14 @@ func usage() {
   panos-explore groups    <config.xml>
   panos-explore target    <config.xml> <serial> <vsys>
   panos-explore lookup    <config.xml> <scope> <value>
+  panos-explore reaches   <config.xml> <scope> <field> <value>
   panos-explore whereused <config.xml> <scope> <name>
   panos-explore simulate  <config.xml> <scope> <source> <destination>
   panos-explore group     <config.xml> <scope> <name>
 
 A scope is shared, vsys:<name> or dg:<name>.
+A field is source, destination, category, application, service, from, to,
+source-user or tag.
 `)
 	os.Exit(2)
 }
@@ -403,6 +408,58 @@ func explain(rep index.Report) {
 		fmt.Printf("  %-24s %s\n", g, "group holding one of those")
 	}
 	fmt.Println()
+}
+
+// cmdReaches asks which rules one field could match one value, whatever kind of
+// value it is: an address, a prefix, a URL, or the name of an object.
+func cmdReaches(cfg *config.Config, args []string) error {
+	sc, err := config.ParseScope(args[0])
+	if err != nil {
+		return err
+	}
+	field, ok := fieldByName(args[1])
+	if !ok {
+		return fmt.Errorf("unknown field %q", args[1])
+	}
+	idx, err := index.For(cfg, sc)
+	if err != nil {
+		return err
+	}
+
+	value := args[2]
+	fmt.Printf("which rules could %s match %s, in %s\n\n", field, value, sc)
+
+	rules, rep := idx.Candidates(field, value)
+	warn(rep.Unresolved)
+	explain(rep)
+
+	if rules.IsEmpty() {
+		fmt.Println("no rule could match it")
+		return nil
+	}
+	all := idx.Rules()
+	fmt.Printf("rules in evaluation order (%d)\n", rules.GetCardinality())
+	for it := rules.Iterator(); it.HasNext(); {
+		r := all[it.Next()]
+		fmt.Printf("  %3d. %-26s %-6s [%-11s %s]\n", r.Position, r.Name, r.Action, r.Layer, r.Scope)
+	}
+	if rep.ViaAny {
+		fmt.Printf("\nsome of those match only because their %s is \"any\"\n", field)
+	}
+	return nil
+}
+
+// fieldByName reads a field name as the library spells it.
+func fieldByName(name string) (index.Field, bool) {
+	for _, f := range []index.Field{
+		index.Source, index.Destination, index.Application, index.Service,
+		index.FromZone, index.ToZone, index.Category, index.SourceUser, index.Tag,
+	} {
+		if f.String() == name {
+			return f, true
+		}
+	}
+	return 0, false
 }
 
 // warn prints what the library could not evaluate.

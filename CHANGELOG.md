@@ -17,6 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   there, so a field that accepts an address, a region and an external list is asked
   of each rather than treated as an address field. Addresses answer exactly as
   before; other value spaces arrive behind the same seam.
+- **`panos-explore reaches <config> <scope> <field> <value>`** asks which rules one
+  rule field could match one value, whatever kind of value it is: an address, a
+  prefix, a URL or an object name. It prints what matched and via which value, and
+  says when rules are included only because the field is `any`.
 - **Ask which rules a URL reaches.** Give the library a URL and it reports the
   custom URL categories covering it, the rules naming those categories, and the
   member that matched — an exact URL or a wildcard alike. A category name still works
