@@ -98,9 +98,9 @@ func TestLocalLayerIsAbsentFromPanorama(t *testing.T) {
 	}
 }
 
-// A sibling's rules must never appear.
-func TestMergedRulesExcludeSiblings(t *testing.T) {
-	tg, _ := TargetFor(lab(t), "007900000000003", "vsys1")
+// A sibling vsys's rules must never appear.
+func TestRulesExcludeASiblingVsys(t *testing.T) {
+	tg, _ := TargetFor(vsysLab(t), "localhost.localdomain", "vsys1")
 	rules, err := tg.Rules(Security)
 	if err != nil {
 		t.Fatalf("Rules: %v", err)
@@ -110,10 +110,45 @@ func TestMergedRulesExcludeSiblings(t *testing.T) {
 		for i, r := range rules {
 			names[i] = r.Name
 		}
-		t.Errorf("got %v, want just [Corp DC Access]", names)
+		t.Fatalf("got %v, want just [Corp DC Access]", names)
 	}
 	if got := rules[0].Fields["source"]; len(got) != 1 || got[0] != "corp-location" {
 		t.Errorf("source = %v, want [corp-location]", got)
+	}
+	sibling, _ := TargetFor(vsysLab(t), "localhost.localdomain", "vsys2")
+	if got, _ := sibling.Rules(Security); len(got) != 0 {
+		t.Errorf("vsys2 has no rules of its own, got %d", len(got))
+	}
+}
+
+// Every rule carries the scope it was read from and its place in the order.
+func TestFirewallRulesCarryScopeAndPosition(t *testing.T) {
+	tg, err := TargetFor(fwLab(t), "localhost.localdomain", "vsys1")
+	if err != nil {
+		t.Fatalf("TargetFor: %v", err)
+	}
+	rules, err := tg.Rules(Security)
+	if err != nil {
+		t.Fatalf("Rules: %v", err)
+	}
+	byName := map[string]Rule{}
+	for i, r := range rules {
+		if r.Position != i+1 {
+			t.Errorf("%s has position %d, want %d", r.Name, r.Position, i+1)
+		}
+		byName[r.Name] = r
+	}
+	if got := byName["pushed-pre"].Scope.String(); got != "shared" {
+		t.Errorf("pushed-pre scope = %q, want shared", got)
+	}
+	if got := byName["dc-to-home"].Scope.String(); got != "vsys:vsys1" {
+		t.Errorf("dc-to-home scope = %q, want vsys:vsys1", got)
+	}
+	if !byName["tagged-out"].Disabled {
+		t.Error("tagged-out is disabled in the fixture")
+	}
+	if byName["pushed-post"].Action != "deny" {
+		t.Errorf("pushed-post action = %q, want deny", byName["pushed-post"].Action)
 	}
 }
 
@@ -161,13 +196,13 @@ func TestRulesForDeviceGroupRejectsACycle(t *testing.T) {
 }
 
 // The NAT rulebase reads through the same path.
-func TestMergedNatRulebaseIsEmptyInTheFixture(t *testing.T) {
-	tg, _ := TargetFor(mergeLab(t), "001122334455", "vsys1")
+func TestNatRulebaseIsEmptyInTheFixture(t *testing.T) {
+	tg, _ := TargetFor(fwLab(t), "localhost.localdomain", "vsys1")
 	got, err := tg.Rules(NAT)
 	if err != nil {
 		t.Fatalf("Rules(NAT): %v", err)
 	}
 	if len(got) != 0 {
-		t.Errorf("the merge fixture has no NAT rules, got %d", len(got))
+		t.Errorf("the fixture has no NAT rules, got %d", len(got))
 	}
 }

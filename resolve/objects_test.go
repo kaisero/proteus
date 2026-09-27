@@ -18,7 +18,7 @@ func loadT(t *testing.T, path string) *config.Config {
 
 func shadowLab(t *testing.T) *config.Config {
 	t.Helper()
-	cfg, _, err := config.Load("../testdata/config/panorama-shadow.xml")
+	cfg, _, err := config.Load("../testdata/config/firewall-shadow.xml")
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -26,7 +26,7 @@ func shadowLab(t *testing.T) *config.Config {
 }
 
 func TestScopedObjectsExcludeSiblings(t *testing.T) {
-	tg, err := TargetFor(lab(t), "007900000000003", "vsys1")
+	tg, err := TargetFor(vsysLab(t), "localhost.localdomain", "vsys1")
 	if err != nil {
 		t.Fatalf("TargetFor: %v", err)
 	}
@@ -41,14 +41,14 @@ func TestScopedObjectsExcludeSiblings(t *testing.T) {
 	if !names["corp-dc-vienna"] || !names["corp-location-vienna"] {
 		t.Errorf("the target's own objects are missing: %v", names)
 	}
-	// corp-graz is a sibling device group, so its objects are invisible here.
+	// vsys2 is a sibling vsys, so its objects are invisible here.
 	if names["corp-dc-graz"] || names["corp-location-graz"] {
-		t.Errorf("sibling device-group objects leaked in: %v", names)
+		t.Errorf("sibling vsys objects leaked in: %v", names)
 	}
 }
 
 func TestScopedObjectsCarryValueAndTags(t *testing.T) {
-	tg, _ := TargetFor(lab(t), "007900000000003", "vsys1")
+	tg, _ := TargetFor(vsysLab(t), "localhost.localdomain", "vsys1")
 	objs, _ := tg.Objects("address")
 	for _, o := range objs {
 		if o.Name != "corp-location-vienna" {
@@ -60,8 +60,8 @@ func TestScopedObjectsCarryValueAndTags(t *testing.T) {
 		if len(o.Tags) != 1 || o.Tags[0] != "corp-location" {
 			t.Errorf("tags = %v, want [corp-location]", o.Tags)
 		}
-		if o.Scope.String() != "dg:host_1_directory" {
-			t.Errorf("scope = %q, want dg:host_1_directory", o.Scope.String())
+		if o.Scope.String() != "vsys:vsys1" {
+			t.Errorf("scope = %q, want vsys:vsys1", o.Scope.String())
 		}
 		return
 	}
@@ -69,7 +69,7 @@ func TestScopedObjectsCarryValueAndTags(t *testing.T) {
 }
 
 func TestShadowingIsReported(t *testing.T) {
-	tg, err := TargetFor(shadowLab(t), "001122334455", "vsys1")
+	tg, err := TargetFor(shadowLab(t), "localhost.localdomain", "vsys1")
 	if err != nil {
 		t.Fatalf("TargetFor: %v", err)
 	}
@@ -86,27 +86,27 @@ func TestShadowingIsReported(t *testing.T) {
 	if shadowed == nil {
 		t.Fatal("web-server not found")
 	}
-	if shadowed.Scope.String() != "dg:leaf" {
-		t.Errorf("the descendant definition must win, got scope %q", shadowed.Scope.String())
+	if shadowed.Scope.String() != "vsys:vsys1" {
+		t.Errorf("the vsys definition must win, got scope %q", shadowed.Scope.String())
 	}
 	if shadowed.Value != "10.9.9.1" {
-		t.Errorf("value = %q, want the leaf's 10.9.9.1", shadowed.Value)
+		t.Errorf("value = %q, want the vsys's 10.9.9.1", shadowed.Value)
 	}
-	if shadowed.ShadowedFrom == nil || shadowed.ShadowedFrom.String() != "dg:top" {
+	if shadowed.ShadowedFrom == nil || shadowed.ShadowedFrom.String() != "shared" {
 		t.Errorf("shadowing must name what it replaced, got %v", shadowed.ShadowedFrom)
 	}
-	// An ancestor-only object is still visible.
+	// A shared-only object is still visible.
 	var found bool
 	for _, o := range objs {
-		if o.Name == "only-in-top" {
+		if o.Name == "only-in-shared" {
 			found = true
 			if o.ShadowedFrom != nil {
-				t.Error("only-in-top shadows nothing")
+				t.Error("only-in-shared shadows nothing")
 			}
 		}
 	}
 	if !found {
-		t.Error("only-in-top must be inherited from the ancestor")
+		t.Error("only-in-shared must be inherited from shared")
 	}
 }
 

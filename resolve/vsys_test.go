@@ -15,6 +15,13 @@ func fwLab(t *testing.T) *config.Config {
 	return cfg
 }
 
+// vsysLab is one firewall with three vsys. vsys1 and vsys2 each tag their own
+// objects for the shared dynamic group corp-location; vsys3 tags nothing.
+func vsysLab(t *testing.T) *config.Config {
+	t.Helper()
+	return loadT(t, "../testdata/config/firewall-multivsys.xml")
+}
+
 func TestVsysesFromAFirewall(t *testing.T) {
 	got, err := Vsyses(fwLab(t))
 	if err != nil {

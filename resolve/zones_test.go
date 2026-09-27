@@ -120,17 +120,14 @@ func TestDynamicRoutingProtocols(t *testing.T) {
 	}
 }
 
-// A device group has no zones, because on Panorama they live in a template.
-func TestZonesInScopeOnADeviceGroup(t *testing.T) {
-	cfg := loadT(t, "../testdata/config/panorama-lab.xml")
-	sc := config.Scope{Sort: config.ScopeDeviceGroup, Name: "at-ktn"}
-
-	zones, err := ZonesInScope(cfg, sc)
+// A vsys that defines no zones has none, and that is an answer, not an error.
+func TestZonesInScopeOnAVsysWithNone(t *testing.T) {
+	zones, err := ZonesInScope(vsysLab(t), config.Scope{Sort: config.ScopeVsys, Name: "vsys3"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(zones) != 0 {
-		t.Errorf("got %d zones in a device group, want none: %+v", len(zones), zones)
+		t.Errorf("got %d zones in vsys3, want none: %+v", len(zones), zones)
 	}
 }
 

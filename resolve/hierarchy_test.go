@@ -79,11 +79,3 @@ func TestHierarchyIgnoresNothingItNeeds(t *testing.T) {
 		t.Fatal("no roots found")
 	}
 }
-
-func scopeStrings(ss []config.Scope) []string {
-	out := make([]string, len(ss))
-	for i, s := range ss {
-		out[i] = s.String()
-	}
-	return out
-}

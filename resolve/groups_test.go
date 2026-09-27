@@ -6,12 +6,13 @@ import (
 	"github.com/okaiser/panos-analyst/config"
 )
 
-// One shared dynamic group resolves to different members in each device group,
-// because only the visible scope contributes. Resolving it globally makes every
-// result for a rule that uses it wrong rather than incomplete.
-// Observed on Panorama 11.2.7-h1.
+// One shared dynamic group resolves to different members in each vsys, because
+// only shared and the vsys itself contribute. Resolving it globally makes every
+// result for a rule that uses it wrong rather than incomplete. First observed on
+// Panorama 11.2.7-h1 across sibling device groups; sibling vsys on one firewall
+// stand in the same relation.
 func TestDynamicGroupResolvesPerScope(t *testing.T) {
-	tg, err := TargetFor(lab(t), "007900000000003", "vsys1")
+	tg, err := TargetFor(vsysLab(t), "localhost.localdomain", "vsys1")
 	if err != nil {
 		t.Fatalf("TargetFor: %v", err)
 	}
@@ -30,36 +31,32 @@ func TestDynamicGroupResolvesPerScope(t *testing.T) {
 	}
 }
 
-// The sibling device group holds the Graz objects, so the same group resolves
-// differently there. This is the case a global index would get wrong.
+// The sibling vsys holds the Graz objects, so the same group resolves differently
+// there. This is the case a global index would get wrong.
 func TestDynamicGroupDiffersInASibling(t *testing.T) {
-	got, err := GroupInScope(lab(t), config.Scope{
-		Sort: config.ScopeDeviceGroup, Name: "corp-graz",
-	}, "corp-location")
+	got, err := GroupInScope(vsysLab(t), config.Scope{Sort: config.ScopeVsys, Name: "vsys2"}, "corp-location")
 	if err != nil {
 		t.Fatalf("GroupInScope: %v", err)
 	}
 	if len(got.ByTag) != 1 || got.ByTag[0] != "corp-location-graz" {
-		t.Errorf("corp-graz resolved to %v, want [corp-location-graz]", got.ByTag)
+		t.Errorf("vsys2 resolved to %v, want [corp-location-graz]", got.ByTag)
 	}
 }
 
-// A device group with no tagged objects of its own resolves the same group to
-// nothing, which is the honest answer rather than the sibling's members.
+// A vsys with no tagged objects of its own resolves the same group to nothing,
+// which is the honest answer rather than the sibling's members.
 func TestDynamicGroupIsEmptyWhereNothingIsTagged(t *testing.T) {
-	got, err := GroupInScope(lab(t), config.Scope{
-		Sort: config.ScopeDeviceGroup, Name: "at-ktn",
-	}, "corp-location")
+	got, err := GroupInScope(vsysLab(t), config.Scope{Sort: config.ScopeVsys, Name: "vsys3"}, "corp-location")
 	if err != nil {
 		t.Fatalf("GroupInScope: %v", err)
 	}
 	if len(got.ByTag) != 0 {
-		t.Errorf("at-ktn resolved to %v, want nothing", got.ByTag)
+		t.Errorf("vsys3 resolved to %v, want nothing", got.ByTag)
 	}
 }
 
 func TestResolveGroupRejectsAnUnknownName(t *testing.T) {
-	tg, _ := TargetFor(lab(t), "007900000000003", "vsys1")
+	tg, _ := TargetFor(vsysLab(t), "localhost.localdomain", "vsys1")
 	if _, err := tg.ResolveGroup("no-such-group"); err == nil {
 		t.Error("an unknown group must be an error")
 	}
@@ -68,11 +65,8 @@ func TestResolveGroupRejectsAnUnknownName(t *testing.T) {
 // A filter PAN-OS accepts but this parser does not must yield nothing and say so,
 // rather than guess a membership.
 func TestUnparseableFilterIsReported(t *testing.T) {
-	cfg, _, err := config.Load("../testdata/config/panorama-badfilter.xml")
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-	got, err := GroupInScope(cfg, config.Scope{Sort: config.ScopeDeviceGroup, Name: "dg1"}, "g-bad")
+	cfg := loadT(t, "../testdata/config/firewall-badfilter.xml")
+	got, err := GroupInScope(cfg, config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}, "g-bad")
 	if err != nil {
 		t.Fatalf("GroupInScope: %v", err)
 	}
@@ -86,11 +80,8 @@ func TestUnparseableFilterIsReported(t *testing.T) {
 
 // A boolean filter resolves, not just a single tag.
 func TestBooleanFilterResolves(t *testing.T) {
-	cfg, _, err := config.Load("../testdata/config/panorama-badfilter.xml")
-	if err != nil {
-		t.Fatal(err)
-	}
-	sc := config.Scope{Sort: config.ScopeDeviceGroup, Name: "dg1"}
+	cfg := loadT(t, "../testdata/config/firewall-badfilter.xml")
+	sc := config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}
 	and, err := GroupInScope(cfg, sc, "g-and")
 	if err != nil {
 		t.Fatalf("GroupInScope: %v", err)

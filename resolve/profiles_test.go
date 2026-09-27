@@ -118,11 +118,11 @@ func TestProfileReadersReportABrokenHierarchy(t *testing.T) {
 	}
 }
 
-// Shared profiles are visible in a device group, and a device group's own definition
-// replaces a shared one of the same name.
+// Shared profiles are visible in a vsys, and a vsys's own definition replaces a
+// shared one of the same name.
 func TestURLFilteringProfilesShadowShared(t *testing.T) {
-	cfg := loadT(t, "../testdata/config/panorama-urlprofile.xml")
-	sc := config.Scope{Sort: config.ScopeDeviceGroup, Name: "dg1"}
+	cfg := loadT(t, "../testdata/config/firewall-urlprofile-shadow.xml")
+	sc := config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}
 
 	profs, err := URLFilteringProfilesInScope(cfg, sc)
 	if err != nil {
@@ -134,7 +134,7 @@ func TestURLFilteringProfilesShadowShared(t *testing.T) {
 	}
 	shared, ok := got["shared-filter"]
 	if !ok {
-		t.Fatal("a shared profile is not visible in the device group")
+		t.Fatal("a shared profile is not visible in the vsys")
 	}
 	if shared.Scope.Sort != config.ScopeShared {
 		t.Errorf("shared-filter scope = %s, want shared", shared.Scope)
@@ -143,10 +143,10 @@ func TestURLFilteringProfilesShadowShared(t *testing.T) {
 	if !ok {
 		t.Fatal("the overridden profile is missing")
 	}
-	if overridden.Scope.Sort != config.ScopeDeviceGroup {
-		t.Errorf("both-filter scope = %s, want the device group to win", overridden.Scope)
+	if overridden.Scope.Sort != config.ScopeVsys {
+		t.Errorf("both-filter scope = %s, want the vsys to win", overridden.Scope)
 	}
-	if list := overridden.Lists["block"]; len(list) != 1 || list[0] != "dg-category" {
-		t.Errorf("both-filter block list = %v, want the device group definition", list)
+	if list := overridden.Lists["block"]; len(list) != 1 || list[0] != "vsys-category" {
+		t.Errorf("both-filter block list = %v, want the vsys definition", list)
 	}
 }
