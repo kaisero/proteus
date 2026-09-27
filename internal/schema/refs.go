@@ -189,10 +189,11 @@ type FieldRefs struct {
 
 // References returns the reference fields of a subtree, grouped by field.
 //
-// A field usually has more than one candidate: of 2,420 reference fields in
-// cms-schema.xml, 919 declare two or more and the worst declares 31. A single
+// A field often has more than one candidate: of 2,961 reference fields in
+// cms-schema.xml, 1,034 declare two or more and the worst declares 153. A single
 // resolved kind cannot be known from the schema alone, so the caller gets the
-// candidates and resolves against the scope.
+// candidates and resolves against the scope. TestReferenceFieldCensus pins the
+// counts, because they moved when scope-relative targets started parsing.
 func References(n *Node) []FieldRefs {
 	var out []FieldRefs
 	for _, field := range n.Fields() {

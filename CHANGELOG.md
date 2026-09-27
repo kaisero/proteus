@@ -112,6 +112,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Two code comments carried a stale field census.** The scope-relative classifier
+  fix changed the counts and the comments were not updated: a Panorama schema has
+  2,961 reference fields, 1,034 of which declare more than one candidate kind, and
+  the worst declares 153 — not 2,420, 919 and 31. `TestReferenceFieldCensus` now pins
+  them against the committed digest.
+
 - **Thousands of reference edges were being discarded.** Any schema target beginning
   `#myentry(` counted as a template variable, but almost all of them are ordinary
   scope-relative references — `#myentry(vsys)/zone/entry/@name` names a zone. Recovering

@@ -75,7 +75,7 @@ tidy-check: ## Fail if go.mod/go.sum are not tidy
 
 gate: tidy-check lint test ## Fast pre-commit gate (tidy + lint + unit tests)
 
-ci: tidy-check lint test-race test-cov generate-check digest-check build vuln ## Everything CI runs
+ci: tidy-check lint test-race test-cov generate-check digest-check context-check build vuln ## Everything CI runs
 
 ## --- generate / build ---
 
@@ -108,6 +108,12 @@ schema-pull: ## Copy schema.xml/cms-schema.xml/opschema.xml off a PAN-OS host (H
 	scp $(HOST):/opt/pancfg/mgmt/factory/cms-schema.xml $(SCHEMA_DIR)/
 	scp $(HOST):/opt/pancfg/mgmt/factory/opschema.xml $(SCHEMA_DIR)/
 	@echo "schemas in $(SCHEMA_DIR)/ — these are vendor files, see ARCHITECTURE.md before committing them"
+
+context: ## Refresh the generated API blocks in .agents/context/
+	@python3 scripts/context-api.py
+
+context-check: ## Fail if the agent context docs have drifted from the real API
+	@python3 scripts/context-api.py --check
 
 digest-check: ## Fail if the embedded digests differ from the committed originals
 	@for f in $(DIGEST_DIR)/*.json.gz; do \

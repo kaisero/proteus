@@ -93,3 +93,51 @@ func TestNoUnrecognisedTargetParses(t *testing.T) {
 		t.Errorf("%d declarations were accepted or rejected wrongly", bad)
 	}
 }
+
+// Pinned field-level counts from the same schema. A reference field carries the
+// candidate kinds it may name, and one kind is not enough: the schema alone cannot
+// say which kind a target is.
+//
+// These moved once already. The scope-relative classifier fix added candidates to
+// existing fields and made some fields references for the first time, and two code
+// comments went stale unnoticed. Pinning them here means the next such change has to
+// be acknowledged.
+const (
+	wantRefFields = 2961
+	wantMultiKind = 1034
+	wantWorstKind = 153
+)
+
+func TestReferenceFieldCensus(t *testing.T) {
+	f, err := os.Open("../../schemadigest/panos-11.2.0-panorama.json.gz")
+	if err != nil {
+		t.Skip("no committed digest to census")
+	}
+	defer func() { _ = f.Close() }()
+	d, err := Read(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	total, multi, worst := 0, 0, 0
+	for _, arr := range schema.EntryTypes(d.Root) {
+		for _, fr := range schema.References(arr.EntrySequence()) {
+			total++
+			if len(fr.Candidates) > 1 {
+				multi++
+			}
+			if len(fr.Candidates) > worst {
+				worst = len(fr.Candidates)
+			}
+		}
+	}
+	if total != wantRefFields {
+		t.Errorf("reference fields = %d, want %d", total, wantRefFields)
+	}
+	if multi != wantMultiKind {
+		t.Errorf("fields declaring more than one kind = %d, want %d", multi, wantMultiKind)
+	}
+	if worst != wantWorstKind {
+		t.Errorf("most kinds on one field = %d, want %d", worst, wantWorstKind)
+	}
+}

@@ -4,9 +4,10 @@ import "github.com/okaiser/go-panos-schema/config"
 
 // Ref is one reference edge.
 //
-// Candidates is a list, not a single kind: of 2,420 reference fields in
-// cms-schema.xml, 919 declare two or more and the worst declares 31, so the schema
-// alone cannot say which kind a target is. From is an instance path, because two
+// Candidates is a list, not a single kind: of 2,961 reference fields in
+// cms-schema.xml, 1,034 declare two or more and the worst declares 153, so the
+// schema alone cannot say which kind a target is. The counts are pinned by
+// TestReferenceFieldCensus. From is an instance path, because two
 // device groups can each hold an object of the same name.
 type Ref struct {
 	Scope      config.Scope

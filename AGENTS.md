@@ -1,7 +1,12 @@
 # AGENTS.md
 
-These rules are mandatory. They apply to every package, existing and new.
-ARCHITECTURE.md holds the reasoning. This file holds the rules.
+Technical context for coding agents lives in
+[`.agents/context/`](.agents/context/index.md). Start at the index, then open
+only the subsystem deep-dive you need. That set explains mechanism and rationale.
+
+This file holds the rules. They are mandatory and they apply to every package,
+existing and new. `ARCHITECTURE.md` holds the reasoning behind the design as a
+whole.
 
 ## R1 — The schema is the only source of field knowledge
 
