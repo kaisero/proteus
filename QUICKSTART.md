@@ -742,8 +742,8 @@ and is reported.
 
 ```
 1 reference(s) to "g-outer" in dg:dg1
-  dg:dg1           source       /config/devices/localhost.localdomain/device-group/dg1/pre-rulebase/security/rules/allow-outer
-                                could be: [region address address-group external-list ip-block-list-v2]
+  dg:dg1 source /config/devices/localhost.localdomain/device-group/dg1/pre-rulebase/security/rules/allow-outer
+                could be: [region address address-group external-list ip-block-list-v2]
 
 it is a group holding [h-1 h-2 g-inner g-middle]
 ```
@@ -765,9 +765,12 @@ profiles are found, which needs three or four levels and a named union in betwee
 
 ```
 1 reference(s) to "baseline" in vsys:vsys1
-  vsys:vsys1       profile-setting/group /config/devices/localhost.localdomain/vsys/vsys1/rulebase/security/rules/by-group
-                                could be: [profile-group]
+  vsys:vsys1 profile-setting/group /config/devices/localhost.localdomain/vsys/vsys1/rulebase/security/rules/by-group
+                                   could be: [profile-group]
 ```
+
+The columns are sized to the rows, so a path-shaped field does not truncate and a
+short one does not push the instance path off to the right.
 
 Values that are an element's text rather than a member are found the same way, so
 `log-setting`, `schedule` and `group-tag` all resolve. Candidates are the kinds

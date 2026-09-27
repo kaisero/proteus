@@ -348,9 +348,17 @@ func cmdWhereUsed(cfg *config.Config, args []string) error {
 
 	refs := idx.Refs(name)
 	fmt.Printf("%d reference(s) to %q in %s\n", len(refs), name, sc)
+	// Sized to the rows, because a field is a path wherever the reference is
+	// nested and profile-setting/profiles/file-blocking is six times the width
+	// of source.
+	wScope, wField := 0, 0
 	for _, r := range refs {
-		fmt.Printf("  %-16s %-12s %s\n", r.Scope, r.Field, r.From)
-		fmt.Printf("  %-16s %-12s could be: %v\n", "", "", r.Candidates)
+		wScope = max(wScope, len(r.Scope.String()))
+		wField = max(wField, len(r.Field))
+	}
+	for _, r := range refs {
+		fmt.Printf("  %-*s %-*s %s\n", wScope, r.Scope, wField, r.Field, r.From)
+		fmt.Printf("  %-*s %-*s could be: %v\n", wScope, "", wField, "", r.Candidates)
 	}
 	if groups := idx.GroupsOf(name); len(groups) > 0 {
 		fmt.Printf("\nalso a member of %v\n", groups)

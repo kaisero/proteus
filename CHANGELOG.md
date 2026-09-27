@@ -125,6 +125,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A reference is listed in a column wide enough to hold it.** A field is a path
+  wherever the reference is nested, and `profile-setting/profiles/file-blocking` is
+  six times the width of `source`, so the fixed column truncated the long ones. Both
+  `panos-explore whereused` and the search server's `where_used` now size the scope
+  and field columns to the rows they are about to print, and the `could be`
+  continuation lines up with them.
+
 - **A configuration was read once per scope to build the same reference edges.**
   Each scope's index walked the whole file and discarded everything it could not
   see, so a Panorama file with 29 scopes was read 29 times. The read is now shared
