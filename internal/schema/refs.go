@@ -7,9 +7,15 @@ import (
 
 // TargetForm is what a memberof declaration actually names.
 //
-// Counted over the 13,120 declarations in cms-schema.xml: 4,605 objects, 2,128
-// predefined, 2,482 template variables, 1,302 rule fields, 2,476 expressions and
-// 127 unrecognised. Only the first two are index edges.
+// Counted over the 13,120 declarations in the 11.2.0 Panorama schema: 7,111 objects,
+// 2,536 predefined, 1,069 template variables, 1,362 rule fields, 915 expressions and 127
+// unrecognised. Only objects and predefined targets are index edges. The census test in
+// internal/digest pins these.
+//
+// A firewall schema has no template variables at all, which stands to reason because a
+// firewall has no templates. An earlier rule here treated every "#myentry(" anchor as
+// one, discarding 1,413 real object references in the Panorama schema and 1,455 in the
+// firewall schema, the zone targets of a security rule's from and to among them.
 type TargetForm int
 
 // The forms a memberof declaration takes.
@@ -54,7 +60,7 @@ func ClassifyTarget(raw string) TargetForm {
 		return FormUnknown
 	}
 	switch {
-	case strings.HasPrefix(s, "#myentry("):
+	case isTemplateVariable(s):
 		return FormTemplateVar
 	case strings.Contains(withoutPredicate(s), "*"):
 		return FormRuleField
@@ -63,6 +69,33 @@ func ClassifyTarget(raw string) TargetForm {
 	default:
 		return FormObject
 	}
+}
+
+// isTemplateVariable reports whether a target names a template variable.
+//
+// The anchor alone does not decide it. "#myentry(...)" is a scope-relative path
+// meaning "the vsys, device or shared gateway this entry belongs to", and almost all of
+// them are ordinary object references: #myentry(vsys)/zone/entry/@name names a zone.
+// A template variable is specifically a variable under a template or a template stack.
+//
+// Counted over both shipped schemas: of 1,455 scope-relative targets in the firewall
+// schema, none are template variables, which stands to reason because a firewall has no
+// templates. Treating the anchor as sufficient therefore discarded every one of them,
+// including the zone targets of a security rule's from and to fields.
+func isTemplateVariable(s string) bool {
+	for _, anchor := range []string{"#myentry(template)/", "#myentry(template-stack)/"} {
+		if rest, ok := cutPrefix(s, anchor); ok && strings.HasPrefix(rest, "variable/") {
+			return true
+		}
+	}
+	return false
+}
+
+func cutPrefix(s, prefix string) (string, bool) {
+	if !strings.HasPrefix(s, prefix) {
+		return "", false
+	}
+	return s[len(prefix):], true
 }
 
 // withoutPredicate removes any [..] predicate, so a wildcard inside one is not

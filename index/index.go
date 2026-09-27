@@ -130,12 +130,26 @@ func build(cfg *config.Config, sc config.Scope) (*Index, error) {
 		return nil, err
 	}
 
+	zones, err := resolve.ZonesInScope(cfg, sc)
+	if err != nil {
+		return nil, err
+	}
+	ifAddrs, err := resolve.InterfaceAddresses(cfg)
+	if err != nil {
+		return nil, err
+	}
+	routes, err := resolve.StaticRoutes(cfg)
+	if err != nil {
+		return nil, err
+	}
+
 	byKind := map[string]resolver{}
 	for _, r := range []resolver{
 		newAddressResolver(addrs, ri),
 		newURLResolver(cats),
 		newServiceResolver(svcs, ri),
 		newUserResolver(localUsers, userGroups, dynUsers),
+		newZoneResolver(zones, ifAddrs, routes, resolve.DynamicRoutingProtocols(cfg)),
 	} {
 		for _, k := range r.kinds() {
 			byKind[k] = r

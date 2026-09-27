@@ -10,16 +10,22 @@ import (
 // Pinned from the 11.2.0 Panorama schema. A change here means the schema or the
 // classifier moved, and either deserves attention.
 //
-// Of 13,120 declarations, 8,234 are real object references: 5,698 configuration
-// objects and 2,536 predefined. An earlier classifier reported only 6,733,
-// because it treated a parenthesis anywhere as a computed expression and so
-// misfiled 1,561 conditional references such as
-// #config/shared/address/entry[not(ip-wildcard)]/@name.
+// Of 13,120 declarations, 9,647 are real object references: 7,111 configuration
+// objects and 2,536 predefined.
+//
+// Two earlier classifiers undercounted. The first reported 6,733, because it treated a
+// parenthesis anywhere as a computed expression and so misfiled 1,561 conditional
+// references such as #config/shared/address/entry[not(ip-wildcard)]/@name. The second
+// reported 8,234, because it treated every "#myentry(" anchor as a template variable.
+// Most of those are scope-relative object references — #myentry(vsys)/zone/entry/@name
+// names a zone — and discarding them cost 1,413 objects here and every zone target of a
+// security rule's from and to fields. A template variable is specifically a variable
+// under a template or a template stack.
 var wantCensus = map[schema.TargetForm]int{
-	schema.FormObject:      5698,
+	schema.FormObject:      7111,
 	schema.FormPredefined:  2536,
-	schema.FormTemplateVar: 2708,
-	schema.FormRuleField:   1136,
+	schema.FormTemplateVar: 1069,
+	schema.FormRuleField:   1362,
 	schema.FormExpression:  915,
 	schema.FormUnknown:     127,
 }

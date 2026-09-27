@@ -17,6 +17,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   there, so a field that accepts an address, a region and an external list is asked
   of each rather than treated as an address field. Addresses answer exactly as
   before; other value spaces arrive behind the same seam.
+- **Ask which zone an address would arrive on.** `reaches ... from 10.1.0.50` reads the
+  configuration as a small routing table — interface addresses and static routes, mapped
+  through each interface to the zone holding it, longest prefix winning — and reports the
+  zone plus the interface and route that placed it. Every limit is reported rather than
+  hidden: a zone with no interface, an interface in no zone, a virtual router that learns
+  routes at runtime, an address no route covers, and a Panorama device group whose zones
+  live in a template.
 - **`simulate` takes zones, and with them it agrees with the firewall.**
   `simulate <config> <scope> <source> <destination> <from-zone> <to-zone>` narrows the
   answer the way the device does. Measured against `test security-policy-match` on a lab
@@ -98,6 +105,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the mandatory rules that govern the library.
 
 ### Fixed
+
+- **Thousands of reference edges were being discarded.** Any schema target beginning
+  `#myentry(` counted as a template variable, but almost all of them are ordinary
+  scope-relative references — `#myentry(vsys)/zone/entry/@name` names a zone. Recovering
+  them adds 1,413 object references in the Panorama schema and 1,455 in the firewall
+  schema, and it is what lets a zone be resolved at all: a firewall schema contains no
+  template variables, so every one of its scope-relative targets was thrown away.
 
 - **Looking up an unknown name no longer corrupts a shared index.** Indexes are
   cached and handed to every caller, and a lookup by name added that name to the

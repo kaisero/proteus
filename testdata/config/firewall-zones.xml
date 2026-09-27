@@ -1,0 +1,96 @@
+<config version="11.2.0" urldb="paloaltonetworks" detail-version="11.2.5">
+  <shared/>
+  <devices>
+    <entry name="localhost.localdomain">
+      <network>
+        <interface>
+          <ethernet>
+            <entry name="ethernet1/1">
+              <layer3><ip><entry name="10.1.0.1/24"/></ip></layer3>
+            </entry>
+            <entry name="ethernet1/2">
+              <layer3>
+                <units>
+                  <entry name="ethernet1/2.20"><ip><entry name="10.2.0.1/24"/></ip></entry>
+                </units>
+              </layer3>
+            </entry>
+            <entry name="ethernet1/9">
+              <layer3><ip><entry name="10.9.0.1/24"/></ip></layer3>
+            </entry>
+          </ethernet>
+          <loopback>
+            <units>
+              <entry name="loopback.1"><ip><entry name="10.255.255.1/32"/></ip></entry>
+            </units>
+          </loopback>
+          <tunnel>
+            <units>
+              <entry name="tunnel.99"/>
+            </units>
+          </tunnel>
+        </interface>
+        <virtual-router>
+          <entry name="default">
+            <interface>
+              <member>ethernet1/1</member>
+            </interface>
+            <routing-table>
+              <ip>
+                <static-route>
+                  <entry name="to-branch">
+                    <destination>172.16.0.0/16</destination>
+                    <interface>ethernet1/1</interface>
+                  </entry>
+                  <entry name="default">
+                    <destination>0.0.0.0/0</destination>
+                    <interface>tunnel.99</interface>
+                  </entry>
+                  <entry name="nexthop-only">
+                    <destination>192.0.2.0/24</destination>
+                    <nexthop><ip-address>10.1.0.254</ip-address></nexthop>
+                  </entry>
+                </static-route>
+              </ip>
+            </routing-table>
+            <protocol>
+              <bgp><enable>yes</enable></bgp>
+            </protocol>
+          </entry>
+        </virtual-router>
+      </network>
+      <vsys>
+        <entry name="vsys1">
+          <zone>
+            <entry name="inside"><network><layer3><member>ethernet1/1</member></layer3></network></entry>
+            <entry name="dmz"><network><layer3><member>ethernet1/2.20</member></layer3></network></entry>
+            <entry name="loop"><network><layer3><member>loopback.1</member></layer3></network></entry>
+            <entry name="empty-zone"><network><layer3/></network></entry>
+          </zone>
+          <rulebase>
+            <security>
+              <rules>
+                <entry name="from-inside">
+                  <from><member>inside</member></from>
+                  <to><member>dmz</member></to>
+                  <source><member>any</member></source>
+                  <destination><member>any</member></destination>
+                  <application><member>any</member></application>
+                  <action>allow</action>
+                </entry>
+                <entry name="from-loop">
+                  <from><member>loop</member></from>
+                  <to><member>any</member></to>
+                  <source><member>any</member></source>
+                  <destination><member>any</member></destination>
+                  <application><member>any</member></application>
+                  <action>allow</action>
+                </entry>
+              </rules>
+            </security>
+          </rulebase>
+        </entry>
+      </vsys>
+    </entry>
+  </devices>
+</config>
