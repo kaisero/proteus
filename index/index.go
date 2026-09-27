@@ -100,7 +100,7 @@ func build(cfg *config.Config, sc config.Scope) (*Index, error) {
 		scope:   sc,
 		in:      in,
 		cidr:    newCIDRIndex(addrs),
-		closure: newClosureIndex(in, groups),
+		closure: newClosureIndex(in, groups, addrs),
 		refs:    refs,
 		rules:   newRulesIndex(in, rules),
 	}, nil

@@ -10,10 +10,11 @@ import (
 
 // Members is a group's membership as the configuration describes it.
 type Members struct {
-	Static []string // members named directly
-	ByTag  []string // members matched by a dynamic filter, within this scope only
-	Filter string   // the dynamic filter, if any
-	Note   string   // what this answer does not cover
+	Static      []string // members named directly
+	ByTag       []string // members matched by a dynamic filter, within this scope only
+	Filter      string   // the dynamic filter, if any
+	FilterError string   // set when the filter could not be parsed, so ByTag is empty
+	Note        string   // what this answer does not cover
 }
 
 const runtimeNote = "Members registered at runtime through User-ID or VM " +
@@ -64,14 +65,17 @@ func resolveGroup(root *config.Element, chain []config.Scope, name string) (Memb
 		return out, nil
 	}
 	out.Filter = target.Value
-	want := strings.Trim(target.Value, "' ")
-
+	filter, err := ParseTagFilter(target.Value)
+	if err != nil {
+		// A filter that cannot be parsed yields no members rather than a guess:
+		// putting an object in a group PAN-OS would leave out is worse than saying
+		// nothing. The caller is told why.
+		out.FilterError = err.Error()
+		return out, nil
+	}
 	for _, a := range objectsInChain(root, chain, "address") {
-		for _, tag := range a.Tags {
-			if tag == want {
-				out.ByTag = append(out.ByTag, a.Name)
-				break
-			}
+		if filter.Match(a.Tags) {
+			out.ByTag = append(out.ByTag, a.Name)
 		}
 	}
 	sort.Strings(out.ByTag)

@@ -239,43 +239,38 @@ Asking in the wrong scope returns nothing, which is the honest answer.
 
 ## What does not work yet
 
-**An address does not reach a rule that names a literal CIDR.** This matters for
-your lab: its rules use **7 literal addresses and 0 named objects** in source and
-destination. So this finds nothing:
+Two gaps this guide originally documented are now closed, and each has tests:
 
-```bash
-./bin/panos-explore lookup /tmp/pano-live.xml dg:Default 198.18.1.1
-#   1. objects whose value covers 198.18.1.1
-#        none
-```
+- **An address reaches a rule that names a literal CIDR.** Your lab needs this: its
+  rules hold literal addresses and no named objects.
 
-The exact string does work, because a literal is interned like any other name:
+  ```bash
+  ./bin/panos-explore lookup /tmp/pano-live.xml dg:Default 198.18.1.1
+  #   3. rules naming any of them, or naming a literal that covers the address
+  #        1. Shared-Pre-Rule    as source  [shared-pre]
+  #        2. Default-Pre-Rule   as source  [dg-pre]
+  #        3. Default-URL-Rule   as source  [dg-pre]
+  #        4. Shared-Post-Rule   as source  [shared-post]
 
-```bash
-./bin/panos-explore whereused /tmp/pano-live.xml dg:Default '198.18.1.1/32'   # finds both rules
-```
+  ./bin/panos-explore lookup /tmp/pano-live.xml dg:Default 198.18.1.77
+  #        3. Default-URL-Rule   as source  [dg-pre]     <- only the /24 covers it
+  ```
 
-The gap is that the address trie holds address *objects* only, so there is no path
-from `198.18.1.1` to a rule field containing `198.18.1.1/32` or to one containing
-`198.18.1.0/24`. Indexing rule-field literals into the same trie fixes it and is a
-contained change.
+- **A dynamic group extends the chain.** An address now finds the object, the
+  dynamic group holding that object by tag, and the rule naming the group.
 
-**A dynamic group does not extend the index chain.** `group` resolves tag-based
-membership correctly, as section 7 shows, but the index's group closure holds
-static membership only. So `lookup 10.124.0.1` finds `corp-location-vienna` and
-stops: it does not continue to the dynamic group holding that object, nor to the
-rule naming that group.
+  ```bash
+  ./bin/panos-explore lookup testdata/config/panorama-lab.xml dg:host_1_directory 10.124.0.1
+  #   2. groups holding them, transitively
+  #        corp-location-vienna   in [corp-location]
+  #   3. rules ...
+  #        1. Corp DC Access      as source      [dg-post]
+  ```
 
-```bash
-./bin/panos-explore group  testdata/config/panorama-lab.xml dg:host_1_directory corp-location
-#   members matched by tag: [corp-location-vienna]        <- works
-
-./bin/panos-explore lookup testdata/config/panorama-lab.xml dg:host_1_directory 10.124.0.1
-#   corp-location-vienna  in no group                     <- the chain stops here
-```
-
-Feeding the tag-based membership into the closure would join the two, and is again
-a contained change.
+  Filters are parsed properly, not just single tags: `and`, `or`, `not` and
+  parentheses, with `and` binding tighter than `or`. A filter this build cannot
+  read contributes no members and is reported rather than guessed at — `lookup`
+  prints a note, and `index.UnparsedFilters()` lists them.
 
 Also not covered, with every affected answer saying so:
 

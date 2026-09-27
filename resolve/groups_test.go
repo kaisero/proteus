@@ -64,3 +64,45 @@ func TestResolveGroupRejectsAnUnknownName(t *testing.T) {
 		t.Error("an unknown group must be an error")
 	}
 }
+
+// A filter PAN-OS accepts but this parser does not must yield nothing and say so,
+// rather than guess a membership.
+func TestUnparseableFilterIsReported(t *testing.T) {
+	cfg, _, err := config.Load("../testdata/config/panorama-badfilter.xml")
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	got, err := GroupInScope(cfg, config.Scope{Sort: config.ScopeDeviceGroup, Name: "dg1"}, "g-bad")
+	if err != nil {
+		t.Fatalf("GroupInScope: %v", err)
+	}
+	if len(got.ByTag) != 0 {
+		t.Errorf("an unparseable filter must yield no members, got %v", got.ByTag)
+	}
+	if got.FilterError == "" {
+		t.Error("it must say why")
+	}
+}
+
+// A boolean filter resolves, not just a single tag.
+func TestBooleanFilterResolves(t *testing.T) {
+	cfg, _, err := config.Load("../testdata/config/panorama-badfilter.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sc := config.Scope{Sort: config.ScopeDeviceGroup, Name: "dg1"}
+	and, err := GroupInScope(cfg, sc, "g-and")
+	if err != nil {
+		t.Fatalf("GroupInScope: %v", err)
+	}
+	if len(and.ByTag) != 1 || and.ByTag[0] != "h-both" {
+		t.Errorf("'a' and 'b' resolved to %v, want [h-both]", and.ByTag)
+	}
+	notf, err := GroupInScope(cfg, sc, "g-not")
+	if err != nil {
+		t.Fatalf("GroupInScope: %v", err)
+	}
+	if len(notf.ByTag) != 1 || notf.ByTag[0] != "h-a" {
+		t.Errorf("'a' and not 'b' resolved to %v, want [h-a]", notf.ByTag)
+	}
+}

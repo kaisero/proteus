@@ -246,13 +246,14 @@ func cmdLookup(cfg *config.Config, args []string) error {
 		objs = append(objs, value)
 	}
 	if len(objs) == 0 {
-		fmt.Println("     none")
-		return nil
+		fmt.Println("     none — but a rule may still name a literal that covers it")
 	}
 
 	// Step 2: from the objects up through every level of group nesting.
 	ids := make([]uint32, 0, len(objs))
-	fmt.Println("\n2. groups holding them, transitively")
+	if len(objs) > 0 {
+		fmt.Println("\n2. groups holding them, transitively")
+	}
 	for _, o := range objs {
 		ids = append(ids, in.ID(o))
 		groups := idx.GroupsOf(o)
@@ -266,12 +267,18 @@ func cmdLookup(cfg *config.Config, args []string) error {
 		}
 	}
 
-	// Step 3: from the object or any of its groups to the rules.
-	fmt.Println("\n3. rules naming any of them")
+	// Step 3: from the object or any of its groups to the rules, and from the
+	// address itself to any rule naming a literal that covers it.
+	fmt.Println("\n3. rules naming any of them, or naming a literal that covers the address")
 	rules := idx.Rules()
 	printed := false
 	for _, f := range []index.Field{index.Source, index.Destination} {
 		b := idx.RulesWith(f, ids...)
+		if addr, err := netip.ParseAddr(value); err == nil {
+			b.Or(idx.RulesWithAddr(f, addr))
+		} else if p, err := netip.ParsePrefix(value); err == nil {
+			b.Or(idx.RulesWithPrefix(f, p))
+		}
 		for it := b.Iterator(); it.HasNext(); {
 			r := rules[it.Next()]
 			fmt.Printf("     %2d. %-24s as %-11s [%s]\n", r.Position, r.Name, f, r.Layer)
@@ -280,6 +287,13 @@ func cmdLookup(cfg *config.Config, args []string) error {
 	}
 	if !printed {
 		fmt.Println("     none")
+	}
+	if bad := idx.UnparsedFilters(); len(bad) > 0 {
+		fmt.Printf("\nnote: %d dynamic group filter(s) could not be read, so their members\n", len(bad))
+		fmt.Println("      are missing from the groups above:")
+		for _, u := range bad {
+			fmt.Printf("      %s: %s\n", u.Group, u.Filter)
+		}
 	}
 	return nil
 }
@@ -345,18 +359,20 @@ func cmdSimulate(cfg *config.Config, args []string) error {
 		return err
 	}
 
-	src, err := sideIDs(idx, args[1])
-	if err != nil {
-		return err
-	}
-	dst, err := sideIDs(idx, args[2])
-	if err != nil {
-		return err
-	}
+	src := sideIDs(idx, args[1])
+	dst := sideIDs(idx, args[2])
 	fmt.Printf("simulating %s -> %s in %s\n", args[1], args[2], sc)
 	fmt.Printf("  source matched %d name(s), destination %d\n\n", len(src), len(dst))
 
-	cand := roaring.And(idx.RulesWith(index.Source, src...), idx.RulesWith(index.Destination, dst...))
+	srcRules := idx.RulesWith(index.Source, src...)
+	if addr, err := netip.ParseAddr(args[1]); err == nil {
+		srcRules.Or(idx.RulesWithAddr(index.Source, addr))
+	}
+	dstRules := idx.RulesWith(index.Destination, dst...)
+	if addr, err := netip.ParseAddr(args[2]); err == nil {
+		dstRules.Or(idx.RulesWithAddr(index.Destination, addr))
+	}
+	cand := roaring.And(srcRules, dstRules)
 	cand.AndNot(idx.Disabled())
 	if cand.IsEmpty() {
 		fmt.Println("no enabled rule names both sides")
@@ -377,7 +393,10 @@ func cmdSimulate(cfg *config.Config, args []string) error {
 
 // sideIDs turns one side of a simulation into the ids that could match it: the
 // objects covering the address, and every group holding them.
-func sideIDs(idx *index.Index, value string) ([]uint32, error) {
+//
+// An empty result is not an error. The address may match only a literal in a rule
+// field, which the caller adds separately.
+func sideIDs(idx *index.Index, value string) []uint32 {
 	in := idx.Interner()
 	var names []string
 	if addr, err := netip.ParseAddr(value); err == nil {
@@ -394,10 +413,7 @@ func sideIDs(idx *index.Index, value string) ([]uint32, error) {
 			ids = append(ids, in.ID(g))
 		}
 	}
-	if len(ids) == 0 {
-		return nil, fmt.Errorf("nothing in %s matches %q", idx.Scope(), value)
-	}
-	return ids, nil
+	return ids
 }
 
 func scopeList(ss []config.Scope) string {

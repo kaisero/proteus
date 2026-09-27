@@ -21,21 +21,52 @@ type closureIndex struct {
 	direct  map[uint32][]uint32        // group -> direct members
 	forward map[uint32]*roaring.Bitmap // group -> transitive members
 
+	unparsed []UnparsedFilter
+
 	mu      sync.Mutex
 	reverse map[uint32]*roaring.Bitmap // member -> ancestor groups, memoised
 }
 
-func newClosureIndex(in *Interner, groups []resolve.Object) *closureIndex {
+// UnparsedFilter is a dynamic group whose filter this build could not read, so it
+// contributed no members.
+type UnparsedFilter struct {
+	Group  string
+	Filter string
+	Reason string
+}
+
+// newClosureIndex builds group membership from both kinds of group.
+//
+// A static group lists its members. A dynamic group carries a tag filter, and its
+// members are the visible objects whose tags satisfy it — which is why the closure
+// is scope-bound: the same filter selects different objects in different device
+// groups. A filter this build cannot parse contributes no members and is recorded
+// in UnparsedFilters rather than guessed at.
+func newClosureIndex(in *Interner, groups, addrs []resolve.Object) *closureIndex {
 	c := &closureIndex{
 		direct:  map[uint32][]uint32{},
 		forward: map[uint32]*roaring.Bitmap{},
 		reverse: map[uint32]*roaring.Bitmap{},
 	}
 	for _, g := range groups {
-		if strings.HasPrefix(g.Value, "'") {
-			continue // a dynamic group resolves by tag, not by membership
-		}
 		gid := in.ID(g.Name)
+		if strings.HasPrefix(g.Value, "'") {
+			filter, err := resolve.ParseTagFilter(g.Value)
+			if err != nil {
+				c.unparsed = append(c.unparsed, UnparsedFilter{
+					Group:  g.Name,
+					Filter: g.Value,
+					Reason: err.Error(),
+				})
+				continue
+			}
+			for _, a := range addrs {
+				if filter.Match(a.Tags) {
+					c.direct[gid] = append(c.direct[gid], in.ID(a.Name))
+				}
+			}
+			continue
+		}
 		for _, m := range strings.Split(g.Value, ", ") {
 			m = strings.TrimSpace(m)
 			if m == "" {
@@ -102,6 +133,12 @@ func (i *Index) GroupsOf(name string) []string {
 		out = append(out, i.in.Name(it.Next()))
 	}
 	return out
+}
+
+// UnparsedFilters returns the dynamic groups whose filters could not be read.
+// Their membership is missing from the index, and this is how a caller finds out.
+func (i *Index) UnparsedFilters() []UnparsedFilter {
+	return append([]UnparsedFilter{}, i.closure.unparsed...)
 }
 
 // MembersOf returns the transitive members of a group.

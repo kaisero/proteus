@@ -1,0 +1,32 @@
+<config version="11.2.0" urldb="paloaltonetworks" detail-version="11.2.7">
+  <shared>
+    <tag>
+      <entry name="a"><color>color1</color></entry>
+      <entry name="b"><color>color2</color></entry>
+    </tag>
+  </shared>
+  <devices>
+    <entry name="localhost.localdomain">
+      <device-group>
+        <entry name="dg1">
+          <devices><entry name="001122334455"><vsys><entry name="vsys1"/></vsys></entry></devices>
+          <address>
+            <entry name="h-a"><ip-netmask>10.0.0.1</ip-netmask><tag><member>a</member></tag></entry>
+            <entry name="h-both"><ip-netmask>10.0.0.2</ip-netmask>
+              <tag><member>a</member><member>b</member></tag></entry>
+          </address>
+          <address-group>
+            <entry name="g-and"><dynamic><filter>'a' and 'b'</filter></dynamic></entry>
+            <entry name="g-not"><dynamic><filter>'a' and not 'b'</filter></dynamic></entry>
+            <entry name="g-bad"><dynamic><filter>'a' xor 'b'</filter></dynamic></entry>
+          </address-group>
+        </entry>
+      </device-group>
+    </entry>
+  </devices>
+  <readonly>
+    <devices><entry name="localhost.localdomain"><device-group>
+      <entry name="dg1"><id>1</id></entry>
+    </device-group></entry></devices>
+  </readonly>
+</config>

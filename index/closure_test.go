@@ -58,8 +58,10 @@ func TestClosureSurvivesACycle(t *testing.T) {
 	}
 }
 
-// A dynamic group has no static membership, so it contributes no closure edges.
-func TestDynamicGroupsAreNotInTheClosure(t *testing.T) {
+// A dynamic group must extend the chain like a static one: an address finds the
+// object, the object finds the dynamic group holding it by tag, and the group
+// finds the rule.
+func TestDynamicGroupExtendsTheChain(t *testing.T) {
 	cfg, _, err := config.Load("../testdata/config/panorama-lab.xml")
 	if err != nil {
 		t.Fatal(err)
@@ -68,7 +70,37 @@ func TestDynamicGroupsAreNotInTheClosure(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := idx.MembersOf("corp-location"); len(got) != 0 {
-		t.Errorf("a dynamic group has no static members, got %v", got)
+	got := idx.GroupsOf("corp-location-vienna")
+	var found bool
+	for _, g := range got {
+		if g == "corp-location" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("corp-location-vienna carries the tag, so it is in corp-location; got %v", got)
+	}
+	if members := idx.MembersOf("corp-location"); len(members) != 1 ||
+		members[0] != "corp-location-vienna" {
+		t.Errorf("MembersOf(corp-location) = %v, want [corp-location-vienna]", members)
+	}
+}
+
+// And the same dynamic group resolves differently in a sibling, so the closure is
+// scope-bound like everything else.
+func TestDynamicClosureIsScopeBound(t *testing.T) {
+	cfg, _, err := config.Load("../testdata/config/panorama-lab.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	graz, err := For(cfg, config.Scope{Sort: config.ScopeDeviceGroup, Name: "corp-graz"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := graz.MembersOf("corp-location"); len(got) != 1 || got[0] != "corp-location-graz" {
+		t.Errorf("in corp-graz the group holds %v, want [corp-location-graz]", got)
+	}
+	if got := graz.GroupsOf("corp-location-vienna"); len(got) != 0 {
+		t.Errorf("the Vienna object is invisible here, got groups %v", got)
 	}
 }
