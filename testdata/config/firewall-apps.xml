@@ -1,0 +1,43 @@
+<config version="11.2.0" urldb="paloaltonetworks" detail-version="11.2.5">
+  <shared/>
+  <devices>
+    <entry name="localhost.localdomain">
+      <vsys>
+        <entry name="vsys1">
+          <application>
+            <entry name="custom-erp"><category>business-systems</category></entry>
+          </application>
+          <application-group>
+            <entry name="erp-bundle">
+              <members><member>custom-erp</member><member>ssl</member></members>
+            </entry>
+          </application-group>
+          <application-filter>
+            <entry name="high-risk-filter"><risk><member>5</member></risk></entry>
+          </application-filter>
+          <application-container>
+            <entry name="ms-office-bundle"/>
+          </application-container>
+          <rulebase>
+            <security>
+              <rules>
+                <entry name="erp-allow">
+                  <source><member>any</member></source>
+                  <destination><member>any</member></destination>
+                  <application><member>erp-bundle</member></application>
+                  <action>allow</action>
+                </entry>
+                <entry name="risk-deny">
+                  <source><member>any</member></source>
+                  <destination><member>any</member></destination>
+                  <application><member>high-risk-filter</member></application>
+                  <action>deny</action>
+                </entry>
+              </rules>
+            </security>
+          </rulebase>
+        </entry>
+      </vsys>
+    </entry>
+  </devices>
+</config>

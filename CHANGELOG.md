@@ -17,6 +17,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   there, so a field that accepts an address, a region and an external list is asked
   of each rather than treated as an address field. Addresses answer exactly as
   before; other value spaces arrive behind the same seam.
+- **Applications resolve as far as a configuration allows.** A custom application and an
+  application group resolve, so naming a custom application finds the rules naming the
+  group holding it, and a predefined name such as `ssl` still works as a name. An
+  application filter or container is reported rather than guessed: it selects predefined
+  applications by category, risk and behaviour, and that metadata is in the content
+  database a firewall downloads, not in its configuration.
 - **Ask which zone an address would arrive on.** `reaches ... from 10.1.0.50` reads the
   configuration as a small routing table — interface addresses and static routes, mapped
   through each interface to the zone holding it, longest prefix winning — and reports the

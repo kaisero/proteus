@@ -201,11 +201,14 @@ func TestResolversComeFromTheSchemaNotTheConfiguration(t *testing.T) {
 	if len(idx.resolversFor(Source)) == 0 {
 		t.Fatal("source has no resolver; the wiring fell back to the configuration")
 	}
-	if len(idx.resolversFor(Category)) == 0 {
-		t.Error("category has no resolver, so a URL cannot be matched")
+	// Every field a security rule matches on now has at least one value space.
+	for _, f := range []Field{Source, Destination, Category, Service, SourceUser, FromZone, ToZone, Application} {
+		if len(idx.resolversFor(f)) == 0 {
+			t.Errorf("%s has no resolver", f)
+		}
 	}
-	// Application accepts only kinds no resolver covers yet.
-	if got := len(idx.resolversFor(Application)); got != 0 {
-		t.Errorf("application resolvers = %d, want 0 for now", got)
+	// Tag needs none: a tag is a name, and looking a name up already works.
+	if got := len(idx.resolversFor(Tag)); got != 0 {
+		t.Errorf("tag resolvers = %d, want 0; a tag is a name", got)
 	}
 }

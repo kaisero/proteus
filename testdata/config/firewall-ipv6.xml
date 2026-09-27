@@ -1,0 +1,28 @@
+<config version="11.2.0" urldb="paloaltonetworks" detail-version="11.2.5">
+  <shared/>
+  <devices>
+    <entry name="localhost.localdomain">
+      <vsys>
+        <entry name="vsys1">
+          <address>
+            <entry name="v6-net"><ip-netmask>2001:db8:1::/48</ip-netmask></entry>
+            <entry name="v6-host"><ip-netmask>2001:db8:1::5/128</ip-netmask></entry>
+            <entry name="v6-range"><ip-range>2001:db8:2::1-2001:db8:2::10</ip-range></entry>
+          </address>
+          <rulebase>
+            <security>
+              <rules>
+                <entry name="v6-rule">
+                  <source><member>v6-net</member></source>
+                  <destination><member>v6-range</member></destination>
+                  <application><member>any</member></application>
+                  <action>allow</action>
+                </entry>
+              </rules>
+            </security>
+          </rulebase>
+        </entry>
+      </vsys>
+    </entry>
+  </devices>
+</config>

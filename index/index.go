@@ -18,6 +18,9 @@ type Index struct {
 	rules     *rulesIndex
 	resolvers map[Field][]resolver
 	profiles  *profileIndex
+	// addrRes is the address resolver, kept directly because address containment is
+	// also exposed on its own and every scope has one.
+	addrRes *addressResolver
 }
 
 // Scope returns the scope the index covers.
@@ -86,6 +89,10 @@ func build(cfg *config.Config, sc config.Scope) (*Index, error) {
 	if err != nil {
 		return nil, err
 	}
+	appGroups, err := resolve.ObjectsInScope(cfg, sc, "application-group")
+	if err != nil {
+		return nil, err
+	}
 	// Intern the addresses first, so their ids are dense and stable.
 	for _, o := range addrs {
 		in.ID(o.Name)
@@ -130,6 +137,19 @@ func build(cfg *config.Config, sc config.Scope) (*Index, error) {
 		return nil, err
 	}
 
+	apps, err := resolve.ObjectsInScope(cfg, sc, "application")
+	if err != nil {
+		return nil, err
+	}
+	appFilters, err := resolve.ObjectsInScope(cfg, sc, "application-filter")
+	if err != nil {
+		return nil, err
+	}
+	appContainers, err := resolve.ObjectsInScope(cfg, sc, "application-container")
+	if err != nil {
+		return nil, err
+	}
+
 	zones, err := resolve.ZonesInScope(cfg, sc)
 	if err != nil {
 		return nil, err
@@ -143,13 +163,16 @@ func build(cfg *config.Config, sc config.Scope) (*Index, error) {
 		return nil, err
 	}
 
+	addrRes := newAddressResolver(addrs, ri)
+
 	byKind := map[string]resolver{}
 	for _, r := range []resolver{
-		newAddressResolver(addrs, ri),
+		addrRes,
 		newURLResolver(cats),
 		newServiceResolver(svcs, ri),
 		newUserResolver(localUsers, userGroups, dynUsers),
 		newZoneResolver(zones, ifAddrs, routes, resolve.DynamicRoutingProtocols(cfg)),
+		newAppResolver(apps, appFilters, appContainers),
 	} {
 		for _, k := range r.kinds() {
 			byKind[k] = r
@@ -168,11 +191,12 @@ func build(cfg *config.Config, sc config.Scope) (*Index, error) {
 	return &Index{
 		scope:     sc,
 		in:        in,
-		closure:   newClosureIndex(in, groups, addrs, svcGroups),
+		closure:   newClosureIndex(in, groups, addrs, svcGroups, appGroups),
 		refs:      refs,
 		rules:     ri,
 		resolvers: wireResolvers(cfg.FieldKinds("rulebase/security/rules"), byKind),
 		profiles:  newProfileIndex(rules, profs, pgroups),
+		addrRes:   addrRes,
 	}, nil
 }
 
