@@ -431,8 +431,10 @@ func sectionSimulate(idx *index.Index, addr netip.Addr, objs []resolve.Object) {
 		return
 	}
 	fmt.Printf("  %s -> %s (%s)\n", addr, dstAddr, dst)
-	why("addresses only: application and service are not evaluated, and a rule")
-	why("using 'any' is excluded because 'any' is a keyword, not an object")
+	why("addresses only: application, service and zones are not evaluated")
+	why("a rule whose field is 'any' matches every address, so those count too;")
+	why("leaving them out returns the wrong winner, because an any-rule is usually")
+	why("earlier in the rulebase than a specific one")
 
 	in := idx.Interner()
 	src := sideBitmap(idx, index.Source, addr, in)
@@ -453,7 +455,7 @@ func sectionSimulate(idx *index.Index, addr netip.Addr, objs []resolve.Object) {
 		fmt.Printf("    %3d. %-26s %-6s [%-11s %s]\n", r.Position, r.Name, r.Action, r.Layer, r.Scope)
 	}
 	first := rules[cand.Minimum()]
-	fmt.Printf("  first match: %s (%s)\n", first.Name, first.Action)
+	fmt.Printf("  first match on addresses: %s (%s)\n", first.Name, first.Action)
 	why("the lowest set bit, because PAN-OS takes the first match top to bottom")
 }
 
@@ -467,6 +469,7 @@ func sideBitmap(idx *index.Index, f index.Field, addr netip.Addr, in *index.Inte
 	}
 	b := idx.RulesWith(f, ids...)
 	b.Or(idx.RulesWithAddr(f, addr))
+	b.Or(idx.RulesWithAny(f))
 	return b
 }
 
@@ -476,7 +479,8 @@ func sectionCaveats(idx *index.Index) {
 		fmt.Printf("  dynamic group %s: filter %s could not be read (%s)\n",
 			u.Group, u.Filter, u.Reason)
 	}
-	fmt.Println("  - application and service are not evaluated when simulating")
+	fmt.Println("  - application, service and zones are not evaluated when simulating,")
+	fmt.Println("    so the device may pick a different rule than the address match does")
 	fmt.Println("  - group members registered at runtime by User-ID or VM monitoring")
 	fmt.Println("    are not in a configuration file, so they are missing")
 	fmt.Println("  - template variables are not resolved")

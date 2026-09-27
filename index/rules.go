@@ -40,6 +40,7 @@ type rulesIndex struct {
 	rules    []resolve.Rule
 	byField  map[Field]map[uint32]*roaring.Bitmap
 	byPrefix map[Field]*bart.Table[*roaring.Bitmap]
+	anyField map[Field]*roaring.Bitmap
 	disabled *roaring.Bitmap
 }
 
@@ -48,6 +49,7 @@ func newRulesIndex(in *Interner, rules []resolve.Rule) *rulesIndex {
 		rules:    rules,
 		byField:  map[Field]map[uint32]*roaring.Bitmap{},
 		byPrefix: map[Field]*bart.Table[*roaring.Bitmap]{},
+		anyField: map[Field]*roaring.Bitmap{},
 		disabled: roaring.New(),
 	}
 	for pos, rule := range rules {
@@ -73,6 +75,18 @@ func newRulesIndex(in *Interner, rules []resolve.Rule) *rulesIndex {
 				// object. Those go in a trie as well, so an address lookup
 				// reaches them.
 				r.addLiteral(f, v, bit)
+
+				// "any" matches every address. It is not an object, so it never
+				// becomes a reference edge, but a first-match answer is wrong
+				// without it.
+				if v == "any" {
+					b, ok := r.anyField[f]
+					if !ok {
+						b = roaring.New()
+						r.anyField[f] = b
+					}
+					b.Add(bit)
+				}
 			}
 		}
 	}
@@ -127,6 +141,21 @@ func (i *Index) RulesWithAddr(f Field, addr netip.Addr) *roaring.Bitmap {
 		out.Or(b)
 	}
 	return out
+}
+
+// RulesWithAny returns the rules whose field is "any", which matches every
+// address.
+//
+// A first-match answer needs these. Checked against a live firewall: for
+// 198.18.0.5 to 198.18.1.5 the device reported ztnac-to-lab, rule 3, whose source
+// is any; matching on addresses alone reported rule 8 instead. An any-rule is
+// usually earlier in a rulebase than a specific one, so leaving it out does not
+// merely lose candidates, it returns the wrong winner.
+func (i *Index) RulesWithAny(f Field) *roaring.Bitmap {
+	if b, ok := i.rules.anyField[f]; ok {
+		return b.Clone()
+	}
+	return roaring.New()
 }
 
 // RulesWithPrefix returns the rules whose field names an address overlapping p.

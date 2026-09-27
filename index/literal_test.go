@@ -115,3 +115,71 @@ func TestRulesWithPrefixOverlaps(t *testing.T) {
 }
 
 var _ = config.ScopeShared
+
+// A rule field of "any" matches every address. Excluding such rules does not just
+// lose candidates, it returns the wrong first match, because an any-rule usually
+// sits earlier in the rulebase than a specific one.
+//
+// Checked against the firewall itself: for 198.18.0.5 -> 198.18.1.5 the device
+// reports ztnac-to-lab, rule 3, whose source is any. Address-only matching reported
+// lab-to-internet, rule 8.
+func TestRulesWithAnyIsNeededForAFirstMatch(t *testing.T) {
+	idx := indexOfVsys(t, "../testdata/config/firewall-anyrule.xml", "vsys1")
+	rules := idx.Rules()
+
+	src := netip.MustParseAddr("198.18.0.5")
+	dst := netip.MustParseAddr("198.18.1.5")
+
+	byName := func(b *roaring.Bitmap) []string {
+		var out []string
+		for it := b.Iterator(); it.HasNext(); {
+			out = append(out, rules[it.Next()].Name)
+		}
+		return out
+	}
+
+	// Address-only: misses the any-rule and picks the later specific rule.
+	narrowSrc := idx.RulesWith(Source, idsFor(idx, src)...)
+	narrowDst := idx.RulesWith(Destination, idsFor(idx, dst)...)
+	narrow := roaring.And(narrowSrc, narrowDst)
+	if narrow.IsEmpty() {
+		t.Fatal("the specific rule should still match on addresses alone")
+	}
+	if got := rules[narrow.Minimum()].Name; got != "specific-late" {
+		t.Errorf("address-only first match = %q, want specific-late", got)
+	}
+
+	// With any-rules included, the earlier rule wins, as the device reports.
+	wideSrc := narrowSrc.Clone()
+	wideSrc.Or(idx.RulesWithAny(Source))
+	wideDst := narrowDst.Clone()
+	wideDst.Or(idx.RulesWithAny(Destination))
+	wide := roaring.And(wideSrc, wideDst)
+	if wide.IsEmpty() {
+		t.Fatal("including any-rules must not lose the match")
+	}
+	if got := rules[wide.Minimum()].Name; got != "any-early" {
+		t.Errorf("first match = %q, want any-early; candidates %v", got, byName(wide))
+	}
+}
+
+// any must not leak into the object-name path, or every address would match
+// every rule through the interner.
+func TestAnyIsNotAnObjectEdge(t *testing.T) {
+	idx := indexOfVsys(t, "../testdata/config/firewall-anyrule.xml", "vsys1")
+	if refs := idx.Refs("any"); len(refs) != 0 {
+		t.Errorf("any must not be a reference edge, got %d", len(refs))
+	}
+}
+
+func idsFor(idx *Index, addr netip.Addr) []uint32 {
+	in := idx.Interner()
+	var ids []uint32
+	for _, m := range idx.Containing(addr) {
+		ids = append(ids, in.ID(m.Name))
+		for _, g := range idx.GroupsOf(m.Name) {
+			ids = append(ids, in.ID(g))
+		}
+	}
+	return ids
+}

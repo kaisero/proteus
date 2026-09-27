@@ -16,4 +16,4 @@ github.com/okaiser/go-panos-schema/internal/codegen  93.0
 github.com/okaiser/go-panos-schema/cmd/panos-schemagen  57.6
 github.com/okaiser/go-panos-schema/config  97.2
 github.com/okaiser/go-panos-schema/resolve  90.7
-github.com/okaiser/go-panos-schema/index  90.0
+github.com/okaiser/go-panos-schema/index  90.4

@@ -19,6 +19,20 @@ func indexOf(t *testing.T, path, dg string) *Index {
 	return idx
 }
 
+// indexOfVsys builds an index for a firewall's vsys rather than a device group.
+func indexOfVsys(t *testing.T, path, vsys string) *Index {
+	t.Helper()
+	cfg, _, err := config.Load(path)
+	if err != nil {
+		t.Fatalf("Load %s: %v", path, err)
+	}
+	idx, err := For(cfg, config.Scope{Sort: config.ScopeVsys, Name: vsys})
+	if err != nil {
+		t.Fatalf("For: %v", err)
+	}
+	return idx
+}
+
 func nestedIndex(t *testing.T) *Index {
 	t.Helper()
 	return indexOf(t, "../testdata/config/panorama-nested-groups.xml", "dg1")

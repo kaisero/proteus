@@ -365,19 +365,21 @@ func cmdSimulate(cfg *config.Config, args []string) error {
 	fmt.Printf("  source matched %d name(s), destination %d\n\n", len(src), len(dst))
 
 	srcRules := idx.RulesWith(index.Source, src...)
+	srcRules.Or(idx.RulesWithAny(index.Source))
 	if addr, err := netip.ParseAddr(args[1]); err == nil {
 		srcRules.Or(idx.RulesWithAddr(index.Source, addr))
 	}
 	dstRules := idx.RulesWith(index.Destination, dst...)
+	dstRules.Or(idx.RulesWithAny(index.Destination))
 	if addr, err := netip.ParseAddr(args[2]); err == nil {
 		dstRules.Or(idx.RulesWithAddr(index.Destination, addr))
 	}
 	cand := roaring.And(srcRules, dstRules)
 	cand.AndNot(idx.Disabled())
 	if cand.IsEmpty() {
-		fmt.Println("no enabled rule names both sides")
-		fmt.Println("note: application and service are not evaluated, and a rule using")
-		fmt.Println("      'any' is excluded because 'any' is a keyword, not an object")
+		fmt.Println("no enabled rule matches both sides")
+		fmt.Println("note: application, service and zones are not evaluated, so the device")
+		fmt.Println("      may still pick a rule this does not")
 		return nil
 	}
 	rules := idx.Rules()
@@ -387,7 +389,9 @@ func cmdSimulate(cfg *config.Config, args []string) error {
 		fmt.Printf("  %2d. %-24s %-6s [%-11s %s]\n", r.Position, r.Name, r.Action, r.Layer, r.Scope)
 	}
 	first := rules[cand.Minimum()]
-	fmt.Printf("\nfirst match: %s (%s)\n", first.Name, first.Action)
+	fmt.Printf("\nfirst match on addresses: %s (%s)\n", first.Name, first.Action)
+	fmt.Println("note: application, service and zones are not evaluated, so this is a")
+	fmt.Println("      candidate set. The device may report no match, or a different rule.")
 	return nil
 }
 

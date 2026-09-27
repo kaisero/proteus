@@ -304,6 +304,43 @@ Also not covered, with every affected answer saying so:
   not in a configuration file at all.
 - **NAT** rules are read but translated-address fields are not resolved.
 
+## Checked against the firewall itself
+
+The device is the authority on which rule wins. `test security-policy-match` asks
+it directly, so the library's answer can be compared with the real one.
+
+```bash
+KEY=$(grep PANOS_API_KEY ~/git/panos-mcp-server/.env | cut -d= -f2-)
+curl -sk "https://fw01.example.net/api/?type=op&key=$KEY" --data-urlencode \
+  "cmd=<test><security-policy-match><source>198.18.0.5</source><destination>198.18.1.5</destination><protocol>6</protocol><destination-port>443</destination-port><application>ssl</application></security-policy-match></test>"
+
+./bin/panos-explore simulate /tmp/fw-live.xml vsys:vsys1 198.18.0.5 198.18.1.5
+```
+
+Seven cases against `fw01.example.net`, a PA-VM on 11.2.5 with nine local rules:
+
+| source → destination | firewall says | library says | agree |
+| --- | --- | --- | --- |
+| 198.18.0.5 → 198.18.1.5 | ztnac-to-lab | ztnac-to-lab | yes |
+| 198.18.100.115 → 198.18.1.1 | certbot-to-homefw | certbot-to-homefw | yes |
+| 198.18.10.100 → 198.18.100.250 | ztnac-to-lab | ztnac-to-lab | yes |
+| 100.64.0.5 → 198.18.1.5 | ztnac-to-lab | ztnac-to-lab | yes |
+| 203.0.113.9 → 198.18.1.5 | ztnac-to-lab | ztnac-to-lab | yes |
+| 198.18.0.5 → 10.10.0.5 | identity-redistribution | identity-redistribution | yes |
+| 198.18.10.100 → 198.18.10.100 | **no match** | ztnac-to-lab | no |
+
+Six of seven agree exactly. The seventh is the documented limit rather than a
+defect: source and destination are the same host, so the device declines on
+**zone** grounds, and zones are not evaluated here. The library over-matches,
+which is the safe direction for a candidate set, but it is a candidate set.
+
+This comparison also found a real defect. Address-only matching originally
+excluded rules whose field is `any`, on the grounds that `any` is a keyword rather
+than an object. That is right for the reference graph and wrong for a first-match
+answer: `ztnac-to-lab` is rule 3 with `source any`, so excluding it returned rule 8
+instead. An any-rule is usually earlier in a rulebase than a specific one, so the
+omission did not merely lose candidates, it named the wrong winner.
+
 ## Running the tests yourself
 
 ```bash
