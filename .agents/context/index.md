@@ -23,6 +23,11 @@ Three packages, dependency order strictly one-way — `config` <- `resolve` <- `
 - **`index`** — speed and answers. `For(cfg, scope)` builds an immutable, cached
   index: a prefix trie, group-closure bitmaps, rule-field bitmaps and a reference
   table. It exposes the lookups and the report that comes with them.
+  The reference edges are read once per configuration and cached as an edge list
+  (`edgesOf`); a scope's index holds positions into it, never its own copies, and
+  still sees only its own scope and shared. The list is a materialisation of the
+  file, not an index — it answers no question and is keyed by nothing — so R10
+  still holds, and `TestNoGlobalIndex` is what proves it.
 
 Control flow for the main question, "which rules can this value reach":
 

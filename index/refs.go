@@ -17,32 +17,36 @@ type Ref struct {
 	Candidates []string
 }
 
-// refsIndex answers "what points at this name".
+// refsIndex answers "what points at this name", for one scope.
+//
+// It holds positions into the configuration's edge list rather than copies of the
+// edges. A Panorama file's scopes overlap heavily — every one of them sees shared —
+// so copying the edge into each index that can see it stored 419,042 edges to
+// describe 479,482.
 type refsIndex struct {
-	byTarget map[uint32][]Ref
+	all      edgeList
+	byTarget map[uint32][]int32
 }
 
-// newRefsIndex reads the configuration once and keeps the edges whose scope this
-// index covers. Shared edges are kept too, because every scope inherits shared.
+// newRefsIndex keeps the positions of the edges whose scope this index covers.
+// Shared edges are kept too, because every scope inherits shared.
 func newRefsIndex(in *Interner, cfg *config.Config, sc config.Scope) (*refsIndex, error) {
-	r := &refsIndex{byTarget: map[uint32][]Ref{}}
-	err := cfg.WalkPaths(func(e config.Event) bool {
+	all, err := edgesOf(cfg)
+	if err != nil {
+		return nil, err
+	}
+	r := &refsIndex{all: all, byTarget: map[uint32][]int32{}}
+	for i, e := range all {
 		if e.Scope != sc && e.Scope.Sort != config.ScopeShared {
-			return true
+			continue
 		}
-		for _, v := range e.Values {
-			id := in.ID(v)
-			r.byTarget[id] = append(r.byTarget[id], Ref{
-				Scope:      e.Scope,
-				From:       e.EntryPath,
-				Field:      e.Field,
-				Target:     v,
-				Candidates: e.Candidates,
-			})
-		}
-		return true
-	})
-	return r, err
+		id := in.ID(e.Target)
+		// G115: a position in the edge list. The largest configuration measured
+		// held 479,482 edges, and a file with 2^31 of them would be terabytes.
+		//nolint:gosec // see above
+		r.byTarget[id] = append(r.byTarget[id], int32(i))
+	}
+	return r, nil
 }
 
 // Refs returns every edge pointing at a name.
@@ -51,5 +55,10 @@ func (i *Index) Refs(name string) []Ref {
 	if !known {
 		return nil
 	}
-	return append([]Ref{}, i.refs.byTarget[id]...)
+	at := i.refs.byTarget[id]
+	out := make([]Ref, 0, len(at))
+	for _, p := range at {
+		out = append(out, i.refs.all[p])
+	}
+	return out
 }

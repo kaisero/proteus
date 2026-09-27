@@ -125,6 +125,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A configuration was read once per scope to build the same reference edges.**
+  Each scope's index walked the whole file and discarded everything it could not
+  see, so a Panorama file with 29 scopes was read 29 times. The read is now shared
+  and the indexes still are not: an index holds positions into one edge list rather
+  than its own copies, and still sees only its own scope and shared. Building every
+  scope's index now costs barely more than reading the file once —
+  `BenchmarkRefsIndexEveryScope` against `BenchmarkReadEdges` — and holds less,
+  because 29 overlapping scopes stored 419,042 edges to describe 479,482.
+  `TestNoGlobalIndex`, which R10 has always named as its check, now exists.
+
 - **Four fifths of the configuration's reference edges were never read.** The walk
   recognised one shape, `entry/<field>/member`, which is 397 of the firewall schema's
   1,991 reference leaves and 834 of Panorama's 4,524. Three things were missed: a
