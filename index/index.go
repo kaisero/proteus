@@ -102,10 +102,16 @@ func build(cfg *config.Config, sc config.Scope) (*Index, error) {
 	// the schema declares the object kinds each field accepts, and a kind maps to
 	// the resolver that can answer for it. A kind with no resolver is not silently
 	// dropped; see opaque rule-field values.
+	cats, err := resolve.ObjectsInScope(cfg, sc, "custom-url-category")
+	if err != nil {
+		return nil, err
+	}
+
 	byKind := map[string]resolver{}
-	addr := newAddressResolver(addrs, ri)
-	for _, k := range addr.kinds() {
-		byKind[k] = addr
+	for _, r := range []resolver{newAddressResolver(addrs, ri), newURLResolver(cats)} {
+		for _, k := range r.kinds() {
+			byKind[k] = r
+		}
 	}
 
 	return &Index{

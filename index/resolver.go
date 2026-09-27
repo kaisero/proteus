@@ -27,7 +27,12 @@ type resolver interface {
 
 	// resolve returns the names whose value matches, each with the value that
 	// matched it, plus anything recognised but not evaluated.
-	resolve(value string, p Providers) ([]Hit, []Unresolved)
+	//
+	// The third result says whether this value space recognised the form of the
+	// value at all. It is not the same as matching: a URL that belongs to no
+	// category is recognised and does not match, and that is a complete answer. A
+	// value nothing recognises is an incomplete one.
+	resolve(value string, p Providers) ([]Hit, []Unresolved, bool)
 
 	// literalRules returns the rules whose field holds a matching value directly
 	// rather than naming an object. Whether a literal matches is as

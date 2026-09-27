@@ -155,3 +155,54 @@ func TestObjectsReadsAServicePort(t *testing.T) {
 		}
 	}
 }
+
+// PAN-OS writes an object's type two ways, and both have to be read. A custom URL
+// category writes text; an external list writes a single child element naming the
+// type. The type decides how the object may be used, because a URL external list and
+// an IP external list share one container.
+func TestObjectSubtypeReadsBothForms(t *testing.T) {
+	cfg := loadT(t, "../testdata/config/firewall-urlcat-edge.xml")
+	sc := config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}
+
+	cats, err := ObjectsInScope(cfg, sc, "custom-url-category")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]string{}
+	for _, o := range cats {
+		got[o.Name] = o.Subtype
+	}
+	if got["cat-match-group"] != "Category Match" {
+		t.Errorf("cat-match-group subtype = %q, want %q", got["cat-match-group"], "Category Match")
+	}
+	if got["cat-bad-member"] != "URL List" {
+		t.Errorf("cat-bad-member subtype = %q, want %q", got["cat-bad-member"], "URL List")
+	}
+
+	edls, err := ObjectsInScope(cfg, sc, "external-list")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(edls) != 1 {
+		t.Fatalf("got %d external lists, want 1", len(edls))
+	}
+	if edls[0].Subtype != "url" {
+		t.Errorf("external list subtype = %q, want %q read from the child element", edls[0].Subtype, "url")
+	}
+}
+
+// An object with no type element has no subtype, rather than a guess.
+func TestObjectSubtypeIsEmptyWhenAbsent(t *testing.T) {
+	cfg := loadT(t, "../testdata/config/firewall-urlcat.xml")
+	sc := config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}
+
+	objs, err := ObjectsInScope(cfg, sc, "address")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, o := range objs {
+		if o.Subtype != "" {
+			t.Errorf("%s subtype = %q, want empty", o.Name, o.Subtype)
+		}
+	}
+}

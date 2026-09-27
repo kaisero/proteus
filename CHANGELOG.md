@@ -17,6 +17,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   there, so a field that accepts an address, a region and an external list is asked
   of each rather than treated as an address field. Addresses answer exactly as
   before; other value spaces arrive behind the same seam.
+- **Ask which rules a URL reaches.** Give the library a URL and it reports the
+  custom URL categories covering it, the rules naming those categories, and the
+  member that matched — an exact URL or a wildcard alike. A category name still works
+  as before. On a lab firewall, `superlong.example.azureapps.microsoft.com` and
+  `foo.wildcard-example.com` both reach the rule `URL-Example`, which no lookup
+  previously found.
+- **A recognised value that matches nothing is a complete answer.** A URL belonging to
+  no category reaches only the rules whose category is `any`, and says nothing about
+  being incomplete. Only a value no value space recognises is reported as incomplete.
 - **Custom URL category members are parsed the way a firewall writes them.** A
   member is matched by tokens, not by substring: `wildcard-example.com` does not
   cover `wildcard-example.com.evil.net`. The host must match in full and the path

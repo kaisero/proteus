@@ -43,8 +43,10 @@ func (v *View) Candidates(f Field, value string) (*roaring.Bitmap, Report) {
 	rep := Report{Value: value}
 	out := roaring.New()
 
+	recognised := false
 	for _, r := range i.resolversFor(f) {
-		hits, un := r.resolve(value, v.p)
+		hits, un, ok := r.resolve(value, v.p)
+		recognised = recognised || ok
 		rep.Hits = append(rep.Hits, hits...)
 		rep.Unresolved = append(rep.Unresolved, un...)
 		for _, h := range hits {
@@ -64,15 +66,17 @@ func (v *View) Candidates(f Field, value string) (*roaring.Bitmap, Report) {
 		out.Or(anyRules)
 	}
 
-	if len(rep.Hits) == 0 && !named {
+	// A value nothing recognised is an incomplete answer. A value that was
+	// recognised and matched nothing is a complete one, even with no hits: a URL
+	// belonging to no category really does reach only the any-rules.
+	if !recognised && !named {
 		rep.Unresolved = append(rep.Unresolved, Unresolved{
 			Value: value,
 			Reason: fmt.Sprintf(
-				"no value space of %s could evaluate this in %s, and no object of that "+
-					"name is visible there. Only rules whose %s is \"any\" are reported, so a "+
-					"rule reaching this value through a kind the index does not yet resolve, "+
-					"such as a custom URL category, a region or an external list, is missing "+
-					"from the result",
+				"no value space of %s recognised this, and no object of that name is visible "+
+					"in %s. Only rules whose %s is \"any\" are reported, so a rule reaching "+
+					"this value through a kind the index does not yet resolve, such as a "+
+					"region or an external list, is missing from the result",
 				f, i.scope, f),
 		})
 	}

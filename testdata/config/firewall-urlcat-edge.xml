@@ -1,0 +1,54 @@
+<config version="11.2.0" urldb="paloaltonetworks" detail-version="11.2.5">
+  <shared/>
+  <devices>
+    <entry name="localhost.localdomain">
+      <vsys>
+        <entry name="vsys1">
+          <external-list>
+            <entry name="edl-urls">
+              <type><url><recurring><daily><at>01</at></daily></recurring><url>https://example.com/list.txt</url></url></type>
+            </entry>
+          </external-list>
+          <profiles>
+            <custom-url-category>
+              <entry name="cat-match-group">
+                <list>
+                  <member>social-networking</member>
+                  <member>gambling</member>
+                </list>
+                <type>Category Match</type>
+              </entry>
+              <entry name="cat-bad-member">
+                <list>
+                  <member>*.*.two-stars.example.com</member>
+                  <member>good.example.com</member>
+                </list>
+                <type>URL List</type>
+              </entry>
+            </custom-url-category>
+          </profiles>
+          <rulebase>
+            <security>
+              <rules>
+                <entry name="uses-cat-match">
+                  <source><member>any</member></source>
+                  <destination><member>any</member></destination>
+                  <application><member>any</member></application>
+                  <category><member>cat-match-group</member></category>
+                  <action>allow</action>
+                </entry>
+                <entry name="uses-bad-member">
+                  <source><member>any</member></source>
+                  <destination><member>any</member></destination>
+                  <application><member>any</member></application>
+                  <category><member>cat-bad-member</member></category>
+                  <action>allow</action>
+                </entry>
+              </rules>
+            </security>
+          </rulebase>
+        </entry>
+      </vsys>
+    </entry>
+  </devices>
+</config>

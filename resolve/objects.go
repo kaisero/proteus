@@ -8,10 +8,14 @@ import (
 
 // Object is one configuration object visible in a scope.
 type Object struct {
-	Name         string
-	Kind         string // address, address-group, service, tag, ...
-	Scope        config.Scope
-	Value        string
+	Name  string
+	Kind  string // address, address-group, service, tag, ...
+	Scope config.Scope
+	Value string
+	// Subtype is the object's type element, when it has one: "URL List" for a
+	// custom URL category, "url" or "ip" for an external list. Two kinds share one
+	// container but mean different things, so the type decides how to read them.
+	Subtype      string
 	Tags         []string
 	ShadowedFrom *config.Scope // the scope whose definition this one replaced
 }
@@ -109,15 +113,33 @@ func readObjects(root *config.Element, sc config.Scope, kind string, within []st
 		}
 		for _, e := range container.Find(inner...) {
 			out = append(out, Object{
-				Name:  e.Attr("name"),
-				Kind:  kind,
-				Scope: sc,
-				Value: objectValue(e),
-				Tags:  e.Child("tag").Members(),
+				Name:    e.Attr("name"),
+				Kind:    kind,
+				Scope:   sc,
+				Value:   objectValue(e),
+				Subtype: objectSubtype(e),
+				Tags:    e.Child("tag").Members(),
 			})
 		}
 	}
 	return out
+}
+
+// objectSubtype reads an object's type, which PAN-OS writes two ways: as text, as
+// a custom URL category does with "URL List", or as a single child element, as an
+// external list does with <type><url>.
+func objectSubtype(e *config.Element) string {
+	t := e.Child("type")
+	if t == nil {
+		return ""
+	}
+	if v := t.TextOr(""); v != "" {
+		return v
+	}
+	if len(t.Children) == 1 {
+		return t.Children[0].Name
+	}
+	return ""
 }
 
 // objectValue reduces an object to the one value that identifies it.

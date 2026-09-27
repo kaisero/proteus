@@ -10,37 +10,82 @@ import (
 	"github.com/RoaringBitmap/roaring/v2"
 )
 
-// The defect this guard exists for. The fixture mirrors fw01: a custom URL
-// category holding a long URL, one rule naming the category, and an earlier rule
-// whose category is "any".
+// The defect that started this, now closed.
 //
-// Asking for the URL used to return the any-rule and nothing else, which reads as
-// "rule any-category-early handles this URL". The URL was never evaluated at all.
-func TestCandidatesReportsAURLItCannotEvaluate(t *testing.T) {
+// The fixture mirrors fw01: a custom URL category holding a long URL and a wildcard,
+// one rule naming the category, and an earlier rule whose category is "any". Asking
+// for the URL used to return the any-rule alone, which reads as "any-category-early
+// handles this URL" — the URL was never evaluated.
+func TestCandidatesFindsARuleByURLValue(t *testing.T) {
 	idx := indexOfVsys(t, "../testdata/config/firewall-urlcat.xml", "vsys1")
 
 	const url = "superlong.example.azureapps.microsoft.com"
 	rules, rep := idx.Candidates(Category, url)
-	unresolved := rep.Unresolved
 
-	if len(unresolved) == 0 {
-		t.Fatal("a URL value resolved silently; the caller cannot tell the answer is incomplete")
+	if !ruleNames(idx, rules)["URL-Example"] {
+		t.Error("the rule whose category holds this URL was not found")
 	}
-	if got := unresolved[0].Value; got != url {
-		t.Errorf("Unresolved.Value = %q, want the queried URL", got)
+	if len(rep.Hits) != 1 || rep.Hits[0].Name != "custom-azuresite-group" {
+		t.Fatalf("hits = %+v, want the category", rep.Hits)
 	}
-	if !strings.Contains(unresolved[0].Reason, "any") {
-		t.Errorf("reason does not say that only any-rules are reported: %q", unresolved[0].Reason)
+	// The member that matched, so the reasoning can be checked.
+	if rep.Hits[0].Via != url {
+		t.Errorf("Via = %q, want the member that matched", rep.Hits[0].Via)
 	}
+	if len(rep.Unresolved) != 0 {
+		t.Errorf("a URL that matched reported unresolved: %v", rep.Unresolved)
+	}
+}
 
-	// The any-rule is still a real match, so it is returned. What must not happen
-	// is returning it without the warning above.
-	names := ruleNames(idx, rules)
-	if !names["any-category-early"] {
-		t.Error("the any-category rule matches every URL and should still be reported")
+// A wildcard member reaches the rule, and reports which pattern did it.
+func TestCandidatesFindsARuleByWildcardURL(t *testing.T) {
+	idx := indexOfVsys(t, "../testdata/config/firewall-urlcat.xml", "vsys1")
+
+	for _, url := range []string{"foo.wildcard-example.com", "a.b.wildcard-example.com"} {
+		rules, rep := idx.Candidates(Category, url)
+		if !ruleNames(idx, rules)["URL-Example"] {
+			t.Errorf("%s did not reach URL-Example", url)
+			continue
+		}
+		if len(rep.Hits) != 1 || rep.Hits[0].Via != "*.wildcard-example.com" {
+			t.Errorf("%s hits = %+v, want the wildcard member", url, rep.Hits)
+		}
 	}
-	if names["URL-Example"] {
-		t.Error("URL-Example cannot be found by URL value yet; P2 adds that")
+}
+
+// The cases a substring match would get wrong, and the one a star cannot cover.
+func TestCandidatesDoesNotOvermatchAURL(t *testing.T) {
+	idx := indexOfVsys(t, "../testdata/config/firewall-urlcat.xml", "vsys1")
+
+	for _, url := range []string{
+		"wildcard-example.com",          // a star needs at least one token
+		"wildcard-example.com.evil.net", // substring matching would match this
+		"unrelated.example.org",
+	} {
+		rules, rep := idx.Candidates(Category, url)
+		if ruleNames(idx, rules)["URL-Example"] {
+			t.Errorf("%s wrongly reached URL-Example", url)
+		}
+		// Recognised and not matched is a complete answer, so nothing is unresolved.
+		if len(rep.Unresolved) != 0 {
+			t.Errorf("%s reported unresolved: %v", url, rep.Unresolved)
+		}
+	}
+}
+
+// A value no value space recognises is a different matter, and must be reported.
+func TestCandidatesReportsAValueNothingRecognises(t *testing.T) {
+	idx := indexOfVsys(t, "../testdata/config/firewall-urlcat.xml", "vsys1")
+
+	rules, rep := idx.Candidates(Category, "not-a-url-and-not-an-object")
+	if len(rep.Unresolved) == 0 {
+		t.Fatal("an unrecognised value resolved silently")
+	}
+	if !strings.Contains(rep.Unresolved[0].Reason, "any") {
+		t.Errorf("reason does not say only any-rules are reported: %q", rep.Unresolved[0].Reason)
+	}
+	if !ruleNames(idx, rules)["any-category-early"] {
+		t.Error("the any-category rule still matches and should be reported")
 	}
 }
 
@@ -156,8 +201,11 @@ func TestResolversComeFromTheSchemaNotTheConfiguration(t *testing.T) {
 	if len(idx.resolversFor(Source)) == 0 {
 		t.Fatal("source has no resolver; the wiring fell back to the configuration")
 	}
-	// Category accepts only kinds no resolver covers yet, so it has none.
-	if got := len(idx.resolversFor(Category)); got != 0 {
-		t.Errorf("category resolvers = %d, want 0 until the URL resolver lands", got)
+	if len(idx.resolversFor(Category)) == 0 {
+		t.Error("category has no resolver, so a URL cannot be matched")
+	}
+	// Application accepts only kinds no resolver covers yet.
+	if got := len(idx.resolversFor(Application)); got != 0 {
+		t.Errorf("application resolvers = %d, want 0 for now", got)
 	}
 }

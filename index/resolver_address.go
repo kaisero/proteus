@@ -42,12 +42,12 @@ func newAddressResolver(objs []resolve.Object, rules *rulesIndex) *addressResolv
 
 func (r *addressResolver) kinds() []string { return []string{"address", "address-group"} }
 
-func (r *addressResolver) resolve(value string, _ Providers) ([]Hit, []Unresolved) {
+func (r *addressResolver) resolve(value string, _ Providers) ([]Hit, []Unresolved, bool) {
 	if addr, err := netip.ParseAddr(value); err == nil {
-		return r.hitsOf(r.covering(addr)), nil
+		return r.hitsOf(r.covering(addr)), nil, true
 	}
 	if p, err := netip.ParsePrefix(value); err == nil {
-		return r.hitsOf(r.overlapping(p)), nil
+		return r.hitsOf(r.overlapping(p)), nil, true
 	}
 	if hits, ok := r.fqdn[strings.ToLower(value)]; ok {
 		// The object is found by its FQDN, but the addresses behind that name are
@@ -57,9 +57,9 @@ func (r *addressResolver) resolve(value string, _ Providers) ([]Hit, []Unresolve
 			Kind:   "address",
 			Reason: "an fqdn object matches this name, but the addresses it resolves to are not in the configuration, so rules reaching those addresses another way are not reported",
 		}}
-		return hits, un
+		return hits, un, true
 	}
-	return nil, nil
+	return nil, nil, false
 }
 
 func (r *addressResolver) literalRules(f Field, value string) *roaring.Bitmap {
