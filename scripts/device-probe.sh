@@ -58,8 +58,8 @@ printf '%-15s %-15s %-9s %-23s %-23s %s\n' SOURCE DESTINATION FROM-ZONE DEVICE L
 for p in "${probes[@]}"; do
   read -r src dst fz tz app port target <<<"$p"
   dev=$(device_match "$src" "$dst" "$fz" "$tz" "$app" "$port")
-  lib=$("$explore" simulate "$cfg" "$scope" "$src" "$dst" 2>/dev/null \
-        | sed -n 's/^first match on addresses: \([^ ]*\).*/\1/p')
+  lib=$("$explore" simulate "$cfg" "$scope" "$src" "$dst" "$fz" "$tz" 2>/dev/null \
+        | sed -n 's/^first match: \([^ ]*\).*/\1/p')
   lib=${lib:-no-match}
   total=$((total + 1))
   if [ "$dev" = "$lib" ]; then
@@ -71,5 +71,6 @@ for p in "${probes[@]}"; do
   printf '%-15s %-15s %-9s %-23s %-23s %s\n' "$src" "$dst" "$fz" "$dev" "$lib" "$agree"
 done
 echo
-echo "$agreed of $total agree. A disagreement means the device declined on zones,"
-echo "applications or services, which the library does not evaluate."
+echo "$agreed of $total agree. The library is given the same zones as the device and"
+echo "evaluates them; a remaining disagreement means the device declined on application"
+echo "or service, which the library does not evaluate."

@@ -17,6 +17,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   there, so a field that accepts an address, a region and an external list is asked
   of each rather than treated as an address field. Addresses answer exactly as
   before; other value spaces arrive behind the same seam.
+- **`simulate` takes zones, and with them it agrees with the firewall.**
+  `simulate <config> <scope> <source> <destination> <from-zone> <to-zone>` narrows the
+  answer the way the device does. Measured against `test security-policy-match` on a lab
+  firewall with probes built from each rule's own zones and ports: 3 of 7 agreed without
+  zones, 7 of 7 with them. Without zones the answer is not slightly wrong but often
+  wrong — one probe reported an allow where the device denies — because a single rule
+  with `source any` and a wide destination covers nearly every address pair, and only
+  its zones hold it back.
 - **Ask which rules a user reaches, with group membership from outside the file.**
   `reaches ... source-user alice` finds the local user, the local groups holding it and
   the rules naming either. Supply a user snapshot and the directory groups are added

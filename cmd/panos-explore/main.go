@@ -58,7 +58,11 @@ func main() {
 	case "whereused":
 		err = withConfig(args, 2, cmdWhereUsed)
 	case "simulate":
-		err = withConfig(args, 3, cmdSimulate)
+		if len(args) == 6 {
+			err = withConfig(args, 5, cmdSimulate)
+		} else {
+			err = withConfig(args, 3, cmdSimulate)
+		}
 	case "group":
 		err = withConfig(args, 2, cmdGroup)
 	case "version", "-version", "--version":
@@ -83,7 +87,7 @@ func usage() {
   panos-explore search    <config.xml> <scope> <substring>
   panos-explore uses      <config.xml> <scope> <category|url>
   panos-explore whereused <config.xml> <scope> <name>
-  panos-explore simulate  <config.xml> <scope> <source> <destination>
+  panos-explore simulate  <config.xml> <scope> <source> <destination> [from-zone to-zone]
   panos-explore group     <config.xml> <scope> <name>
 
 A scope is shared, vsys:<name> or dg:<name>.
@@ -382,13 +386,34 @@ func cmdSimulate(cfg *config.Config, args []string) error {
 	dstRules, dstRep := idx.Candidates(index.Destination, args[2])
 	explain(srcRep)
 	explain(dstRep)
-	warn(append(srcRep.Unresolved, dstRep.Unresolved...))
+	var unresolved []index.Unresolved
+	unresolved = append(unresolved, srcRep.Unresolved...)
+	unresolved = append(unresolved, dstRep.Unresolved...)
 	cand := roaring.And(srcRules, dstRules)
+
+	// Zones are given, not derived. A firewall's own test security-policy-match takes
+	// them as input too, and without them the answer is wrong far more often than it
+	// looks: on a lab configuration one rule with "source any" and a /15 destination
+	// covers nearly every address pair, and only its zones hold it back.
+	if len(args) == 5 {
+		fromRules, fromRep := idx.Candidates(index.FromZone, args[3])
+		toRules, toRep := idx.Candidates(index.ToZone, args[4])
+		unresolved = append(unresolved, fromRep.Unresolved...)
+		unresolved = append(unresolved, toRep.Unresolved...)
+		cand.And(fromRules)
+		cand.And(toRules)
+		fmt.Printf("zones: from %s, to %s\n\n", args[3], args[4])
+	} else {
+		fmt.Println("no zones given, so zones are not evaluated; pass from-zone and to-zone to")
+		fmt.Println("narrow the answer the way the device does")
+		fmt.Println()
+	}
+	warn(unresolved)
 	cand.AndNot(idx.Disabled())
+	zoned := len(args) == 5
 	if cand.IsEmpty() {
-		fmt.Println("no enabled rule matches both sides")
-		fmt.Println("note: application, service and zones are not evaluated, so the device")
-		fmt.Println("      may still pick a rule this does not")
+		fmt.Println("no enabled rule matches")
+		printCaveat(zoned)
 		return nil
 	}
 	rules := idx.Rules()
@@ -398,10 +423,20 @@ func cmdSimulate(cfg *config.Config, args []string) error {
 		fmt.Printf("  %2d. %-24s %-6s [%-11s %s]\n", r.Position, r.Name, r.Action, r.Layer, r.Scope)
 	}
 	first := rules[cand.Minimum()]
-	fmt.Printf("\nfirst match on addresses: %s (%s)\n", first.Name, first.Action)
-	fmt.Println("note: application, service and zones are not evaluated, so this is a")
-	fmt.Println("      candidate set. The device may report no match, or a different rule.")
+	fmt.Printf("\nfirst match: %s (%s)\n", first.Name, first.Action)
+	printCaveat(zoned)
 	return nil
+}
+
+// printCaveat names what was not evaluated, which is not the same list in both cases.
+func printCaveat(zoned bool) {
+	if zoned {
+		fmt.Println("note: addresses and zones were evaluated; application and service were not,")
+		fmt.Println("      so the device may still decline a rule this reports.")
+		return
+	}
+	fmt.Println("note: addresses only. Application, service and zones were not evaluated,")
+	fmt.Println("      so this is a candidate set and the device may pick a different rule.")
 }
 
 // explain prints why a side matched, so the reasoning can be checked rather than
