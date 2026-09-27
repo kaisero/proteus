@@ -334,6 +334,26 @@ defect: source and destination are the same host, so the device declines on
 **zone** grounds, and zones are not evaluated here. The library over-matches,
 which is the safe direction for a candidate set, but it is a candidate set.
 
+### Where the line sits
+
+Rule matching is not in the library. The library answers one question per side of
+a match — *which rules could this value reach* — and the caller decides what that
+means:
+
+```go
+src := idx.CandidatesFor(index.Source, srcAddr)       // or CandidatesForName
+dst := idx.CandidatesFor(index.Destination, dstAddr)
+
+cand := roaring.And(src, dst)
+cand.AndNot(idx.Disabled())
+first := idx.Rules()[cand.Minimum()]                  // your verdict, not the library's
+```
+
+`CandidatesFor` unions the four paths by which a rule field can reach an address:
+an object covering it, a group holding that object, a literal in the field, and a
+field of `any`. Those four are index knowledge. Whether the winner is really the
+winner — application, service, zones — is the simulator's business.
+
 This comparison also found a real defect. Address-only matching originally
 excluded rules whose field is `any`, on the grounds that `any` is a keyword rather
 than an object. That is right for the reference graph and wrong for a first-match

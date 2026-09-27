@@ -1,0 +1,54 @@
+<config version="11.2.0" urldb="paloaltonetworks" detail-version="11.2.5">
+  <shared/>
+  <devices>
+    <entry name="localhost.localdomain">
+      <vsys>
+        <entry name="vsys1">
+          <address>
+            <entry name="h-1"><ip-netmask>10.1.1.1/32</ip-netmask></entry>
+            <entry name="h-other"><ip-netmask>10.9.9.9/32</ip-netmask></entry>
+          </address>
+          <address-group>
+            <entry name="g-hosts"><static><member>h-1</member></static></entry>
+          </address-group>
+          <rulebase>
+            <security>
+              <rules>
+                <entry name="by-object">
+                  <source><member>h-1</member></source>
+                  <destination><member>any</member></destination>
+                  <application><member>any</member></application>
+                  <action>allow</action>
+                </entry>
+                <entry name="by-group">
+                  <source><member>g-hosts</member></source>
+                  <destination><member>any</member></destination>
+                  <application><member>any</member></application>
+                  <action>allow</action>
+                </entry>
+                <entry name="by-literal">
+                  <source><member>10.1.0.0/16</member></source>
+                  <destination><member>any</member></destination>
+                  <application><member>any</member></application>
+                  <action>allow</action>
+                </entry>
+                <entry name="by-any">
+                  <source><member>any</member></source>
+                  <destination><member>any</member></destination>
+                  <application><member>any</member></application>
+                  <action>allow</action>
+                </entry>
+                <entry name="unrelated">
+                  <source><member>h-other</member></source>
+                  <destination><member>h-other</member></destination>
+                  <application><member>any</member></application>
+                  <action>deny</action>
+                </entry>
+              </rules>
+            </security>
+          </rulebase>
+        </entry>
+      </vsys>
+    </entry>
+  </devices>
+</config>

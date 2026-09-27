@@ -110,9 +110,23 @@ detail and the measurements.
 - **Schema input.** A compact digest is committed; the vendor XML is not. CI
   regenerates from the digest, so drift is gated without an appliance.
 - **Unknown data.** Preserved verbatim and reported. A newer config still loads.
-- **Indexes live here.** References, transitive group closure, CIDR containment
-  and rule-position bitmaps, all keyed by scope. Consumers build the policy
-  simulator and where-used calls on top.
+- **Indexes live here, verdicts do not.** References, transitive group closure,
+  CIDR containment and rule-position bitmaps, all keyed by scope. Consumers build
+  the policy simulator and where-used calls on top.
+
+  The line runs between *reachability* and *decision*. The library answers "which
+  rules could this value reach", because that is index knowledge and there are four
+  separate paths to get it wrong: the object covering an address, a group holding
+  that object, a literal in the rule field, and a field of `any`. `CandidatesFor`
+  unions all four for one side of a match. Intersecting the sides, dropping
+  disabled rules, and deciding what a first match means — including whether
+  application, service and zone agree — is the consumer's.
+
+  That split was arrived at the hard way. The composition was first written twice,
+  in two commands, and the `any` path was missing from both. A live firewall caught
+  it: for 198.18.0.5 to 198.18.1.5 the device reports rule 3, whose source is
+  `any`, while matching on objects alone reported rule 8. One wrong winner, fixed
+  in two places. Now there is one place.
 - **No version seam.** `resolve` and `index` read the configuration as a parsed
   element tree, guided by the schema digest, rather than through the generated
   structs. The digest records its own PAN-OS version, so no version-agnostic

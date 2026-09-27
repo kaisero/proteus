@@ -359,21 +359,12 @@ func cmdSimulate(cfg *config.Config, args []string) error {
 		return err
 	}
 
-	src := sideIDs(idx, args[1])
-	dst := sideIDs(idx, args[2])
-	fmt.Printf("simulating %s -> %s in %s\n", args[1], args[2], sc)
-	fmt.Printf("  source matched %d name(s), destination %d\n\n", len(src), len(dst))
+	fmt.Printf("simulating %s -> %s in %s\n\n", args[1], args[2], sc)
 
-	srcRules := idx.RulesWith(index.Source, src...)
-	srcRules.Or(idx.RulesWithAny(index.Source))
-	if addr, err := netip.ParseAddr(args[1]); err == nil {
-		srcRules.Or(idx.RulesWithAddr(index.Source, addr))
-	}
-	dstRules := idx.RulesWith(index.Destination, dst...)
-	dstRules.Or(idx.RulesWithAny(index.Destination))
-	if addr, err := netip.ParseAddr(args[2]); err == nil {
-		dstRules.Or(idx.RulesWithAddr(index.Destination, addr))
-	}
+	// One call per side. The library knows the four ways a rule field can reach a
+	// value; the verdict below is this command's part.
+	srcRules := candidates(idx, index.Source, args[1])
+	dstRules := candidates(idx, index.Destination, args[2])
 	cand := roaring.And(srcRules, dstRules)
 	cand.AndNot(idx.Disabled())
 	if cand.IsEmpty() {
@@ -395,29 +386,16 @@ func cmdSimulate(cfg *config.Config, args []string) error {
 	return nil
 }
 
-// sideIDs turns one side of a simulation into the ids that could match it: the
-// objects covering the address, and every group holding them.
-//
-// An empty result is not an error. The address may match only a literal in a rule
-// field, which the caller adds separately.
-func sideIDs(idx *index.Index, value string) []uint32 {
-	in := idx.Interner()
-	var names []string
+// candidates asks the library for one side of a match, reading the argument as an
+// address, a prefix, or an object name.
+func candidates(idx *index.Index, f index.Field, value string) *roaring.Bitmap {
 	if addr, err := netip.ParseAddr(value); err == nil {
-		for _, m := range idx.Containing(addr) {
-			names = append(names, m.Name)
-		}
-	} else {
-		names = append(names, value)
+		return idx.CandidatesFor(f, addr)
 	}
-	ids := make([]uint32, 0, len(names))
-	for _, n := range names {
-		ids = append(ids, in.ID(n))
-		for _, g := range idx.GroupsOf(n) {
-			ids = append(ids, in.ID(g))
-		}
+	if p, err := netip.ParsePrefix(value); err == nil {
+		return idx.CandidatesForPrefix(f, p)
 	}
-	return ids
+	return idx.CandidatesForName(f, value)
 }
 
 func scopeList(ss []config.Scope) string {

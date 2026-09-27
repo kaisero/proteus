@@ -436,9 +436,11 @@ func sectionSimulate(idx *index.Index, addr netip.Addr, objs []resolve.Object) {
 	why("leaving them out returns the wrong winner, because an any-rule is usually")
 	why("earlier in the rulebase than a specific one")
 
-	in := idx.Interner()
-	src := sideBitmap(idx, index.Source, addr, in)
-	dstB := sideBitmap(idx, index.Destination, dstAddr, in)
+	// The library supplies each side: every rule the address can reach, by object,
+	// by group, by literal, or because the field is any. The verdict below is the
+	// caller's part.
+	src := idx.CandidatesFor(index.Source, addr)
+	dstB := idx.CandidatesFor(index.Destination, dstAddr)
 	cand := roaring.And(src, dstB)
 	before := cand.GetCardinality()
 	cand.AndNot(idx.Disabled())
@@ -457,20 +459,6 @@ func sectionSimulate(idx *index.Index, addr netip.Addr, objs []resolve.Object) {
 	first := rules[cand.Minimum()]
 	fmt.Printf("  first match on addresses: %s (%s)\n", first.Name, first.Action)
 	why("the lowest set bit, because PAN-OS takes the first match top to bottom")
-}
-
-func sideBitmap(idx *index.Index, f index.Field, addr netip.Addr, in *index.Interner) *roaring.Bitmap {
-	var ids []uint32
-	for _, m := range idx.Containing(addr) {
-		ids = append(ids, in.ID(m.Name))
-		for _, g := range idx.GroupsOf(m.Name) {
-			ids = append(ids, in.ID(g))
-		}
-	}
-	b := idx.RulesWith(f, ids...)
-	b.Or(idx.RulesWithAddr(f, addr))
-	b.Or(idx.RulesWithAny(f))
-	return b
 }
 
 func sectionCaveats(idx *index.Index) {
