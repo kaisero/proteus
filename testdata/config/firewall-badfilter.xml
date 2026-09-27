@@ -1,0 +1,26 @@
+<config version="11.2.0" urldb="paloaltonetworks" detail-version="11.2.5">
+  <shared>
+    <tag>
+      <entry name="a"><color>color1</color></entry>
+      <entry name="b"><color>color2</color></entry>
+    </tag>
+  </shared>
+  <devices>
+    <entry name="localhost.localdomain">
+      <vsys>
+        <entry name="vsys1">
+          <address>
+            <entry name="h-a"><ip-netmask>10.0.0.1</ip-netmask><tag><member>a</member></tag></entry>
+            <entry name="h-both"><ip-netmask>10.0.0.2</ip-netmask>
+              <tag><member>a</member><member>b</member></tag></entry>
+          </address>
+          <address-group>
+            <entry name="g-and"><dynamic><filter>'a' and 'b'</filter></dynamic></entry>
+            <entry name="g-not"><dynamic><filter>'a' and not 'b'</filter></dynamic></entry>
+            <entry name="g-bad"><dynamic><filter>'a' xor 'b'</filter></dynamic></entry>
+          </address-group>
+        </entry>
+      </vsys>
+    </entry>
+  </devices>
+</config>

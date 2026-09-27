@@ -16,4 +16,4 @@ github.com/okaiser/panos-analyst/internal/codegen  93.0
 github.com/okaiser/panos-analyst/cmd/panos-schemagen  57.6
 github.com/okaiser/panos-analyst/config  97.7
 github.com/okaiser/panos-analyst/resolve  94.2
-github.com/okaiser/panos-analyst/index  94.6
+github.com/okaiser/panos-analyst/index  94.9

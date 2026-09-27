@@ -118,3 +118,20 @@ func TestDynamicClosureIsScopeBound(t *testing.T) {
 		t.Errorf("the Vienna object is invisible here, got groups %v", got)
 	}
 }
+
+// A dynamic group whose filter cannot be read has no members in the index, and the
+// index says which group that is rather than leaving the caller to notice.
+func TestUnparsedFiltersAreReported(t *testing.T) {
+	idx := indexOfVsys(t, "../testdata/config/firewall-badfilter.xml", "vsys1")
+	got := idx.UnparsedFilters()
+	if len(got) != 1 || got[0].Group != "g-bad" {
+		t.Fatalf("UnparsedFilters = %+v, want just g-bad", got)
+	}
+	if got[0].Filter != "'a' xor 'b'" || got[0].Reason == "" {
+		t.Errorf("the report must carry the filter and a reason, got %+v", got[0])
+	}
+	got[0].Group = "mutated"
+	if idx.UnparsedFilters()[0].Group != "g-bad" {
+		t.Error("UnparsedFilters returned the index's own slice; it must return a copy")
+	}
+}

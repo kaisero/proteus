@@ -212,3 +212,18 @@ func TestResolversComeFromTheSchemaNotTheConfiguration(t *testing.T) {
 		t.Errorf("tag resolvers = %d, want 0; a tag is a name", got)
 	}
 }
+
+// An Unresolved prints its kind only when it has one.
+func TestUnresolvedString(t *testing.T) {
+	for _, tc := range []struct {
+		u    Unresolved
+		want string
+	}{
+		{Unresolved{Value: "x", Reason: "why"}, "x: why"},
+		{Unresolved{Value: "x", Kind: "zone", Reason: "why"}, "x (zone): why"},
+	} {
+		if got := tc.u.String(); got != tc.want {
+			t.Errorf("String() = %q, want %q", got, tc.want)
+		}
+	}
+}
