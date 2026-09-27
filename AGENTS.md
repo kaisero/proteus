@@ -124,3 +124,17 @@ forward closure eagerly and memoise reverse lookups — building the reverse
 closure eagerly on the same data cost 26 s and 294 MB.
 
 Check: `go test ./index -run TestClosureRepresentation`
+
+## R12 — The read-only core imports no I/O, and dependencies point one way
+
+`config`, `resolve` and `index` import no `net`, `net/http`, `net/url` or
+`os/exec`, and no package of this module except each other, `internal/schema`
+and `internal/digest`. `index` does not import `simulate`. `fetch` imports
+neither `simulate` nor `estate`. `store` does not import `fetch`.
+
+The core's freedom from I/O is an absolute property today. A fetcher in the same
+module makes it a conditional one, and conditional invariants decay unless a test
+holds them. A rule for a package that does not exist yet passes; it binds when
+the package lands.
+
+Check: `go test ./internal/archtest -run TestImportDirection`
