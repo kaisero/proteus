@@ -1,0 +1,409 @@
+// Command panos-explore answers questions about a PAN-OS or Panorama
+// configuration file, so the library can be tried without writing any Go.
+//
+// Usage:
+//
+//	panos-explore info      <config.xml>
+//	panos-explore groups    <config.xml>
+//	panos-explore target    <config.xml> <serial> <vsys>
+//	panos-explore lookup    <config.xml> <scope> <value>
+//	panos-explore whereused <config.xml> <scope> <name>
+//	panos-explore simulate  <config.xml> <scope> <source> <destination>
+//	panos-explore group     <config.xml> <scope> <name>
+//
+// A scope is shared, vsys:<name> or dg:<name>. A value is an IP address, a
+// prefix, or an object name.
+package main
+
+import (
+	"fmt"
+	"net/netip"
+	"os"
+	"strings"
+	"time"
+
+	"github.com/RoaringBitmap/roaring/v2"
+
+	"github.com/okaiser/go-panos-schema/config"
+	"github.com/okaiser/go-panos-schema/index"
+	"github.com/okaiser/go-panos-schema/resolve"
+)
+
+// version is set at build time via -ldflags.
+var version = "dev"
+
+func main() {
+	if len(os.Args) < 2 {
+		usage()
+	}
+	cmd, args := os.Args[1], os.Args[2:]
+
+	var err error
+	switch cmd {
+	case "info":
+		err = withConfig(args, 0, cmdInfo)
+	case "groups":
+		err = withConfig(args, 0, cmdGroups)
+	case "target":
+		err = withConfig(args, 2, cmdTarget)
+	case "lookup":
+		err = withConfig(args, 2, cmdLookup)
+	case "whereused":
+		err = withConfig(args, 2, cmdWhereUsed)
+	case "simulate":
+		err = withConfig(args, 3, cmdSimulate)
+	case "group":
+		err = withConfig(args, 2, cmdGroup)
+	case "version", "-version", "--version":
+		fmt.Println(version)
+		return
+	default:
+		usage()
+	}
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "panos-explore: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+func usage() {
+	fmt.Fprint(os.Stderr, `usage:
+  panos-explore info      <config.xml>
+  panos-explore groups    <config.xml>
+  panos-explore target    <config.xml> <serial> <vsys>
+  panos-explore lookup    <config.xml> <scope> <value>
+  panos-explore whereused <config.xml> <scope> <name>
+  panos-explore simulate  <config.xml> <scope> <source> <destination>
+  panos-explore group     <config.xml> <scope> <name>
+
+A scope is shared, vsys:<name> or dg:<name>.
+`)
+	os.Exit(2)
+}
+
+// withConfig loads the configuration named by the first argument and reports how
+// long it took, then runs the command with the rest.
+func withConfig(args []string, extra int, fn func(*config.Config, []string) error) error {
+	if len(args) != 1+extra {
+		usage()
+	}
+	start := time.Now()
+	cfg, rep, err := config.Load(args[0])
+	if err != nil {
+		return err
+	}
+	fmt.Printf("loaded %s in %v: PAN-OS %s (%s), %s\n",
+		args[0], time.Since(start).Round(time.Microsecond),
+		cfg.Version(), cfg.DetailVersion(), cfg.Platform())
+	if rep.HasUnknown() {
+		fmt.Printf("  note: %s\n", rep)
+	}
+	fmt.Println()
+	return fn(cfg, args[1:])
+}
+
+func cmdInfo(cfg *config.Config, _ []string) error {
+	h, err := resolve.NewHierarchy(cfg)
+	if err != nil {
+		return err
+	}
+	fmt.Println("device-group tree")
+	for _, root := range h.Roots() {
+		printTree(h, root, 1)
+	}
+
+	tgs, err := resolve.Targets(cfg)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("\nfirewalls (%d), keyed by serial and vsys\n", len(tgs))
+	if len(tgs) == 0 {
+		fmt.Println("  none assigned to a device group")
+	}
+	for _, tg := range tgs {
+		rules, err := tg.Rules(resolve.Security)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("  %s / %-8s -> %-20s stack %-12s %d effective rules\n",
+			tg.Serial(), tg.Vsys(), tg.DeviceGroup(), tg.TemplateStack(), len(rules))
+	}
+	return nil
+}
+
+func printTree(h *resolve.Hierarchy, dg string, depth int) {
+	fmt.Printf("  %s%s\n", strings.Repeat("  ", depth), dg)
+	for _, c := range h.Children(dg) {
+		printTree(h, c, depth+1)
+	}
+}
+
+func cmdGroups(cfg *config.Config, _ []string) error {
+	h, err := resolve.NewHierarchy(cfg)
+	if err != nil {
+		return err
+	}
+	var all []string
+	var walk func(string)
+	walk = func(dg string) {
+		all = append(all, dg)
+		for _, c := range h.Children(dg) {
+			walk(c)
+		}
+	}
+	for _, r := range h.Roots() {
+		walk(r)
+	}
+
+	fmt.Println("effective policy per device group")
+	for _, dg := range all {
+		rules, err := resolve.RulesForDeviceGroup(cfg, dg, resolve.Security)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("\n  %s (%d rules)\n", dg, len(rules))
+		for _, r := range rules {
+			fmt.Printf("    %2d. [%-11s %-16s] %-24s src=%v dst=%v\n",
+				r.Position, r.Layer, r.Scope, r.Name, r.Fields["source"], r.Fields["destination"])
+		}
+	}
+	return nil
+}
+
+func cmdTarget(cfg *config.Config, args []string) error {
+	tg, err := resolve.TargetFor(cfg, args[0], args[1])
+	if err != nil {
+		return err
+	}
+	fmt.Printf("%s / %s\n", tg.Serial(), tg.Vsys())
+	fmt.Printf("  device group   %s\n", tg.DeviceGroup())
+	fmt.Printf("  template stack %s\n", tg.TemplateStack())
+	fmt.Printf("  inherits from  %s\n\n", scopeList(tg.Chain()))
+
+	rules, err := tg.Rules(resolve.Security)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("effective security policy, in evaluation order (%d rules)\n", len(rules))
+	for _, r := range rules {
+		state := ""
+		if r.Disabled {
+			state = " DISABLED"
+		}
+		fmt.Printf("  %2d. [%-11s %-16s] %-24s %-6s src=%v dst=%v app=%v%s\n",
+			r.Position, r.Layer, r.Scope, r.Name, r.Action,
+			r.Fields["source"], r.Fields["destination"], r.Fields["application"], state)
+	}
+
+	objs, err := tg.Objects("address")
+	if err != nil {
+		return err
+	}
+	fmt.Printf("\nvisible address objects (%d)\n", len(objs))
+	for _, o := range objs {
+		shadow := ""
+		if o.ShadowedFrom != nil {
+			shadow = fmt.Sprintf("  (shadows the definition in %s)", o.ShadowedFrom)
+		}
+		fmt.Printf("  %-26s %-20s %-16s tags=%v%s\n", o.Name, o.Value, o.Scope, o.Tags, shadow)
+	}
+	return nil
+}
+
+// cmdLookup is the reverse lookup: from a value to the objects that hold it, the
+// groups that hold those, and the rules that name any of them.
+func cmdLookup(cfg *config.Config, args []string) error {
+	sc, err := config.ParseScope(args[0])
+	if err != nil {
+		return err
+	}
+	value := args[1]
+
+	idx, err := index.For(cfg, sc)
+	if err != nil {
+		return err
+	}
+	in := idx.Interner()
+
+	fmt.Printf("looking up %q in %s\n\n", value, sc)
+
+	// Step 1: from the value to the objects that cover it.
+	var objs []string
+	if addr, err := netip.ParseAddr(value); err == nil {
+		fmt.Printf("1. objects whose value covers %s\n", addr)
+		for _, m := range idx.Containing(addr) {
+			fmt.Printf("     %-26s %-18s %s\n", m.Name, m.Prefix, m.Scope)
+			objs = append(objs, m.Name)
+		}
+	} else if p, err := netip.ParsePrefix(value); err == nil {
+		fmt.Printf("1. objects overlapping %s\n", p)
+		for _, m := range idx.Overlapping(p) {
+			fmt.Printf("     %-26s %-18s %s\n", m.Name, m.Prefix, m.Scope)
+			objs = append(objs, m.Name)
+		}
+	} else {
+		fmt.Printf("1. treating %q as an object name\n", value)
+		objs = append(objs, value)
+	}
+	if len(objs) == 0 {
+		fmt.Println("     none")
+		return nil
+	}
+
+	// Step 2: from the objects up through every level of group nesting.
+	ids := make([]uint32, 0, len(objs))
+	fmt.Println("\n2. groups holding them, transitively")
+	for _, o := range objs {
+		ids = append(ids, in.ID(o))
+		groups := idx.GroupsOf(o)
+		if len(groups) == 0 {
+			fmt.Printf("     %-26s in no group\n", o)
+			continue
+		}
+		fmt.Printf("     %-26s in %v\n", o, groups)
+		for _, g := range groups {
+			ids = append(ids, in.ID(g))
+		}
+	}
+
+	// Step 3: from the object or any of its groups to the rules.
+	fmt.Println("\n3. rules naming any of them")
+	rules := idx.Rules()
+	printed := false
+	for _, f := range []index.Field{index.Source, index.Destination} {
+		b := idx.RulesWith(f, ids...)
+		for it := b.Iterator(); it.HasNext(); {
+			r := rules[it.Next()]
+			fmt.Printf("     %2d. %-24s as %-11s [%s]\n", r.Position, r.Name, f, r.Layer)
+			printed = true
+		}
+	}
+	if !printed {
+		fmt.Println("     none")
+	}
+	return nil
+}
+
+func cmdWhereUsed(cfg *config.Config, args []string) error {
+	sc, err := config.ParseScope(args[0])
+	if err != nil {
+		return err
+	}
+	name := args[1]
+	idx, err := index.For(cfg, sc)
+	if err != nil {
+		return err
+	}
+
+	refs := idx.Refs(name)
+	fmt.Printf("%d reference(s) to %q in %s\n", len(refs), name, sc)
+	for _, r := range refs {
+		fmt.Printf("  %-16s %-12s %s\n", r.Scope, r.Field, r.From)
+		fmt.Printf("  %-16s %-12s could be: %v\n", "", "", r.Candidates)
+	}
+	if groups := idx.GroupsOf(name); len(groups) > 0 {
+		fmt.Printf("\nalso a member of %v\n", groups)
+	}
+	if members := idx.MembersOf(name); len(members) > 0 {
+		fmt.Printf("\nit is a group holding %v\n", members)
+	}
+	return nil
+}
+
+// cmdGroup resolves an address group in a scope, static members and tag-matched
+// members alike. The same shared dynamic group resolves differently in different
+// device groups, because only the visible scope contributes members.
+func cmdGroup(cfg *config.Config, args []string) error {
+	sc, err := config.ParseScope(args[0])
+	if err != nil {
+		return err
+	}
+	m, err := resolve.GroupInScope(cfg, sc, args[1])
+	if err != nil {
+		return err
+	}
+	fmt.Printf("%s in %s\n", args[1], sc)
+	if m.Filter != "" {
+		fmt.Printf("  dynamic, filter %s\n", m.Filter)
+		fmt.Printf("  members matched by tag: %v\n", m.ByTag)
+	} else {
+		fmt.Printf("  static members: %v\n", m.Static)
+	}
+	fmt.Printf("  note: %s\n", m.Note)
+	return nil
+}
+
+// cmdSimulate finds the first rule that matches a source and destination. PAN-OS
+// evaluates top to bottom and takes the first match, so the lowest bit wins.
+func cmdSimulate(cfg *config.Config, args []string) error {
+	sc, err := config.ParseScope(args[0])
+	if err != nil {
+		return err
+	}
+	idx, err := index.For(cfg, sc)
+	if err != nil {
+		return err
+	}
+
+	src, err := sideIDs(idx, args[1])
+	if err != nil {
+		return err
+	}
+	dst, err := sideIDs(idx, args[2])
+	if err != nil {
+		return err
+	}
+	fmt.Printf("simulating %s -> %s in %s\n", args[1], args[2], sc)
+	fmt.Printf("  source matched %d name(s), destination %d\n\n", len(src), len(dst))
+
+	cand := roaring.And(idx.RulesWith(index.Source, src...), idx.RulesWith(index.Destination, dst...))
+	cand.AndNot(idx.Disabled())
+	if cand.IsEmpty() {
+		fmt.Println("no enabled rule names both sides")
+		fmt.Println("note: application and service are not evaluated, and a rule using")
+		fmt.Println("      'any' is excluded because 'any' is a keyword, not an object")
+		return nil
+	}
+	rules := idx.Rules()
+	fmt.Printf("candidates in evaluation order (%d)\n", cand.GetCardinality())
+	for it := cand.Iterator(); it.HasNext(); {
+		r := rules[it.Next()]
+		fmt.Printf("  %2d. %-24s %-6s [%-11s %s]\n", r.Position, r.Name, r.Action, r.Layer, r.Scope)
+	}
+	first := rules[cand.Minimum()]
+	fmt.Printf("\nfirst match: %s (%s)\n", first.Name, first.Action)
+	return nil
+}
+
+// sideIDs turns one side of a simulation into the ids that could match it: the
+// objects covering the address, and every group holding them.
+func sideIDs(idx *index.Index, value string) ([]uint32, error) {
+	in := idx.Interner()
+	var names []string
+	if addr, err := netip.ParseAddr(value); err == nil {
+		for _, m := range idx.Containing(addr) {
+			names = append(names, m.Name)
+		}
+	} else {
+		names = append(names, value)
+	}
+	ids := make([]uint32, 0, len(names))
+	for _, n := range names {
+		ids = append(ids, in.ID(n))
+		for _, g := range idx.GroupsOf(n) {
+			ids = append(ids, in.ID(g))
+		}
+	}
+	if len(ids) == 0 {
+		return nil, fmt.Errorf("nothing in %s matches %q", idx.Scope(), value)
+	}
+	return ids, nil
+}
+
+func scopeList(ss []config.Scope) string {
+	out := make([]string, len(ss))
+	for i, s := range ss {
+		out[i] = s.String()
+	}
+	return strings.Join(out, " -> ")
+}
