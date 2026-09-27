@@ -113,3 +113,22 @@ func TestTagFilterRejectsGarbage(t *testing.T) {
 		}
 	}
 }
+
+// A nil filter matches nothing and names no tags, and a parsed one prints as
+// written.
+func TestTagFilterNilAndString(t *testing.T) {
+	var none *TagFilter
+	if none.Match([]string{"a"}) {
+		t.Error("a nil filter must match nothing")
+	}
+	if got := none.Tags(); got != nil {
+		t.Errorf("a nil filter names no tags, got %v", got)
+	}
+	f, err := ParseTagFilter("'a' and 'b'")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f.String() != "'a' and 'b'" {
+		t.Errorf("String() = %q", f.String())
+	}
+}

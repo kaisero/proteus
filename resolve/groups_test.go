@@ -97,3 +97,21 @@ func TestBooleanFilterResolves(t *testing.T) {
 		t.Errorf("'a' and not 'b' resolved to %v, want [h-a]", notf.ByTag)
 	}
 }
+
+// A static group reports its member list, not a filter.
+func TestStaticGroupResolvesToItsMembers(t *testing.T) {
+	tg, err := TargetFor(fwLab(t), "localhost.localdomain", "vsys1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := tg.ResolveGroup("g-servers")
+	if err != nil {
+		t.Fatalf("ResolveGroup: %v", err)
+	}
+	if len(got.Static) != 1 || got.Static[0] != "dc01" {
+		t.Errorf("Static = %v, want [dc01]", got.Static)
+	}
+	if got.Filter != "" {
+		t.Errorf("a static group has no filter, got %q", got.Filter)
+	}
+}

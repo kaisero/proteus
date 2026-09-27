@@ -1,6 +1,8 @@
 package config
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -117,5 +119,17 @@ func TestSchemaIsSharedBetweenLoads(t *testing.T) {
 	}
 	if a.Root() == b.Root() {
 		t.Error("but each keeps its own parsed tree")
+	}
+}
+
+// A <config> element without a version cannot be matched to a schema.
+func TestLoadRejectsAConfigWithNoVersion(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "noversion.xml")
+	if err := os.WriteFile(path, []byte("<config><devices/></config>"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, _, err := Load(path)
+	if err == nil || !strings.Contains(err.Error(), "version") {
+		t.Errorf("want an error naming the missing version, got %v", err)
 	}
 }

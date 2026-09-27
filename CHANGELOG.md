@@ -129,6 +129,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `github.com/okaiser/panos-analyst`; update imports that used
   `github.com/okaiser/go-panos-schema`.
 
+### Removed
+
+- **Panorama configurations are no longer read.** panos-analyst works from each
+  firewall's own configuration, so device groups, templates and the device-group
+  hierarchy are gone, and loading a Panorama export returns an error that says so.
+  A firewall's pushed shared pre- and post-rules are still read in evaluation order.
+
 ### Fixed
 
 - **A reference is listed in a column wide enough to hold it.** A field is a path

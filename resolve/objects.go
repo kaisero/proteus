@@ -86,7 +86,8 @@ func objectsInChain(cfg *config.Config, chain []config.Scope, kind string, withi
 	return out
 }
 
-// scopeContainer names where a scope's objects live, as a path under /config.
+// scopeContainer names where a scope's objects and rulebase live, as a path under
+// /config. The config scope holds neither.
 func scopeContainer(sc config.Scope) ([]string, bool) {
 	switch sc.Sort {
 	case config.ScopeShared:

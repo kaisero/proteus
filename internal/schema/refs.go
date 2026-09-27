@@ -7,14 +7,14 @@ import (
 
 // TargetForm is what a memberof declaration actually names.
 //
-// Counted over the 13,120 declarations in the 11.2.0 Panorama schema: 7,111 objects,
-// 2,536 predefined, 1,069 template variables, 1,362 rule fields, 915 expressions and 127
-// unrecognised. Only objects and predefined targets are index edges. The census test in
+// Counted over the 5,898 declarations in the 11.2.0 firewall schema: 3,811 objects,
+// 1,333 predefined, 276 rule fields, 429 expressions and 49 unrecognised. Only
+// objects and predefined targets are index edges. The census test in
 // internal/digest pins these.
 //
-// A firewall schema has no template variables at all, which stands to reason because a
-// firewall has no templates. An earlier rule here treated every "#myentry(" anchor as
-// one, discarding 1,413 real object references in the Panorama schema and 1,455 in the
+// A firewall schema has no template variables at all, which stands to reason
+// because a firewall has no templates. An earlier rule here treated every
+// "#myentry(" anchor as one, discarding 1,455 real object references in the
 // firewall schema, the zone targets of a security rule's from and to among them.
 type TargetForm int
 

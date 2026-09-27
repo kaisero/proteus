@@ -82,22 +82,9 @@ func (t *Target) Rules(rb Rulebase) ([]Rule, error) {
 	return out, nil
 }
 
-// rulebaseContainer names where a scope's rulebase lives, as a path under
-// /config. The path is matched exactly.
-func rulebaseContainer(sc config.Scope) ([]string, bool) {
-	switch sc.Sort {
-	case config.ScopeShared:
-		return []string{"shared"}, true
-	case config.ScopeVsys:
-		return []string{"devices", "entry", "vsys", "entry"}, true
-	default:
-		return nil, false
-	}
-}
-
 // readRules reads one scope's rulebase.
 func readRules(root *config.Element, sc config.Scope, rulebase string, rb Rulebase) []Rule {
-	path, ok := rulebaseContainer(sc)
+	path, ok := scopeContainer(sc)
 	if !ok {
 		return nil
 	}

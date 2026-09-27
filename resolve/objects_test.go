@@ -309,3 +309,29 @@ func TestObjectValueReadsEveryForm(t *testing.T) {
 		}
 	}
 }
+
+// The config scope sits outside shared and every vsys, so it holds no objects of
+// its own; readers see only shared from it.
+func TestConfigScopeHoldsNoObjectsOfItsOwn(t *testing.T) {
+	cfg := fwLab(t)
+	sc := config.Scope{Sort: config.ScopeConfig}
+	objs, err := ObjectsInScope(cfg, sc, "address")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, o := range objs {
+		if o.Scope.Sort != config.ScopeShared {
+			t.Errorf("%s came from %s, want shared only", o.Name, o.Scope)
+		}
+	}
+	if len(objs) == 0 {
+		t.Error("shared-dns is in shared and must still be visible")
+	}
+	zones, err := ZonesInScope(cfg, sc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(zones) != 0 {
+		t.Errorf("zones = %v, want none", zones)
+	}
+}

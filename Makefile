@@ -101,11 +101,10 @@ generate-check: generate ## Fail if the committed model differs from a fresh run
 		exit 1; \
 	}
 
-schema-pull: ## Copy schema.xml/cms-schema.xml/opschema.xml off a PAN-OS host (HOST=user@host)
+schema-pull: ## Copy schema.xml/opschema.xml off a PAN-OS firewall (HOST=user@host)
 	@test -n "$(HOST)" || { echo "usage: make schema-pull HOST=user@host"; exit 1; }
 	@mkdir -p $(SCHEMA_DIR)
 	scp $(HOST):/opt/pancfg/mgmt/factory/schema.xml $(SCHEMA_DIR)/
-	scp $(HOST):/opt/pancfg/mgmt/factory/cms-schema.xml $(SCHEMA_DIR)/
 	scp $(HOST):/opt/pancfg/mgmt/factory/opschema.xml $(SCHEMA_DIR)/
 	@echo "schemas in $(SCHEMA_DIR)/ — these are vendor files, see ARCHITECTURE.md before committing them"
 

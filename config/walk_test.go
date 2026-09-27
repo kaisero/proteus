@@ -280,3 +280,25 @@ func TestKindContainersReportsAmbiguity(t *testing.T) {
 		t.Errorf("an empty kind gave %v, want nil", got)
 	}
 }
+
+// A broad suffix matches several rules arrays — security, NAT, policy-based
+// forwarding and more — and every field still lists each kind once.
+func TestFieldKindsMergesSeveralArrays(t *testing.T) {
+	cfg, _, err := Load("../testdata/config/firewall-lab.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	kinds := cfg.FieldKinds("/rules")
+	if len(kinds["source"]) == 0 {
+		t.Fatal("no rules array names a source kind")
+	}
+	for field, ks := range kinds {
+		seen := map[string]bool{}
+		for _, k := range ks {
+			if seen[k] {
+				t.Errorf("%s repeats kind %q: %v", field, k, ks)
+			}
+			seen[k] = true
+		}
+	}
+}
