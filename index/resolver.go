@@ -119,10 +119,12 @@ func (i *Index) resolversFor(f Field) []resolver {
 // SearchValues returns every object whose value contains the substring, case
 // insensitively, across every value space.
 //
-// This is the answer to a name that cannot hold its own value. PAN-OS caps an object
-// name at 31 characters and a custom URL category member at 255, so a long URL cannot
-// appear in the name of the category holding it: searching the values is the only way
-// to find it.
+// This is the answer to a name that cannot hold its own value. PAN-OS caps a custom
+// URL category name at 31 characters and one of its members at 255, so a long URL
+// cannot appear in the name of the category holding it, and searching the values is
+// the only way to find it. Other kinds are wider — an address or service name may be
+// 63 characters, a tag 127 — but the same problem appears whenever a value is longer
+// than the name that holds it.
 //
 // It is a search, not a match. Use Candidates to ask what a rule would do.
 func (i *Index) SearchValues(substr string) []Hit {

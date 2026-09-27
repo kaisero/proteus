@@ -5,9 +5,9 @@ import (
 	"testing"
 )
 
-// The case the 31-character name limit creates. PAN-OS caps an object name at 31
-// characters and a custom URL category member at 255, so a long URL cannot appear in
-// the name of the category holding it. Searching the values is the only way to find it.
+// The case the category name limit creates. PAN-OS caps a custom URL category name at
+// 31 characters and one of its members at 255, so a long URL cannot appear in the name
+// of the category holding it. Searching the values is the only way to find it.
 func TestSearchValuesFindsALongURLByFragment(t *testing.T) {
 	idx := indexOfVsys(t, "../testdata/config/firewall-urlcat.xml", "vsys1")
 

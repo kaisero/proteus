@@ -152,6 +152,10 @@ func objectValue(e *config.Element) string {
 	if m := e.Child("static").Members(); len(m) > 0 {
 		return strings.Join(m, ", ")
 	}
+	// A service group spells its membership "members", not "static".
+	if m := e.Child("members").Members(); len(m) > 0 {
+		return strings.Join(m, ", ")
+	}
 	if v := e.Child("dynamic").Child("filter").TextOr(""); v != "" {
 		return v
 	}

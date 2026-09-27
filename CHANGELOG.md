@@ -17,6 +17,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   there, so a field that accepts an address, a region and an external list is asked
   of each rather than treated as an address field. Addresses answer exactly as
   before; other value spaces arrive behind the same seam.
+- **Ask which rules a port reaches.** `reaches ... service tcp/8006` reports the
+  service objects covering that port, the groups holding them and the rules naming
+  either. Port ranges are matched as ranges, a bare `443` matches whichever protocol
+  carries it, and the hit reports the range that matched. Tags need nothing new: a tag
+  is a name, so asking for one already worked.
 - **Find which rules apply a profile that mentions a URL category.**
   `panos-explore uses <config> <scope> <category|url>` follows the path a rule takes
   to a category through its security profiles — profile group or named profile, then
@@ -29,9 +34,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Search every object value by fragment.**
   `panos-explore search <config> <scope> <substring>` finds objects whose value
   contains a fragment, case-insensitively, across addresses, FQDNs and URL category
-  members. This is the answer to a name that cannot hold its own value: PAN-OS caps an
-  object name at 31 characters and a category member at 255, so searching `azureapps`
-  finds the category holding a 41-character URL that appears in no name anywhere.
+  members. This is the answer to a name that cannot hold its own value: a custom URL
+  category name may be 31 characters and one of its members 255, so searching
+  `azureapps` finds the category holding a 41-character URL that appears in no name
+  anywhere.
 - **`panos-explore reaches <config> <scope> <field> <value>`** asks which rules one
   rule field could match one value, whatever kind of value it is: an address, a
   prefix, a URL or an object name. It prints what matched and via which value, and

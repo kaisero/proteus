@@ -206,3 +206,24 @@ func TestObjectSubtypeIsEmptyWhenAbsent(t *testing.T) {
 		}
 	}
 }
+
+// A service group spells its membership "members" where an address group says
+// "static". Reading only "static" left every service group with no value, and so with
+// no members in the group closure.
+func TestObjectsReadsServiceGroupMembers(t *testing.T) {
+	cfg := loadT(t, "../testdata/config/firewall-urlcat.xml")
+	sc := config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}
+
+	objs, err := ObjectsInScope(cfg, sc, "service-group")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(objs) != 1 {
+		t.Fatalf("got %d service groups, want 1", len(objs))
+	}
+	for _, want := range []string{"svc-pve", "svc-range"} {
+		if !strings.Contains(objs[0].Value, want) {
+			t.Errorf("value %q does not contain %q", objs[0].Value, want)
+		}
+	}
+}

@@ -4,6 +4,17 @@
     <entry name="localhost.localdomain">
       <vsys>
         <entry name="vsys1">
+          <service>
+            <entry name="svc-ok"><protocol><tcp><port>443</port></tcp></protocol></entry>
+            <entry name="svc-reversed"><protocol><tcp><port>9000-8000</port></tcp></protocol></entry>
+            <entry name="svc-words"><protocol><tcp><port>http</port></tcp></protocol></entry>
+            <entry name="svc-toobig"><protocol><tcp><port>70000</port></tcp></protocol></entry>
+            <entry name="svc-mixed"><protocol><tcp><port>, 80 , bad, 100-200</port></tcp></protocol></entry>
+            <entry name="svc-empty"><description>no protocol at all</description></entry>
+          </service>
+          <service-group>
+            <entry name="grp-ok"><members><member>svc-ok</member></members></entry>
+          </service-group>
           <external-list>
             <entry name="edl-urls">
               <type><url><recurring><daily><at>01</at></daily></recurring><url>https://example.com/list.txt</url></url></type>

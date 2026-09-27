@@ -42,7 +42,9 @@ type UnparsedFilter struct {
 // is scope-bound: the same filter selects different objects in different device
 // groups. A filter this build cannot parse contributes no members and is recorded
 // in UnparsedFilters rather than guessed at.
-func newClosureIndex(in *Interner, groups, addrs []resolve.Object) *closureIndex {
+// A group set other than address groups carries no tag filter, so only the first is
+// checked for one. PAN-OS gives a dynamic filter to address groups alone.
+func newClosureIndex(in *Interner, groups, addrs []resolve.Object, others ...[]resolve.Object) *closureIndex {
 	c := &closureIndex{
 		direct:  map[uint32][]uint32{},
 		forward: map[uint32]*roaring.Bitmap{},
@@ -73,6 +75,16 @@ func newClosureIndex(in *Interner, groups, addrs []resolve.Object) *closureIndex
 				continue
 			}
 			c.direct[gid] = append(c.direct[gid], in.ID(m))
+		}
+	}
+	for _, set := range others {
+		for _, g := range set {
+			gid := in.ID(g.Name)
+			for _, m := range strings.Split(g.Value, ", ") {
+				if m = strings.TrimSpace(m); m != "" {
+					c.direct[gid] = append(c.direct[gid], in.ID(m))
+				}
+			}
 		}
 	}
 	for gid := range c.direct {

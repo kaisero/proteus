@@ -82,6 +82,10 @@ func build(cfg *config.Config, sc config.Scope) (*Index, error) {
 	if err != nil {
 		return nil, err
 	}
+	svcGroups, err := resolve.ObjectsInScope(cfg, sc, "service-group")
+	if err != nil {
+		return nil, err
+	}
 	// Intern the addresses first, so their ids are dense and stable.
 	for _, o := range addrs {
 		in.ID(o.Name)
@@ -107,9 +111,17 @@ func build(cfg *config.Config, sc config.Scope) (*Index, error) {
 	if err != nil {
 		return nil, err
 	}
+	svcs, err := resolve.ObjectsInScope(cfg, sc, "service")
+	if err != nil {
+		return nil, err
+	}
 
 	byKind := map[string]resolver{}
-	for _, r := range []resolver{newAddressResolver(addrs, ri), newURLResolver(cats)} {
+	for _, r := range []resolver{
+		newAddressResolver(addrs, ri),
+		newURLResolver(cats),
+		newServiceResolver(svcs, ri),
+	} {
 		for _, k := range r.kinds() {
 			byKind[k] = r
 		}
@@ -127,7 +139,7 @@ func build(cfg *config.Config, sc config.Scope) (*Index, error) {
 	return &Index{
 		scope:     sc,
 		in:        in,
-		closure:   newClosureIndex(in, groups, addrs),
+		closure:   newClosureIndex(in, groups, addrs, svcGroups),
 		refs:      refs,
 		rules:     ri,
 		resolvers: wireResolvers(cfg.FieldKinds("rulebase/security/rules"), byKind),
