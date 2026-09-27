@@ -132,8 +132,12 @@ func (i *Index) RulesWith(f Field, ids ...uint32) *roaring.Bitmap {
 // This is the literal path: a rule that names 198.18.0.0/16 as its source matches
 // any address inside it, with no object involved.
 func (i *Index) RulesWithAddr(f Field, addr netip.Addr) *roaring.Bitmap {
+	return i.rules.withAddr(f, addr)
+}
+
+func (r *rulesIndex) withAddr(f Field, addr netip.Addr) *roaring.Bitmap {
 	out := roaring.New()
-	t, ok := i.rules.byPrefix[f]
+	t, ok := r.byPrefix[f]
 	if !ok {
 		return out
 	}
@@ -160,8 +164,12 @@ func (i *Index) RulesWithAny(f Field) *roaring.Bitmap {
 
 // RulesWithPrefix returns the rules whose field names an address overlapping p.
 func (i *Index) RulesWithPrefix(f Field, p netip.Prefix) *roaring.Bitmap {
+	return i.rules.withPrefix(f, p)
+}
+
+func (r *rulesIndex) withPrefix(f Field, p netip.Prefix) *roaring.Bitmap {
 	out := roaring.New()
-	t, ok := i.rules.byPrefix[f]
+	t, ok := r.byPrefix[f]
 	if !ok {
 		return out
 	}

@@ -1,6 +1,9 @@
 package config
 
 import (
+	"sort"
+	"strings"
+
 	"github.com/okaiser/go-panos-schema/internal/schema"
 )
 
@@ -152,4 +155,38 @@ func scopeOf(e *Element) (Scope, bool) {
 		return Scope{}, false
 	}
 	return Scope{Sort: sort, Name: e.Attr("name")}, true
+}
+
+// FieldKinds returns the object kinds each reference field may name, for every
+// entry array whose schema path ends with suffix.
+//
+// This comes from the schema, not from the configuration, because a field the
+// configuration leaves at "any" yields no walk event: a rulebase whose every rule
+// has "source any" would otherwise look as though source names nothing. Kinds from
+// several matching arrays are merged, so one call covers a firewall's rulebase and
+// a Panorama pre- and post-rulebase alike.
+func (c *Config) FieldKinds(suffix string) map[string][]string {
+	out := map[string][]string{}
+	seen := map[string]map[string]bool{}
+	for path, byField := range c.schema.refs {
+		if !strings.HasSuffix(path, suffix) {
+			continue
+		}
+		for field, fr := range byField {
+			if seen[field] == nil {
+				seen[field] = map[string]bool{}
+			}
+			for _, k := range fr.Candidates {
+				if seen[field][k] {
+					continue
+				}
+				seen[field][k] = true
+				out[field] = append(out[field], k)
+			}
+		}
+	}
+	for _, ks := range out {
+		sort.Strings(ks)
+	}
+	return out
 }

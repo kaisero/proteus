@@ -20,7 +20,8 @@ func TestCandidatesReportsAURLItCannotEvaluate(t *testing.T) {
 	idx := indexOfVsys(t, "../testdata/config/firewall-urlcat.xml", "vsys1")
 
 	const url = "superlong.example.azureapps.microsoft.com"
-	rules, unresolved := idx.Candidates(Category, url)
+	rules, rep := idx.Candidates(Category, url)
+	unresolved := rep.Unresolved
 
 	if len(unresolved) == 0 {
 		t.Fatal("a URL value resolved silently; the caller cannot tell the answer is incomplete")
@@ -48,7 +49,8 @@ func TestCandidatesReportsAURLItCannotEvaluate(t *testing.T) {
 func TestCandidatesResolvesACategoryName(t *testing.T) {
 	idx := indexOfVsys(t, "../testdata/config/firewall-urlcat.xml", "vsys1")
 
-	rules, unresolved := idx.Candidates(Category, "custom-azuresite-group")
+	rules, rep := idx.Candidates(Category, "custom-azuresite-group")
+	unresolved := rep.Unresolved
 	if len(unresolved) != 0 {
 		t.Fatalf("a known category name reported unresolved: %v", unresolved)
 	}
@@ -62,8 +64,8 @@ func TestCandidatesResolvesAddressesQuietly(t *testing.T) {
 	idx := indexOfVsys(t, "../testdata/config/firewall-urlcat.xml", "vsys1")
 
 	for _, v := range []string{"198.18.0.5", "198.18.0.0/24"} {
-		if _, un := idx.Candidates(Source, v); len(un) != 0 {
-			t.Errorf("%s reported unresolved: %v", v, un)
+		if _, rep := idx.Candidates(Source, v); len(rep.Unresolved) != 0 {
+			t.Errorf("%s reported unresolved: %v", v, rep.Unresolved)
 		}
 	}
 }
@@ -112,4 +114,50 @@ func ruleNames(idx *Index, b *roaring.Bitmap) map[string]bool {
 		out[rules[it.Next()].Name] = true
 	}
 	return out
+}
+
+// An fqdn address object is found by its own value, but the addresses behind that
+// name live on the device, not in the file. Both halves have to be said: the object
+// matched, and the answer is still incomplete.
+func TestCandidatesFindsAnFQDNObjectAndSaysWhatIsMissing(t *testing.T) {
+	idx := indexOfVsys(t, "../testdata/config/firewall-urlcat.xml", "vsys1")
+
+	rules, rep := idx.Candidates(Source, "host.example.com")
+
+	if len(rep.Hits) != 1 || rep.Hits[0].Name != "fqdn-host" {
+		t.Fatalf("hits = %+v, want the fqdn-host object", rep.Hits)
+	}
+	if rep.Hits[0].Via != "host.example.com" {
+		t.Errorf("Via = %q, want the value that matched", rep.Hits[0].Via)
+	}
+	if len(rep.Unresolved) == 0 {
+		t.Error("an fqdn resolves on the device, so the answer is incomplete and must say so")
+	}
+	if !ruleNames(idx, rules)["fqdn-rule"] {
+		t.Error("the rule naming the fqdn object was not found")
+	}
+}
+
+// Matching is case-insensitive for an fqdn, because DNS names are.
+func TestCandidatesMatchesAnFQDNIgnoringCase(t *testing.T) {
+	idx := indexOfVsys(t, "../testdata/config/firewall-urlcat.xml", "vsys1")
+
+	_, rep := idx.Candidates(Source, "HOST.Example.COM")
+	if len(rep.Hits) != 1 {
+		t.Errorf("hits = %+v, want the fqdn-host object", rep.Hits)
+	}
+}
+
+// A field's value spaces come from the schema, so source has an address resolver
+// even in a configuration whose every rule says "source any".
+func TestResolversComeFromTheSchemaNotTheConfiguration(t *testing.T) {
+	idx := indexOfVsys(t, "../testdata/config/firewall-urlcat.xml", "vsys1")
+
+	if len(idx.resolversFor(Source)) == 0 {
+		t.Fatal("source has no resolver; the wiring fell back to the configuration")
+	}
+	// Category accepts only kinds no resolver covers yet, so it has none.
+	if got := len(idx.resolversFor(Category)); got != 0 {
+		t.Errorf("category resolvers = %d, want 0 until the URL resolver lands", got)
+	}
 }

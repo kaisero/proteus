@@ -11,12 +11,12 @@ import (
 // Index is the lookup structures for one scope. It is immutable once built, so
 // concurrent readers need no lock.
 type Index struct {
-	scope   config.Scope
-	in      *Interner
-	cidr    *cidrIndex
-	closure *closureIndex
-	refs    *refsIndex
-	rules   *rulesIndex
+	scope     config.Scope
+	in        *Interner
+	closure   *closureIndex
+	refs      *refsIndex
+	rules     *rulesIndex
+	resolvers map[Field][]resolver
 }
 
 // Scope returns the scope the index covers.
@@ -96,13 +96,25 @@ func build(cfg *config.Config, sc config.Scope) (*Index, error) {
 		return nil, err
 	}
 
+	ri := newRulesIndex(in, rules)
+
+	// Which resolvers a field needs comes from the schema, not from a list here:
+	// the schema declares the object kinds each field accepts, and a kind maps to
+	// the resolver that can answer for it. A kind with no resolver is not silently
+	// dropped; see opaque rule-field values.
+	byKind := map[string]resolver{}
+	addr := newAddressResolver(addrs, ri)
+	for _, k := range addr.kinds() {
+		byKind[k] = addr
+	}
+
 	return &Index{
-		scope:   sc,
-		in:      in,
-		cidr:    newCIDRIndex(addrs),
-		closure: newClosureIndex(in, groups, addrs),
-		refs:    refs,
-		rules:   newRulesIndex(in, rules),
+		scope:     sc,
+		in:        in,
+		closure:   newClosureIndex(in, groups, addrs),
+		refs:      refs,
+		rules:     ri,
+		resolvers: wireResolvers(cfg.FieldKinds("rulebase/security/rules"), byKind),
 	}, nil
 }
 

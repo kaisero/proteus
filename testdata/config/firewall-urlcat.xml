@@ -6,6 +6,7 @@
         <entry name="vsys1">
           <address>
             <entry name="net-labor"><ip-netmask>198.18.0.0/15</ip-netmask></entry>
+            <entry name="fqdn-host"><fqdn>host.example.com</fqdn></entry>
           </address>
           <profiles>
             <custom-url-category>
@@ -26,6 +27,12 @@
                   <destination><member>any</member></destination>
                   <application><member>any</member></application>
                   <category><member>any</member></category>
+                  <action>allow</action>
+                </entry>
+                <entry name="fqdn-rule">
+                  <source><member>fqdn-host</member></source>
+                  <destination><member>any</member></destination>
+                  <application><member>any</member></application>
                   <action>allow</action>
                 </entry>
                 <entry name="URL-Example">

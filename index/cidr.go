@@ -143,20 +143,27 @@ func lastAddr(p netip.Prefix) netip.Addr {
 // Containing returns every object whose value covers the address, most specific
 // first.
 func (i *Index) Containing(addr netip.Addr) []Match {
-	var out []Match
-	for _, ms := range i.cidr.table.Supernets(netip.PrefixFrom(addr, addr.BitLen())) {
-		out = append(out, ms...)
+	if r := i.addresses(); r != nil {
+		return r.covering(addr)
 	}
-	return out
+	return nil
 }
 
 // Overlapping returns every object whose value intersects the prefix.
 func (i *Index) Overlapping(p netip.Prefix) []Match {
-	var out []Match
-	for q, ms := range i.cidr.table.All() {
-		if q.Overlaps(p) {
-			out = append(out, ms...)
+	if r := i.addresses(); r != nil {
+		return r.overlapping(p)
+	}
+	return nil
+}
+
+// addresses returns the address resolver, which every scope has because the schema
+// allows an address in a rule's source.
+func (i *Index) addresses() *addressResolver {
+	for _, r := range i.resolvers[Source] {
+		if ar, ok := r.(*addressResolver); ok {
+			return ar
 		}
 	}
-	return out
+	return nil
 }

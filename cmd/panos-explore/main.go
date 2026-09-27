@@ -363,9 +363,11 @@ func cmdSimulate(cfg *config.Config, args []string) error {
 
 	// One call per side. The library knows the four ways a rule field can reach a
 	// value; the verdict below is this command's part.
-	srcRules, srcUn := idx.Candidates(index.Source, args[1])
-	dstRules, dstUn := idx.Candidates(index.Destination, args[2])
-	warn(append(srcUn, dstUn...))
+	srcRules, srcRep := idx.Candidates(index.Source, args[1])
+	dstRules, dstRep := idx.Candidates(index.Destination, args[2])
+	explain(srcRep)
+	explain(dstRep)
+	warn(append(srcRep.Unresolved, dstRep.Unresolved...))
 	cand := roaring.And(srcRules, dstRules)
 	cand.AndNot(idx.Disabled())
 	if cand.IsEmpty() {
@@ -385,6 +387,22 @@ func cmdSimulate(cfg *config.Config, args []string) error {
 	fmt.Println("note: application, service and zones are not evaluated, so this is a")
 	fmt.Println("      candidate set. The device may report no match, or a different rule.")
 	return nil
+}
+
+// explain prints why a side matched, so the reasoning can be checked rather than
+// trusted.
+func explain(rep index.Report) {
+	if len(rep.Hits) == 0 && len(rep.Groups) == 0 {
+		return
+	}
+	fmt.Printf("%s matched via\n", rep.Value)
+	for _, h := range rep.Hits {
+		fmt.Printf("  %-24s %-14s %s\n", h.Name, h.Kind, h.Via)
+	}
+	for _, g := range rep.Groups {
+		fmt.Printf("  %-24s %s\n", g, "group holding one of those")
+	}
+	fmt.Println()
 }
 
 // warn prints what the library could not evaluate.

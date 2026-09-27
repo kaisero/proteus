@@ -469,10 +469,10 @@ func sectionCaveats(idx *index.Index) {
 	// exactly where this used to mislead: the rules whose category is "any" came
 	// back and looked like the answer.
 	probe := "superlong.example.azureapps.microsoft.com"
-	rules, unresolved := idx.Candidates(index.Category, probe)
+	rules, rep := idx.Candidates(index.Category, probe)
 	fmt.Printf("  asking which rules a URL reaches: %s\n", probe)
 	fmt.Printf("    %d rule(s) returned\n", rules.GetCardinality())
-	for _, u := range unresolved {
+	for _, u := range rep.Unresolved {
 		fmt.Printf("    INCOMPLETE: %s\n", u)
 	}
 	fmt.Println()

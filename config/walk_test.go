@@ -134,3 +134,71 @@ func TestWalkContinuesPastANestedConfigElement(t *testing.T) {
 	}
 	t.Logf("device-group events after the nested config: %d", afterNestedConfig)
 }
+
+// A field's candidate kinds come from the schema, so they are known even when the
+// configuration never uses the field.
+//
+// This matters because "any" is a keyword and yields no walk event: a rulebase
+// whose every rule says "source any" would otherwise look as though source names
+// nothing, and a lookup wired from the configuration would have no resolver for it.
+func TestFieldKindsComeFromTheSchema(t *testing.T) {
+	cfg, _, err := Load("../testdata/config/firewall-urlcat.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	kinds := cfg.FieldKinds("rulebase/security/rules")
+
+	want := map[string][]string{
+		"source":      {"address", "address-group", "external-list", "ip-block-list-v2", "region"},
+		"category":    {"bc-url-categories", "custom-url-category", "external-list", "pan-url-categories", "url-predefined"},
+		"source-user": {"dynamic-user-group", "user", "user-group"},
+	}
+	for field, exp := range want {
+		got := kinds[field]
+		if len(got) != len(exp) {
+			t.Errorf("%s kinds = %v, want %v", field, got, exp)
+			continue
+		}
+		for i := range exp {
+			if got[i] != exp[i] {
+				t.Errorf("%s kinds = %v, want %v", field, got, exp)
+				break
+			}
+		}
+	}
+}
+
+// A suffix that matches no entry array yields nothing rather than everything.
+func TestFieldKindsUnknownSuffix(t *testing.T) {
+	cfg, _, err := Load("../testdata/config/firewall-urlcat.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := cfg.FieldKinds("no/such/array"); len(got) != 0 {
+		t.Errorf("FieldKinds = %v, want empty", got)
+	}
+}
+
+// A Panorama schema holds the same rules array three times, as pre-rulebase,
+// rulebase and post-rulebase, so merging them must not repeat a kind.
+func TestFieldKindsMergesArraysWithoutRepeating(t *testing.T) {
+	cfg, _, err := Load("../testdata/config/panorama-lab.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	kinds := cfg.FieldKinds("rulebase/security/rules")
+	for field, ks := range kinds {
+		seen := map[string]bool{}
+		for _, k := range ks {
+			if seen[k] {
+				t.Errorf("%s repeats kind %q: %v", field, k, ks)
+			}
+			seen[k] = true
+		}
+	}
+	if len(kinds["from"]) != 1 || kinds["from"][0] != "zone" {
+		t.Errorf("from kinds = %v, want [zone]", kinds["from"])
+	}
+}

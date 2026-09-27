@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **A lookup now says how it reached its answer.** Asking which rules a value can
+  reach returns the objects that matched and the value in each that matched it — a
+  prefix, an FQDN — so the reasoning can be checked instead of trusted.
+- **Value matching is per value space, and the wiring comes from the schema.** A
+  rule field is matched by the resolvers for the object kinds the schema allows
+  there, so a field that accepts an address, a region and an external list is asked
+  of each rather than treated as an address field. Addresses answer exactly as
+  before; other value spaces arrive behind the same seam.
 - **An incomplete answer now says so.** Asking which rules a value can reach
   returns the rules together with a list of what could not be evaluated. A value
   that is not an address, not a prefix and not a known object name — a URL, for
@@ -34,3 +42,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   cached and handed to every caller, and a lookup by name added that name to the
   index's internal name table. Two callers asking about unknown names at the same
   time raced on it.
+- **An FQDN address object is found by its own name.** Asking for
+  `host.example.com` now finds the object holding it, case-insensitively, and says
+  that the addresses the name resolves to are not in the configuration.
