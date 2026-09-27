@@ -251,7 +251,7 @@ func TestWalkPathsStopsWhenTheCallbackSaysSo(t *testing.T) {
 // A file whose version the schema does not cover still walks; it simply matches
 // no entry array and yields nothing.
 func TestWalkPathsOnAConfigWithNoKnownArrays(t *testing.T) {
-	c, _, err := Load("../testdata/config/panorama-shadow.xml")
+	c, _, err := Load("../testdata/config/firewall-shadow.xml")
 	if err != nil {
 		t.Skip(err)
 	}

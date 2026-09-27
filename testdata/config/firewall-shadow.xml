@@ -1,0 +1,19 @@
+<config version="11.2.0" urldb="paloaltonetworks" detail-version="11.2.5">
+  <shared>
+    <address>
+      <entry name="web-server"><ip-netmask>10.0.0.1</ip-netmask></entry>
+      <entry name="only-in-shared"><ip-netmask>10.0.0.9</ip-netmask></entry>
+    </address>
+  </shared>
+  <devices>
+    <entry name="localhost.localdomain">
+      <vsys>
+        <entry name="vsys1">
+          <address>
+            <entry name="web-server"><ip-netmask>10.9.9.1</ip-netmask></entry>
+          </address>
+        </entry>
+      </vsys>
+    </entry>
+  </devices>
+</config>

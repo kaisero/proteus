@@ -1,0 +1,71 @@
+<response status="success"><result>
+<config version="11.2.0" urldb="paloaltonetworks" detail-version="11.2.5">
+  <!-- One firewall, three vsys. vsys1 and vsys2 each tag their own objects for the
+       shared dynamic groups, so one shared group resolves to different members in
+       each. vsys3 tags nothing. The nested shared/log-settings/config element comes
+       first on purpose: a walk that stops at the first nested <config> never
+       reaches a vsys. -->
+  <shared>
+    <log-settings>
+      <config>
+        <match-list/>
+      </config>
+    </log-settings>
+    <tag>
+      <entry name="corp-dc"><color>color1</color></entry>
+      <entry name="corp-location"><color>color2</color></entry>
+    </tag>
+    <address-group>
+      <entry name="corp-location">
+        <dynamic><filter>'corp-location'</filter></dynamic>
+      </entry>
+      <entry name="corp-dc">
+        <dynamic><filter>'corp-dc'</filter></dynamic>
+      </entry>
+    </address-group>
+  </shared>
+  <devices>
+    <entry name="localhost.localdomain">
+      <vsys>
+        <entry name="vsys1">
+          <address>
+            <entry name="corp-dc-vienna">
+              <ip-netmask>10.124.0.1</ip-netmask>
+              <tag><member>corp-dc</member></tag>
+            </entry>
+            <entry name="corp-location-vienna">
+              <ip-netmask>10.124.0.0/16</ip-netmask>
+              <tag><member>corp-location</member></tag>
+            </entry>
+          </address>
+          <rulebase>
+            <security>
+              <rules>
+                <entry name="Corp DC Access">
+                  <source><member>corp-location</member></source>
+                  <destination><member>corp-dc</member></destination>
+                  <application><member>active-directory</member></application>
+                  <action>allow</action>
+                </entry>
+              </rules>
+            </security>
+          </rulebase>
+        </entry>
+        <entry name="vsys2">
+          <address>
+            <entry name="corp-dc-graz">
+              <ip-netmask>10.125.0.1</ip-netmask>
+              <tag><member>corp-dc</member></tag>
+            </entry>
+            <entry name="corp-location-graz">
+              <ip-netmask>10.125.0.0/16</ip-netmask>
+              <tag><member>corp-location</member></tag>
+            </entry>
+          </address>
+        </entry>
+        <entry name="vsys3"/>
+      </vsys>
+    </entry>
+  </devices>
+</config>
+</result></response>

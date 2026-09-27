@@ -7,14 +7,14 @@ import "testing"
 // together cost about 55 ms; every Load after that does not.
 func BenchmarkLoad(b *testing.B) {
 	for b.Loop() {
-		if _, _, err := Load("../testdata/config/panorama-lab.xml"); err != nil {
+		if _, _, err := Load("../testdata/config/firewall-multivsys.xml"); err != nil {
 			b.Fatal(err)
 		}
 	}
 }
 
 func BenchmarkWalk(b *testing.B) {
-	cfg, _, err := Load("../testdata/config/panorama-lab.xml")
+	cfg, _, err := Load("../testdata/config/firewall-multivsys.xml")
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -24,7 +24,7 @@ func BenchmarkWalk(b *testing.B) {
 }
 
 func BenchmarkBuildRefTable(b *testing.B) {
-	cfg, _, err := Load("../testdata/config/panorama-lab.xml")
+	cfg, _, err := Load("../testdata/config/firewall-multivsys.xml")
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -37,7 +37,7 @@ func BenchmarkBuildRefTable(b *testing.B) {
 // is the faster of the two: Walk rebuilds the entry's instance path for every
 // value it emits, and WalkPaths builds it once per entry.
 func BenchmarkWalkPaths(b *testing.B) {
-	cfg, _, err := Load("../testdata/config/panorama-lab.xml")
+	cfg, _, err := Load("../testdata/config/firewall-multivsys.xml")
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -47,7 +47,7 @@ func BenchmarkWalkPaths(b *testing.B) {
 }
 
 func BenchmarkBuildPathTable(b *testing.B) {
-	cfg, _, err := Load("../testdata/config/panorama-lab.xml")
+	cfg, _, err := Load("../testdata/config/firewall-multivsys.xml")
 	if err != nil {
 		b.Fatal(err)
 	}

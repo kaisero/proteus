@@ -1,0 +1,27 @@
+<config version="11.2.0" urldb="paloaltonetworks" detail-version="11.2.5">
+  <shared/>
+  <devices>
+    <entry name="localhost.localdomain">
+      <vsys>
+        <entry name="vsys1">
+          <address>
+            <entry name="h-1"><ip-netmask>10.1.1.1</ip-netmask></entry>
+            <entry name="h-2"><ip-netmask>10.1.1.2</ip-netmask></entry>
+          </address>
+          <address-group>
+            <entry name="g-inner"><static><member>h-1</member><member>h-2</member></static></entry>
+            <entry name="g-middle"><static><member>g-inner</member></static></entry>
+            <entry name="g-outer"><static><member>g-middle</member></static></entry>
+          </address-group>
+          <rulebase><security><rules>
+            <entry name="allow-outer">
+              <source><member>g-outer</member></source>
+              <destination><member>any</member></destination>
+              <action>allow</action>
+            </entry>
+          </rules></security></rulebase>
+        </entry>
+      </vsys>
+    </entry>
+  </devices>
+</config>

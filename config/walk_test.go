@@ -6,7 +6,7 @@ import (
 )
 
 func TestWalkYieldsScopedReferenceEvents(t *testing.T) {
-	cfg, _, err := Load("../testdata/config/panorama-lab.xml")
+	cfg, _, err := Load("../testdata/config/firewall-multivsys.xml")
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -22,9 +22,9 @@ func TestWalkYieldsScopedReferenceEvents(t *testing.T) {
 	}
 	t.Logf("events: %d", len(events))
 
-	// The device-group post-rule must appear, with its device-group scope. A walk
-	// that consumes an entry wholesale misses it: a device group holds a rulebase
-	// which holds rules, and all three are entries.
+	// The vsys rule must appear, with its vsys scope. A walk that consumes an entry
+	// wholesale misses it: a vsys holds a rulebase which holds rules, and the vsys
+	// and the rule are both entries.
 	var rule *Event
 	for i := range events {
 		if events[i].Field == "source" && len(events[i].Values) > 0 &&
@@ -33,9 +33,9 @@ func TestWalkYieldsScopedReferenceEvents(t *testing.T) {
 		}
 	}
 	if rule == nil {
-		t.Fatal("the nested device-group rule was not reached")
+		t.Fatal("the nested vsys rule was not reached")
 	}
-	if got, want := rule.Scope.String(), "dg:host_1_directory"; got != want {
+	if got, want := rule.Scope.String(), "vsys:vsys1"; got != want {
 		t.Errorf("scope = %q, want %q", got, want)
 	}
 	if !strings.Contains(rule.EntryPath, "Corp DC Access") {
@@ -46,10 +46,10 @@ func TestWalkYieldsScopedReferenceEvents(t *testing.T) {
 	}
 }
 
-// Two device groups can hold an object of the same name, so an event's path must
-// identify the instance, not the schema location.
+// Two vsys can hold an object of the same name, so an event's path must identify
+// the instance, not the schema location.
 func TestWalkEntryPathsAreInstancePaths(t *testing.T) {
-	cfg, _, _ := Load("../testdata/config/panorama-lab.xml")
+	cfg, _, _ := Load("../testdata/config/firewall-multivsys.xml")
 	seen := map[string]bool{}
 	_ = cfg.Walk(func(e Event) bool {
 		seen[e.EntryPath] = true
@@ -57,22 +57,21 @@ func TestWalkEntryPathsAreInstancePaths(t *testing.T) {
 	})
 	var vienna, graz bool
 	for p := range seen {
-		if strings.Contains(p, "host_1_directory") && strings.Contains(p, "corp-location-vienna") {
+		if strings.Contains(p, "vsys1") && strings.Contains(p, "corp-location-vienna") {
 			vienna = true
 		}
-		if strings.Contains(p, "corp-graz") && strings.Contains(p, "corp-location-graz") {
+		if strings.Contains(p, "vsys2") && strings.Contains(p, "corp-location-graz") {
 			graz = true
 		}
 	}
 	if !vienna || !graz {
-		t.Errorf("both device groups' objects must be distinguishable; vienna=%v graz=%v",
-			vienna, graz)
+		t.Errorf("both vsys' objects must be distinguishable; vienna=%v graz=%v", vienna, graz)
 	}
 }
 
 // any is a keyword, not an object, and must never be yielded as a reference.
 func TestWalkExcludesKeywords(t *testing.T) {
-	cfg, _, _ := Load("../testdata/config/panorama-lab.xml")
+	cfg, _, _ := Load("../testdata/config/firewall-literals.xml")
 	_ = cfg.Walk(func(e Event) bool {
 		for _, v := range e.Values {
 			if Keywords[v] {
@@ -85,7 +84,7 @@ func TestWalkExcludesKeywords(t *testing.T) {
 
 // Returning false from the callback stops the walk.
 func TestWalkStops(t *testing.T) {
-	cfg, _, _ := Load("../testdata/config/panorama-lab.xml")
+	cfg, _, _ := Load("../testdata/config/firewall-multivsys.xml")
 	n := 0
 	_ = cfg.Walk(func(Event) bool {
 		n++
@@ -98,8 +97,8 @@ func TestWalkStops(t *testing.T) {
 
 // The walk reads the wrapped form too.
 func TestWalkHandlesTheWrappedForm(t *testing.T) {
-	bare, _, _ := Load("../testdata/config/panorama-lab.xml")
-	wrapped, _, _ := Load("../testdata/config/panorama-lab-wrapped.xml")
+	bare, _, _ := Load("../testdata/config/firewall-multivsys.xml")
+	wrapped, _, _ := Load("../testdata/config/firewall-multivsys-wrapped.xml")
 	count := func(c *Config) int {
 		n := 0
 		_ = c.Walk(func(Event) bool { n++; return true })
@@ -110,29 +109,29 @@ func TestWalkHandlesTheWrappedForm(t *testing.T) {
 	}
 }
 
-// A Panorama configuration holds several nested <config> elements: a template
-// embeds a whole firewall configuration, and an admin role's webui permissions
-// have one too. Stopping at the first of them ends the walk early. On the real
-// lab configuration that bug yielded 1 event instead of 24.
+// A configuration can hold nested <config> elements: a firewall's
+// shared/log-settings has one, and so do an admin role's webui permissions.
+// Stopping at the first of them ends the walk early. On a real Panorama
+// configuration that bug yielded 1 event instead of 24.
 //
-// The fixture puts the template, with its nested config, before the device
-// groups, so every device-group event here arrives only if the walk continued.
+// The fixture puts shared/log-settings/config before the vsys, so every vsys
+// event here arrives only if the walk continued.
 func TestWalkContinuesPastANestedConfigElement(t *testing.T) {
-	cfg, _, err := Load("../testdata/config/panorama-lab.xml")
+	cfg, _, err := Load("../testdata/config/firewall-multivsys.xml")
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
 	afterNestedConfig := 0
 	_ = cfg.Walk(func(e Event) bool {
-		if e.Scope.Sort == ScopeDeviceGroup {
+		if e.Scope.Sort == ScopeVsys {
 			afterNestedConfig++
 		}
 		return true
 	})
 	if afterNestedConfig == 0 {
-		t.Error("no device-group event arrived, so the walk stopped at the nested config")
+		t.Error("no vsys event arrived, so the walk stopped at the nested config")
 	}
-	t.Logf("device-group events after the nested config: %d", afterNestedConfig)
+	t.Logf("vsys events after the nested config: %d", afterNestedConfig)
 }
 
 // A field's candidate kinds come from the schema, so they are known even when the
@@ -180,10 +179,11 @@ func TestFieldKindsUnknownSuffix(t *testing.T) {
 	}
 }
 
-// A Panorama schema holds the same rules array three times, as pre-rulebase,
-// rulebase and post-rulebase, so merging them must not repeat a kind.
+// Kinds from several matching arrays are merged, so merging must not repeat a
+// kind. A Panorama schema holds the rules array three times, as pre-rulebase,
+// rulebase and post-rulebase; a firewall schema holds it once, under vsys.
 func TestFieldKindsMergesArraysWithoutRepeating(t *testing.T) {
-	cfg, _, err := Load("../testdata/config/panorama-lab.xml")
+	cfg, _, err := Load("../testdata/config/firewall-multivsys.xml")
 	if err != nil {
 		t.Fatal(err)
 	}
