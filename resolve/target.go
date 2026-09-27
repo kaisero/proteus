@@ -34,8 +34,12 @@ func (t *Target) DeviceGroup() string { return t.deviceGroup }
 // TemplateStack returns the template stack assigned to the firewall, if any.
 func (t *Target) TemplateStack() string { return t.templateStack }
 
-// Scope returns the target's own scope.
+// Scope returns the target's own scope: its device group on Panorama, its vsys on
+// a firewall.
 func (t *Target) Scope() config.Scope {
+	if t.deviceGroup == "" {
+		return config.Scope{Sort: config.ScopeVsys, Name: t.vsys}
+	}
 	return config.Scope{Sort: config.ScopeDeviceGroup, Name: t.deviceGroup}
 }
 
@@ -43,9 +47,28 @@ func (t *Target) Scope() config.Scope {
 // leaf.
 func (t *Target) Chain() []config.Scope { return append([]config.Scope{}, t.chain...) }
 
-// Targets returns every (serial, vsys) the configuration assigns to a device
-// group.
+// Vsyses returns the vsys names a firewall configuration defines, sorted. A
+// Panorama configuration has none of its own.
+func Vsyses(cfg *config.Config) ([]string, error) {
+	var out []string
+	for _, v := range cfg.Root().Find("devices", "entry", "vsys", "entry") {
+		if n := v.Attr("name"); n != "" {
+			out = append(out, n)
+		}
+	}
+	sort.Strings(out)
+	return out, nil
+}
+
+// Targets returns every policy target the configuration describes.
+//
+// On Panorama that is every (serial, vsys) assigned to a device group. On a
+// firewall it is every vsys, which has no device group but does have its own
+// rulebase.
 func Targets(cfg *config.Config) ([]*Target, error) {
+	if cfg.Platform() == config.Firewall {
+		return firewallTargets(cfg)
+	}
 	h, err := NewHierarchy(cfg)
 	if err != nil {
 		return nil, err
@@ -68,6 +91,33 @@ func Targets(cfg *config.Config) ([]*Target, error) {
 		}
 		return out[i].vsys < out[j].vsys
 	})
+	return out, nil
+}
+
+// firewallTargets returns one target per vsys. A firewall configuration carries no
+// device groups, so the chain is shared and the vsys itself.
+func firewallTargets(cfg *config.Config) ([]*Target, error) {
+	names, err := Vsyses(cfg)
+	if err != nil {
+		return nil, err
+	}
+	serial := cfg.Root().Find("devices", "entry")
+	hostname := ""
+	if len(serial) > 0 {
+		hostname = serial[0].Attr("name")
+	}
+	out := make([]*Target, 0, len(names))
+	for _, v := range names {
+		out = append(out, &Target{
+			root:   cfg.Root(),
+			serial: hostname,
+			vsys:   v,
+			chain: []config.Scope{
+				{Sort: config.ScopeShared},
+				{Sort: config.ScopeVsys, Name: v},
+			},
+		})
+	}
 	return out, nil
 }
 

@@ -10,7 +10,27 @@ real output.
 cd ~/git/go-panos-schema
 make build-local                      # the generator
 go build -o bin/panos-explore ./cmd/panos-explore
+go build -o bin/panos-demo    ./cmd/panos-demo
 ```
+
+## The fastest way to see everything
+
+`panos-demo` runs every feature against one file and narrates what it does. With
+`-v` it also explains why each answer is what it is.
+
+```bash
+./bin/panos-demo -v testdata/config/firewall-lab.xml
+./bin/panos-demo -v /tmp/pano-live.xml
+./bin/panos-demo -v -probe 198.18.1.77 /tmp/pano-live.xml
+```
+
+Twelve sections: loading, what the schema says, the scopes, the policy targets,
+the effective policy, visible objects and shadowing, static and dynamic groups,
+building the index, a reverse lookup, where a name is used, which rule wins, and
+what the answers do not cover. It picks a probe address from the configuration
+itself, including from a rule literal when there are no objects.
+
+The rest of this guide takes the same ground one command at a time.
 
 ## Get a configuration
 

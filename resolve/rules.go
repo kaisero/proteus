@@ -73,6 +73,16 @@ func (t *Target) Rules(rb Rulebase) ([]Rule, error) {
 			out = append(out, r)
 		}
 	}
+	// A firewall's own rules sit in the plain rulebase, between any pushed
+	// pre-rules and any pushed post-rules. A Panorama configuration has none, so
+	// this layer is simply empty there.
+	for _, sc := range chain {
+		for _, r := range readRules(t.root, sc, "rulebase", rb) {
+			r.Layer = LayerLocal
+			out = append(out, r)
+		}
+	}
+
 	for i := len(chain) - 1; i >= 0; i-- {
 		sc := chain[i]
 		rs := readRules(t.root, sc, "post-rulebase", rb)

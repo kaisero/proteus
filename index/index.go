@@ -106,11 +106,16 @@ func build(cfg *config.Config, sc config.Scope) (*Index, error) {
 	}, nil
 }
 
-// rulesForScope returns the merged policy for a device-group scope. Any other
-// scope has none: shared rules are a layer of a device group's policy, not a
-// policy of their own, and a template carries no rules at all.
+// rulesForScope returns the effective policy of a scope.
+//
+// A device group has one, and so does a firewall's vsys: its own rulebase, wrapped
+// in whatever pre and post rules were pushed to it. Shared has none of its own,
+// because shared rules are a layer of another scope's policy rather than a policy
+// in their own right, and a template carries no rules at all.
 func rulesForScope(cfg *config.Config, sc config.Scope) ([]resolve.Rule, error) {
-	if sc.Sort != config.ScopeDeviceGroup {
+	switch sc.Sort {
+	case config.ScopeDeviceGroup, config.ScopeVsys:
+	default:
 		return nil, nil
 	}
 	tgs, err := resolve.Targets(cfg)
@@ -118,9 +123,12 @@ func rulesForScope(cfg *config.Config, sc config.Scope) ([]resolve.Rule, error) 
 		return nil, err
 	}
 	for _, tg := range tgs {
-		if tg.DeviceGroup() == sc.Name {
+		if tg.Scope() == sc {
 			return tg.Rules(resolve.Security)
 		}
+	}
+	if sc.Sort == config.ScopeVsys {
+		return nil, fmt.Errorf("index: no vsys named %q", sc.Name)
 	}
 	// A device group with no firewall assigned still has a policy. Build a target
 	// for it directly.

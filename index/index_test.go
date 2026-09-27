@@ -168,3 +168,57 @@ func TestForRejectsAnUnknownDeviceGroup(t *testing.T) {
 		t.Error("an unknown device group must be an error")
 	}
 }
+
+// A firewall's vsys is a policy scope like a device group, and its own rulebase is
+// part of the effective policy.
+func TestIndexForAFirewallVsys(t *testing.T) {
+	cfg, _, err := config.Load("../testdata/config/firewall-lab.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	idx, err := For(cfg, config.Scope{Sort: config.ScopeVsys, Name: "vsys1"})
+	if err != nil {
+		t.Fatalf("For: %v", err)
+	}
+	rules := idx.Rules()
+	if len(rules) == 0 {
+		t.Fatal("a firewall vsys has its own rules")
+	}
+
+	// The whole chain on a firewall: an address, the object covering it, the group
+	// holding that object, the rule naming the group.
+	ms := idx.Containing(netip.MustParseAddr("198.18.10.100"))
+	if len(ms) == 0 {
+		t.Fatal("dc01 covers 198.18.10.100")
+	}
+	in := idx.Interner()
+	ids := []uint32{}
+	for _, m := range ms {
+		ids = append(ids, in.ID(m.Name))
+		for _, g := range idx.GroupsOf(m.Name) {
+			ids = append(ids, in.ID(g))
+		}
+	}
+	b := idx.RulesWith(Source, ids...)
+	if b.IsEmpty() {
+		t.Fatal("dc01 is in g-servers, which dc-to-home names as its source")
+	}
+	found := map[string]bool{}
+	for it := b.Iterator(); it.HasNext(); {
+		found[rules[it.Next()].Name] = true
+	}
+	if !found["dc-to-home"] {
+		t.Errorf("got %v, want dc-to-home", found)
+	}
+	// The dynamic group matches the same object by tag.
+	if !found["tagged-out"] {
+		t.Errorf("got %v, want tagged-out through the tag filter", found)
+	}
+}
+
+func TestIndexRejectsAnUnknownVsys(t *testing.T) {
+	cfg, _, _ := config.Load("../testdata/config/firewall-lab.xml")
+	if _, err := For(cfg, config.Scope{Sort: config.ScopeVsys, Name: "vsys9"}); err == nil {
+		t.Error("an unknown vsys must be an error")
+	}
+}
