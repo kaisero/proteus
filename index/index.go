@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/okaiser/go-panos-schema/config"
-	"github.com/okaiser/go-panos-schema/resolve"
+	"github.com/okaiser/panos-analyst/config"
+	"github.com/okaiser/panos-analyst/resolve"
 )
 
 // Index is the lookup structures for one scope. It is immutable once built, so

@@ -4,7 +4,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/okaiser/go-panos-schema/internal/schema"
+	"github.com/okaiser/panos-analyst/internal/schema"
 )
 
 // Pinned from the 11.2.0 Panorama schema. A change here means the schema or the

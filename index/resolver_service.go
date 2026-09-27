@@ -6,7 +6,7 @@ import (
 
 	"github.com/RoaringBitmap/roaring/v2"
 
-	"github.com/okaiser/go-panos-schema/resolve"
+	"github.com/okaiser/panos-analyst/resolve"
 )
 
 // serviceResolver answers the service value space: which service objects cover a

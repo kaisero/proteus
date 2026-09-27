@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/okaiser/go-panos-schema/internal/schema"
+	"github.com/okaiser/panos-analyst/internal/schema"
 )
 
 type edge struct{ entry, field, value string }

@@ -3,8 +3,8 @@ package index
 import (
 	"strings"
 
-	"github.com/okaiser/go-panos-schema/config"
-	"github.com/okaiser/go-panos-schema/resolve"
+	"github.com/okaiser/panos-analyst/config"
+	"github.com/okaiser/panos-analyst/resolve"
 )
 
 // ProfileUse is one path from a rule to a URL category through its security

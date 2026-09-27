@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/okaiser/go-panos-schema/internal/codegen"
-	"github.com/okaiser/go-panos-schema/internal/digest"
+	"github.com/okaiser/panos-analyst/internal/codegen"
+	"github.com/okaiser/panos-analyst/internal/digest"
 )
 
 // versionPackage turns a config version into a Go package directory: 11.2.0

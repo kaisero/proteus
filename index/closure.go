@@ -6,7 +6,7 @@ import (
 
 	"github.com/RoaringBitmap/roaring/v2"
 
-	"github.com/okaiser/go-panos-schema/resolve"
+	"github.com/okaiser/panos-analyst/resolve"
 )
 
 // closureIndex answers transitive group membership.

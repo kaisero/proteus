@@ -1,6 +1,6 @@
-# go-panos-schema
+# panos-analyst
 
-`go-panos-schema` is a read-only Go library. It loads a PAN-OS or Panorama
+`panos-analyst` is a read-only Go library. It loads a PAN-OS or Panorama
 configuration file and answers questions about it. It never writes a
 configuration and it never contacts a device.
 
@@ -190,8 +190,8 @@ config/schemadigest` refreshes the copy after you regenerate a digest, and
 The repository has no remote yet. Add it with a `replace` directive:
 
 ```
-require github.com/okaiser/go-panos-schema v0.0.0
-replace github.com/okaiser/go-panos-schema => ../go-panos-schema
+require github.com/okaiser/panos-analyst v0.0.0
+replace github.com/okaiser/panos-analyst => ../go-panos-schema
 ```
 
 ## Commands

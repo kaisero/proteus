@@ -3,7 +3,7 @@ package resolve
 import (
 	"testing"
 
-	"github.com/okaiser/go-panos-schema/config"
+	"github.com/okaiser/panos-analyst/config"
 )
 
 // One shared dynamic group resolves to different members in each device group,

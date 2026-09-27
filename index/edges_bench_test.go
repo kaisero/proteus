@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/okaiser/go-panos-schema/config"
+	"github.com/okaiser/panos-analyst/config"
 )
 
 // writePanorama generates a Panorama configuration of a given size.

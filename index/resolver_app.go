@@ -5,7 +5,7 @@ import (
 
 	"github.com/RoaringBitmap/roaring/v2"
 
-	"github.com/okaiser/go-panos-schema/resolve"
+	"github.com/okaiser/panos-analyst/resolve"
 )
 
 // appResolver answers the application value space, which a configuration can only

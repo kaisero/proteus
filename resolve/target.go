@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/okaiser/go-panos-schema/config"
+	"github.com/okaiser/panos-analyst/config"
 )
 
 // Target is one firewall vsys and the policy it inherits.

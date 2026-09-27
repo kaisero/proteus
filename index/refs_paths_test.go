@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/okaiser/go-panos-schema/config"
+	"github.com/okaiser/panos-analyst/config"
 )
 
 func refpathsIndex(t *testing.T) (*config.Config, *Index) {

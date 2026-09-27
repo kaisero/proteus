@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/okaiser/go-panos-schema/config"
+	"github.com/okaiser/panos-analyst/config"
 )
 
 func siblingIndex(t *testing.T, dg string) *Index {

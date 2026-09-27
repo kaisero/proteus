@@ -3,7 +3,7 @@ package index
 import (
 	"sync"
 
-	"github.com/okaiser/go-panos-schema/config"
+	"github.com/okaiser/panos-analyst/config"
 )
 
 // edgeList is every reference edge in a configuration, in document order, each

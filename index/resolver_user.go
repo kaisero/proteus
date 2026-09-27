@@ -5,8 +5,8 @@ import (
 
 	"github.com/RoaringBitmap/roaring/v2"
 
-	"github.com/okaiser/go-panos-schema/config"
-	"github.com/okaiser/go-panos-schema/resolve"
+	"github.com/okaiser/panos-analyst/config"
+	"github.com/okaiser/panos-analyst/resolve"
 )
 
 // userResolver answers the user value space: which users and user groups a name

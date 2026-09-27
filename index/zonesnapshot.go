@@ -11,7 +11,7 @@ import (
 
 	"github.com/gaissmai/bart"
 
-	"github.com/okaiser/go-panos-schema/resolve"
+	"github.com/okaiser/panos-analyst/resolve"
 )
 
 // ZoneSnapshot is a firewall's forwarding table and interface list, as the device

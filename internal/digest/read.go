@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/okaiser/go-panos-schema/internal/schema"
+	"github.com/okaiser/panos-analyst/internal/schema"
 )
 
 // Read decodes a gzipped JSON digest and rebuilds parent pointers, which are not

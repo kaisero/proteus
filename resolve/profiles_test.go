@@ -3,7 +3,7 @@ package resolve
 import (
 	"testing"
 
-	"github.com/okaiser/go-panos-schema/config"
+	"github.com/okaiser/panos-analyst/config"
 )
 
 // A url-filtering profile carries several action lists, and which list a category

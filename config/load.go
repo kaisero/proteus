@@ -6,8 +6,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/okaiser/go-panos-schema/internal/digest"
-	"github.com/okaiser/go-panos-schema/internal/schema"
+	"github.com/okaiser/panos-analyst/internal/digest"
+	"github.com/okaiser/panos-analyst/internal/schema"
 )
 
 // Platform is the kind of device a configuration came from.

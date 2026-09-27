@@ -5,7 +5,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/okaiser/go-panos-schema/internal/schema"
+	"github.com/okaiser/panos-analyst/internal/schema"
 )
 
 func fixture(t *testing.T) *schema.Node {

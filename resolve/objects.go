@@ -3,7 +3,7 @@ package resolve
 import (
 	"strings"
 
-	"github.com/okaiser/go-panos-schema/config"
+	"github.com/okaiser/panos-analyst/config"
 )
 
 // Object is one configuration object visible in a scope.

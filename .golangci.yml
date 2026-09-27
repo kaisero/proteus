@@ -1,4 +1,4 @@
-# golangci-lint v2 configuration for go-panos-schema.
+# golangci-lint v2 configuration for panos-analyst.
 # Run: make lint   (or: golangci-lint run)
 version: "2"
 
@@ -53,4 +53,4 @@ formatters:
   settings:
     goimports:
       local-prefixes:
-        - github.com/okaiser/go-panos-schema
+        - github.com/okaiser/panos-analyst

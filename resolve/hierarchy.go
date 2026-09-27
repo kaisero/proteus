@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/okaiser/go-panos-schema/config"
+	"github.com/okaiser/panos-analyst/config"
 )
 
 // Hierarchy is the device-group tree.

@@ -3,7 +3,7 @@ package index
 import (
 	"testing"
 
-	"github.com/okaiser/go-panos-schema/config"
+	"github.com/okaiser/panos-analyst/config"
 )
 
 func indexOf(t *testing.T, path, dg string) *Index {

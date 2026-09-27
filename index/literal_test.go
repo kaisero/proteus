@@ -6,7 +6,7 @@ import (
 
 	"github.com/RoaringBitmap/roaring/v2"
 
-	"github.com/okaiser/go-panos-schema/config"
+	"github.com/okaiser/panos-analyst/config"
 )
 
 func liveLikeIndex(t *testing.T, dg string) *Index {

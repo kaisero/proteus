@@ -1,4 +1,4 @@
-module github.com/okaiser/go-panos-schema
+module github.com/okaiser/panos-analyst
 
 go 1.26.6
 

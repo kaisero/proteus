@@ -3,7 +3,7 @@ package config
 import (
 	"strings"
 
-	"github.com/okaiser/go-panos-schema/internal/schema"
+	"github.com/okaiser/panos-analyst/internal/schema"
 )
 
 // pathNode is one segment of an entry array's reference paths, held as a trie so

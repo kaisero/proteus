@@ -9,8 +9,8 @@ import (
 	"github.com/RoaringBitmap/roaring/v2"
 	"github.com/gaissmai/bart"
 
-	"github.com/okaiser/go-panos-schema/config"
-	"github.com/okaiser/go-panos-schema/resolve"
+	"github.com/okaiser/panos-analyst/config"
+	"github.com/okaiser/panos-analyst/resolve"
 )
 
 // zoneResolver answers which zone an address could arrive on, from the configuration

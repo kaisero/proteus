@@ -10,9 +10,9 @@ import (
 	"os"
 	"testing"
 
-	"github.com/okaiser/go-panos-schema/config"
-	"github.com/okaiser/go-panos-schema/index"
-	"github.com/okaiser/go-panos-schema/resolve"
+	"github.com/okaiser/panos-analyst/config"
+	"github.com/okaiser/panos-analyst/index"
+	"github.com/okaiser/panos-analyst/resolve"
 )
 
 // TestLiveConfigLoads checks the whole path against a configuration exported from

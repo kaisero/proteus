@@ -4,7 +4,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/okaiser/go-panos-schema/internal/schema"
+	"github.com/okaiser/panos-analyst/internal/schema"
 )
 
 // ModelPackage is the single package every generated type lives in.

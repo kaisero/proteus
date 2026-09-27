@@ -7,8 +7,8 @@ import (
 
 	"github.com/gaissmai/bart"
 
-	"github.com/okaiser/go-panos-schema/config"
-	"github.com/okaiser/go-panos-schema/resolve"
+	"github.com/okaiser/panos-analyst/config"
+	"github.com/okaiser/panos-analyst/resolve"
 )
 
 // Match is one object whose value covers or overlaps an address.

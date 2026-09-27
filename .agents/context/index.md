@@ -1,4 +1,4 @@
-# go-panos-schema
+# panos-analyst
 
 > Read a PAN-OS or Panorama configuration file and answer questions about it. This
 > is the read-first map for coding agents working in-repo: the system model and

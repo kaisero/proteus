@@ -6,7 +6,7 @@ import (
 	"github.com/RoaringBitmap/roaring/v2"
 	"github.com/gaissmai/bart"
 
-	"github.com/okaiser/go-panos-schema/resolve"
+	"github.com/okaiser/panos-analyst/resolve"
 )
 
 // Field is an indexed rule field.

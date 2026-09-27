@@ -5,7 +5,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/okaiser/go-panos-schema/internal/schema"
+	"github.com/okaiser/panos-analyst/internal/schema"
 )
 
 // Emit renders every generated type as one Go package.

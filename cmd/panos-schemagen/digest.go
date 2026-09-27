@@ -5,8 +5,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/okaiser/go-panos-schema/internal/digest"
-	"github.com/okaiser/go-panos-schema/internal/schema"
+	"github.com/okaiser/panos-analyst/internal/digest"
+	"github.com/okaiser/panos-analyst/internal/schema"
 )
 
 // schemaFiles maps a vendor filename to the platform it describes.

@@ -3,7 +3,7 @@ package config_test
 import (
 	"fmt"
 
-	"github.com/okaiser/go-panos-schema/config"
+	"github.com/okaiser/panos-analyst/config"
 )
 
 // Point the library at a configuration file and it reports what it is.

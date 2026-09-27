@@ -4,7 +4,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/okaiser/go-panos-schema/internal/schema"
+	"github.com/okaiser/panos-analyst/internal/schema"
 )
 
 // Keywords are values that appear in reference fields but name no object. They

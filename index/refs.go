@@ -1,6 +1,6 @@
 package index
 
-import "github.com/okaiser/go-panos-schema/config"
+import "github.com/okaiser/panos-analyst/config"
 
 // Ref is one reference edge.
 //

@@ -123,6 +123,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Repository skeleton.** Project layout, build and lint configuration, CI, and
   the mandatory rules that govern the library.
 
+### Changed
+
+- **The project is now `panos-analyst`.** The module path is
+  `github.com/okaiser/panos-analyst`; update imports that used
+  `github.com/okaiser/go-panos-schema`.
+
 ### Fixed
 
 - **A reference is listed in a column wide enough to hold it.** A field is a path

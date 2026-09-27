@@ -5,7 +5,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/okaiser/go-panos-schema/config"
+	"github.com/okaiser/panos-analyst/config"
 )
 
 // Members is a group's membership as the configuration describes it.
