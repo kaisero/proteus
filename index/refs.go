@@ -20,9 +20,9 @@ type Ref struct {
 // refsIndex answers "what points at this name", for one scope.
 //
 // It holds positions into the configuration's edge list rather than copies of the
-// edges. A Panorama file's scopes overlap heavily — every one of them sees shared —
-// so copying the edge into each index that can see it stored 419,042 edges to
-// describe 479,482.
+// edges. A configuration's scopes overlap heavily. Every scope sees shared, so
+// copying an edge into each index that can see it stores shared edges once per
+// scope.
 type refsIndex struct {
 	all      edgeList
 	byTarget map[uint32][]int32

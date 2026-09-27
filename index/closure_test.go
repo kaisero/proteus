@@ -6,19 +6,6 @@ import (
 	"github.com/okaiser/panos-analyst/config"
 )
 
-func indexOf(t *testing.T, path, dg string) *Index {
-	t.Helper()
-	cfg, _, err := config.Load(path)
-	if err != nil {
-		t.Fatalf("Load %s: %v", path, err)
-	}
-	idx, err := For(cfg, config.Scope{Sort: config.ScopeDeviceGroup, Name: dg})
-	if err != nil {
-		t.Fatalf("For: %v", err)
-	}
-	return idx
-}
-
 // indexOfVsys builds an index for a firewall's vsys rather than a device group.
 func indexOfVsys(t *testing.T, path, vsys string) *Index {
 	t.Helper()
@@ -35,7 +22,7 @@ func indexOfVsys(t *testing.T, path, vsys string) *Index {
 
 func nestedIndex(t *testing.T) *Index {
 	t.Helper()
-	return indexOf(t, "../testdata/config/panorama-nested-groups.xml", "dg1")
+	return indexOfVsys(t, "../testdata/config/firewall-nested-groups.xml", "vsys1")
 }
 
 func TestGroupsOfIsTransitive(t *testing.T) {
@@ -66,7 +53,7 @@ func TestMembersOfIsTransitive(t *testing.T) {
 
 // A cycle must not hang or overflow. The membership is still reported.
 func TestClosureSurvivesACycle(t *testing.T) {
-	idx := indexOf(t, "../testdata/config/panorama-cyclic-groups.xml", "dg1")
+	idx := indexOfVsys(t, "../testdata/config/firewall-cyclic-groups.xml", "vsys1")
 	if got := idx.GroupsOf("h-1"); len(got) == 0 {
 		t.Error("a cyclic group definition still has members")
 	}
@@ -76,11 +63,11 @@ func TestClosureSurvivesACycle(t *testing.T) {
 // object, the object finds the dynamic group holding it by tag, and the group
 // finds the rule.
 func TestDynamicGroupExtendsTheChain(t *testing.T) {
-	cfg, _, err := config.Load("../testdata/config/panorama-lab.xml")
+	cfg, _, err := config.Load("../testdata/config/firewall-multivsys.xml")
 	if err != nil {
 		t.Fatal(err)
 	}
-	idx, err := For(cfg, config.Scope{Sort: config.ScopeDeviceGroup, Name: "host_1_directory"})
+	idx, err := For(cfg, config.Scope{Sort: config.ScopeVsys, Name: "vsys1"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -100,19 +87,12 @@ func TestDynamicGroupExtendsTheChain(t *testing.T) {
 	}
 }
 
-// And the same dynamic group resolves differently in a sibling, so the closure is
-// scope-bound like everything else.
+// And the same dynamic group resolves differently in a sibling vsys, so the
+// closure is scope-bound like everything else.
 func TestDynamicClosureIsScopeBound(t *testing.T) {
-	cfg, _, err := config.Load("../testdata/config/panorama-lab.xml")
-	if err != nil {
-		t.Fatal(err)
-	}
-	graz, err := For(cfg, config.Scope{Sort: config.ScopeDeviceGroup, Name: "corp-graz"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	graz := indexOfVsys(t, "../testdata/config/firewall-multivsys.xml", "vsys2")
 	if got := graz.MembersOf("corp-location"); len(got) != 1 || got[0] != "corp-location-graz" {
-		t.Errorf("in corp-graz the group holds %v, want [corp-location-graz]", got)
+		t.Errorf("in vsys2 the group holds %v, want [corp-location-graz]", got)
 	}
 	if got := graz.GroupsOf("corp-location-vienna"); len(got) != 0 {
 		t.Errorf("the Vienna object is invisible here, got groups %v", got)

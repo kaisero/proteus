@@ -11,11 +11,11 @@ import (
 
 func benchIndex(b *testing.B) *Index {
 	b.Helper()
-	cfg, _, err := config.Load("../testdata/config/panorama-lab.xml")
+	cfg, _, err := config.Load("../testdata/config/firewall-multivsys.xml")
 	if err != nil {
 		b.Fatal(err)
 	}
-	idx, err := For(cfg, config.Scope{Sort: config.ScopeDeviceGroup, Name: "host_1_directory"})
+	idx, err := For(cfg, config.Scope{Sort: config.ScopeVsys, Name: "vsys1"})
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -31,7 +31,7 @@ func BenchmarkContaining(b *testing.B) {
 }
 
 func BenchmarkGroupsOf(b *testing.B) {
-	idx := indexOfB(b, "../testdata/config/panorama-nested-groups.xml", "dg1")
+	idx := indexOfB(b, "../testdata/config/firewall-nested-groups.xml", "vsys1")
 	for b.Loop() {
 		_ = idx.GroupsOf("h-1")
 	}
@@ -57,11 +57,11 @@ func BenchmarkFirstMatch(b *testing.B) {
 }
 
 func BenchmarkIndexBuild(b *testing.B) {
-	cfg, _, err := config.Load("../testdata/config/panorama-lab.xml")
+	cfg, _, err := config.Load("../testdata/config/firewall-multivsys.xml")
 	if err != nil {
 		b.Fatal(err)
 	}
-	sc := config.Scope{Sort: config.ScopeDeviceGroup, Name: "host_1_directory"}
+	sc := config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}
 	for b.Loop() {
 		clearCache()
 		if _, err := For(cfg, sc); err != nil {
@@ -76,13 +76,13 @@ func BenchmarkPrefixesOfRange(b *testing.B) {
 	}
 }
 
-func indexOfB(b *testing.B, path, dg string) *Index {
+func indexOfB(b *testing.B, path, vsys string) *Index {
 	b.Helper()
 	cfg, _, err := config.Load(path)
 	if err != nil {
 		b.Fatal(err)
 	}
-	idx, err := For(cfg, config.Scope{Sort: config.ScopeDeviceGroup, Name: dg})
+	idx, err := For(cfg, config.Scope{Sort: config.ScopeVsys, Name: vsys})
 	if err != nil {
 		b.Fatal(err)
 	}

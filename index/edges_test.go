@@ -7,60 +7,52 @@ import (
 	"github.com/okaiser/panos-analyst/config"
 )
 
-func siblingIndex(t *testing.T, dg string) *Index {
+func siblingIndex(t *testing.T, vsys string) *Index {
 	t.Helper()
-	cfg, _, err := config.Load("../testdata/config/panorama-siblings.xml")
-	if err != nil {
-		t.Fatal(err)
-	}
-	idx, err := For(cfg, config.Scope{Sort: config.ScopeDeviceGroup, Name: dg})
-	if err != nil {
-		t.Fatal(err)
-	}
-	return idx
+	return indexOfVsys(t, "../testdata/config/firewall-siblings.xml", vsys)
 }
 
 // R10. The edge list spans the file, so this is the test that the indexes built
 // from it do not: an index shows its own scope and shared, never a sibling's.
 //
 // The name means different things on each side — both-sides is 10.1.0.0/24 in
-// left and 10.2.0.0/24 in right — so a merged answer is wrong, not incomplete.
+// vsys1 and 10.2.0.0/24 in vsys2 — so a merged answer is wrong, not incomplete.
 func TestNoGlobalIndex(t *testing.T) {
-	for _, tc := range []struct{ dg, wantRule, notRule string }{
-		{"left", "left-rule", "right-rule"},
-		{"right", "right-rule", "left-rule"},
+	for _, tc := range []struct{ vsys, wantRule, notRule string }{
+		{"vsys1", "left-rule", "right-rule"},
+		{"vsys2", "right-rule", "left-rule"},
 	} {
-		refs := siblingIndex(t, tc.dg).Refs("both-sides")
+		refs := siblingIndex(t, tc.vsys).Refs("both-sides")
 		if len(refs) != 1 {
-			t.Errorf("%s: Refs(both-sides) returned %d edges, want 1: %+v", tc.dg, len(refs), refs)
+			t.Errorf("%s: Refs(both-sides) returned %d edges, want 1: %+v", tc.vsys, len(refs), refs)
 			continue
 		}
 		if !strings.HasSuffix(refs[0].From, "/"+tc.wantRule) {
-			t.Errorf("%s: edge came from %s, want %s", tc.dg, refs[0].From, tc.wantRule)
+			t.Errorf("%s: edge came from %s, want %s", tc.vsys, refs[0].From, tc.wantRule)
 		}
 		if strings.Contains(refs[0].From, tc.notRule) {
-			t.Errorf("%s: edge leaked from the sibling device group: %s", tc.dg, refs[0].From)
+			t.Errorf("%s: edge leaked from the sibling vsys: %s", tc.vsys, refs[0].From)
 		}
 	}
 }
 
 // A scope still inherits shared, which is why the filter cannot simply be equality.
 func TestAnIndexSeesSharedEdges(t *testing.T) {
-	for _, dg := range []string{"left", "right"} {
-		refs := siblingIndex(t, dg).Refs("everywhere")
+	for _, vsys := range []string{"vsys1", "vsys2"} {
+		refs := siblingIndex(t, vsys).Refs("everywhere")
 		if len(refs) != 1 {
-			t.Errorf("%s: Refs(everywhere) returned %d edges, want 1", dg, len(refs))
+			t.Errorf("%s: Refs(everywhere) returned %d edges, want 1", vsys, len(refs))
 			continue
 		}
 		if refs[0].Field != "destination" {
-			t.Errorf("%s: shared edge at %s, want destination", dg, refs[0].Field)
+			t.Errorf("%s: shared edge at %s, want destination", vsys, refs[0].Field)
 		}
 	}
 }
 
 // The file is read once however many scopes ask for it.
 func TestTheEdgeListIsReadOnce(t *testing.T) {
-	cfg, _, err := config.Load("../testdata/config/panorama-siblings.xml")
+	cfg, _, err := config.Load("../testdata/config/firewall-siblings.xml")
 	if err != nil {
 		t.Fatal(err)
 	}

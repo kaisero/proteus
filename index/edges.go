@@ -15,8 +15,10 @@ import (
 // shared here is the reading, which is the same work whoever asks for it.
 //
 // Reading it once matters. newRefsIndex walked the whole configuration and threw
-// away everything outside its scope, so a Panorama file with 21 scopes was read 21
-// times: 2.25 s of a 29 MB file against 0.11 s to read it once.
+// away everything outside its scope, so a file with N scopes was read N times.
+// BenchmarkRefsIndexEveryScope builds every scope's index of a generated 13-scope
+// firewall in 0.044 s; BenchmarkReadEdges reads it once in 0.034 s. Before the
+// shared edge list, each of those builds re-read the file.
 type edgeList []Ref
 
 type edgeCacheEntry struct {

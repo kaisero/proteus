@@ -12,15 +12,15 @@ import (
 
 func labIndex(t *testing.T) *Index {
 	t.Helper()
-	return indexOf(t, "../testdata/config/panorama-lab.xml", "host_1_directory")
+	return indexOfVsys(t, "../testdata/config/firewall-multivsys.xml", "vsys1")
 }
 
 func TestIndexIsCachedPerScope(t *testing.T) {
-	cfg, _, err := config.Load("../testdata/config/panorama-lab.xml")
+	cfg, _, err := config.Load("../testdata/config/firewall-multivsys.xml")
 	if err != nil {
 		t.Fatal(err)
 	}
-	sc := config.Scope{Sort: config.ScopeDeviceGroup, Name: "host_1_directory"}
+	sc := config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}
 	a, err := For(cfg, sc)
 	if err != nil {
 		t.Fatalf("For: %v", err)
@@ -29,15 +29,15 @@ func TestIndexIsCachedPerScope(t *testing.T) {
 	if a != b {
 		t.Error("the same scope must return the same cached index")
 	}
-	other, err := For(cfg, config.Scope{Sort: config.ScopeDeviceGroup, Name: "corp-graz"})
+	other, err := For(cfg, config.Scope{Sort: config.ScopeVsys, Name: "vsys2"})
 	if err != nil {
 		t.Fatalf("For sibling: %v", err)
 	}
 	if other == a {
 		t.Error("a different scope must get its own index")
 	}
-	if other.Scope().String() != "dg:corp-graz" {
-		t.Errorf("scope = %q, want dg:corp-graz", other.Scope().String())
+	if other.Scope().String() != "vsys:vsys2" {
+		t.Errorf("scope = %q, want vsys:vsys2", other.Scope().String())
 	}
 }
 
@@ -55,13 +55,13 @@ func TestContainingFindsEveryCoveringObject(t *testing.T) {
 	}
 }
 
-// The sibling device group's objects must not appear, whatever the address.
+// The sibling vsys's objects must not appear, whatever the address.
 func TestContainingIsScopeBound(t *testing.T) {
 	idx := labIndex(t)
 	for _, m := range idx.Containing(netip.MustParseAddr("10.125.0.1")) {
 		t.Errorf("a Graz object leaked into the Vienna index: %s", m.Name)
 	}
-	graz := indexOf(t, "../testdata/config/panorama-lab.xml", "corp-graz")
+	graz := indexOfVsys(t, "../testdata/config/firewall-multivsys.xml", "vsys2")
 	found := false
 	for _, m := range graz.Containing(netip.MustParseAddr("10.125.0.1")) {
 		if m.Name == "corp-dc-graz" {
@@ -93,8 +93,8 @@ func TestRefsFindTheRuleThatUsesAGroup(t *testing.T) {
 			if len(r.Candidates) < 2 {
 				t.Errorf("source must carry several candidate kinds, got %v", r.Candidates)
 			}
-			if r.Scope.String() != "dg:host_1_directory" {
-				t.Errorf("edge scope = %q, want dg:host_1_directory", r.Scope.String())
+			if r.Scope.String() != "vsys:vsys1" {
+				t.Errorf("edge scope = %q, want vsys:vsys1", r.Scope.String())
 			}
 		}
 	}
@@ -142,22 +142,15 @@ func TestFirstMatchThroughNestedGroups(t *testing.T) {
 }
 
 func TestDisabledRulesAreMasked(t *testing.T) {
-	cfg, _, err := config.Load("../testdata/config/panorama-merge.xml")
-	if err != nil {
-		t.Fatal(err)
-	}
-	idx, err := For(cfg, config.Scope{Sort: config.ScopeDeviceGroup, Name: "leaf"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	idx := indexOfVsys(t, "../testdata/config/firewall-lab.xml", "vsys1")
 	mask := idx.Disabled()
 	if mask.IsEmpty() {
-		t.Fatal("leaf-pre-2 is disabled in the fixture")
+		t.Fatal("tagged-out is disabled in the fixture")
 	}
 	rules := idx.Rules()
 	for it := mask.Iterator(); it.HasNext(); {
-		if got := rules[it.Next()].Name; got != "leaf-pre-2" {
-			t.Errorf("disabled rule = %q, want leaf-pre-2", got)
+		if got := rules[it.Next()].Name; got != "tagged-out" {
+			t.Errorf("disabled rule = %q, want tagged-out", got)
 		}
 	}
 }

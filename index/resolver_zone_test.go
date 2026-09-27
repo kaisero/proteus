@@ -3,6 +3,8 @@ package index
 import (
 	"strings"
 	"testing"
+
+	"github.com/okaiser/panos-analyst/config"
 )
 
 func zonesIndex(t *testing.T) *Index {
@@ -139,20 +141,19 @@ func TestZoneResolverIgnoresADefaultRouteWithNoZone(t *testing.T) {
 	}
 }
 
-// On Panorama the network configuration lives in a template, so a device group has no
-// zones. That is where PAN-OS keeps it, not a failure to look, and the answer says so.
+// A vsys with no zones says so rather than returning nothing silently.
 func TestZoneResolverSaysWhenAScopeHasNoZones(t *testing.T) {
-	idx := indexOf(t, "../testdata/config/panorama-lab.xml", "at-ktn")
+	idx := indexOfVsys(t, "../testdata/config/firewall-multivsys.xml", "vsys3")
 
 	_, rep := idx.Candidates(FromZone, "10.0.0.1")
 	var told bool
 	for _, u := range rep.Unresolved {
-		if strings.Contains(u.Reason, "template") {
+		if strings.Contains(u.Reason, "defines no zones") {
 			told = true
 		}
 	}
 	if !told {
-		t.Errorf("a device group with no zones did not explain why: %v", rep.Unresolved)
+		t.Errorf("a vsys with no zones did not explain why: %v", rep.Unresolved)
 	}
 }
 
@@ -375,14 +376,20 @@ func TestZoneResolverSurfacesUnroutedInterfaces(t *testing.T) {
 	}
 }
 
-// A device group keeps every placement: a snapshot comes from one firewall, and which
-// vsys of it a device group corresponds to is not knowable from here.
-func TestZoneResolverKeepsEveryPlacementForADeviceGroup(t *testing.T) {
-	idx := indexOf(t, "../testdata/config/panorama-lab.xml", "at-ktn")
-
+// The shared scope keeps every placement: a snapshot comes from one firewall, and
+// shared belongs to none of its vsys.
+func TestZoneResolverKeepsEveryPlacementForShared(t *testing.T) {
+	cfg, _, err := config.Load("../testdata/config/firewall-multivsys.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	idx, err := For(cfg, config.Scope{Sort: config.ScopeShared})
+	if err != nil {
+		t.Fatal(err)
+	}
 	_, rep := idx.With(Providers{Zones: zoneSnap(t)}).Candidates(FromZone, "198.18.0.5")
 	if got := zoneNames(rep); len(got) == 0 {
-		t.Errorf("a device group scope dropped every placement: %v", rep.Unresolved)
+		t.Errorf("the shared scope dropped every placement: %v", rep.Unresolved)
 	}
 }
 
