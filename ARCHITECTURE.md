@@ -113,15 +113,27 @@ detail and the measurements.
 - **Indexes live here.** References, transitive group closure, CIDR containment
   and rule-position bitmaps, all keyed by scope. Consumers build the policy
   simulator and where-used calls on top.
+- **No version seam.** `resolve` and `index` read the configuration as a parsed
+  element tree, guided by the schema digest, rather than through the generated
+  structs. The digest records its own PAN-OS version, so no version-agnostic
+  interface and no generated adapter are needed. A prototype established this; an
+  earlier draft had both.
+- **Shapes are deduplicated on both sides.** Entry arrays and inline sequences
+  alike, which takes the Panorama package from 4,438 type declarations to 2,891.
+- **Everything immutable is computed once.** The schema digest is decoded once per
+  process and the reference table built alongside it; a configuration is parsed
+  once by `Load`; an index is built once per scope. Recomputing these per query
+  cost 18.7 ms to build one index on a 41 KB file, against 0.023 ms now.
 
 ## Still open
 
 1. **Schema redistribution.** Whether the derived digest may be published is
    unresolved. Until it is, this repository stays private.
-2. **Firewall-side scoping.** The spec details Panorama. A standalone firewall
-   needs vsys scoping and shared shadowing — simpler, but not yet specified.
-3. **Large configurations.** A DOM peaks near ten times the file size, so a
-   200 MB Panorama config implies roughly 2 GB. Streaming per device group is the
-   mitigation and is not yet designed.
-4. **Runtime data.** Registered-IP group members, App-ID dependencies and
-   template-variable resolution are not in a config file at all.
+2. **Large configurations.** The parsed element tree peaks near ten times the file
+   size, so a 200 MB Panorama export implies roughly 2 GB. Streaming per device
+   group is the mitigation and is not yet designed.
+3. **Runtime data.** Registered-IP group members, App-ID dependencies and
+   template-variable resolution are not in a configuration file at all. 2,482 of
+   the schema's reference declarations point at template variables.
+4. **NAT semantics.** The NAT rulebase is read, but translated-address fields are
+   not resolved.
