@@ -94,8 +94,12 @@ A scope is shared, vsys:<name> or dg:<name>.
 A field is source, destination, category, application, service, from, to,
 source-user or tag.
 
-Set PANOS_USERS to a user snapshot in JSON form to resolve directory groups:
+Set PANOS_USERS to a user snapshot to resolve directory groups:
   {"taken_at":"2026-09-27T12:00:00Z","groups":{"alice":["engineering"]}}
+
+Set PANOS_ZONES to a zone snapshot to place an address from the device's own
+forwarding table instead of from the configuration. Capture one with
+scripts/capture-zones.sh; the format is in docs/zone-snapshot-format.md.
 `)
 	os.Exit(2)
 }
@@ -570,25 +574,42 @@ func cmdUses(cfg *config.Config, args []string) error {
 // mapping into a file. PANOS_USERS names a snapshot in the library's JSON format.
 func providers() index.Providers {
 	var p index.Providers
-	path := os.Getenv("PANOS_USERS")
+	if f, ok := openEnvFile("PANOS_USERS"); ok {
+		defer func() { _ = f.Close() }()
+		snap, err := index.LoadUserSnapshot(f)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "warning: %v\n", err)
+		} else {
+			fmt.Printf("using user snapshot, taken %s\n", snap.TakenAt.Format(time.RFC3339))
+			p.Users = snap
+		}
+	}
+	if f, ok := openEnvFile("PANOS_ZONES"); ok {
+		defer func() { _ = f.Close() }()
+		snap, err := index.LoadZoneSnapshot(f)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "warning: %v\n", err)
+		} else {
+			fmt.Printf("using zone snapshot from %s; routers %v\n", snap.Describe(), snap.Routers())
+			p.Zones = snap
+		}
+	}
+	return p
+}
+
+// openEnvFile opens the file a variable names, if it names one.
+func openEnvFile(name string) (*os.File, bool) {
+	path := os.Getenv(name)
 	if path == "" {
-		return p
+		return nil, false
 	}
 	// The path comes from this operator's own environment, and the file is only read.
 	f, err := os.Open(filepath.Clean(path)) //nolint:gosec // operator-supplied path, read only
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "warning: cannot read PANOS_USERS %s: %v\n", path, err)
-		return p
+		fmt.Fprintf(os.Stderr, "warning: cannot read %s %s: %v\n", name, path, err)
+		return nil, false
 	}
-	defer func() { _ = f.Close() }()
-	snap, err := index.LoadUserSnapshot(f)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "warning: %v\n", err)
-		return p
-	}
-	fmt.Printf("using user snapshot %s, taken %s\n", path, snap.TakenAt.Format(time.RFC3339))
-	p.Users = snap
-	return p
+	return f, true
 }
 
 // fieldByName reads a field name as the library spells it.

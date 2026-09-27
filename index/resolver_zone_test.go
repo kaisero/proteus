@@ -218,3 +218,195 @@ func TestZoneResolverSearch(t *testing.T) {
 		t.Errorf("searching a loopback prefix did not find its zone: %+v", hits)
 	}
 }
+
+// A snapshot is authoritative. Where it answers, the configuration is not consulted,
+// and the answer names the route that decided it.
+func TestZoneResolverPrefersTheSnapshot(t *testing.T) {
+	idx := indexOfVsys(t, "../testdata/config/firewall-zones.xml", "vsys1")
+	v := idx.With(Providers{Zones: zoneSnap(t)})
+
+	// 198.18.0.5 is placed by the snapshot and by nothing in this configuration.
+	_, rep := v.Candidates(FromZone, "198.18.0.5")
+	got := zoneNames(rep)
+	if got["transport"] == "" {
+		t.Fatalf("the snapshot did not place the address: %v", got)
+	}
+	if !strings.Contains(got["transport"], "ethernet1/1 via default") {
+		t.Errorf("the placement does not name the route: %q", got["transport"])
+	}
+	// The configuration's own zones must not appear: this fixture has "inside" and
+	// "dmz", and the snapshot came from another device.
+	for _, unwanted := range []string{"inside", "dmz", "loop"} {
+		if got[unwanted] != "" {
+			t.Errorf("a configuration zone leaked into a snapshot answer: %v", got)
+		}
+	}
+}
+
+// When the snapshot places nothing, the configuration is still not consulted. Falling
+// back would hide a disagreement between what a device was told and what it is doing.
+//
+// The fixture device has a default route, so every address is covered. Removing it
+// leaves 10.1.0.50 unplaceable by the snapshot while the configuration still places it
+// in "inside", which is exactly the case that must not fall back.
+func TestZoneResolverDoesNotFallBackWhenASnapshotIsPresent(t *testing.T) {
+	idx := indexOfVsys(t, "../testdata/config/firewall-zones.xml", "vsys1")
+
+	// The configuration can answer on its own.
+	if _, rep := idx.Candidates(FromZone, "10.1.0.50"); zoneNames(rep)["inside"] == "" {
+		t.Fatal("the fixture no longer places this address, so the test proves nothing")
+	}
+
+	snap := zoneSnap(t)
+	snap.FIBXML = strings.Replace(snap.FIBXML,
+		"<dst>0.0.0.0/0</dst>", "<dst>203.0.113.0/24</dst>", 1)
+	if err := snap.index(); err != nil {
+		t.Fatal(err)
+	}
+
+	_, rep := idx.With(Providers{Zones: snap}).Candidates(FromZone, "10.1.0.50")
+	if got := zoneNames(rep); len(got) != 0 {
+		t.Errorf("the configuration answered while a snapshot was present: %v", got)
+	}
+	var told bool
+	for _, u := range rep.Unresolved {
+		if strings.Contains(u.Reason, "would not forward it") {
+			told = true
+		}
+	}
+	if !told {
+		t.Errorf("the empty answer did not explain itself: %v", rep.Unresolved)
+	}
+}
+
+// Every configuration-derived answer says that it is one. It is an inference from what
+// the firewall was told, and on a real device it was reasoning from a default route
+// that had since been replaced.
+func TestZoneResolverAlwaysReportsAConfigurationAnswer(t *testing.T) {
+	idx := indexOfVsys(t, "../testdata/config/firewall-zones.xml", "vsys1")
+
+	_, rep := idx.Candidates(FromZone, "10.1.0.50")
+	if len(zoneNames(rep)) == 0 {
+		t.Fatal("the configuration should place this address")
+	}
+	var told bool
+	for _, u := range rep.Unresolved {
+		if strings.Contains(u.Reason, "came from the configuration, not from the device") {
+			told = true
+		}
+	}
+	if !told {
+		t.Errorf("a configuration-derived zone was not reported as such: %v", rep.Unresolved)
+	}
+}
+
+// Several routers covering one address is reported, not resolved by picking one.
+func TestZoneResolverReportsRouterAmbiguity(t *testing.T) {
+	idx := indexOfVsys(t, "../testdata/config/firewall-zones.xml", "vsys1")
+	v := idx.With(Providers{Zones: zoneSnap(t)})
+
+	_, rep := v.Candidates(FromZone, "198.19.11.5")
+	if len(zoneNames(rep)) != 2 {
+		t.Errorf("both routers should be reported: %v", zoneNames(rep))
+	}
+	var told bool
+	for _, u := range rep.Unresolved {
+		if strings.Contains(u.Reason, "more than one logical router") {
+			told = true
+		}
+	}
+	if !told {
+		t.Errorf("the ambiguity was not reported: %v", rep.Unresolved)
+	}
+}
+
+// A zone is visible only inside the vsys that defines it, so a snapshot of a
+// multi-vsys firewall must not leak zones across a scope boundary.
+func TestZoneResolverFiltersByVsys(t *testing.T) {
+	idx := indexOfVsys(t, "../testdata/config/firewall-zones.xml", "vsys1")
+
+	// The same forwarding table, but every interface belongs to vsys 2.
+	other := zoneSnap(t)
+	other.InterfacesXML = strings.ReplaceAll(other.InterfacesXML, "<vsys>1</vsys>", "<vsys>2</vsys>")
+	if err := other.index(); err != nil {
+		t.Fatal(err)
+	}
+
+	_, rep := idx.With(Providers{Zones: other}).Candidates(FromZone, "198.18.0.5")
+	if got := zoneNames(rep); len(got) != 0 {
+		t.Errorf("zones from another vsys were reported: %v", got)
+	}
+	var told bool
+	for _, u := range rep.Unresolved {
+		if strings.Contains(u.Reason, "another vsys") {
+			told = true
+		}
+	}
+	if !told {
+		t.Errorf("the vsys mismatch was not reported: %v", rep.Unresolved)
+	}
+
+	// And the unmodified snapshot, whose vsys matches, still answers.
+	if _, rep := idx.With(Providers{Zones: zoneSnap(t)}).Candidates(FromZone, "198.18.0.5"); len(zoneNames(rep)) == 0 {
+		t.Error("vsys1 should see its own zones")
+	}
+}
+
+// The resolver surfaces an unrouted interface, so an empty answer explains itself
+// rather than looking like "this address is nowhere".
+func TestZoneResolverSurfacesUnroutedInterfaces(t *testing.T) {
+	idx := indexOfVsys(t, "../testdata/config/firewall-zones.xml", "vsys1")
+	snap := zoneSnap(t)
+	snap.FIBXML = strings.Replace(snap.FIBXML,
+		"<interface>ethernet1/1</interface>", "<interface>tunnel.99</interface>", 1)
+	if err := snap.index(); err != nil {
+		t.Fatal(err)
+	}
+
+	_, rep := idx.With(Providers{Zones: snap}).Candidates(FromZone, "8.8.8.8")
+	var told bool
+	for _, u := range rep.Unresolved {
+		if u.Value == "tunnel.99" && strings.Contains(u.Reason, "in no zone") {
+			told = true
+		}
+	}
+	if !told {
+		t.Errorf("the zoneless interface was not surfaced: %v", rep.Unresolved)
+	}
+}
+
+// A device group keeps every placement: a snapshot comes from one firewall, and which
+// vsys of it a device group corresponds to is not knowable from here.
+func TestZoneResolverKeepsEveryPlacementForADeviceGroup(t *testing.T) {
+	idx := indexOf(t, "../testdata/config/panorama-lab.xml", "at-ktn")
+
+	_, rep := idx.With(Providers{Zones: zoneSnap(t)}).Candidates(FromZone, "198.18.0.5")
+	if got := zoneNames(rep); len(got) == 0 {
+		t.Errorf("a device group scope dropped every placement: %v", rep.Unresolved)
+	}
+}
+
+// A forwarding entry with no router still places, and the ambiguity note is not
+// raised for it.
+func TestZoneResolverHandlesAnUnnamedRouter(t *testing.T) {
+	body := `{"interfaces_xml":"<result><ifnet><entry><name>ethernet1/1</name><vsys>1</vsys>` +
+		`<zone>a</zone><fwd>N/A</fwd></entry></ifnet></result>",` +
+		`"fib_xml":"<result><fibs><entry><vr></vr><type>0</type><entries>` +
+		`<entry><dst>10.0.0.0/8</dst><interface>ethernet1/1</interface></entry>` +
+		`</entries></entry></fibs></result>"}`
+	snap, err := LoadZoneSnapshot(strings.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	idx := indexOfVsys(t, "../testdata/config/firewall-zones.xml", "vsys1")
+
+	_, rep := idx.With(Providers{Zones: snap}).Candidates(FromZone, "10.1.2.3")
+	if zoneNames(rep)["a"] == "" {
+		t.Errorf("a route with no named router did not place: %v", rep.Hits)
+	}
+	for _, u := range rep.Unresolved {
+		if strings.Contains(u.Reason, "more than one logical router") {
+			t.Error("a single unnamed router was reported as ambiguous")
+		}
+	}
+}

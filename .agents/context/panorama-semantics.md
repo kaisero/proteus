@@ -86,8 +86,10 @@ possibly a zone of its own.
 
 <!-- GENERATED:api ./resolve -->
 ```go
+type FIBRoute struct{ ... }
 type Hierarchy struct{ ... }
 type InterfaceAddress struct{ ... }
+type InterfaceState struct{ ... }
 type Layer int
 type Members struct{ ... }
 type Object struct{ ... }
@@ -130,6 +132,8 @@ func ObjectsInScope(cfg *config.Config, sc config.Scope, kind string) ([]Object,
 func ParseTagFilter(raw string) (*TagFilter, error)
 func ParseURLPattern(member string) (URLPattern, error)
 func ProfileGroupsInScope(cfg *config.Config, sc config.Scope) ([]ProfileGroup, error)
+func ReadFIBRoutes(b []byte) ([]FIBRoute, error)
+func ReadInterfaceStates(b []byte) ([]InterfaceState, error)
 func RulesForDeviceGroup(cfg *config.Config, dg string, rb Rulebase) ([]Rule, error)
 func StaticRoutes(cfg *config.Config) ([]StaticRoute, error)
 func TargetFor(cfg *config.Config, serial, vsys string) (*Target, error)

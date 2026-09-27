@@ -93,6 +93,8 @@ type UserDirectory interface{ ... }
 type UserSnapshot struct{ ... }
 type View struct{ ... }
 type ZoneLocator interface{ ... }
+type ZonePlacement struct{ ... }
+type ZoneSnapshot struct{ ... }
 
 func (f Field) String() string
 func (i *Index) Candidates(f Field, value string) (*roaring.Bitmap, Report)
@@ -122,11 +124,17 @@ func (in *Interner) Lookup(name string) (uint32, bool)
 func (in *Interner) Name(id uint32) string
 func (s *UserSnapshot) GroupsOf(user string) []string
 func (s *UserSnapshot) Stale() (string, bool)
+func (s *ZoneSnapshot) Describe() string
+func (s *ZoneSnapshot) Routers() []string
+func (s *ZoneSnapshot) UnroutedInterfaces() []string
+func (s *ZoneSnapshot) ZonesOf(addr netip.Addr) []ZonePlacement
 func (u Unresolved) String() string
 func (v *View) Candidates(f Field, value string) (*roaring.Bitmap, Report)
 func For(cfg *config.Config, sc config.Scope) (*Index, error)
 func LoadUserSnapshot(r io.Reader) (*UserSnapshot, error)
+func LoadZoneSnapshot(r io.Reader) (*ZoneSnapshot, error)
 func NewInterner() *Interner
+func NewZoneSnapshot(takenAt time.Time, source string, interfaces, fib io.Reader) (*ZoneSnapshot, error)
 ```
 <!-- /GENERATED:api -->
 

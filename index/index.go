@@ -171,7 +171,7 @@ func build(cfg *config.Config, sc config.Scope) (*Index, error) {
 		newURLResolver(cats),
 		newServiceResolver(svcs, ri),
 		newUserResolver(localUsers, userGroups, dynUsers),
-		newZoneResolver(zones, ifAddrs, routes, resolve.DynamicRoutingProtocols(cfg)),
+		newZoneResolver(sc, zones, ifAddrs, routes, resolve.DynamicRoutingProtocols(cfg)),
 		newAppResolver(apps, appFilters, appContainers),
 	} {
 		for _, k := range r.kinds() {

@@ -65,9 +65,38 @@ local user database was searched, so a rule naming a directory group is absent.
 
 ### ZoneLocator
 
-Defined, not yet used. Zone placement is currently config-derived — interface
-addresses and static routes read as a routing table. A live snapshot would override
-it. The interface exists so the seam is fixed; the loader is deliberately not built.
+Real. `ZoneSnapshot` carries two op-command responses verbatim —
+`show interface all` and `show advanced-routing fib` — and answers from the device's
+own forwarding table.
+
+```
+address -> longest matching route in each router -> interface -> zone
+```
+
+`ZonesOf` returns `[]ZonePlacement{Zone, Interface, Router, Route, Vsys}`, not
+`[]string`. A placement carries the reasoning, like every other answer here.
+
+Three things separate it from `UserSnapshot`:
+
+- **No staleness.** An upstream tool supplies a forwarding table fresh enough for the
+  question. `TakenAt` is provenance, unenforced, and `ZoneSnapshot` deliberately does
+  not implement `StaleReporter`.
+- **It is authoritative.** Where a snapshot places nothing, the configuration is not
+  consulted instead. Falling back would hide a disagreement, and the two disagree
+  routinely: a lab firewall's configuration held one static route where its device held
+  25, and they named different default routes.
+- **It returns a set, not an answer.** Several logical routers can cover one address,
+  and which applies depends on the interface the packet arrived on — the thing being
+  worked out. Measured: `198.19.11.5` is in `lte`'s `198.19.11.0/24` reaching
+  `int-link-b`, and in `default`'s `0.0.0.0/0` reaching `transport`. Both are reported
+  and the ambiguity is named.
+
+A zone is visible only inside its vsys, so placements from another vsys are dropped
+and counted when the scope is a vsys. A device-group scope keeps everything: a snapshot
+comes from one firewall, and which vsys a device group corresponds to is not knowable.
+
+The format contract is `docs/zone-snapshot-format.md` and the `ZoneSnapshot` doc
+comment. `scripts/capture-zones.sh` captures one.
 
 ## Build / run pointers
 
@@ -94,6 +123,8 @@ type UserDirectory interface{ ... }
 type UserSnapshot struct{ ... }
 type View struct{ ... }
 type ZoneLocator interface{ ... }
+type ZonePlacement struct{ ... }
+type ZoneSnapshot struct{ ... }
 
 func (f Field) String() string
 func (i *Index) Candidates(f Field, value string) (*roaring.Bitmap, Report)
@@ -123,11 +154,17 @@ func (in *Interner) Lookup(name string) (uint32, bool)
 func (in *Interner) Name(id uint32) string
 func (s *UserSnapshot) GroupsOf(user string) []string
 func (s *UserSnapshot) Stale() (string, bool)
+func (s *ZoneSnapshot) Describe() string
+func (s *ZoneSnapshot) Routers() []string
+func (s *ZoneSnapshot) UnroutedInterfaces() []string
+func (s *ZoneSnapshot) ZonesOf(addr netip.Addr) []ZonePlacement
 func (u Unresolved) String() string
 func (v *View) Candidates(f Field, value string) (*roaring.Bitmap, Report)
 func For(cfg *config.Config, sc config.Scope) (*Index, error)
 func LoadUserSnapshot(r io.Reader) (*UserSnapshot, error)
+func LoadZoneSnapshot(r io.Reader) (*ZoneSnapshot, error)
 func NewInterner() *Interner
+func NewZoneSnapshot(takenAt time.Time, source string, interfaces, fib io.Reader) (*ZoneSnapshot, error)
 ```
 <!-- /GENERATED:api -->
 

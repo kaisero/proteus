@@ -88,8 +88,29 @@ type StaleReporter interface {
 }
 
 // ZoneLocator maps an address to the zones it can arrive on.
+//
+// It returns a set, not an answer, and that is not a shortcoming to be engineered
+// away. A firewall can have several logical routers whose address space overlaps, and
+// which one applies is decided by the interface a packet arrives on — the very thing
+// being worked out. Measured on a lab firewall: 198.19.11.5 is covered by the lte
+// router's 198.19.11.0/24, reaching zone int-link-b, and by the default router's
+// 0.0.0.0/0, reaching zone transport. Only the device knows which, which is why its
+// own test security-policy-match takes the zone as an argument.
 type ZoneLocator interface {
-	ZonesOf(addr netip.Addr) []string
+	ZonesOf(addr netip.Addr) []ZonePlacement
+}
+
+// ZonePlacement is one way an address could arrive, and the reasoning behind it.
+//
+// Every other answer in this library carries the value that produced it, so a reader
+// can check it rather than trust it. A zone placement says which interface, which
+// router and which route.
+type ZonePlacement struct {
+	Zone      string
+	Interface string
+	Router    string
+	Route     string // the forwarding entry that selected the interface
+	Vsys      string
 }
 
 // View pairs an immutable index with the providers for one question.

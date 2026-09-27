@@ -435,6 +435,38 @@ A tag needs no value space, because a tag is a name.
 
 ---
 
+### 5.5.1 Place an address from the device, not the configuration
+
+A configuration says what a firewall was told. Its forwarding table says what it is
+doing, and the two differ routinely. Capture a snapshot:
+
+```bash
+PANOS_HOST=fw01 PANOS_API_KEY=... scripts/capture-zones.sh zone-snapshot.json
+```
+
+Then point `PANOS_ZONES` at it:
+
+```bash
+PANOS_ZONES=zone-snapshot.json ./bin/panos-explore reaches cfg.xml vsys:vsys1 from 198.18.0.5
+```
+
+```
+using zone snapshot from fw01.example.net, serial 007900000000002, taken 2026-09-27T17:05:00Z; routers [default lte]
+198.18.0.5 matched via
+  transport                zone           ethernet1/1 via default 0.0.0.0/0
+```
+
+The answer names the interface, the router and the route that decided it. Without the
+snapshot this address places nowhere: the configuration's default route points at a
+tunnel that is in no zone, and the device has since replaced that route.
+
+An address can be covered by more than one logical router. All of them are reported
+and none is chosen, because which applies depends on the interface the packet arrived
+on — which is what the question was.
+
+A snapshot is authoritative: where it places nothing, the configuration is not
+consulted instead. The format is in `docs/zone-snapshot-format.md`.
+
 ## 6. Follow a URL category through security profiles
 
 PAN-OS deployments normally apply URL policy through profiles, not through the

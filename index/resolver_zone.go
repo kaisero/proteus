@@ -1,7 +1,9 @@
 package index
 
 import (
+	"fmt"
 	"net/netip"
+	"sort"
 	"strings"
 
 	"github.com/RoaringBitmap/roaring/v2"
@@ -26,6 +28,7 @@ import (
 // interface a packet actually arrived on, which is why the device's own
 // test security-policy-match takes the zone as an argument instead of working it out.
 type zoneResolver struct {
+	scope config.Scope
 	table *bart.Table[[]Hit]
 	// zonesOf records, for each interface, the zones holding it.
 	zonesOf map[string][]zoneRef
@@ -41,12 +44,13 @@ type zoneRef struct {
 const kindZone = "zone"
 
 func newZoneResolver(
+	sc config.Scope,
 	zones []resolve.Zone,
 	addrs []resolve.InterfaceAddress,
 	routes []resolve.StaticRoute,
 	dynamic []string,
 ) *zoneResolver {
-	r := &zoneResolver{table: new(bart.Table[[]Hit]), zonesOf: map[string][]zoneRef{}}
+	r := &zoneResolver{scope: sc, table: new(bart.Table[[]Hit]), zonesOf: map[string][]zoneRef{}}
 
 	for _, z := range zones {
 		for _, iface := range z.Interfaces {
@@ -116,16 +120,26 @@ func (r *zoneResolver) insert(p netip.Prefix, iface, via string) {
 
 func (r *zoneResolver) kinds() []string { return []string{kindZone} }
 
-// resolve returns the zones an address could arrive on. Longest prefix wins, so a
-// specific route beats a default one, as it does on a router.
-func (r *zoneResolver) resolve(value string, _ Providers) ([]Hit, []Unresolved, bool) {
+// resolve returns the zones an address could arrive on.
+//
+// A snapshot of the device's own forwarding table answers if the caller supplied one,
+// and it is authoritative: when it places nothing, the configuration is not consulted
+// instead. Falling back there would hide a real disagreement, and the two do disagree
+// routinely.
+//
+// Without a snapshot the configuration answers, and says so. That answer is an
+// inference from what the firewall was told, not from what it is doing.
+func (r *zoneResolver) resolve(value string, p Providers) ([]Hit, []Unresolved, bool) {
 	addr, err := netip.ParseAddr(value)
 	if err != nil {
-		p, perr := netip.ParsePrefix(value)
+		q, perr := netip.ParsePrefix(value)
 		if perr != nil {
 			return nil, nil, false
 		}
-		addr = p.Addr()
+		addr = q.Addr()
+	}
+	if p.Zones != nil {
+		return r.fromSnapshot(value, addr, p.Zones)
 	}
 	if r.empty {
 		return nil, []Unresolved{{
@@ -136,16 +150,132 @@ func (r *zoneResolver) resolve(value string, _ Providers) ([]Hit, []Unresolved, 
 		}}, true
 	}
 
+	un := append(r.limitsCopy(), Unresolved{
+		Value: value,
+		Kind:  kindZone,
+		Reason: "this zone came from the configuration, not from the device. It is an " +
+			"inference from interface addresses and static routes, and a firewall's " +
+			"forwarding table routinely differs: supply a zone snapshot for what the " +
+			"device is actually doing",
+	})
 	hits, found := r.table.Lookup(addr)
 	if !found {
-		return nil, append(r.limitsCopy(), Unresolved{
+		return nil, append(un, Unresolved{
 			Value: value,
 			Kind:  kindZone,
 			Reason: "no interface address and no static route in this configuration covers " +
 				"this address, so the zone it would arrive on is unknown",
 		}), true
 	}
-	return hits, r.limitsCopy(), true
+	return hits, un, true
+}
+
+// fromSnapshot answers from the device's own forwarding table.
+func (r *zoneResolver) fromSnapshot(value string, addr netip.Addr, loc ZoneLocator) ([]Hit, []Unresolved, bool) {
+	placements := loc.ZonesOf(addr)
+	if len(placements) == 0 {
+		un := []Unresolved{{
+			Value: value,
+			Kind:  kindZone,
+			Reason: "no forwarding entry in the snapshot covers this address, so the device " +
+				"would not forward it and no zone applies",
+		}}
+		if snap, ok := loc.(*ZoneSnapshot); ok {
+			for _, iface := range snap.UnroutedInterfaces() {
+				un = append(un, Unresolved{
+					Value: iface,
+					Kind:  kindZone,
+					Reason: "a forwarding entry leaves by interface " + iface +
+						", which is in no zone, so nothing it covers can be placed",
+				})
+			}
+		}
+		return nil, un, true
+	}
+
+	var un []Unresolved
+	// A zone belongs to one vsys. A snapshot covers the whole firewall, so on a
+	// multi-vsys device it carries zones this scope cannot see.
+	placements, dropped := keepVsys(placements, r.scope)
+	if dropped > 0 {
+		un = append(un, Unresolved{
+			Value: value,
+			Kind:  kindZone,
+			Reason: fmt.Sprintf(
+				"%d placement(s) in the snapshot belong to another vsys and were left out, "+
+					"because a zone is visible only inside the vsys that defines it", dropped),
+		})
+	}
+	if len(placements) == 0 {
+		return nil, append(un, Unresolved{
+			Value: value,
+			Kind:  kindZone,
+			Reason: "the snapshot places this address, but only in a vsys other than " +
+				r.scope.String(),
+		}), true
+	}
+
+	hits := make([]Hit, 0, len(placements))
+	for _, p := range placements {
+		hits = append(hits, Hit{
+			Name:  p.Zone,
+			Kind:  kindZone,
+			Scope: r.scope,
+			Via:   p.Interface + " via " + p.Router + " " + p.Route,
+		})
+	}
+
+	// Several routers can cover one address, and which applies depends on the
+	// interface the packet arrived on. Reporting one of them as the answer would be
+	// a guess.
+	if routers := distinctRouters(placements); len(routers) > 1 {
+		un = append(un, Unresolved{
+			Value: value,
+			Kind:  kindZone,
+			Reason: "this address is covered by more than one logical router (" +
+				strings.Join(routers, ", ") + "), and which applies depends on the " +
+				"interface the packet arrives on, so every zone is reported and none is " +
+				"chosen",
+		})
+	}
+	return hits, un, true
+}
+
+// keepVsys drops placements from another vsys, and reports how many.
+//
+// A device group scope keeps everything: a snapshot comes from one firewall, and which
+// vsys of it a device group corresponds to is not knowable from here.
+func keepVsys(ps []ZonePlacement, sc config.Scope) ([]ZonePlacement, int) {
+	if sc.Sort != config.ScopeVsys {
+		return ps, 0
+	}
+	want := strings.TrimPrefix(sc.Name, "vsys")
+	out := ps[:0:0]
+	dropped := 0
+	for _, p := range ps {
+		// An unlabelled placement is kept: saying nothing is not the same as saying
+		// another vsys.
+		if p.Vsys == "" || p.Vsys == want {
+			out = append(out, p)
+			continue
+		}
+		dropped++
+	}
+	return out, dropped
+}
+
+func distinctRouters(ps []ZonePlacement) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, p := range ps {
+		if p.Router == "" || seen[p.Router] {
+			continue
+		}
+		seen[p.Router] = true
+		out = append(out, p.Router)
+	}
+	sort.Strings(out)
+	return out
 }
 
 func (r *zoneResolver) limitsCopy() []Unresolved {

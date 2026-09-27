@@ -89,9 +89,11 @@ already answers it.
   documentation-derived and labelled as such.
 - **A service group spells its membership `members`**, an address group `static`,
   a local user group `user`. All three are read in `resolve.objectValue`.
-- **Zone placement is an inference**, not a reading. It reports every limit: a zone
-  with no interface, an interface in no zone, a virtual router learning routes at
-  runtime, and an address no route covers.
+- **Zone placement has two sources.** With a `ZoneSnapshot` in `Providers` it reads
+  the device's own forwarding table and is authoritative. Without one it infers from
+  the configuration, reports that it did, and reports every limit: a zone with no
+  interface, an interface in no zone, a virtual router learning routes at runtime, and
+  an address no route covers. See [providers](providers.md).
 
 ## Adding a value space
 
@@ -128,6 +130,8 @@ type UserDirectory interface{ ... }
 type UserSnapshot struct{ ... }
 type View struct{ ... }
 type ZoneLocator interface{ ... }
+type ZonePlacement struct{ ... }
+type ZoneSnapshot struct{ ... }
 
 func (f Field) String() string
 func (i *Index) Candidates(f Field, value string) (*roaring.Bitmap, Report)
@@ -157,11 +161,17 @@ func (in *Interner) Lookup(name string) (uint32, bool)
 func (in *Interner) Name(id uint32) string
 func (s *UserSnapshot) GroupsOf(user string) []string
 func (s *UserSnapshot) Stale() (string, bool)
+func (s *ZoneSnapshot) Describe() string
+func (s *ZoneSnapshot) Routers() []string
+func (s *ZoneSnapshot) UnroutedInterfaces() []string
+func (s *ZoneSnapshot) ZonesOf(addr netip.Addr) []ZonePlacement
 func (u Unresolved) String() string
 func (v *View) Candidates(f Field, value string) (*roaring.Bitmap, Report)
 func For(cfg *config.Config, sc config.Scope) (*Index, error)
 func LoadUserSnapshot(r io.Reader) (*UserSnapshot, error)
+func LoadZoneSnapshot(r io.Reader) (*ZoneSnapshot, error)
 func NewInterner() *Interner
+func NewZoneSnapshot(takenAt time.Time, source string, interfaces, fib io.Reader) (*ZoneSnapshot, error)
 ```
 <!-- /GENERATED:api -->
 

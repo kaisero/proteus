@@ -23,6 +23,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   application filter or container is reported rather than guessed: it selects predefined
   applications by category, risk and behaviour, and that metadata is in the content
   database a firewall downloads, not in its configuration.
+- **Place an address in a zone from the firewall's own forwarding table.** Capture
+  `show interface all` and `show advanced-routing fib` into a snapshot, hand it to the
+  library through `Providers{Zones: …}`, and a zone answer comes from what the device
+  is doing rather than from what its configuration says. Each answer names the
+  interface, the logical router and the route that decided it. Point `PANOS_ZONES` at
+  the file, or capture one with `scripts/capture-zones.sh`.
+- **A snapshot is authoritative, and a configuration answer says that it is.** Where a
+  snapshot places nothing, the configuration is not consulted instead. Where no
+  snapshot is supplied the configuration still answers, and reports that it is an
+  inference: on a lab firewall the configuration held one static route where the device
+  held 25, and the two disagreed about the default route.
+- **Several routers covering one address are all reported.** Which applies depends on
+  the interface a packet arrives on, so every zone is named and none is chosen.
 - **Ask which zone an address would arrive on.** `reaches ... from 10.1.0.50` reads the
   configuration as a small routing table — interface addresses and static routes, mapped
   through each interface to the zone holding it, longest prefix winning — and reports the
