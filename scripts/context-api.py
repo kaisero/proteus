@@ -35,7 +35,7 @@ def api_of(pkg: str) -> str:
     # that includes methods.
     types = sorted(l.rstrip() for l in go_doc("-short", pkg).splitlines()
                    if l.startswith("type "))
-    funcs = sorted(l.rstrip() for l in go_doc("-all", "-short", pkg).splitlines()
+    funcs = sorted(l.rstrip() for l in go_doc("-all", pkg).splitlines()
                    if l.startswith("func "))
     body = ["```go"]
     body += types

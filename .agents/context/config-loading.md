@@ -66,8 +66,14 @@ Before that caching, `Load` cost 41.8 ms and `Walk` 15.2 ms; after, 0.12 ms and
 - **`KindContainer(kind)` / `KindContainers(kind)`** — where a kind sits under a
   scope. Most kinds are direct children; a custom URL category and every security
   profile live under `profiles/`.
-- **`Walk(fn)`** — every reference field in the file, scoped, with the candidate
-  kinds the schema allows.
+- **`WalkPaths(fn)`** — every reference value in the file, scoped, each located by
+  its path below the entry that holds it (`profile-setting/group`, `log-setting`),
+  with the candidate kinds the schema allows for that leaf alone. This is the walk
+  to use.
+- **`Walk(fn)`** — the older walk, kept for callers that have not moved. It sees
+  only `entry/<field>/member`, which is 397 of the firewall schema's 1,991
+  reference leaves, and reports a field's candidates merged across everything
+  below it.
 
 ### Ambiguous kind names
 
@@ -116,6 +122,7 @@ func (c *Config) Platform() Platform
 func (c *Config) Root() *Element
 func (c *Config) Version() string
 func (c *Config) Walk(fn func(Event) bool) error
+func (c *Config) WalkPaths(fn func(Event) bool) error
 func (e *Element) Attr(name string) string
 func (e *Element) Child(name string) *Element
 func (e *Element) ChildrenNamed(name string) []*Element
@@ -148,6 +155,18 @@ func ParseScope(s string) (Scope, error)
   computed expression and misfiled 1,561 conditional references; the other treated
   every `#myentry(` anchor as a template variable and discarded 1,413 scope-relative
   object references, every zone target among them.
+- **A named choice or union owns a path segment; an anonymous one does not.**
+  `Fields()` flattens both, which is right for the grammar and wrong for the file:
+  `profile-setting` is a named union and a real element, so flattening it leaves a
+  path that matches nothing. `PathFields` flattens only the anonymous ones. The
+  firewall schema has 358 named and 325 anonymous.
+- **Stop at a nested entry array by kind, never by element name.** An element named
+  `entry` is not always an entry list: `prefix-list` holds
+  `<prefix><entry><network/></entry></prefix>`, where `entry` has no name attribute
+  and is a plain sequence. Attributing on the name puts the edge on the wrong object.
+- **A reference value is always an element's text.** A member list needs no special
+  case — its path ends at `member` and the descent visits each `<member>` sibling in
+  turn. Reading `Members()` instead silently drops every scalar reference.
 - **The element tree peaks near ten times the file size.** A 200 MB export implies
   roughly 2 GB. Streaming per device group is not yet designed.
 

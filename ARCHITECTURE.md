@@ -135,7 +135,7 @@ detail and the measurements.
 - **Shapes are deduplicated on both sides.** Entry arrays and inline sequences
   alike, which takes the Panorama package from 4,438 type declarations to 2,891.
 - **Everything immutable is computed once.** The schema digest is decoded once per
-  process and the reference table built alongside it; a configuration is parsed
+  process and the reference tables built alongside it; a configuration is parsed
   once by `Load`; an index is built once per scope. Recomputing these per query
   cost 18.7 ms to build one index on a 41 KB file, against 0.023 ms now.
 

@@ -118,8 +118,9 @@ func platformOf(root *Element) Platform {
 // Neither depends on a configuration file, so both are computed once per process
 // and shared by every Config that uses that schema.
 type loadedSchema struct {
-	root *schema.Node
-	refs refTable
+	root  *schema.Node
+	refs  refTable
+	paths pathTable
 }
 
 var (
@@ -146,7 +147,7 @@ func loadDigest(version string, platform Platform) (*loadedSchema, error) {
 	if err != nil {
 		return nil, fmt.Errorf("config: read digest %s: %w", name, err)
 	}
-	ls := &loadedSchema{root: d.Root, refs: buildRefTable(d.Root)}
+	ls := &loadedSchema{root: d.Root, refs: buildRefTable(d.Root), paths: buildPathTable(d.Root)}
 	schemaCache[name] = ls
 	return ls, nil
 }

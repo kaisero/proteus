@@ -1,0 +1,82 @@
+<config version="11.2.0" urldb="paloaltonetworks" detail-version="11.2.5">
+  <shared/>
+  <devices>
+    <entry name="localhost.localdomain">
+      <network>
+        <routing-profile>
+          <filters>
+            <prefix-list>
+              <entry name="reject-default">
+                <type>
+                  <ipv4>
+                    <ipv4-entry>
+                      <entry name="10">
+                        <action>deny</action>
+                        <!-- <entry> here is a bare sequence, not an entry list: it
+                             carries no name attribute. The edge belongs to ipv4-entry/10. -->
+                        <prefix><entry><network>0.0.0.0/0</network></entry></prefix>
+                      </entry>
+                    </ipv4-entry>
+                  </ipv4>
+                </type>
+              </entry>
+            </prefix-list>
+          </filters>
+        </routing-profile>
+      </network>
+      <vsys>
+        <entry name="vsys1">
+          <tag><entry name="edge"/></tag>
+          <schedule><entry name="off-hours"/></schedule>
+          <log-settings>
+            <profiles><entry name="to-siem"/></profiles>
+          </log-settings>
+          <profile-group>
+            <entry name="baseline">
+              <url-filtering><member>strict-url</member></url-filtering>
+            </entry>
+          </profile-group>
+          <profiles>
+            <url-filtering><entry name="strict-url"><block><member>malware</member></block></entry></url-filtering>
+            <file-blocking><entry name="no-exe"><rules/></entry></file-blocking>
+          </profiles>
+          <rulebase>
+            <security>
+              <rules>
+                <!-- A profile group: profile-setting is a named union, so the leaf
+                     sits at profile-setting/group/member. -->
+                <entry name="by-group">
+                  <source><member>any</member></source>
+                  <destination><member>any</member></destination>
+                  <application><member>any</member></application>
+                  <service><member>application-default</member></service>
+                  <profile-setting><group><member>baseline</member></group></profile-setting>
+                  <log-setting>to-siem</log-setting>
+                  <action>allow</action>
+                </entry>
+                <!-- Named profiles, four levels down, plus three scalar leaves. -->
+                <entry name="by-profiles">
+                  <source><member>any</member></source>
+                  <destination><member>any</member></destination>
+                  <application><member>any</member></application>
+                  <service><member>application-default</member></service>
+                  <profile-setting>
+                    <profiles>
+                      <url-filtering><member>strict-url</member></url-filtering>
+                      <file-blocking><member>no-exe</member></file-blocking>
+                    </profiles>
+                  </profile-setting>
+                  <schedule>off-hours</schedule>
+                  <group-tag>edge</group-tag>
+                  <log-setting>to-siem</log-setting>
+                  <tag><member>edge</member></tag>
+                  <action>allow</action>
+                </entry>
+              </rules>
+            </security>
+          </rulebase>
+        </entry>
+      </vsys>
+    </entry>
+  </devices>
+</config>

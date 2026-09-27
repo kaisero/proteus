@@ -32,7 +32,8 @@ type Event struct {
 	Scope      Scope
 	EntryPath  string   // instance path, with entry names
 	SchemaPath string   // the schema path of the containing array
-	Field      string   // source, destination, tag, ...
+	Field      string   // source, destination, tag, ... or a path: profile-setting/group/member
+	Path       []string // the field's path below the entry, nil from Walk
 	Values     []string // the members, keywords already removed
 	Candidates []string // the object kinds the schema allows for this field
 }

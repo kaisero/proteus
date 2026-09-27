@@ -32,3 +32,26 @@ func BenchmarkBuildRefTable(b *testing.B) {
 		_ = buildRefTable(cfg.schema.root)
 	}
 }
+
+// WalkPaths sees every reference shape and Walk sees one, yet on a large file it
+// is the faster of the two: Walk rebuilds the entry's instance path for every
+// value it emits, and WalkPaths builds it once per entry.
+func BenchmarkWalkPaths(b *testing.B) {
+	cfg, _, err := Load("../testdata/config/panorama-lab.xml")
+	if err != nil {
+		b.Fatal(err)
+	}
+	for b.Loop() {
+		_ = cfg.WalkPaths(func(Event) bool { return true })
+	}
+}
+
+func BenchmarkBuildPathTable(b *testing.B) {
+	cfg, _, err := Load("../testdata/config/panorama-lab.xml")
+	if err != nil {
+		b.Fatal(err)
+	}
+	for b.Loop() {
+		_ = buildPathTable(cfg.schema.root)
+	}
+}
