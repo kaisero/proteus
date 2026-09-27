@@ -227,3 +227,98 @@ func TestObjectsReadsServiceGroupMembers(t *testing.T) {
 		}
 	}
 }
+
+// ObjectsAt names the container, for the kinds whose name is ambiguous. Reading "user"
+// by name alone finds a different array from the local user database, and the mistake
+// is invisible in the result.
+func TestObjectsAtReadsAnExplicitContainer(t *testing.T) {
+	cfg := loadT(t, "../testdata/config/firewall-users.xml")
+	sc := config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}
+
+	local, err := ObjectsAt(cfg, sc, "user", []string{"local-user-database", "user"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	names := map[string]bool{}
+	for _, o := range local {
+		names[o.Name] = true
+	}
+	for _, want := range []string{"alice", "bob"} {
+		if !names[want] {
+			t.Errorf("%s not found in the local user database: %v", want, names)
+		}
+	}
+
+	// The guessed container finds none of them, which is why the explicit form exists.
+	guessed, err := ObjectsInScope(cfg, sc, "user")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(guessed) != 0 {
+		t.Errorf("the guessed container returned %d objects; the fixture no longer shows the problem", len(guessed))
+	}
+}
+
+// A local user group spells its membership "user", where an address group says "static"
+// and a service group says "members".
+func TestObjectsReadsUserGroupMembers(t *testing.T) {
+	cfg := loadT(t, "../testdata/config/firewall-users.xml")
+	sc := config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}
+
+	groups, err := ObjectsInScope(cfg, sc, "user-group")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(groups) != 1 {
+		t.Fatalf("got %d user groups, want 1", len(groups))
+	}
+	if !strings.Contains(groups[0].Value, "alice") {
+		t.Errorf("value = %q, want it to hold the member", groups[0].Value)
+	}
+}
+
+// One value identifies an object, and PAN-OS spells it differently for each kind. All
+// the forms have to be read, or an object looks valueless and drops out of every
+// lookup that works on values.
+func TestObjectValueReadsEveryForm(t *testing.T) {
+	cfg := loadT(t, "../testdata/config/firewall-urlcat-edge.xml")
+	sc := config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}
+
+	addrs, err := ObjectsInScope(cfg, sc, "address")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]string{}
+	for _, o := range addrs {
+		got[o.Name] = o.Value
+	}
+	if got["wild-host"] != "10.0.0.0/0.0.255.255" {
+		t.Errorf("ip-wildcard value = %q", got["wild-host"])
+	}
+	if got["tagged-host"] != "10.1.1.1/32" {
+		t.Errorf("ip-netmask value = %q", got["tagged-host"])
+	}
+
+	groups, err := ObjectsInScope(cfg, sc, "address-group")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, g := range groups {
+		if g.Name == "dyn-grp" && g.Value != "'prod'" {
+			t.Errorf("a dynamic group's value should be its filter, got %q", g.Value)
+		}
+	}
+}
+
+// A scope whose inheritance chain cannot be built is reported, by both readers.
+func TestObjectReadersReportABrokenHierarchy(t *testing.T) {
+	cfg := loadT(t, "../testdata/config/panorama-cycle.xml")
+	sc := config.Scope{Sort: config.ScopeDeviceGroup, Name: "dg1"}
+
+	if _, err := ObjectsInScope(cfg, sc, "address"); err == nil {
+		t.Error("ObjectsInScope did not report a cyclic hierarchy")
+	}
+	if _, err := ObjectsAt(cfg, sc, "user", []string{"local-user-database", "user"}); err == nil {
+		t.Error("ObjectsAt did not report a cyclic hierarchy")
+	}
+}

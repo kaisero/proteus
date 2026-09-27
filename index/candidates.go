@@ -66,6 +66,13 @@ func (v *View) Candidates(f Field, value string) (*roaring.Bitmap, Report) {
 		out.Or(anyRules)
 	}
 
+	// Two value spaces can find the same thing. A user belonging to a local group that
+	// a directory also reports is the plain case: the answer is one membership, not
+	// two, and a report that lists it twice invites a reader to think otherwise.
+	rep.Hits = dedupeHits(rep.Hits)
+	rep.Groups = dedupeStrings(rep.Groups)
+	rep.Unresolved = dedupeUnresolved(rep.Unresolved)
+
 	// A value nothing recognised is an incomplete answer. A value that was
 	// recognised and matched nothing is a complete one, even with no hits: a URL
 	// belonging to no category really does reach only the any-rules.
@@ -101,6 +108,54 @@ func (i *Index) CandidatesForPrefix(f Field, p netip.Prefix) *roaring.Bitmap {
 func (i *Index) CandidatesForName(f Field, name string) *roaring.Bitmap {
 	b, _ := i.Candidates(f, name)
 	return b
+}
+
+func dedupeHits(in []Hit) []Hit {
+	if len(in) < 2 {
+		return in
+	}
+	seen := make(map[Hit]bool, len(in))
+	out := in[:0:0]
+	for _, h := range in {
+		if seen[h] {
+			continue
+		}
+		seen[h] = true
+		out = append(out, h)
+	}
+	return out
+}
+
+func dedupeStrings(in []string) []string {
+	if len(in) < 2 {
+		return in
+	}
+	seen := make(map[string]bool, len(in))
+	out := in[:0:0]
+	for _, s := range in {
+		if seen[s] {
+			continue
+		}
+		seen[s] = true
+		out = append(out, s)
+	}
+	return out
+}
+
+func dedupeUnresolved(in []Unresolved) []Unresolved {
+	if len(in) < 2 {
+		return in
+	}
+	seen := make(map[Unresolved]bool, len(in))
+	out := in[:0:0]
+	for _, u := range in {
+		if seen[u] {
+			continue
+		}
+		seen[u] = true
+		out = append(out, u)
+	}
+	return out
 }
 
 // reach returns the interned ids a name reaches: the name itself and every group

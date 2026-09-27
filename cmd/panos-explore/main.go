@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"net/netip"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -88,6 +89,9 @@ func usage() {
 A scope is shared, vsys:<name> or dg:<name>.
 A field is source, destination, category, application, service, from, to,
 source-user or tag.
+
+Set PANOS_USERS to a user snapshot in JSON form to resolve directory groups:
+  {"taken_at":"2026-09-27T12:00:00Z","groups":{"alice":["engineering"]}}
 `)
 	os.Exit(2)
 }
@@ -435,7 +439,8 @@ func cmdReaches(cfg *config.Config, args []string) error {
 	value := args[2]
 	fmt.Printf("which rules could %s match %s, in %s\n\n", field, value, sc)
 
-	rules, rep := idx.Candidates(field, value)
+	view := idx.With(providers())
+	rules, rep := view.Candidates(field, value)
 	warn(rep.Unresolved)
 	explain(rep)
 
@@ -507,6 +512,34 @@ func cmdUses(cfg *config.Config, args []string) error {
 		fmt.Println("match is not derivable from the configuration, so no verdict is given here.")
 	}
 	return nil
+}
+
+// providers reads the external data files named by the environment, so a lookup that
+// needs facts a configuration does not hold can have them.
+//
+// The library never fetches anything itself, so the caller is what turns a User-ID
+// mapping into a file. PANOS_USERS names a snapshot in the library's JSON format.
+func providers() index.Providers {
+	var p index.Providers
+	path := os.Getenv("PANOS_USERS")
+	if path == "" {
+		return p
+	}
+	// The path comes from this operator's own environment, and the file is only read.
+	f, err := os.Open(filepath.Clean(path)) //nolint:gosec // operator-supplied path, read only
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "warning: cannot read PANOS_USERS %s: %v\n", path, err)
+		return p
+	}
+	defer func() { _ = f.Close() }()
+	snap, err := index.LoadUserSnapshot(f)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "warning: %v\n", err)
+		return p
+	}
+	fmt.Printf("using user snapshot %s, taken %s\n", path, snap.TakenAt.Format(time.RFC3339))
+	p.Users = snap
+	return p
 }
 
 // fieldByName reads a field name as the library spells it.

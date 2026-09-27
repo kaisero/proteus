@@ -4,6 +4,13 @@
     <entry name="localhost.localdomain">
       <vsys>
         <entry name="vsys1">
+          <address>
+            <entry name="wild-host"><ip-wildcard>10.0.0.0/0.0.255.255</ip-wildcard></entry>
+            <entry name="tagged-host"><ip-netmask>10.1.1.1/32</ip-netmask><tag><member>prod</member></tag></entry>
+          </address>
+          <address-group>
+            <entry name="dyn-grp"><dynamic><filter>'prod'</filter></dynamic></entry>
+          </address-group>
           <service>
             <entry name="svc-ok"><protocol><tcp><port>443</port></tcp></protocol></entry>
             <entry name="svc-reversed"><protocol><tcp><port>9000-8000</port></tcp></protocol></entry>

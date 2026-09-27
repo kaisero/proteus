@@ -40,7 +40,7 @@ func GroupInScope(cfg *config.Config, sc config.Scope, name string) (Members, er
 }
 
 func resolveGroup(cfg *config.Config, chain []config.Scope, name string) (Members, error) {
-	groups := objectsInChain(cfg, chain, "address-group")
+	groups := objectsInChain(cfg, chain, "address-group", nil)
 	var target *Object
 	for i := range groups {
 		if groups[i].Name == name {
@@ -73,7 +73,7 @@ func resolveGroup(cfg *config.Config, chain []config.Scope, name string) (Member
 		out.FilterError = err.Error()
 		return out, nil
 	}
-	for _, a := range objectsInChain(cfg, chain, "address") {
+	for _, a := range objectsInChain(cfg, chain, "address", nil) {
 		if filter.Match(a.Tags) {
 			out.ByTag = append(out.ByTag, a.Name)
 		}

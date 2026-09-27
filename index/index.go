@@ -115,12 +115,27 @@ func build(cfg *config.Config, sc config.Scope) (*Index, error) {
 	if err != nil {
 		return nil, err
 	}
+	// "user" is ambiguous in the schema, so the container is named rather than
+	// guessed: a vsys has both a local user database and a separate user array.
+	localUsers, err := resolve.ObjectsAt(cfg, sc, "user", []string{"local-user-database", "user"})
+	if err != nil {
+		return nil, err
+	}
+	userGroups, err := resolve.ObjectsInScope(cfg, sc, "user-group")
+	if err != nil {
+		return nil, err
+	}
+	dynUsers, err := resolve.ObjectsInScope(cfg, sc, "dynamic-user-group")
+	if err != nil {
+		return nil, err
+	}
 
 	byKind := map[string]resolver{}
 	for _, r := range []resolver{
 		newAddressResolver(addrs, ri),
 		newURLResolver(cats),
 		newServiceResolver(svcs, ri),
+		newUserResolver(localUsers, userGroups, dynUsers),
 	} {
 		for _, k := range r.kinds() {
 			byKind[k] = r

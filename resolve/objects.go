@@ -23,7 +23,7 @@ type Object struct {
 // Objects returns the objects of one kind visible to the target, with a
 // descendant definition shadowing an ancestor's of the same name.
 func (t *Target) Objects(kind string) ([]Object, error) {
-	return objectsInChain(t.cfg, t.Chain(), kind), nil
+	return objectsInChain(t.cfg, t.Chain(), kind, nil), nil
 }
 
 // ObjectsInScope returns the objects of one kind visible in a scope and its
@@ -33,7 +33,21 @@ func ObjectsInScope(cfg *config.Config, sc config.Scope, kind string) ([]Object,
 	if err != nil {
 		return nil, err
 	}
-	return objectsInChain(cfg, chain, kind), nil
+	return objectsInChain(cfg, chain, kind, nil), nil
+}
+
+// ObjectsAt reads a kind from an explicit container path, for the kinds whose name
+// appears in more than one place under a scope.
+//
+// "user" is the example: the schema puts a user array both at local-user-database/user
+// and directly under a vsys, and they are different things. A caller that means one of
+// them has to say which.
+func ObjectsAt(cfg *config.Config, sc config.Scope, kind string, within []string) ([]Object, error) {
+	chain, err := chainFor(cfg, sc)
+	if err != nil {
+		return nil, err
+	}
+	return objectsInChain(cfg, chain, kind, within), nil
 }
 
 // chainFor returns the scopes a scope inherits from, shared first.
@@ -54,11 +68,14 @@ func chainFor(cfg *config.Config, sc config.Scope) ([]config.Scope, error) {
 
 // objectsInChain walks the chain root to leaf, so a later definition replaces an
 // earlier one and the replacement is recorded.
-func objectsInChain(cfg *config.Config, chain []config.Scope, kind string) []Object {
+func objectsInChain(cfg *config.Config, chain []config.Scope, kind string, within []string) []Object {
 	// Where a kind sits under a scope comes from the schema: most are direct
 	// children, but a custom URL category and every security profile live under
-	// profiles/.
-	within := cfg.KindContainer(kind)
+	// profiles/. A caller may name the path instead, for a kind whose name is
+	// ambiguous.
+	if within == nil {
+		within = cfg.KindContainer(kind)
+	}
 	if within == nil {
 		within = []string{kind}
 	}
@@ -154,6 +171,10 @@ func objectValue(e *config.Element) string {
 	}
 	// A service group spells its membership "members", not "static".
 	if m := e.Child("members").Members(); len(m) > 0 {
+		return strings.Join(m, ", ")
+	}
+	// A local user group spells its membership "user".
+	if m := e.Child("user").Members(); len(m) > 0 {
 		return strings.Join(m, ", ")
 	}
 	if v := e.Child("dynamic").Child("filter").TextOr(""); v != "" {

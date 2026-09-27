@@ -202,16 +202,37 @@ var scopeAnchors = []string{
 // array, as element names.
 //
 // Most kinds sit directly under the scope, so address returns ["address"]. Some do
-// not: a custom URL category lives at profiles/custom-url-category, and so does
-// every security profile. The path comes from the schema rather than a list kept
-// here, so a kind added later needs no code change.
+// not: a custom URL category lives at profiles/custom-url-category, and so does every
+// security profile. The path comes from the schema rather than a list kept here, so a
+// kind added later needs no code change.
+//
+// A few kind names appear in more than one place under a scope, and this returns the
+// shallowest, which is a guess. "user" is one: the schema has both
+// local-user-database/user and a separate user array under a vsys, and they are
+// different things. Use KindContainers and choose when the kind might be ambiguous.
 //
 // It returns nil for a kind the schema does not place under any scope.
 func (c *Config) KindContainer(kind string) []string {
+	all := c.KindContainers(kind)
+	if len(all) == 0 {
+		return nil
+	}
+	return all[0]
+}
+
+// KindContainers returns every path under a scope at which a kind's entry array
+// appears, shallowest first and then alphabetically.
+//
+// More than one means the name is ambiguous and the caller has to choose. Returning
+// only the first would be a silent wrong answer, which is exactly what it was before
+// this existed: asking for "user" gave a vsys-level user array rather than the local
+// user database, and the difference is not visible in the result.
+func (c *Config) KindContainers(kind string) [][]string {
 	if kind == "" {
 		return nil
 	}
-	best := []string{}
+	var out [][]string
+	seen := map[string]bool{}
 	for _, arr := range schema.EntryTypes(c.schema.root) {
 		path := arr.Path()
 		if !strings.HasSuffix(path, "/"+kind) {
@@ -224,16 +245,20 @@ func (c *Config) KindContainer(kind string) []string {
 				// object, not a kind the scope holds directly.
 				continue
 			}
-			parts := strings.Split(rest, "/")
-			if len(best) == 0 || len(parts) < len(best) {
-				best = parts
+			if seen[rest] {
+				continue
 			}
+			seen[rest] = true
+			out = append(out, strings.Split(rest, "/"))
 		}
 	}
-	if len(best) == 0 {
-		return nil
-	}
-	return best
+	sort.Slice(out, func(a, b int) bool {
+		if len(out[a]) != len(out[b]) {
+			return len(out[a]) < len(out[b])
+		}
+		return strings.Join(out[a], "/") < strings.Join(out[b], "/")
+	})
+	return out
 }
 
 func cutPrefix(s, prefix string) (string, bool) {

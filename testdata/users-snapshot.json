@@ -1,0 +1,8 @@
+{
+  "taken_at": "2026-09-27T12:00:00Z",
+  "source": "User-ID on a lab firewall",
+  "groups": {
+    "alice": ["local-admins", "engineering"],
+    "ACME\\carol": ["engineering"]
+  }
+}

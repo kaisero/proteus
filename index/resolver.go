@@ -80,6 +80,13 @@ type UserDirectory interface {
 	GroupsOf(user string) []string
 }
 
+// A StaleReporter is a provider that knows its data may be out of date. A lookup asks,
+// and passes the answer on rather than trusting the data silently. UserSnapshot
+// implements it.
+type StaleReporter interface {
+	Stale() (reason string, stale bool)
+}
+
 // ZoneLocator maps an address to the zones it can arrive on.
 type ZoneLocator interface {
 	ZonesOf(addr netip.Addr) []string

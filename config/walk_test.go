@@ -230,3 +230,53 @@ func TestKindContainerComesFromTheSchema(t *testing.T) {
 		t.Errorf("KindContainer of an empty kind = %v, want nil", got)
 	}
 }
+
+// A kind name can appear at more than one place under a scope, and "user" does: the
+// schema has a local user database and a separate user array under a vsys, and they are
+// different things. KindContainer returns the shallowest, which for this kind is the
+// wrong one, so a caller that might hit an ambiguous kind has to look at all of them.
+func TestKindContainersReportsAmbiguity(t *testing.T) {
+	cfg, _, err := Load("../testdata/config/firewall-users.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	all := cfg.KindContainers("user")
+	if len(all) < 2 {
+		t.Fatalf("user should be ambiguous, got %v", all)
+	}
+	var found bool
+	for _, p := range all {
+		if strings.Join(p, "/") == "local-user-database/user" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("the local user database is not among the candidates: %v", all)
+	}
+	// Shallowest first, so the ordering is stable for callers that accept the guess.
+	for i := 1; i < len(all); i++ {
+		if len(all[i-1]) > len(all[i]) {
+			t.Errorf("candidates are not ordered shallowest first: %v", all)
+		}
+	}
+	// Ambiguity is not rare. Two containers can sit at the same depth, and then the
+	// order is alphabetical so it stays stable: an anti-spyware profile lives under
+	// profiles/ while a custom spyware signature lives under threats/.
+	spyware := cfg.KindContainers("spyware")
+	if len(spyware) != 2 {
+		t.Fatalf("spyware candidates = %v, want two", spyware)
+	}
+	if strings.Join(spyware[0], "/") != "profiles/spyware" ||
+		strings.Join(spyware[1], "/") != "threats/spyware" {
+		t.Errorf("same-depth candidates are not in alphabetical order: %v", spyware)
+	}
+
+	// An unambiguous kind has exactly one.
+	if got := cfg.KindContainers("address"); len(got) != 1 {
+		t.Errorf("address candidates = %v, want one", got)
+	}
+	if got := cfg.KindContainers(""); got != nil {
+		t.Errorf("an empty kind gave %v, want nil", got)
+	}
+}

@@ -17,6 +17,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   there, so a field that accepts an address, a region and an external list is asked
   of each rather than treated as an address field. Addresses answer exactly as
   before; other value spaces arrive behind the same seam.
+- **Ask which rules a user reaches, with group membership from outside the file.**
+  `reaches ... source-user alice` finds the local user, the local groups holding it and
+  the rules naming either. Supply a user snapshot and the directory groups are added
+  too. Without one the answer says that only the local database was searched, and a
+  dynamic user group is always reported rather than matched, because User-ID fills it in
+  at runtime.
+- **A user snapshot format, defined by the library and fetched by the caller.**
+  A small JSON file of user-to-group mappings with the time it was taken. A snapshot
+  older than a day is reported on every lookup that used it, because a mapping read
+  days ago can place a user in a group they have since left. Point `PANOS_USERS` at one.
 - **Ask which rules a port reaches.** `reaches ... service tcp/8006` reports the
   service objects covering that port, the groups holding them and the rules naming
   either. Port ranges are matched as ranges, a bare `443` matches whichever protocol
