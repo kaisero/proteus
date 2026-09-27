@@ -125,6 +125,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Four fifths of the configuration's reference edges were never read.** The walk
+  recognised one shape, `entry/<field>/member`, which is 397 of the firewall schema's
+  1,991 reference leaves and 834 of Panorama's 4,524. Three things were missed: a
+  value that is an element's text rather than a member, such as a rule's
+  `log-setting` or `schedule`; a leaf below the first level, such as
+  `profile-setting/profiles/url-filtering/member`; and anything under a named choice
+  or union, because those were flattened away with the anonymous ones although they
+  are real elements — the firewall schema has 358 of them. A security rule declares
+  30 reference leaves and 16 were seen, so asking what used a rule's profile group,
+  file-blocking profile or log-forwarding profile answered that nothing did.
+  `Walk` is superseded by `WalkPaths`, which locates every leaf by its path below
+  the entry and finds half again as many edges on a 29 MB Panorama configuration —
+  in 109 ms against the old walk's 183 ms, because the entry's instance path is now
+  built once per entry rather than once per value.
+
 - **Two code comments carried a stale field census.** The scope-relative classifier
   fix changed the counts and the comments were not updated: a Panorama schema has
   2,961 reference fields, 1,034 of which declare more than one candidate kind, and

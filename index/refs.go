@@ -26,7 +26,7 @@ type refsIndex struct {
 // index covers. Shared edges are kept too, because every scope inherits shared.
 func newRefsIndex(in *Interner, cfg *config.Config, sc config.Scope) (*refsIndex, error) {
 	r := &refsIndex{byTarget: map[uint32][]Ref{}}
-	err := cfg.Walk(func(e config.Event) bool {
+	err := cfg.WalkPaths(func(e config.Event) bool {
 		if e.Scope != sc && e.Scope.Sort != config.ScopeShared {
 			return true
 		}

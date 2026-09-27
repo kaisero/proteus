@@ -16,7 +16,7 @@ Three packages, dependency order strictly one-way — `config` <- `resolve` <- `
 - **`config`** — the file. `Load(path)` parses the XML into an element tree and
   attaches the schema digest for that PAN-OS version. It answers schema questions:
   which object kinds a field may name (`FieldKinds`), where a kind sits under a
-  scope (`KindContainer`), and every reference edge in the file (`Walk`).
+  scope (`KindContainer`), and every reference edge in the file (`WalkPaths`).
 - **`resolve`** — PAN-OS semantics. Device-group hierarchy, which firewall gets
   which policy, merged rule order, scoped object visibility with shadowing, group
   membership including tag filters, URL pattern parsing, zones and routes.

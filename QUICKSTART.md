@@ -751,9 +751,28 @@ it is a group holding [h-1 h-2 g-inner g-middle]
 The path names the **instance**, not the schema location, so two device groups
 holding an object of the same name stay distinguishable.
 
-`could be` lists the object kinds the schema permits in that field. 919 of 2,420
-reference fields allow more than one, and the widest allows 31. The schema cannot
+`could be` lists the object kinds the schema permits in that field. 1,034 of 2,961
+reference fields allow more than one, and the widest allows 153. The schema cannot
 tell you which kind a given target actually is.
+
+A field is a **path** wherever the reference really is nested, and a plain name
+wherever it is not — `source` stays `source`. That is how a rule's security
+profiles are found, which needs three or four levels and a named union in between:
+
+```bash
+./bin/panos-explore whereused testdata/config/firewall-refpaths.xml vsys:vsys1 baseline
+```
+
+```
+1 reference(s) to "baseline" in vsys:vsys1
+  vsys:vsys1       profile-setting/group /config/devices/localhost.localdomain/vsys/vsys1/rulebase/security/rules/by-group
+                                could be: [profile-group]
+```
+
+Values that are an element's text rather than a member are found the same way, so
+`log-setting`, `schedule` and `group-tag` all resolve. Candidates are the kinds
+declared for that leaf alone: `profile-setting/group` can only be a profile group,
+where a merged field would have offered all eleven kinds `profile-setting` contains.
 
 ## 12. Run the tests
 
