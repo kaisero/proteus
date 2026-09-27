@@ -93,6 +93,24 @@ func (r *urlResolver) resolve(value string, _ Providers) ([]Hit, []Unresolved, b
 // holds a URL itself.
 func (r *urlResolver) literalRules(Field, string) *roaring.Bitmap { return roaring.New() }
 
+// search finds a category by a fragment of one of its members. This is the case the
+// 31-character name limit creates: a long URL cannot be in the name of its category.
+func (r *urlResolver) search(substr string) []Hit {
+	want := strings.ToLower(substr)
+	var out []Hit
+	for value, hits := range r.exact {
+		if strings.Contains(value, want) {
+			out = append(out, hits...)
+		}
+	}
+	for _, p := range r.patterns {
+		if strings.Contains(strings.ToLower(p.pattern.Raw()), want) {
+			out = append(out, p.hit)
+		}
+	}
+	return out
+}
+
 // splitMembers undoes the joining that Object.Value does. A URL cannot contain a
 // space, so the separator is unambiguous here.
 func splitMembers(value string) []string {

@@ -48,6 +48,16 @@ type Rule struct {
 	Layer    Layer
 	Position int // 1-based position in the effective order
 	Fields   map[string][]string
+
+	// ProfileGroups are the security profile groups the rule applies, and Profiles
+	// the individual profiles it names instead, by kind.
+	//
+	// These are not matching fields. A rule matches on addresses, zones,
+	// application and service; its profiles then inspect what the session carries.
+	// They are read so that a caller can see which rules apply a profile that
+	// mentions an object, without being told that the rule therefore matches it.
+	ProfileGroups []string
+	Profiles      map[string][]string
 }
 
 // Rules returns the target's effective policy in evaluation order.
@@ -135,6 +145,9 @@ func readRules(root *config.Element, sc config.Scope, rulebase string, rb Ruleba
 				Disabled: e.Child("disabled").TextOr("") == "yes",
 				Scope:    sc,
 				Fields:   ruleFields(e),
+
+				ProfileGroups: e.Child("profile-setting").Child("group").Members(),
+				Profiles:      memberLists(e.Child("profile-setting").Child("profiles")),
 			})
 		}
 	}
@@ -144,11 +157,24 @@ func readRules(root *config.Element, sc config.Scope, rulebase string, rb Ruleba
 // ruleFields collects every member list on a rule, so a caller sees them all
 // without the generated model.
 func ruleFields(e *config.Element) map[string][]string {
-	out := map[string][]string{}
+	return memberLists(e)
+}
+
+// memberLists collects every child of an element that is a list of members.
+func memberLists(e *config.Element) map[string][]string {
+	if e == nil {
+		return nil
+	}
+	var out map[string][]string
 	for _, f := range e.Children {
-		if m := f.Members(); len(m) > 0 {
-			out[f.Name] = m
+		m := f.Members()
+		if len(m) == 0 {
+			continue
 		}
+		if out == nil {
+			out = map[string][]string{}
+		}
+		out[f.Name] = m
 	}
 	return out
 }
@@ -163,6 +189,6 @@ func RulesForDeviceGroup(cfg *config.Config, dg string, rb Rulebase) ([]Rule, er
 	if err != nil {
 		return nil, err
 	}
-	t := &Target{root: cfg.Root(), deviceGroup: dg, chain: h.Chain(dg)}
+	t := &Target{cfg: cfg, root: cfg.Root(), deviceGroup: dg, chain: h.Chain(dg)}
 	return t.Rules(rb)
 }

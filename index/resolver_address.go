@@ -93,6 +93,26 @@ func (r *addressResolver) overlapping(p netip.Prefix) []Match {
 	return out
 }
 
+// search finds an object by a fragment of its address or FQDN.
+func (r *addressResolver) search(substr string) []Hit {
+	want := strings.ToLower(substr)
+	var out []Hit
+	for p, ms := range r.cidr.table.All() {
+		if !strings.Contains(strings.ToLower(p.String()), want) {
+			continue
+		}
+		for _, m := range ms {
+			out = append(out, Hit{Name: m.Name, Kind: "address", Scope: m.Scope, Via: m.Prefix.String()})
+		}
+	}
+	for value, hits := range r.fqdn {
+		if strings.Contains(value, want) {
+			out = append(out, hits...)
+		}
+	}
+	return out
+}
+
 func (r *addressResolver) hitsOf(ms []Match) []Hit {
 	out := make([]Hit, 0, len(ms))
 	for _, m := range ms {

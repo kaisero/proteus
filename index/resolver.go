@@ -2,6 +2,8 @@ package index
 
 import (
 	"net/netip"
+	"sort"
+	"strings"
 
 	"github.com/RoaringBitmap/roaring/v2"
 
@@ -38,6 +40,14 @@ type resolver interface {
 	// rather than naming an object. Whether a literal matches is as
 	// value-space-specific as whether an object does.
 	literalRules(f Field, value string) *roaring.Bitmap
+
+	// search returns the objects whose value contains the substring, case
+	// insensitively. This is not matching and must never be used for it: PAN-OS
+	// matches a URL by tokens, so "wildcard-example.com" does not cover
+	// "wildcard-example.com.evil.net" even though one contains the other. Searching
+	// answers a human question — where is this value mentioned — and for that,
+	// substring is exactly right.
+	search(substr string) []Hit
 }
 
 // Hit is one object whose value matches a query, with the value that matched.
@@ -104,6 +114,56 @@ type Report struct {
 // five value spaces, not one.
 func (i *Index) resolversFor(f Field) []resolver {
 	return i.resolvers[f]
+}
+
+// SearchValues returns every object whose value contains the substring, case
+// insensitively, across every value space.
+//
+// This is the answer to a name that cannot hold its own value. PAN-OS caps an object
+// name at 31 characters and a custom URL category member at 255, so a long URL cannot
+// appear in the name of the category holding it: searching the values is the only way
+// to find it.
+//
+// It is a search, not a match. Use Candidates to ask what a rule would do.
+func (i *Index) SearchValues(substr string) []Hit {
+	substr = strings.TrimSpace(substr)
+	if substr == "" {
+		return nil
+	}
+	var out []Hit
+	seen := map[Hit]bool{}
+	for _, r := range i.distinctResolvers() {
+		for _, h := range r.search(substr) {
+			if seen[h] {
+				continue
+			}
+			seen[h] = true
+			out = append(out, h)
+		}
+	}
+	sort.Slice(out, func(a, b int) bool {
+		if out[a].Name != out[b].Name {
+			return out[a].Name < out[b].Name
+		}
+		return out[a].Via < out[b].Via
+	})
+	return out
+}
+
+// distinctResolvers returns each resolver once, however many kinds it covers.
+func (i *Index) distinctResolvers() []resolver {
+	var out []resolver
+	seen := map[resolver]bool{}
+	for _, rs := range i.resolvers {
+		for _, r := range rs {
+			if seen[r] {
+				continue
+			}
+			seen[r] = true
+			out = append(out, r)
+		}
+	}
+	return out
 }
 
 // wireResolvers maps each field to the resolvers covering the kinds the schema

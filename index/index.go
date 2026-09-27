@@ -17,6 +17,7 @@ type Index struct {
 	refs      *refsIndex
 	rules     *rulesIndex
 	resolvers map[Field][]resolver
+	profiles  *profileIndex
 }
 
 // Scope returns the scope the index covers.
@@ -114,6 +115,15 @@ func build(cfg *config.Config, sc config.Scope) (*Index, error) {
 		}
 	}
 
+	profs, err := resolve.URLFilteringProfilesInScope(cfg, sc)
+	if err != nil {
+		return nil, err
+	}
+	pgroups, err := resolve.ProfileGroupsInScope(cfg, sc)
+	if err != nil {
+		return nil, err
+	}
+
 	return &Index{
 		scope:     sc,
 		in:        in,
@@ -121,6 +131,7 @@ func build(cfg *config.Config, sc config.Scope) (*Index, error) {
 		refs:      refs,
 		rules:     ri,
 		resolvers: wireResolvers(cfg.FieldKinds("rulebase/security/rules"), byKind),
+		profiles:  newProfileIndex(rules, profs, pgroups),
 	}, nil
 }
 

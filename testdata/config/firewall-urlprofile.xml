@@ -1,0 +1,64 @@
+<config version="11.2.0" urldb="paloaltonetworks" detail-version="11.2.5">
+  <shared/>
+  <devices>
+    <entry name="localhost.localdomain">
+      <vsys>
+        <entry name="vsys1">
+          <profile-group>
+            <entry name="default">
+              <virus><member>default-antivirus</member></virus>
+              <url-filtering><member>default-url-filter</member></url-filtering>
+            </entry>
+          </profile-group>
+          <profiles>
+            <custom-url-category>
+              <entry name="demo-category">
+                <list>
+                  <member>example.com/this/is/a/very/long/url/i/need/to/match</member>
+                  <member>*.flagged.example.com</member>
+                </list>
+                <type>URL List</type>
+              </entry>
+            </custom-url-category>
+            <url-filtering>
+              <entry name="default-url-filter">
+                <alert><member>demo-category</member></alert>
+                <block><member>malware</member></block>
+                <allow><member>any</member></allow>
+              </entry>
+            </url-filtering>
+          </profiles>
+          <rulebase>
+            <security>
+              <rules>
+                <entry name="via-group">
+                  <source><member>any</member></source>
+                  <destination><member>any</member></destination>
+                  <application><member>any</member></application>
+                  <category><member>any</member></category>
+                  <profile-setting><group><member>default</member></group></profile-setting>
+                  <action>allow</action>
+                </entry>
+                <entry name="via-named-profile">
+                  <source><member>any</member></source>
+                  <destination><member>any</member></destination>
+                  <application><member>any</member></application>
+                  <category><member>any</member></category>
+                  <profile-setting><profiles><url-filtering><member>default-url-filter</member></url-filtering></profiles></profile-setting>
+                  <action>allow</action>
+                </entry>
+                <entry name="no-profile">
+                  <source><member>any</member></source>
+                  <destination><member>any</member></destination>
+                  <application><member>any</member></application>
+                  <category><member>any</member></category>
+                  <action>allow</action>
+                </entry>
+              </rules>
+            </security>
+          </rulebase>
+        </entry>
+      </vsys>
+    </entry>
+  </devices>
+</config>

@@ -50,6 +50,10 @@ func main() {
 		err = withConfig(args, 2, cmdLookup)
 	case "reaches":
 		err = withConfig(args, 3, cmdReaches)
+	case "search":
+		err = withConfig(args, 2, cmdSearch)
+	case "uses":
+		err = withConfig(args, 2, cmdUses)
 	case "whereused":
 		err = withConfig(args, 2, cmdWhereUsed)
 	case "simulate":
@@ -75,6 +79,8 @@ func usage() {
   panos-explore target    <config.xml> <serial> <vsys>
   panos-explore lookup    <config.xml> <scope> <value>
   panos-explore reaches   <config.xml> <scope> <field> <value>
+  panos-explore search    <config.xml> <scope> <substring>
+  panos-explore uses      <config.xml> <scope> <category|url>
   panos-explore whereused <config.xml> <scope> <name>
   panos-explore simulate  <config.xml> <scope> <source> <destination>
   panos-explore group     <config.xml> <scope> <name>
@@ -445,6 +451,60 @@ func cmdReaches(cfg *config.Config, args []string) error {
 	}
 	if rep.ViaAny {
 		fmt.Printf("\nsome of those match only because their %s is \"any\"\n", field)
+	}
+	return nil
+}
+
+// cmdSearch finds objects by a fragment of their value, which is the only way to find
+// one whose name cannot hold its own value.
+func cmdSearch(cfg *config.Config, args []string) error {
+	sc, err := config.ParseScope(args[0])
+	if err != nil {
+		return err
+	}
+	idx, err := index.For(cfg, sc)
+	if err != nil {
+		return err
+	}
+	hits := idx.SearchValues(args[1])
+	fmt.Printf("%d object(s) whose value contains %q in %s\n", len(hits), args[1], sc)
+	for _, h := range hits {
+		fmt.Printf("  %-26s %-20s %-10s %s\n", h.Name, h.Kind, h.Scope, h.Via)
+	}
+	if len(hits) > 0 {
+		fmt.Println("\nthis is a search, not a match: use reaches to ask what a rule would do")
+	}
+	return nil
+}
+
+// cmdUses shows which rules apply a security profile that mentions a URL category.
+func cmdUses(cfg *config.Config, args []string) error {
+	sc, err := config.ParseScope(args[0])
+	if err != nil {
+		return err
+	}
+	idx, err := index.For(cfg, sc)
+	if err != nil {
+		return err
+	}
+	uses := idx.ProfileUses(args[1])
+	fmt.Printf("%d profile path(s) reaching %q in %s\n", len(uses), args[1], sc)
+	for _, u := range uses {
+		via := u.Via
+		if via == "" {
+			via = "by name"
+		}
+		group := u.Group
+		if group == "" {
+			group = "-"
+		}
+		fmt.Printf("  rule %-24s pos %-4d group %-14s profile %-22s %-9s %-22s %s\n",
+			u.Rule, u.Position, group, u.Profile, u.List, u.Category, via)
+	}
+	if len(uses) > 0 {
+		fmt.Println("\nthese are not matches. A rule matches on addresses, zones, application and")
+		fmt.Println("service; its profile then inspects the request. What the profile does with a")
+		fmt.Println("match is not derivable from the configuration, so no verdict is given here.")
 	}
 	return nil
 }
