@@ -22,8 +22,9 @@ model.
 ## D2 — The index is scope-keyed, never global
 
 A name means different things in different scopes. The same shared dynamic address
-group resolves to `10.124.0.0/16` in one device group and `10.125.0.0/16` in its
-sibling. A global index merges siblings and returns answers that are **wrong**,
+group resolved to `10.124.0.0/16` in one Panorama device group and `10.125.0.0/16`
+in its sibling; sibling vsys on one firewall stand in the same relation. (Panorama
+support was removed in M1.) A global index merges siblings and returns answers that are **wrong**,
 not merely incomplete. **R5** and **R10**.
 
 ## D3 — Reachability, not a verdict

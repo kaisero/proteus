@@ -92,8 +92,8 @@ Three things separate it from `UserSnapshot`:
   and the ambiguity is named.
 
 A zone is visible only inside its vsys, so placements from another vsys are dropped
-and counted when the scope is a vsys. A device-group scope keeps everything: a snapshot
-comes from one firewall, and which vsys a device group corresponds to is not knowable.
+and counted when the scope is a vsys. The shared scope keeps everything: a snapshot
+comes from one firewall, and shared belongs to none of its vsys.
 
 The format contract is `docs/zone-snapshot-format.md` and the `ZoneSnapshot` doc
 comment. `scripts/capture-zones.sh` captures one.

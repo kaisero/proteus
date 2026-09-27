@@ -15,9 +15,9 @@ generator for linux/amd64.
 ## panos-explore
 
 ```
-info      <cfg>                                      version, platform, load time
-groups    <cfg>                                      the device-group tree
-target    <cfg> <serial> <vsys>                      what one firewall actually gets
+info      <cfg>                                      version, vsys, rule counts
+groups    <cfg>                                      the policy of every vsys
+target    <cfg> <device> <vsys>                      what one vsys evaluates
 lookup    <cfg> <scope> <value>                      the four paths, narrated step by step
 reaches   <cfg> <scope> <field> <value>              which rules one field could match
 search    <cfg> <scope> <substring>                  objects by a fragment of their value
@@ -27,7 +27,7 @@ simulate  <cfg> <scope> <src> <dst> [from to]        both sides, optionally zone
 group     <cfg> <scope> <name>                       one address group in one scope
 ```
 
-A scope is `shared`, `vsys:<name>` or `dg:<name>`. A field is `source`,
+A scope is `shared` or `vsys:<name>`. A field is `source`,
 `destination`, `category`, `application`, `service`, `from`, `to`, `source-user`
 or `tag`. `PANOS_USERS` points at a user snapshot.
 
@@ -52,7 +52,7 @@ or `tag`. `PANOS_USERS` points at a user snapshot.
 
 ## panos-demo
 
-`panos-demo <cfg>` walks twelve sections over one configuration: load, hierarchy,
+`panos-demo <cfg>` walks twelve sections over one configuration: load, scopes,
 targets, rules, objects, groups, lookups, matching, and the caveats. `-v` explains
 each answer. `-probe <addr>` chooses the address the lookup sections use.
 

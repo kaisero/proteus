@@ -4,7 +4,7 @@ This file holds the reasoning. AGENTS.md holds the rules.
 
 ## What this library is
 
-A read-only Go interface to a PAN-OS or Panorama configuration file, with the
+A read-only Go interface to a PAN-OS firewall configuration file, with the
 object model generated from PAN-OS's own schema.
 
 It is a library. Other tools consume it — an analysis platform, an MCP server, a
@@ -49,28 +49,22 @@ with different risks, and pango's API client already solves it. Keeping writes
 out removes a whole category of failure from a library whose value is that its
 answers can be trusted. R2 enforces it.
 
-## Panorama is the primary target
+## Each firewall is read directly
 
-Observed on Panorama 11.2.7-h1:
+panos-analyst reads each firewall's own configuration, not Panorama's. A managed
+firewall's running configuration already carries the policy Panorama pushed to
+it, so the device-group hierarchy that computed that policy does not need to be
+modelled here. What remains is the order a firewall evaluates its layers in:
+shared pre-rules, the vsys's own rules, shared post-rules, then the defaults.
+Source: PAN-OS documentation, "Device Group Policies".
 
-- **The device group hierarchy is not where the device groups are.** `parent-dg`
-  lives only under `/config/readonly/devices/entry/device-group/entry`. It
-  survives both `action=show` and `export`, so a config file is sufficient. The
-  schema declares `readonly` as an empty node, so this is hand-modelled (R8).
-- **The device key is (serial, vsys), never serial.** One firewall had vsys2 and
-  vsys3 in two different device groups. Keying by serial merges two distinct
-  effective policies into one wrong answer.
-- **Panorama cannot tell you the merged policy.** `show config merged` and
-  `show config pushed-shared-policy` are both rejected on Panorama. Computing
-  the effective policy is this library's job.
-- **Rule order reverses between pre and post.** Shared pre-rules, then device
-  group pre-rules from root to leaf, then the firewall's local rules, then device
-  group post-rules from leaf to root, then shared post-rules, then the defaults.
-  Source: PAN-OS documentation, "Device Group Policies".
-- **Scope decides what a name means.** A shared dynamic address group resolves
-  to different members in each device group, because only the visible scope
-  contributes. Resolve globally and sibling device groups bleed into each other.
-  R5 exists for this.
+That claim is not yet verified on a Panorama-managed firewall, and the 11.2.0
+firewall schema declares no pre-rulebase at all. See
+`docs/specs/2026-09-27-panos-analyst-scope.md` §5.3.
+
+Scope still decides what a name means. A shared dynamic address group resolves to
+different members in each vsys, because only shared and the vsys contribute.
+Resolve globally and sibling vsys bleed into each other. R5 exists for this.
 
 ## Layout
 
@@ -79,18 +73,20 @@ cmd/panos-schemagen/   generator CLI: digest -> Go model
 internal/schema/       parse the PAN-OS schema grammar
 internal/digest/       the committed schema digest format
 internal/codegen/      emit Go from the digest
+internal/archtest/      the import-direction check (R12)
 schema/                public: query the schema itself (types, limits, references)
 config/                public: Load, version detection, the Model interface
-config/v11_2/…         public: generated model per PAN-OS minor and platform
-resolve/               public: Panorama semantics (hierarchy, targets, merge order)
+config/v11_2/…         public: generated model per PAN-OS minor
+resolve/               public: PAN-OS semantics (targets, rule order, scoped visibility)
 index/                 public: scope-keyed indexes (refs, closure, CIDR, rules)
-schemadigest/          committed digests, ~0.4 MB each
+schemadigest/          committed firewall digests, ~0.2 MB each
 testdata/              trimmed schema fragments and config fixtures
 schemas/               vendor schema files, pulled from an appliance, not committed
 ```
 
 Dependency order is one-way: `config` <- `resolve` <- `index`. Nothing imports a
-versioned package except the caller.
+versioned package except the caller. R12 checks it with a test rather than a
+sentence.
 
 `schema/` is public because the schema is useful on its own: it answers "what may
 this field reference", "how long may this name be", and "what does this field
@@ -103,9 +99,10 @@ detail and the measurements.
 
 - **Naming.** One Go type per distinct structural shape. That collapses 2,291
   entry types to 506, because the template subtree embeds a whole firewall
-  config. Names come from the shallowest path where a shape occurs.
+  config. Names come from the shallowest path where a shape occurs. (Measured on
+  the Panorama schema; Panorama support was removed in M1.)
 - **API surface.** All generated structs are public.
-- **Versions.** One generated model per PAN-OS minor and platform, in its own
+- **Versions.** One generated model per PAN-OS minor, in its own
   package. Adding 11.3 cannot break an 11.2 consumer.
 - **Schema input.** A compact digest is committed; the vendor XML is not. CI
   regenerates from the digest, so drift is gated without an appliance.
@@ -133,7 +130,8 @@ detail and the measurements.
   interface and no generated adapter are needed. A prototype established this; an
   earlier draft had both.
 - **Shapes are deduplicated on both sides.** Entry arrays and inline sequences
-  alike, which takes the Panorama package from 4,438 type declarations to 2,891.
+  alike, which took the Panorama package from 4,438 type declarations to 2,891.
+  (Panorama support was removed in M1.)
 - **Everything immutable is computed once.** The schema digest is decoded once per
   process and the reference tables built alongside it; a configuration is parsed
   once by `Load`; an index is built once per scope. Recomputing these per query
@@ -144,10 +142,9 @@ detail and the measurements.
 1. **Schema redistribution.** Whether the derived digest may be published is
    unresolved. Until it is, this repository stays private.
 2. **Large configurations.** The parsed element tree peaks near ten times the file
-   size, so a 200 MB Panorama export implies roughly 2 GB. Streaming per device
-   group is the mitigation and is not yet designed.
-3. **Runtime data.** Registered-IP group members, App-ID dependencies and
-   template-variable resolution are not in a configuration file at all. 1,069 of
-   the schema's reference declarations point at template variables.
+   size, so a 200 MB export implies roughly 2 GB. Streaming per vsys is the
+   mitigation and is not yet designed.
+3. **Runtime data.** Registered-IP group members and App-ID dependencies are not
+   in a configuration file at all.
 4. **NAT semantics.** The NAT rulebase is read, but translated-address fields are
    not resolved.

@@ -53,12 +53,11 @@ Check: `go test ./internal/codegen -run TestListShape`
 ## R5 — Resolution is scope-correct
 
 No lookup resolves a name globally. Every resolution takes an explicit scope —
-shared, a vsys, or a device group with its ancestor chain — and sees only what
-that scope sees.
+shared or a vsys — and sees only what that scope sees.
 
-A shared dynamic address group resolves to different members in different device
-groups. A global resolution silently merges sibling device groups and returns
-answers that are wrong rather than incomplete.
+A shared dynamic address group resolves to different members in different vsys.
+A global resolution silently merges sibling vsys and returns answers that are
+wrong rather than incomplete.
 
 Check: `go test ./config -run TestScopedResolution`
 
@@ -83,9 +82,9 @@ Check: `go test -bench . ./...`
 A node modelled by hand rather than generated is registered in
 `internal/schema.HandModelled`, with the reason and the schema path.
 
-There is one today: `/config/readonly`, which the schema declares as an empty
-`skip-validation` sequence. It holds `parent-dg`, the device group hierarchy —
-the single most important relationship in a Panorama config.
+There is none today. The one there was, `/config/readonly/.../parent-dg`, held
+the Panorama device-group hierarchy and left with Panorama support. The registry
+and its check stay, so the next one is declared rather than slipped in.
 
 Check: `go test ./internal/schema -run TestHandModelledIsDeclared`
 
@@ -101,15 +100,14 @@ Check: review.
 ## R10 — Indexes are keyed by scope
 
 No index spans scopes, and no lookup resolves a name without one. A scope is
-`shared`, `vsys:<name>`, or `dg:<name>` together with its ancestor chain.
+`shared` or `vsys:<name>`, and a vsys inherits shared.
 
-A global index merges sibling device groups. Observed on the lab Panorama: one
-shared dynamic address group resolves to `10.124.0.0/16` in `host_1_directory`
-and `10.125.0.0/16` in its sibling `corp-graz`. A merged answer is wrong, not
-merely incomplete.
+A global index merges sibling scopes. First observed on the lab Panorama: one
+shared dynamic address group resolved to `10.124.0.0/16` in one device group and
+`10.125.0.0/16` in its sibling. Sibling vsys on one firewall stand in the same
+relation. A merged answer is wrong, not merely incomplete.
 
-Rule bitmaps key on the device group rather than on `(serial, vsys)`, because
-merged Panorama policy is identical for every firewall in the same device group.
+Rule bitmaps key on the vsys, because each vsys has its own rulebase.
 
 Check: `go test ./index -run TestNoGlobalIndex`
 

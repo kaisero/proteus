@@ -1,6 +1,6 @@
 # panos-analyst
 
-> Read a PAN-OS or Panorama configuration file and answer questions about it. This
+> Read a PAN-OS firewall configuration file and answer questions about it. This
 > is the read-first map for coding agents working in-repo: the system model and
 > where each subsystem is documented. Load only the deep-dive you need.
 
@@ -17,9 +17,9 @@ Three packages, dependency order strictly one-way — `config` <- `resolve` <- `
   attaches the schema digest for that PAN-OS version. It answers schema questions:
   which object kinds a field may name (`FieldKinds`), where a kind sits under a
   scope (`KindContainer`), and every reference edge in the file (`WalkPaths`).
-- **`resolve`** — PAN-OS semantics. Device-group hierarchy, which firewall gets
-  which policy, merged rule order, scoped object visibility with shadowing, group
-  membership including tag filters, URL pattern parsing, zones and routes.
+- **`resolve`** — PAN-OS semantics. Targets per vsys, rule order, scoped object
+  visibility with shadowing, group membership including tag filters, URL pattern
+  parsing, zones and routes.
 - **`index`** — speed and answers. `For(cfg, scope)` builds an immutable, cached
   index: a prefix trie, group-closure bitmaps, rule-field bitmaps and a reference
   table. It exposes the lookups and the report that comes with them.
@@ -42,16 +42,16 @@ rule-field bitmaps. The rules whose field is `any` join them. The result is a
 
 Repo map:
 
-- `config/` — `load.go` (Load, platform, digest cache), `tree.go` (element tree),
+- `config/` — `load.go` (Load, Panorama refusal, digest cache), `tree.go` (element tree),
   `walk.go` (reference walk, `FieldKinds`, `KindContainers`), `embed.go`,
   `schemadigest/` (embedded digests), `v11_2/` (generated model).
-- `resolve/` — `target.go`, `hierarchy.go`, `rules.go`, `objects.go`, `groups.go`,
+- `resolve/` — `target.go`, `rules.go`, `objects.go`, `groups.go`,
   `filter.go` (tag filters), `urlpattern.go`, `profiles.go`, `zones.go`.
 - `index/` — `index.go` (build + cache), `candidates.go` (the driver),
   `resolver*.go` (one file per value space), `closure.go`, `cidr.go`, `rules.go`,
   `refs.go`, `profileuse.go`, `snapshot.go`, `intern.go`.
 - `internal/schema`, `internal/digest`, `internal/codegen` — schema parsing,
-  digest format, code generation.
+  digest format, code generation. `internal/archtest` — the R12 import check.
 - `cmd/` — `panos-explore` (the query surface), `panos-demo` (narrated tour),
   `panos-schemagen` (digest + generate).
 - `scripts/` — `coverage-gate.sh`, `device-probe.sh`, `context-api.py`.
@@ -73,8 +73,8 @@ Hard invariants:
 
 - [config-loading](config-loading.md): `Load`, the element tree, the embedded
   schema digest, and the schema questions `config` answers.
-- [panorama-semantics](panorama-semantics.md): device groups, targets, merged rule
-  order, scoped visibility, shadowing, group membership.
+- [scope-semantics](scope-semantics.md): targets, rule order, scoped visibility,
+  shadowing, group membership.
 - [value-spaces](value-spaces.md): the resolver seam, the four paths that reach a
   value, and each implemented value space.
 - [reporting](reporting.md): `Report`, `Hit`, `Unresolved`, and the difference
@@ -95,5 +95,5 @@ Hard invariants:
 ## Rules
 
 The binding rules live in [`AGENTS.md`](../../AGENTS.md) at the repo root — R1 to
-R11, each with a check. This set explains mechanism and rationale, not rules.
+R12, each with a check. This set explains mechanism and rationale, not rules.
 `ARCHITECTURE.md` holds the reasoning behind the design as a whole.

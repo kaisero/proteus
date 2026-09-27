@@ -1,6 +1,6 @@
 # panos-analyst
 
-`panos-analyst` is a read-only Go library. It loads a PAN-OS or Panorama
+`panos-analyst` is a read-only Go library. It loads a PAN-OS firewall
 configuration file and answers questions about it. It never writes a
 configuration and it never contacts a device.
 
@@ -12,10 +12,9 @@ The object model is generated from the schema PAN-OS itself ships.
 
 ## What it does
 
-- **Reads what a firewall actually gets** — the library builds the device group
-  hierarchy from `parent-dg`, keys each firewall by serial **and** vsys, and
-  merges the rule layers in the order the firewall evaluates them. Panorama
-  cannot report a merged policy. The library computes it.
+- **Reads what a firewall actually evaluates** — the library keys each policy by
+  device **and** vsys, and orders the rule layers the way the firewall evaluates
+  them: pushed shared pre-rules, the vsys's own rules, pushed shared post-rules.
 - **Answers from a value, not only from a name** — give it an address, a prefix,
   a URL, a port, a user, a zone or an application name. It returns the rules that
   value can reach, in evaluation order.
@@ -23,9 +22,9 @@ The object model is generated from the schema PAN-OS itself ships.
   security rule's `source` accepts an address, an address group, a region, an
   external list and an IP block list. That is five value spaces, not one. The
   wiring comes from the schema, not from hand-written code.
-- **Resolves per scope** — a scope is `shared`, a vsys, or a device group with its
-  ancestor chain. One shared dynamic address group resolves to different members
-  in each device group. A global answer is wrong, not merely incomplete.
+- **Resolves per scope** — a scope is `shared` or a vsys, and a vsys inherits
+  shared. One shared dynamic address group resolves to different members in each
+  vsys. A global answer is wrong, not merely incomplete.
 - **Reports incompleteness** — every lookup returns a report. A non-empty
   `Unresolved` list means the answer is missing matches, and the report says why.
 - **Takes facts a configuration does not hold** — a user-to-group mapping comes
@@ -39,7 +38,7 @@ The object model is generated from the schema PAN-OS itself ships.
 ```text
 $ ./bin/panos-explore reaches testdata/config/firewall-urlcat.xml vsys:vsys1 \
       category superlong.example.azureapps.microsoft.com
-loaded testdata/config/firewall-urlcat.xml in 29.501ms: PAN-OS 11.2.0 (11.2.5), firewall
+loaded testdata/config/firewall-urlcat.xml in 53.311ms: PAN-OS 11.2.0 (11.2.5)
 
 which rules could category match superlong.example.azureapps.microsoft.com, in vsys:vsys1
 
@@ -81,9 +80,8 @@ Three packages. The dependency order is one-way: `config` <- `resolve` <-
 1. **`config`** loads the file. It parses the XML into an element tree and holds
    the schema digest for the version the file declares. `config.Load(path)`
    returns the configuration and a report of anything it could not type.
-2. **`resolve`** holds PAN-OS semantics: the device group hierarchy, which
-   firewall gets which policy, scoped object visibility with shadowing, merged
-   rule order, group membership and tag filters, URL pattern parsing, and zones,
+2. **`resolve`** holds PAN-OS semantics: one policy target per vsys, scoped
+   object visibility with shadowing, rule order, group membership and tag filters, URL pattern parsing, and zones,
    interfaces and routes.
 3. **`index`** holds the lookup structures. `index.For(cfg, scope)` returns an
    immutable, cached `*Index`.
@@ -156,8 +154,8 @@ list, but Panorama writes an entry list. pango returns an empty value and
 preserves nothing, so a round trip deletes the assignment. The schema states the
 shape without ambiguity, so a generator cannot get it wrong.
 
-The schema also carries the reference graph. The Panorama schema declares 13,120
-`memberof` targets, and 9,647 of them are real object references saying which
+The schema also carries the reference graph. The firewall schema declares 5,898
+`memberof` targets, and 5,144 of them are real object references saying which
 objects a field may point at. `internal/digest.TestRealSchemaFormCensus` pins the
 census. The schema also carries name length limits, defaults, enum values and
 help strings.
@@ -200,9 +198,9 @@ replace github.com/okaiser/panos-analyst => ../go-panos-schema
 
 | Command and arguments | What it answers |
 | --- | --- |
-| `info <config.xml>` | Which version and platform this file is, the device group tree, and each firewall's rule count |
-| `groups <config.xml>` | The effective policy of every device group, in evaluation order |
-| `target <config.xml> <serial> <vsys>` | Which device group, template stack and scope chain one firewall gets |
+| `info <config.xml>` | Which version this file is, its vsys, and each vsys's rule count |
+| `groups <config.xml>` | The policy of every vsys, in evaluation order |
+| `target <config.xml> <device> <vsys>` | The scope chain, policy and visible addresses of one vsys |
 | `lookup <config.xml> <scope> <value>` | From an address or prefix: the objects covering it, the groups holding them, the rules naming either |
 | `reaches <config.xml> <scope> <field> <value>` | Which rules one field could match one value, in any value space |
 | `search <config.xml> <scope> <substring>` | Which objects hold a fragment of a value |
@@ -211,7 +209,7 @@ replace github.com/okaiser/panos-analyst => ../go-panos-schema
 | `simulate <config.xml> <scope> <source> <destination> [from-zone to-zone]` | The candidate rules for one address pair, and the first match |
 | `group <config.xml> <scope> <name>` | What an address group resolves to in one scope |
 
-A scope is `shared`, `vsys:<name>` or `dg:<name>`. A field is `source`,
+A scope is `shared` or `vsys:<name>`. A field is `source`,
 `destination`, `category`, `application`, `service`, `from`, `to`, `source-user`
 or `tag`. `PANOS_USERS` points at a user snapshot.
 
@@ -223,7 +221,7 @@ sections and narrates what it does.
 The library reports each of these rather than hiding it.
 
 - **Only PAN-OS 11.2 digests ship.** `config.Load` refuses a 12.2 configuration.
-- **Template variables are not resolved.** 1,069 schema targets point at them.
+- **Panorama configurations are refused.** Read each firewall's own export instead.
 - **NAT translated addresses are not modelled.** The library reads the rulebase.
 - **Predefined content is unknown.** Regions, predefined applications and PAN-DB
   categories live in the content database a firewall downloads.
@@ -252,16 +250,16 @@ go-panos-schema/
 │   ├── panos-demo/        # a narrated tour of every feature
 │   └── panos-schemagen/   # digest a vendor schema, generate the Go model
 ├── config/                # Load, version detection, element tree, scopes
-│   ├── v11_2/firewall/    # generated model, per PAN-OS minor and platform
-│   └── v11_2/panorama/
-├── resolve/               # PAN-OS semantics: hierarchy, targets, merge order,
+│   └── v11_2/firewall/    # generated model, per PAN-OS minor
+├── resolve/               # PAN-OS semantics: targets per vsys, rule order,
 │                          #   objects, groups, tag filters, URL patterns, zones
 ├── index/                 # lookup structures, value-space resolvers, reports
 ├── schema/                # public: query the schema itself (design not settled)
 ├── internal/schema/       # parse the PAN-OS schema grammar
 ├── internal/digest/       # the committed digest format
 ├── internal/codegen/      # emit Go from a digest
-├── schemadigest/          # committed digests, roughly 0.4 MB each
+├── internal/archtest/     # the import-direction check (R12)
+├── schemadigest/          # committed firewall digests, roughly 0.2 MB each
 ├── testdata/config/       # configuration fixtures, one per behaviour
 ├── ARCHITECTURE.md        # the reasoning, and where the library's line sits
 ├── AGENTS.md              # the mandatory rules

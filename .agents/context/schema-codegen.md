@@ -5,7 +5,9 @@ Validated against 86fd84f on 2026-09-27 · Purpose: how the PAN-OS schema become
 ## Purpose & responsibilities
 
 PAN-OS ships its own schema on the appliance: `/opt/pancfg/mgmt/factory/schema.xml`
-on a firewall and `cms-schema.xml` on Panorama. `panos-schemagen` turns one into a
+on a firewall and `cms-schema.xml` on Panorama. `panos-schemagen` still reads
+both, but only the firewall digest ships (Panorama support was removed in M1). It
+turns one into a
 compact digest, and the digest into Go structs for every configuration object.
 
 Nothing in this library hand-writes a field mapping that the schema already
@@ -19,7 +21,7 @@ describes. That is rule R1.
   proprietary grammar and write a trimmed, gzipped JSON digest carrying its PAN-OS
   version and platform.
 - **`panos-schemagen generate -digest schemadigest -out config`** — emit
-  `config/v11_2/{firewall,panorama}/model.go`.
+  `config/v11_2/firewall/model.go`.
 
 ### The grammar
 
@@ -46,24 +48,24 @@ is a regression test and a fixture for it.
 ### Reference classification
 
 `internal/schema/refs.go` decides what a `memberof` target names. Only an object or
-predefined target is an index edge. The census over the 11.2 Panorama schema, pinned
+predefined target is an index edge. The census over the 11.2 firewall schema, pinned
 by `internal/digest/census_test.go`:
 
 | Form | Count |
 |---|---|
-| object | 7,111 |
-| predefined | 2,536 |
-| template variable | 1,069 |
-| rule field | 1,362 |
-| expression | 915 |
-| unrecognised | 127 |
-| **total** | **13,120** |
+| object | 3,811 |
+| predefined | 1,333 |
+| template variable | 0 |
+| rule field | 276 |
+| expression | 429 |
+| unrecognised | 49 |
+| **total** | **5,898** |
 
 Two earlier classifiers undercounted, and both are recorded in that test so the
 mistake cannot recur. The first treated any parenthesis as a computed expression and
-misfiled 1,561 conditional references. The second treated every `#myentry(` anchor
+misfiled conditional references. The second treated every `#myentry(` anchor
 as a template variable; most are scope-relative object references, and discarding
-them cost 1,413 objects here and every zone target of a security rule.
+them cost 1,455 objects in this schema and every zone target of a security rule.
 
 ### Where the digests live
 

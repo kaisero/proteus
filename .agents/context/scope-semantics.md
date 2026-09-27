@@ -1,48 +1,41 @@
-# panorama-semantics
+# scope-semantics
 
-Validated against 86fd84f on 2026-09-27 · Purpose: which policy a firewall actually gets, and which objects it can see.
+Validated against 133ba4a on 2026-09-27 · Purpose: which policy a vsys evaluates, and which objects it can see.
 
 ## Purpose & responsibilities
 
-`resolve` turns a parsed file into PAN-OS meaning. Panorama cannot report a merged
-policy for a firewall; this package computes it. It also decides which objects a
-scope can see, which definition wins when two scopes define the same name, and what
-a group resolves to in one device group specifically.
+`resolve` turns a parsed firewall configuration into PAN-OS meaning: which policy
+each vsys evaluates and in what order, which objects a scope can see, which
+definition wins when two scopes define the same name, and what a group resolves to
+in one vsys specifically.
 
 ## How it works
 
-### Hierarchy and targets
+### Targets
 
-`NewHierarchy` reads `parent-dg` to build the device-group tree. `Roots`,
-`ParentOf`, `Children` and `Chain` navigate it. `Chain(dg)` returns shared first,
-then root to leaf.
+`Targets` returns one target per vsys, keyed by device entry name and vsys.
+`Chain` is shared, then the vsys. A Panorama file never reaches here: `config.Load`
+refuses it.
 
-`readParentDg` matches exactly `/config/readonly/devices/entry/device-group/entry`.
-A looser match also hits the read-only mirror of the same tree and overwrites real
-data with nil.
+### Rule order
 
-A `Target` is a firewall, keyed by **serial and vsys**, not by serial alone. Two
-vsys on one chassis can sit in different device groups. `Targets(cfg)` branches on
-platform: a Panorama file yields device-group targets, a firewall file yields one
-per vsys.
+`(*Target).Rules(rb)` returns the policy in evaluation order:
 
-### Merged rule order
+1. shared pre-rules (`LayerSharedPre`) — pushed from Panorama
+2. the vsys's own `rulebase` (`LayerLocal`)
+3. shared post-rules (`LayerSharedPost`) — pushed from Panorama
 
-`(*Target).Rules(rb)` returns the effective policy in evaluation order:
+Source: PAN-OS documentation, "Device Group Policies". Where a managed firewall
+keeps pushed rules is not yet observed on a device; the 11.2.0 firewall schema
+declares no pre-rulebase. See `docs/specs/2026-09-27-panos-analyst-scope.md` §5.3.
 
-1. shared pre-rules
-2. device-group pre-rules, root to leaf
-3. the firewall's own rules — the plain `rulebase`, empty on Panorama
-4. device-group post-rules, leaf to root
-5. shared post-rules
-
-`Position` is 1-based in that merged order, and it is the bit index the rule
-bitmaps use. So the lowest set bit is the first match.
+`Position` is 1-based in that order, and it is the bit index the rule bitmaps use.
+So the lowest set bit is the first match.
 
 ### Scoped visibility and shadowing
 
-`ObjectsInScope(cfg, scope, kind)` walks the chain root to leaf, so a descendant
-definition replaces an ancestor's of the same name and records what it replaced in
+`ObjectsInScope(cfg, scope, kind)` walks the chain shared first, so a vsys
+definition replaces a shared one of the same name and records what it replaced in
 `ShadowedFrom`. `ObjectsAt` takes an explicit container path, for the kinds whose
 name is ambiguous in the schema.
 
@@ -57,7 +50,7 @@ Missing one leaves the object valueless and it drops out of every value lookup.
 A static group lists members. A dynamic group carries a tag filter, and its members
 are the visible objects whose tags satisfy it — which is why group resolution is
 scope-bound. The same shared group resolves to different members in different
-device groups.
+vsys.
 
 `ParseTagFilter` is a real recursive-descent parser: `and`, `or`, `not`,
 parentheses, and `and` binds tighter. A filter it cannot read contributes no
@@ -78,8 +71,8 @@ possibly a zone of its own.
 ## Build / run pointers
 
 - `go test ./resolve/` — the whole package.
-- `./bin/panos-explore target <cfg> <serial> <vsys>` — what one firewall gets.
-- `./bin/panos-explore groups <cfg>` — the device-group tree.
+- `./bin/panos-explore target <cfg> <device> <vsys>` — what one vsys evaluates.
+- `./bin/panos-explore groups <cfg>` — the policy of every vsys.
 - `./bin/panos-explore group <cfg> <scope> <name>` — one group in one scope.
 
 ## Public API
@@ -137,10 +130,8 @@ func ZonesInScope(cfg *config.Config, sc config.Scope) ([]Zone, error)
 
 ## Gotchas / invariants
 
-- **A scope is not optional.** A global index merges sibling device groups and
-  returns answers that are wrong rather than incomplete. See R5 and R10.
-- **A template carries no policy objects.** Templates hold network and device
-  configuration. Zones live there, which is why a device-group scope has none.
+- **A scope is not optional.** A global index merges sibling vsys and returns
+  answers that are wrong rather than incomplete. See R5 and R10.
 - **`group` reads address groups only.** Service and application groups take part
   in the index closure but `GroupInScope` does not read them.
 - **Runtime group members are absent by design.** Addresses registered through
@@ -148,7 +139,7 @@ func ZonesInScope(cfg *config.Config, sc config.Scope) ([]Zone, error)
 
 ## See also
 
-- `resolve/target.go`, `resolve/hierarchy.go`, `resolve/rules.go`
+- `resolve/target.go`, `resolve/rules.go`
 - `resolve/objects.go`, `resolve/groups.go`, `resolve/filter.go`
 - `resolve/zones.go`, `resolve/profiles.go`
 - [config-loading](config-loading.md) — the tree and schema questions this builds on

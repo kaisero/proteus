@@ -9,7 +9,7 @@ attaches the schema digest for that PAN-OS version, and answers the questions on
 the schema can answer: which object kinds a field may name, where a kind sits under
 a scope, and every reference edge the file contains.
 
-It knows nothing about device groups, rules or lookups. Those are `resolve` and
+It knows nothing about vsys policy, rules or lookups. Those are `resolve` and
 `index`.
 
 ## How it works
@@ -17,16 +17,18 @@ It knows nothing about device groups, rules or lookups. Those are `resolve` and
 ### Load
 
 `Load(path)` returns `(*Config, Report, error)`. It reads the version attributes
-from the root element, picks the platform (firewall or Panorama) from the presence
-of Panorama-only containers, and loads the matching digest.
+from the root element, refuses a Panorama configuration (recognised by its
+device-group, template or template-stack containers), and loads the firewall
+digest for the version.
 
 Two details are load-bearing and both have regression tests:
 
 - **Paths anchor at `<config>`.** A file arrives bare from
   `type=export&category=configuration` or wrapped in `<response><result>` from
   `type=config&action=show`. Both load.
-- **A nested `<config>` is an ordinary child.** A Panorama file holds several,
-  because a template embeds a whole firewall configuration. Parsing stops only when
+- **A nested `<config>` is an ordinary child.** A firewall file holds one under
+  `shared/log-settings`, and a Panorama template embeds a whole firewall
+  configuration. Parsing stops only when
   the outermost one closes. Stopping at the first nested close found 1 reference
   edge where the correct walk finds 18.
 
@@ -39,7 +41,7 @@ parsed against the wrong schema.
 `Find`, `SchemaPath`, `InstancePath`, `TextOr`. Every accessor tolerates a nil
 receiver, so a walk reads as a path rather than as a chain of existence checks.
 
-`InstancePath` names entries, because two device groups can each hold an object of
+`InstancePath` names entries, because two vsys can each hold an object of
 the same name.
 
 ### The digest, and why it is embedded twice
@@ -95,7 +97,7 @@ that might hit an ambiguous kind uses `KindContainers` and chooses, then reads w
 ## Build / run pointers
 
 - `go test ./config/` — loading, the tree, the walk, the schema questions.
-- `./bin/panos-explore info <cfg>` — version, platform, load time.
+- `./bin/panos-explore info <cfg>` — version, vsys, load time.
 - `make digest-check` — the two digest copies agree.
 
 ## Public API
@@ -149,8 +151,8 @@ func ParseScope(s string) (Scope, error)
   accept `any` without declaring it as an enum value.
 - **A `memberof` declaration is not always a reference.** Classify on the `#`
   prefix. Two earlier classifiers undercounted: one treated any parenthesis as a
-  computed expression and misfiled 1,561 conditional references; the other treated
-  every `#myentry(` anchor as a template variable and discarded 1,413 scope-relative
+  computed expression and misfiled conditional references; the other treated
+  every `#myentry(` anchor as a template variable and discarded 1,455 scope-relative
   object references, every zone target among them.
 - **A named choice or union owns a path segment; an anonymous one does not.**
   `Fields()` flattens both, which is right for the grammar and wrong for the file:
@@ -165,11 +167,11 @@ func ParseScope(s string) (Scope, error)
   case — its path ends at `member` and the descent visits each `<member>` sibling in
   turn. Reading `Members()` instead silently drops every scalar reference.
 - **The element tree peaks near ten times the file size.** A 200 MB export implies
-  roughly 2 GB. Streaming per device group is not yet designed.
+  roughly 2 GB. Streaming per vsys is not yet designed.
 
 ## See also
 
 - `config/load.go`, `config/tree.go`, `config/walk.go`
 - `internal/schema/refs.go` — target classification and the census
 - [schema-codegen](schema-codegen.md) — where the digest comes from
-- [panorama-semantics](panorama-semantics.md) — what `resolve` builds on this
+- [scope-semantics](scope-semantics.md) — what `resolve` builds on this

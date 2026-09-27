@@ -7,8 +7,7 @@ equivalent.
 Every command below runs against a committed fixture in `testdata/config/`. The
 output is the output those commands produce. No device is involved.
 
-Each command first prints a `loaded ...` line with the file, the version and the
-platform. The output blocks below drop that line, except in section 1.
+Each command first prints a `loaded ...` line with the file and the version. The output blocks below drop that line, except in section 1.
 
 ## Build
 
@@ -26,7 +25,7 @@ the fixtures in `testdata/config/`, so you need no device and no network.
 
 ```bash
 ./bin/panos-demo testdata/config/firewall-urlcat.xml
-./bin/panos-demo -v testdata/config/panorama-lab.xml
+./bin/panos-demo -v testdata/config/firewall-multivsys.xml
 ```
 
 The tour has twelve sections: loading, what the schema says, the scopes, the
@@ -43,11 +42,12 @@ what the answers do not cover.
 | `firewall-users.xml` | local users, local groups, a dynamic user group |
 | `firewall-zones.xml` | zones, interfaces, static routes, a virtual router with BGP |
 | `firewall-apps.xml` | a custom application, a group, a filter, a container |
-| `panorama-lab.xml` | two hierarchies, one serial in two vsys, dynamic groups |
-| `panorama-merge.xml` | three levels, every rule layer populated |
-| `panorama-nested-groups.xml` | three levels of group nesting |
-| `panorama-shadow.xml` | a child device group shadowing a parent's object |
+| `firewall-multivsys.xml` | three vsys, one shared dynamic group resolving differently in each |
+| `firewall-lab.xml` | pushed shared pre- and post-rules around a vsys's own rules |
+| `firewall-nested-groups.xml` | three levels of group nesting |
+| `firewall-shadow.xml` | a vsys object shadowing a shared one |
 | `unsupported-version.xml` | a version this build has no digest for |
+| `panorama-rejected.xml` | a Panorama configuration, which is refused |
 
 ---
 
@@ -56,36 +56,27 @@ what the answers do not cover.
 This tells you what the file is before you ask anything about it.
 
 ```bash
-./bin/panos-explore info testdata/config/panorama-lab.xml
+./bin/panos-explore info testdata/config/firewall-multivsys.xml
 ```
 
 ```
-loaded testdata/config/panorama-lab.xml in 60.525ms: PAN-OS 11.2.0 (11.2.7), panorama
+loaded testdata/config/firewall-multivsys.xml in 36.12ms: PAN-OS 11.2.0 (11.2.5)
 
-device-group tree
-    corp
-      host_1_directory
-      corp-graz
-    vsys01
-      at-ktn
-      at-ooe
-
-firewalls (3), keyed by serial and vsys
-  007900000000004 / vsys2    -> at-ooe               stack s_vsys01     0 effective rules
-  007900000000004 / vsys3    -> at-ktn               stack s_vsys01     0 effective rules
-  007900000000003 / vsys1    -> host_1_directory     stack s_corp       1 effective rules
+vsys (3), keyed by device and vsys
+  localhost.localdomain / vsys1    1 rules
+  localhost.localdomain / vsys2    0 rules
+  localhost.localdomain / vsys3    0 rules
 ```
 
-The version and the platform come from the file. The tree comes from `parent-dg`
-under `/config/readonly`, which is the only place PAN-OS records it. One serial
-appears twice, because the key is serial **and** vsys.
+The version comes from the file. Each vsys is its own policy scope, so the key is
+device **and** vsys.
 
 ```go
-cfg, rep, err := config.Load("testdata/config/panorama-lab.xml")
+cfg, rep, err := config.Load("testdata/config/firewall-multivsys.xml")
 if err != nil {
     return err                       // an unsupported version fails here
 }
-fmt.Println(cfg.Version(), cfg.DetailVersion(), cfg.Platform())
+fmt.Println(cfg.Version(), cfg.DetailVersion())
 fmt.Println("untyped elements:", len(rep.Untyped))
 ```
 
@@ -97,54 +88,48 @@ Only PAN-OS 11.2 digests ship. Another version fails with a clear message:
 
 ```
 $ ./bin/panos-explore info testdata/config/unsupported-version.xml
-panos-explore: config: no schema for PAN-OS 9.1.0 firewall; this build supports 11.2.0
+panos-explore: config: no schema for PAN-OS 9.1.0; this build supports 11.2.0
 ```
 
-## 2. Find what a firewall actually gets
+A Panorama configuration is refused. Read each firewall's own export instead.
 
-Panorama cannot report a merged policy. This computes it.
+## 2. Find what a firewall actually evaluates
 
 ```bash
-./bin/panos-explore target testdata/config/panorama-lab.xml 007900000000003 vsys1
+./bin/panos-explore target testdata/config/firewall-multivsys.xml localhost.localdomain vsys1
 ```
 
 ```
-007900000000003 / vsys1
-  device group   host_1_directory
-  template stack s_corp
-  inherits from  shared -> dg:corp -> dg:host_1_directory
+localhost.localdomain / vsys1
+  inherits from  shared -> vsys:vsys1
 
 effective security policy, in evaluation order (1 rules)
-   1. [dg-post     dg:host_1_directory] Corp DC Access           allow  src=[corp-location] dst=[corp-dc] app=[active-directory]
+   1. [local       vsys:vsys1      ] Corp DC Access           allow  src=[corp-location] dst=[corp-dc] app=[active-directory]
 
 visible address objects (2)
-  corp-dc-vienna             10.124.0.1           dg:host_1_directory tags=[corp-dc]
-  corp-location-vienna       10.124.0.0/16        dg:host_1_directory tags=[corp-location]
+  corp-dc-vienna             10.124.0.1           vsys:vsys1       tags=[corp-dc]
+  corp-location-vienna       10.124.0.0/16        vsys:vsys1       tags=[corp-location]
 ```
 
-To see the layer order, use the merge fixture. Pre-rules run from root to leaf.
-Post-rules run from leaf to root.
+To see the layer order, use the lab fixture. Pushed shared pre-rules come first,
+then the vsys's own rules, then pushed shared post-rules.
 
 ```bash
-./bin/panos-explore groups testdata/config/panorama-merge.xml
+./bin/panos-explore groups testdata/config/firewall-lab.xml
 ```
 
 ```
-  leaf (9 rules)
-     1. [shared-pre  shared          ] shared-pre-1             src=[any] dst=[]
-     2. [dg-pre      dg:top          ] top-pre                  src=[] dst=[]
-     3. [dg-pre      dg:middle       ] middle-pre               src=[] dst=[]
-     4. [dg-pre      dg:leaf         ] leaf-pre-1               src=[] dst=[]
-     5. [dg-pre      dg:leaf         ] leaf-pre-2               src=[] dst=[]
-     6. [dg-post     dg:leaf         ] leaf-post                src=[] dst=[]
-     7. [dg-post     dg:middle       ] middle-post              src=[] dst=[]
-     8. [dg-post     dg:top          ] top-post                 src=[] dst=[]
-     9. [shared-post shared          ] shared-post-1            src=[any] dst=[]
+  vsys1 (5 rules)
+     1. [shared-pre  shared          ] pushed-pre               src=[any] dst=[]
+     2. [local       vsys:vsys1      ] identity-redistribution  src=[any] dst=[10.10.0.0/24]
+     3. [local       vsys:vsys1      ] dc-to-home               src=[g-servers] dst=[net-home]
+     4. [local       vsys:vsys1      ] tagged-out               src=[g-tagged] dst=[any]
+     5. [shared-post shared          ] pushed-post              src=[any] dst=[]
 ```
 
 ```go
-t, err := resolve.TargetFor(cfg, "007900000000003", "vsys1")
-fmt.Println(t.DeviceGroup(), t.TemplateStack(), t.Chain())
+t, err := resolve.TargetFor(cfg, "localhost.localdomain", "vsys1")
+fmt.Println(t.Scope(), t.Chain())
 
 rules, err := t.Rules(resolve.Security)
 for _, r := range rules {
@@ -152,17 +137,17 @@ for _, r := range rules {
 }
 ```
 
-`target` also reports shadowing. A child device group's object of the same name
-hides the parent's:
+`target` also reports shadowing. A vsys object of the same name hides the shared
+one:
 
 ```bash
-./bin/panos-explore target testdata/config/panorama-shadow.xml 001122334455 vsys1
+./bin/panos-explore target testdata/config/firewall-shadow.xml localhost.localdomain vsys1
 ```
 
 ```
 visible address objects (2)
-  web-server                 10.9.9.1             dg:leaf          tags=[]  (shadows the definition in dg:top)
-  only-in-top                10.0.0.9             dg:top           tags=[]
+  web-server                 10.9.9.1             vsys:vsys1       tags=[]  (shadows the definition in shared)
+  only-in-shared             10.0.0.9             shared           tags=[]
 ```
 
 ## 3. Find an object by value
@@ -171,20 +156,20 @@ Use this when you hold an address and want the objects covering it, the groups
 holding them, and the rules naming either.
 
 ```bash
-./bin/panos-explore lookup testdata/config/panorama-nested-groups.xml dg:dg1 10.1.1.1
+./bin/panos-explore lookup testdata/config/firewall-nested-groups.xml vsys:vsys1 10.1.1.1
 ```
 
 ```
-looking up "10.1.1.1" in dg:dg1
+looking up "10.1.1.1" in vsys:vsys1
 
 1. objects whose value covers 10.1.1.1
-     h-1                        10.1.1.1/32        dg:dg1
+     h-1                        10.1.1.1/32        vsys:vsys1
 
 2. groups holding them, transitively
      h-1                        in [g-inner g-middle g-outer]
 
 3. rules naming any of them, or naming a literal that covers the address
-      1. allow-outer              as source      [dg-pre]
+      1. allow-outer              as source      [local]
 ```
 
 The fixture nests `h-1` in `g-inner`, in `g-middle`, in `g-outer`. The rule names
@@ -237,12 +222,12 @@ list. That is five value spaces, not one.
 ### 5.1 An address
 
 ```bash
-./bin/panos-explore reaches testdata/config/panorama-lab.xml dg:host_1_directory \
+./bin/panos-explore reaches testdata/config/firewall-multivsys.xml vsys:vsys1 \
     source 10.124.0.1
 ```
 
 ```
-which rules could source match 10.124.0.1, in dg:host_1_directory
+which rules could source match 10.124.0.1, in vsys:vsys1
 
 10.124.0.1 matched via
   corp-dc-vienna           address        10.124.0.1/32
@@ -251,7 +236,7 @@ which rules could source match 10.124.0.1, in dg:host_1_directory
   corp-location            group holding one of those
 
 rules in evaluation order (1)
-    1. Corp DC Access             allow  [dg-post     dg:host_1_directory]
+    1. Corp DC Access             allow  [local       vsys:vsys1]
 ```
 
 The address resolver reads a prefix, a range and an FQDN. `Via` names the value
@@ -384,6 +369,7 @@ INCOMPLETE: this answer is missing matches.
   ethernet1/9 (zone): interface ethernet1/9 is in no zone, so 10.9.0.0/24 cannot be placed in one
   tunnel.99 (zone): interface tunnel.99 is in no zone, so 0.0.0.0/0 cannot be placed in one
   default/bgp (zone): this virtual router learns routes at runtime, and a route learned that way is not in the configuration, so an address reachable only by it cannot be placed in a zone
+  10.1.0.5 (zone): this zone came from the configuration, not from the device. It is an inference from interface addresses and static routes, and a firewall's forwarding table routinely differs: supply a zone snapshot for what the device is actually doing
 
 10.1.0.5 matched via
   inside                   zone           ethernet1/1 10.1.0.1/24
@@ -403,9 +389,6 @@ The inference reports every limit. An address no route covers places nowhere:
 
 no rule could match it
 ```
-
-On Panorama the network configuration lives in a template, so a device group scope
-has no zones at all.
 
 ### 5.6 An application
 
@@ -699,26 +682,26 @@ locator, for a live routing table.
 
 ## 10. Scope decides the answer
 
-One shared dynamic address group. Three device groups. Three different answers.
+One shared dynamic address group. Three vsys. Three different answers.
 
 ```bash
-for dg in host_1_directory corp-graz at-ktn; do
-  ./bin/panos-explore group testdata/config/panorama-lab.xml dg:$dg corp-location
+for v in vsys1 vsys2 vsys3; do
+  ./bin/panos-explore group testdata/config/firewall-multivsys.xml vsys:$v corp-location
 done
 ```
 
 ```
-corp-location in dg:host_1_directory
+corp-location in vsys:vsys1
   dynamic, filter 'corp-location'
   members matched by tag: [corp-location-vienna]
   note: Members registered at runtime through User-ID or VM monitoring are not in a configuration file and are not included.
 
-corp-location in dg:corp-graz
+corp-location in vsys:vsys2
   dynamic, filter 'corp-location'
   members matched by tag: [corp-location-graz]
   note: Members registered at runtime through User-ID or VM monitoring are not in a configuration file and are not included.
 
-corp-location in dg:at-ktn
+corp-location in vsys:vsys3
   dynamic, filter 'corp-location'
   members matched by tag: []
   note: Members registered at runtime through User-ID or VM monitoring are not in a configuration file and are not included.
@@ -737,21 +720,21 @@ and is reported.
 ## 11. Find every reference to a name
 
 ```bash
-./bin/panos-explore whereused testdata/config/panorama-nested-groups.xml dg:dg1 g-outer
+./bin/panos-explore whereused testdata/config/firewall-nested-groups.xml vsys:vsys1 g-outer
 ```
 
 ```
-1 reference(s) to "g-outer" in dg:dg1
-  dg:dg1 source /config/devices/localhost.localdomain/device-group/dg1/pre-rulebase/security/rules/allow-outer
-                could be: [region address address-group external-list ip-block-list-v2]
+1 reference(s) to "g-outer" in vsys:vsys1
+  vsys:vsys1 source /config/devices/localhost.localdomain/vsys/vsys1/rulebase/security/rules/allow-outer
+                    could be: [region address address-group external-list ip-block-list-v2]
 
 it is a group holding [h-1 h-2 g-inner g-middle]
 ```
 
-The path names the **instance**, not the schema location, so two device groups
-holding an object of the same name stay distinguishable.
+The path names the **instance**, not the schema location, so two vsys holding
+an object of the same name stay distinguishable.
 
-`could be` lists the object kinds the schema permits in that field. 1,034 of 2,961
+`could be` lists the object kinds the schema permits in that field. 673 of 1,559
 reference fields allow more than one, and the widest allows 153. The schema cannot
 tell you which kind a given target actually is.
 
@@ -788,16 +771,16 @@ go test -bench . -benchmem ./index/ ./config/
 Against a real device, which CI never does:
 
 ```bash
-PANOS_LIVE_CONFIG=/tmp/pano-live.xml go test -tags live -v ./resolve/
+PANOS_LIVE_CONFIG=/tmp/fw-live.xml go test -tags live -v ./resolve/
 ```
 
 Read these tests first. Each one pins a mistake that was actually made.
 
 | Test | What it prevents |
 | --- | --- |
-| `config.TestWalkContinuesPastANestedConfigElement` | a template embeds a whole config; stopping at the first `</config>` yielded 1 reference instead of 18 |
+| `config.TestWalkContinuesPastANestedConfigElement` | a configuration holds nested `<config>` elements; stopping at the first yielded 1 reference instead of 18 |
 | `index.TestNestedChainFromValueToRule` | the value, object, group, group, rule chain |
-| `resolve.TestMergedRuleOrder` | pre-rules top-down, post-rules bottom-up |
-| `resolve.TestDynamicGroupDiffersInASibling` | the same group resolving differently per device group |
-| `digest.TestRealSchemaFormCensus` | 9,647 real object references out of 13,120 declarations |
+| `resolve.TestFirewallRuleOrderIncludesTheLocalLayer` | shared pre-rules, then the vsys's own, then shared post-rules |
+| `resolve.TestDynamicGroupDiffersInASibling` | the same group resolving differently per vsys |
+| `digest.TestRealSchemaFormCensus` | 5,144 real object references out of 5,898 declarations |
 | `codegen.TestRootNameIsReserved` | the schema contains an inline sequence named `config` |

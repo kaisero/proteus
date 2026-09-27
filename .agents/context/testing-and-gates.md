@@ -1,6 +1,6 @@
 # testing-and-gates
 
-Validated against 86fd84f on 2026-09-27 · Purpose: what must pass before a commit, and what each gate is protecting against.
+Validated against 133ba4a on 2026-09-27 · Purpose: what must pass before a commit, and what each gate is protecting against.
 
 ## Purpose & responsibilities
 
@@ -8,7 +8,7 @@ Validated against 86fd84f on 2026-09-27 · Purpose: what must pass before a comm
 pre-commit hook runs it, which is why it has to stay fast enough to tolerate.
 
 ```
-ci: tidy-check lint test-race test-cov generate-check digest-check build vuln
+ci: tidy-check lint test-race test-cov generate-check digest-check context-check build vuln
 ```
 
 ## The gates
@@ -25,6 +25,9 @@ ci: tidy-check lint test-race test-cov generate-check digest-check build vuln
 | `vuln` | govulncheck |
 | `context-check` | these agent docs drifting from the real API |
 
+`go test ./internal/archtest -run TestImportDirection` is R12: the read-only core
+imports no I/O, and the packages above it point one way. It runs in `test-race`.
+
 ### The coverage ratchet
 
 `coverage-floors.txt` records what each package achieves. `scripts/coverage-gate.sh`
@@ -33,7 +36,7 @@ fails if a package drops below its floor.
 **A floor is raised, never lowered.** If new code drops coverage, the answer is
 tests, not a lower number. This was got wrong once and the commit had to be amended.
 
-Current floors: config 97.7, resolve 94.0, index 94.0, internal/schema 85.9,
+Current floors: config 98.1, resolve 95.7, index 95.0, internal/schema 85.9,
 internal/codegen 93.0, internal/digest 71.8, cmd/panos-schemagen 57.6.
 
 ### Fixtures
@@ -42,15 +45,14 @@ internal/codegen 93.0, internal/digest 71.8, cmd/panos-schemagen 57.6.
 
 | Fixture | What it exercises |
 |---|---|
-| `panorama-lab.xml` | real device groups (`vsys01`, `at-ktn`, `host_1_directory`, `corp-graz`), dynamic groups |
-| `panorama-merge.xml` | rule layer order across shared and nested device groups |
-| `panorama-shadow.xml` | a descendant definition shadowing an ancestor's |
-| `panorama-cycle.xml` | a cyclic hierarchy, which must be reported |
-| `panorama-nested-groups.xml`, `panorama-cyclic-groups.xml` | closure depth and cycles |
-| `panorama-badfilter.xml` | a tag filter the parser refuses |
-| `panorama-literals.xml` | addresses written directly into rule fields |
-| `panorama-wrapped.xml` | the `<response><result>` envelope |
-| `firewall-lab.xml`, `firewall-paths.xml` | vsys targets and local rulebases |
+| `firewall-multivsys.xml` | three vsys; one shared dynamic group resolving differently in each; a nested `<config>` |
+| `firewall-multivsys-wrapped.xml` | the `<response><result>` envelope |
+| `firewall-siblings.xml` | one name, two vsys, two values: R10 |
+| `firewall-shadow.xml`, `firewall-urlprofile-shadow.xml` | a vsys definition shadowing a shared one |
+| `firewall-nested-groups.xml`, `firewall-cyclic-groups.xml` | closure depth and cycles |
+| `firewall-badfilter.xml` | a tag filter the parser refuses |
+| `firewall-literals.xml` | addresses written directly into rule fields |
+| `firewall-lab.xml`, `firewall-paths.xml` | shared pre/post around vsys rulebases, disabled rules |
 | `firewall-anyrule.xml` | the any-field path |
 | `firewall-urlcat.xml` | URL categories, services, FQDN, ip-range |
 | `firewall-urlcat-edge.xml` | Category Match, unreadable members, malformed ports |
@@ -60,6 +62,7 @@ internal/codegen 93.0, internal/digest 71.8, cmd/panos-schemagen 57.6.
 | `firewall-apps.xml` | custom application, group, filter, container |
 | `firewall-ipv6.xml` | v6 containment and range decomposition |
 | `unsupported-version.xml` | a version refusal |
+| `panorama-rejected.xml` | a Panorama refusal |
 
 ### The device probe
 
