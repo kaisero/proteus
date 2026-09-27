@@ -22,7 +22,7 @@ const runtimeNote = "Members registered at runtime through User-ID or VM " +
 
 // ResolveGroup returns the membership of an address group as seen by the target.
 func (t *Target) ResolveGroup(name string) (Members, error) {
-	return resolveGroup(t.root, t.Chain(), name)
+	return resolveGroup(t.cfg, t.Chain(), name)
 }
 
 // GroupInScope returns the membership of an address group as seen in one scope.
@@ -36,11 +36,11 @@ func GroupInScope(cfg *config.Config, sc config.Scope, name string) (Members, er
 	if err != nil {
 		return Members{}, err
 	}
-	return resolveGroup(cfg.Root(), chain, name)
+	return resolveGroup(cfg, chain, name)
 }
 
-func resolveGroup(root *config.Element, chain []config.Scope, name string) (Members, error) {
-	groups := objectsInChain(root, chain, "address-group")
+func resolveGroup(cfg *config.Config, chain []config.Scope, name string) (Members, error) {
+	groups := objectsInChain(cfg, chain, "address-group")
 	var target *Object
 	for i := range groups {
 		if groups[i].Name == name {
@@ -73,7 +73,7 @@ func resolveGroup(root *config.Element, chain []config.Scope, name string) (Memb
 		out.FilterError = err.Error()
 		return out, nil
 	}
-	for _, a := range objectsInChain(root, chain, "address") {
+	for _, a := range objectsInChain(cfg, chain, "address") {
 		if filter.Match(a.Tags) {
 			out.ByTag = append(out.ByTag, a.Name)
 		}

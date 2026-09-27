@@ -14,6 +14,7 @@ import (
 // effective policies. Observed on Panorama 11.2.7-h1: serial 007900000000004 had
 // vsys3 in at-ktn and vsys2 in at-ooe.
 type Target struct {
+	cfg           *config.Config
 	root          *config.Element
 	serial        string
 	vsys          string
@@ -77,6 +78,7 @@ func Targets(cfg *config.Config) ([]*Target, error) {
 	out := make([]*Target, 0, len(assign))
 	for k, dg := range assign {
 		out = append(out, &Target{
+			cfg:           cfg,
 			root:          cfg.Root(),
 			serial:        k.serial,
 			vsys:          k.vsys,
@@ -109,6 +111,7 @@ func firewallTargets(cfg *config.Config) ([]*Target, error) {
 	out := make([]*Target, 0, len(names))
 	for _, v := range names {
 		out = append(out, &Target{
+			cfg:    cfg,
 			root:   cfg.Root(),
 			serial: hostname,
 			vsys:   v,

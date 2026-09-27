@@ -8,6 +8,10 @@
             <entry name="net-labor"><ip-netmask>198.18.0.0/15</ip-netmask></entry>
             <entry name="fqdn-host"><fqdn>host.example.com</fqdn></entry>
           </address>
+          <service>
+            <entry name="svc-pve"><protocol><tcp><port>8006</port></tcp></protocol></entry>
+            <entry name="svc-dns"><protocol><udp><port>53</port></udp></protocol></entry>
+          </service>
           <profiles>
             <custom-url-category>
               <entry name="custom-azuresite-group">

@@ -1,10 +1,20 @@
 package resolve
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/okaiser/go-panos-schema/config"
 )
+
+func loadT(t *testing.T, path string) *config.Config {
+	t.Helper()
+	cfg, _, err := config.Load(path)
+	if err != nil {
+		t.Fatalf("Load %s: %v", path, err)
+	}
+	return cfg
+}
 
 func shadowLab(t *testing.T) *config.Config {
 	t.Helper()
@@ -97,5 +107,51 @@ func TestShadowingIsReported(t *testing.T) {
 	}
 	if !found {
 		t.Error("only-in-top must be inherited from the ancestor")
+	}
+}
+
+// A custom URL category does not sit directly under its scope; it lives under
+// profiles/. Reading a kind as a direct child found none of them, so the objects
+// were invisible and so was every security profile.
+func TestObjectsFindsAKindNestedUnderProfiles(t *testing.T) {
+	cfg := loadT(t, "../testdata/config/firewall-urlcat.xml")
+	sc := config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}
+
+	objs, err := ObjectsInScope(cfg, sc, "custom-url-category")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(objs) != 1 {
+		t.Fatalf("got %d custom URL categories, want 1", len(objs))
+	}
+	if objs[0].Name != "custom-azuresite-group" {
+		t.Errorf("name = %q", objs[0].Name)
+	}
+	// The members are the value, so a URL lookup has something to match against.
+	for _, want := range []string{"superlong.example.azureapps.microsoft.com", "*.wildcard-example.com"} {
+		if !strings.Contains(objs[0].Value, want) {
+			t.Errorf("value %q does not contain %q", objs[0].Value, want)
+		}
+	}
+}
+
+// A service keeps its port one level below the entry, under the protocol. Reading
+// only the top level reported every service as having no value at all.
+func TestObjectsReadsAServicePort(t *testing.T) {
+	cfg := loadT(t, "../testdata/config/firewall-urlcat.xml")
+	sc := config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}
+
+	objs, err := ObjectsInScope(cfg, sc, "service")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]string{}
+	for _, o := range objs {
+		got[o.Name] = o.Value
+	}
+	for name, want := range map[string]string{"svc-pve": "tcp/8006", "svc-dns": "udp/53"} {
+		if got[name] != want {
+			t.Errorf("%s value = %q, want %q", name, got[name], want)
+		}
 	}
 }

@@ -202,3 +202,31 @@ func TestFieldKindsMergesArraysWithoutRepeating(t *testing.T) {
 		t.Errorf("from kinds = %v, want [zone]", kinds["from"])
 	}
 }
+
+// Where a kind lives under a scope comes from the schema, not from a list in the
+// code. Most kinds are direct children; a custom URL category and every security
+// profile are one level down, under profiles/.
+func TestKindContainerComesFromTheSchema(t *testing.T) {
+	cfg, _, err := Load("../testdata/config/firewall-urlcat.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for kind, want := range map[string]string{
+		"address":             "address",
+		"service":             "service",
+		"external-list":       "external-list",
+		"custom-url-category": "profiles/custom-url-category",
+		"url-filtering":       "profiles/url-filtering",
+	} {
+		if got := strings.Join(cfg.KindContainer(kind), "/"); got != want {
+			t.Errorf("KindContainer(%q) = %q, want %q", kind, got, want)
+		}
+	}
+	if got := cfg.KindContainer("no-such-kind"); got != nil {
+		t.Errorf("KindContainer of an unknown kind = %v, want nil", got)
+	}
+	if got := cfg.KindContainer(""); got != nil {
+		t.Errorf("KindContainer of an empty kind = %v, want nil", got)
+	}
+}

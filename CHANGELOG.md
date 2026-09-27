@@ -17,6 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   there, so a field that accepts an address, a region and an external list is asked
   of each rather than treated as an address field. Addresses answer exactly as
   before; other value spaces arrive behind the same seam.
+- **Objects nested under a sub-container are visible.** A custom URL category, and
+  every security profile, lives under `profiles/` rather than directly under its
+  scope, so the library found none of them. Where a kind sits now comes from the
+  schema, so a kind added later needs no code change.
 - **An incomplete answer now says so.** Asking which rules a value can reach
   returns the rules together with a list of what could not be evaluated. A value
   that is not an address, not a prefix and not a known object name — a URL, for
@@ -42,6 +46,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   cached and handed to every caller, and a lookup by name added that name to the
   index's internal name table. Two callers asking about unknown names at the same
   time raced on it.
+- **Service objects report their port.** Every service read back with an empty
+  value, because the port sits under the protocol rather than on the entry.
+  `svc-pve` now reads `tcp/8006`. A custom URL category likewise reports its member
+  list as its value.
 - **An FQDN address object is found by its own name.** Asking for
   `host.example.com` now finds the object holding it, case-insensitively, and says
   that the addresses the name resolves to are not in the configuration.

@@ -19,7 +19,7 @@ type Object struct {
 // Objects returns the objects of one kind visible to the target, with a
 // descendant definition shadowing an ancestor's of the same name.
 func (t *Target) Objects(kind string) ([]Object, error) {
-	return objectsInChain(t.root, t.Chain(), kind), nil
+	return objectsInChain(t.cfg, t.Chain(), kind), nil
 }
 
 // ObjectsInScope returns the objects of one kind visible in a scope and its
@@ -29,7 +29,7 @@ func ObjectsInScope(cfg *config.Config, sc config.Scope, kind string) ([]Object,
 	if err != nil {
 		return nil, err
 	}
-	return objectsInChain(cfg.Root(), chain, kind), nil
+	return objectsInChain(cfg, chain, kind), nil
 }
 
 // chainFor returns the scopes a scope inherits from, shared first.
@@ -50,11 +50,18 @@ func chainFor(cfg *config.Config, sc config.Scope) ([]config.Scope, error) {
 
 // objectsInChain walks the chain root to leaf, so a later definition replaces an
 // earlier one and the replacement is recorded.
-func objectsInChain(root *config.Element, chain []config.Scope, kind string) []Object {
+func objectsInChain(cfg *config.Config, chain []config.Scope, kind string) []Object {
+	// Where a kind sits under a scope comes from the schema: most are direct
+	// children, but a custom URL category and every security profile live under
+	// profiles/.
+	within := cfg.KindContainer(kind)
+	if within == nil {
+		within = []string{kind}
+	}
 	byName := map[string]Object{}
 	var order []string
 	for _, sc := range chain {
-		for _, o := range readObjects(root, sc, kind) {
+		for _, o := range readObjects(cfg.Root(), sc, kind, within) {
 			if prev, seen := byName[o.Name]; seen {
 				prevScope := prev.Scope
 				o.ShadowedFrom = &prevScope
@@ -89,17 +96,18 @@ func scopeContainer(sc config.Scope) ([]string, bool) {
 //
 // The container path is matched exactly, so a template's nested configuration
 // cannot contribute objects to a device group.
-func readObjects(root *config.Element, sc config.Scope, kind string) []Object {
+func readObjects(root *config.Element, sc config.Scope, kind string, within []string) []Object {
 	path, ok := scopeContainer(sc)
 	if !ok {
 		return nil
 	}
+	inner := append(append([]string{}, within...), "entry")
 	var out []Object
 	for _, container := range root.Find(path...) {
 		if sc.Name != "" && container.Attr("name") != sc.Name {
 			continue
 		}
-		for _, e := range container.Find(kind, "entry") {
+		for _, e := range container.Find(inner...) {
 			out = append(out, Object{
 				Name:  e.Attr("name"),
 				Kind:  kind,
@@ -127,6 +135,19 @@ func objectValue(e *config.Element) string {
 	}
 	if m := e.Child("value").Members(); len(m) > 0 {
 		return strings.Join(m, ", ")
+	}
+	// A custom URL category holds its members in list/member.
+	if m := e.Child("list").Members(); len(m) > 0 {
+		return strings.Join(m, ", ")
+	}
+	// A service keeps its value one level down, under the protocol it uses.
+	// Without this a service object reports an empty value, which it did.
+	if p := e.Child("protocol"); p != nil {
+		for _, proto := range []string{"tcp", "udp", "sctp"} {
+			if port := p.Child(proto).Child("port").TextOr(""); port != "" {
+				return proto + "/" + port
+			}
+		}
 	}
 	return ""
 }

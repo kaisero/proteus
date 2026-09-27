@@ -190,3 +190,55 @@ func (c *Config) FieldKinds(suffix string) map[string][]string {
 	}
 	return out
 }
+
+// scopeAnchors are the schema paths a scope's objects hang from.
+var scopeAnchors = []string{
+	"/config/shared/",
+	"/config/devices/entry/vsys/entry/",
+	"/config/devices/entry/device-group/entry/",
+}
+
+// KindContainer returns the path from a scope container down to a kind's entry
+// array, as element names.
+//
+// Most kinds sit directly under the scope, so address returns ["address"]. Some do
+// not: a custom URL category lives at profiles/custom-url-category, and so does
+// every security profile. The path comes from the schema rather than a list kept
+// here, so a kind added later needs no code change.
+//
+// It returns nil for a kind the schema does not place under any scope.
+func (c *Config) KindContainer(kind string) []string {
+	if kind == "" {
+		return nil
+	}
+	best := []string{}
+	for _, arr := range schema.EntryTypes(c.schema.root) {
+		path := arr.Path()
+		if !strings.HasSuffix(path, "/"+kind) {
+			continue
+		}
+		for _, anchor := range scopeAnchors {
+			rest, ok := cutPrefix(path, anchor)
+			if !ok || strings.Contains(rest, "/entry/") {
+				// Anything with a further entry level is nested inside another
+				// object, not a kind the scope holds directly.
+				continue
+			}
+			parts := strings.Split(rest, "/")
+			if len(best) == 0 || len(parts) < len(best) {
+				best = parts
+			}
+		}
+	}
+	if len(best) == 0 {
+		return nil
+	}
+	return best
+}
+
+func cutPrefix(s, prefix string) (string, bool) {
+	if !strings.HasPrefix(s, prefix) {
+		return "", false
+	}
+	return s[len(prefix):], true
+}
