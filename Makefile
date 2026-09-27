@@ -75,7 +75,7 @@ tidy-check: ## Fail if go.mod/go.sum are not tidy
 
 gate: tidy-check lint test ## Fast pre-commit gate (tidy + lint + unit tests)
 
-ci: tidy-check lint test-race test-cov generate-check build vuln ## Everything CI runs
+ci: tidy-check lint test-race test-cov generate-check digest-check build vuln ## Everything CI runs
 
 ## --- generate / build ---
 
@@ -108,6 +108,18 @@ schema-pull: ## Copy schema.xml/cms-schema.xml/opschema.xml off a PAN-OS host (H
 	scp $(HOST):/opt/pancfg/mgmt/factory/cms-schema.xml $(SCHEMA_DIR)/
 	scp $(HOST):/opt/pancfg/mgmt/factory/opschema.xml $(SCHEMA_DIR)/
 	@echo "schemas in $(SCHEMA_DIR)/ — these are vendor files, see ARCHITECTURE.md before committing them"
+
+digest-check: ## Fail if the embedded digests differ from the committed originals
+	@for f in $(DIGEST_DIR)/*.json.gz; do \
+		cmp -s "$$f" "config/schemadigest/$$(basename $$f)" || { \
+			echo "config/schemadigest/$$(basename $$f) differs from $$f; run make config/schemadigest"; \
+			exit 1; }; \
+	done
+	@echo "embedded digests match the originals"
+
+tools-bin: ## Build the exploration commands for local use
+	CGO_ENABLED=0 go build -ldflags '$(LDFLAGS)' -o $(BIN_DIR)/panos-explore ./cmd/panos-explore
+	CGO_ENABLED=0 go build -ldflags '$(LDFLAGS)' -o $(BIN_DIR)/panos-demo ./cmd/panos-demo
 
 build: ## Cross-compile a static linux/amd64 generator binary
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags '$(LDFLAGS)' -o $(BIN_DIR)/$(BINARY) $(PKG)

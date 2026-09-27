@@ -269,12 +269,24 @@ func cmdLookup(cfg *config.Config, args []string) error {
 	}
 
 	// Step 2: from the objects up through every level of group nesting.
+	//
+	// One object can appear in step 1 several times, because an ip-range decomposes
+	// into one prefix per block and each is listed. Group membership belongs to the
+	// object, not to the prefix, so it is reported once.
 	ids := make([]uint32, 0, len(objs))
 	if len(objs) > 0 {
 		fmt.Println("\n2. groups holding them, transitively")
 	}
+	seen := map[string]bool{}
 	for _, o := range objs {
-		ids = append(ids, in.ID(o))
+		if seen[o] {
+			continue
+		}
+		seen[o] = true
+		// Lookup, never ID: a query must not add a name to a shared index.
+		if id, known := in.Lookup(o); known {
+			ids = append(ids, id)
+		}
 		groups := idx.GroupsOf(o)
 		if len(groups) == 0 {
 			fmt.Printf("     %-26s in no group\n", o)
@@ -282,7 +294,9 @@ func cmdLookup(cfg *config.Config, args []string) error {
 		}
 		fmt.Printf("     %-26s in %v\n", o, groups)
 		for _, g := range groups {
-			ids = append(ids, in.ID(g))
+			if id, known := in.Lookup(g); known {
+				ids = append(ids, id)
+			}
 		}
 	}
 

@@ -5,5 +5,8 @@
 # so they stay out of git until that question is answered. See ARCHITECTURE.md.
 /schemas/
 
-# Copied in from schemadigest/ for go:embed; the originals are committed.
-/config/schemadigest/
+# config/schemadigest/ is committed, not ignored. go:embed cannot reach outside its
+# own package, so the digests have to sit there for the library to compile at all. A
+# pristine checkout without them does not build, which means neither does a consumer
+# that runs go get. The Makefile keeps the copy in step with schemadigest/ and
+# digest-check verifies it.

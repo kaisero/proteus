@@ -147,7 +147,7 @@ detail and the measurements.
    size, so a 200 MB Panorama export implies roughly 2 GB. Streaming per device
    group is the mitigation and is not yet designed.
 3. **Runtime data.** Registered-IP group members, App-ID dependencies and
-   template-variable resolution are not in a configuration file at all. 2,482 of
+   template-variable resolution are not in a configuration file at all. 1,069 of
    the schema's reference declarations point at template variables.
 4. **NAT semantics.** The NAT rulebase is read, but translated-address fields are
    not resolved.
