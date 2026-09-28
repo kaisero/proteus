@@ -12,7 +12,8 @@
 //	panos-explore group     <config.xml> <scope> <name>
 //
 // A scope is shared or vsys:<name>. A value is an IP address, a
-// prefix, or an object name.
+// prefix, or an object name. <config.xml> may also be @<device> for the device's
+// latest stored snapshot, or @<device>@<id> for one in particular.
 package main
 
 import (
@@ -28,6 +29,7 @@ import (
 	"github.com/okaiser/panos-analyst/config"
 	"github.com/okaiser/panos-analyst/index"
 	"github.com/okaiser/panos-analyst/resolve"
+	"github.com/okaiser/panos-analyst/store"
 )
 
 // version is set at build time via -ldflags.
@@ -91,6 +93,8 @@ func usage() {
   panos-explore group     <config.xml> <scope> <name>
 
 A scope is shared or vsys:<name>.
+<config.xml> may also be @<device> for its latest stored snapshot, or
+@<device>@<id>; the store is $PANOS_STORE or ~/.local/share/panos-analyst.
 A field is source, destination, category, application, service, from, to,
 source-user or tag.
 
@@ -110,13 +114,17 @@ func withConfig(args []string, extra int, fn func(*config.Config, []string) erro
 	if len(args) != 1+extra {
 		usage()
 	}
+	path, err := configPath(args[0])
+	if err != nil {
+		return err
+	}
 	start := time.Now()
-	cfg, rep, err := config.Load(args[0])
+	cfg, rep, err := config.Load(path)
 	if err != nil {
 		return err
 	}
 	fmt.Printf("loaded %s in %v: PAN-OS %s (%s)\n",
-		args[0], time.Since(start).Round(time.Microsecond),
+		path, time.Since(start).Round(time.Microsecond),
 		cfg.Version(), cfg.DetailVersion())
 	if rep.HasUnknown() {
 		fmt.Printf("  note: %s\n", rep)
@@ -126,6 +134,35 @@ func withConfig(args []string, extra int, fn func(*config.Config, []string) erro
 	}
 	fmt.Println()
 	return fn(cfg, args[1:])
+}
+
+// snapshot is the stored snapshot the configuration came from, when the argument
+// named one. providers reads its forwarding table.
+var snapshot *store.Snapshot
+
+// configPath turns the configuration argument into a file. @fw01 is fw01's latest
+// stored snapshot, and @fw01@<id> one in particular; anything else is a path.
+func configPath(arg string) (string, error) {
+	ref, ok := strings.CutPrefix(arg, "@")
+	if !ok {
+		return arg, nil
+	}
+	root, err := store.DefaultRoot(os.Getenv)
+	if err != nil {
+		return "", err
+	}
+	st, err := store.Open(root)
+	if err != nil {
+		return "", err
+	}
+	sn, err := st.Resolve(ref)
+	if err != nil {
+		return "", err
+	}
+	snapshot = &sn
+	fmt.Printf("snapshot %s@%s, taken %s from %s\n", sn.Device, sn.ID,
+		sn.Meta.TakenAt.Format(time.RFC3339), sn.Meta.Host)
+	return sn.Path(store.ConfigDoc), nil
 }
 
 func cmdInfo(cfg *config.Config, _ []string) error {
@@ -569,6 +606,14 @@ func providers() index.Providers {
 		} else {
 			fmt.Printf("using zone snapshot from %s; routers %v\n", snap.Describe(), snap.Routers())
 			p.Zones = snap
+		}
+	}
+	if p.Zones == nil && snapshot != nil {
+		if z, err := snapshot.Zones(); err == nil {
+			fmt.Printf("using the snapshot's forwarding table; routers %v\n", z.Routers())
+			p.Zones = z
+		} else {
+			fmt.Fprintf(os.Stderr, "warning: %v\n", err)
 		}
 	}
 	return p

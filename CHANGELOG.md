@@ -15,6 +15,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   timestamped snapshot, so every analysis can be repeated against exactly what the
   device said. TLS certificate verification is off by default for self-signed lab
   devices, and the inventory says so and shows how to turn it on.
+- **Ask questions of a stored snapshot.** Every `panos-explore` command takes
+  `@fw01` for the device's latest snapshot, or `@fw01@<id>` for an earlier one, and
+  places addresses in zones from the forwarding table stored with it.
 - **A lookup now says how it reached its answer.** Asking which rules a value can
   reach returns the objects that matched and the value in each that matched it — a
   prefix, an FQDN — so the reasoning can be checked instead of trusted.
