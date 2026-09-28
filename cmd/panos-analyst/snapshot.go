@@ -117,7 +117,7 @@ func (a *app) snapshotShowCmd() *cobra.Command {
 			for i, r := range rows {
 				if r.Device != last {
 					last = r.Device
-					fmt.Fprintf(a.stdout, "%s\n", header(ts[i], a.now()))
+					fmt.Fprintf(a.stdout, "%s   %s\n", r.Device, source(ts[i], a.now()))
 					for _, n := range ts[i].Notes {
 						fmt.Fprintf(a.stdout, "  note: %s\n", n)
 					}
@@ -132,7 +132,7 @@ func (a *app) snapshotShowCmd() *cobra.Command {
 						}
 					}
 				}
-				fmt.Fprintf(a.stdout, "  %-8s PAN-OS %s, %d security rules\n", r.Vsys, r.Version, r.Rules)
+				fmt.Fprintf(a.stdout, "  %-8s PAN-OS %s, security rules: %d\n", r.Vsys, r.Version, r.Rules)
 			}
 			printQualifiers(a, holes, un, notes)
 			return finish(holes, un)
@@ -226,7 +226,7 @@ func (a *app) snapshotDiffCmd() *cobra.Command {
 					case drift.Changed:
 						detail = c.Old + " -> " + c.New
 					}
-					fmt.Fprintf(a.stdout, "    %-8s %-15s %-24s %s\n", c.Op, c.Kind, c.Name, detail)
+					fmt.Fprintf(a.stdout, "    %-8s %-20s %-24s %s\n", c.Op, c.Kind, c.Name, detail)
 				}
 			}
 			printQualifiers(a, holes, nil, nil)

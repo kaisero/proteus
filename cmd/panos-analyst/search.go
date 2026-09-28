@@ -39,10 +39,11 @@ func (a *app) searchCmd() *cobra.Command {
 				return usageErr("--exact, --within and --contains exclude each other")
 			}
 			for _, st := range show {
-				if !contains2(search.Stages, search.Stage(st)) {
+				stage, ok := showNames[st]
+				if !ok {
 					return usageErr("--show %q: want objects, groups, refs or literals", st)
 				}
-				q.Show = append(q.Show, search.Stage(st))
+				q.Show = append(q.Show, stage)
 			}
 			s, err := a.settings(sel.file == "")
 			if err != nil {
@@ -108,7 +109,7 @@ func (a *app) searchCmd() *cobra.Command {
 					fmt.Fprintf(a.stdout, "  note: %s\n", n)
 				}
 				for _, f := range byTarget[i] {
-					fmt.Fprintf(a.stdout, "  %-10s %-15s %-24s %s\n", f.Stage, f.Kind, f.Name, detail(f))
+					fmt.Fprintf(a.stdout, "  %-10s %-20s %-24s %s\n", f.Stage, f.Kind, f.Name, detail(f))
 				}
 			}
 			printQualifiers(a, holes, un, notes)
@@ -128,13 +129,10 @@ func (a *app) searchCmd() *cobra.Command {
 	return cmd
 }
 
-func contains2(xs []search.Stage, x search.Stage) bool {
-	for _, v := range xs {
-		if v == x {
-			return true
-		}
-	}
-	return false
+// showNames are the --show values of spec §15 C6.
+var showNames = map[string]search.Stage{
+	"objects": search.StageObject, "groups": search.StageGroup,
+	"refs": search.StageReference, "literals": search.StageLiteral,
 }
 
 // userSnapshot reads PANOS_USERS, the user-to-group mapping a configuration does
@@ -188,10 +186,16 @@ func detail(f search.Finding) string {
 
 // header names a target: device, vsys, and where its configuration came from.
 func header(t estate.Target, now time.Time) string {
+	return t.Device + " / " + t.Vsys + "   " + source(t, now)
+}
+
+// source says where a target's configuration came from: a file, or a snapshot
+// and its age.
+func source(t estate.Target, now time.Time) string {
 	if t.Snapshot == nil {
-		return fmt.Sprintf("%s / %s   %s", t.Device, t.Vsys, t.Config.Path())
+		return t.Config.Path()
 	}
-	return fmt.Sprintf("%s / %s   snapshot %s (%s)", t.Device, t.Vsys, t.Snapshot.ID, ago(now.Sub(t.Snapshot.Meta.TakenAt)))
+	return fmt.Sprintf("snapshot %s (%s)", t.Snapshot.ID, ago(now.Sub(t.Snapshot.Meta.TakenAt)))
 }
 
 // printQualifiers prints holes, unresolved entries and notes after an answer.

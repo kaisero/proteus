@@ -240,7 +240,7 @@ func TestHousekeeping(t *testing.T) {
 	if err := json.Unmarshal([]byte(c.want(0, "snapshot", "list", "fw01", "--output", "json")), &env); err != nil || len(env.Results) != 2 {
 		t.Errorf("snapshot list json: %v %+v", err, env)
 	}
-	if out := c.want(0, "snapshot", "show", "--vsys", "vsys1"); !strings.Contains(out, "PA-VM") || !strings.Contains(out, "5 security rules") {
+	if out := c.want(0, "snapshot", "show", "--vsys", "vsys1"); !strings.Contains(out, "PA-VM") || !strings.Contains(out, "security rules: 5") {
 		t.Errorf("snapshot show:\n%s", out)
 	}
 	if out := c.want(0, "snapshot", "show", "--output", "json"); !strings.Contains(out, `"serial": "007900000000001"`) {
@@ -265,8 +265,8 @@ func TestSearchAcrossTheEstate(t *testing.T) {
 	c.want(0, "fetch", "fw01")
 	out := c.want(3, "search", "198.18.10.100")
 	for _, want := range []string{
-		"search 198.18.10.100 (covers)", "fw01 / vsys1   snapshot", "object     address         dc01",
-		"reference  security rule   dc-to-home", "hole: fw02:", "1 with results, 1 without, 1 holes",
+		"search 198.18.10.100 (covers)", "fw01 / vsys1   snapshot", "object     address              dc01",
+		"reference  security rule        dc-to-home", "hole: fw02:", "1 with results, 1 without, 1 holes",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("missing %q in:\n%s", want, out)
@@ -283,6 +283,9 @@ func TestSearchAcrossTheEstate(t *testing.T) {
 	}
 	c.want(2, "search", "x", "--exact", "--within")
 	c.want(2, "search", "x", "--show", "nothing")
+	if out := c.want(0, "search", "198.18.10.100", "--device", "fw01", "--show", "objects,refs"); strings.Contains(out, "\n  group ") || !strings.Contains(out, "reference") {
+		t.Errorf("--show objects,refs:\n%s", out)
+	}
 	c.want(2, "search", "web", "--within", "--device", "fw01")
 	c.want(2, "search", "x", "--file", "f.xml", "--device", "fw01")
 	c.want(2, "search", "x", "--label", "nolabel")
@@ -352,8 +355,8 @@ func TestSnapshotDiff(t *testing.T) {
 	c.want(0, "fetch", "fw01")
 	out := c.want(0, "snapshot", "diff")
 	for _, want := range []string{
-		"changed  address         net-home                 198.18.1.0/24 -> 198.18.2.0/24",
-		"added    security rule   new-rule", "vsys:vsys2 no changes",
+		"changed  address              net-home                 198.18.1.0/24 -> 198.18.2.0/24",
+		"added    security rule        new-rule", "vsys:vsys2 no changes",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("missing %q in:\n%s", want, out)
