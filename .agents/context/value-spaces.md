@@ -154,6 +154,7 @@ func (i *Index) RulesWithPrefix(f Field, p netip.Prefix) *roaring.Bitmap
 func (i *Index) Scope() config.Scope
 func (i *Index) SearchValues(substr string) []Hit
 func (i *Index) UnparsedFilters() []UnparsedFilter
+func (i *Index) VersionGap() string
 func (i *Index) With(p Providers) *View
 func (in *Interner) ID(name string) uint32
 func (in *Interner) Len() int

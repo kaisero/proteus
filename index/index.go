@@ -21,10 +21,17 @@ type Index struct {
 	// addrRes is the address resolver, kept directly because address containment is
 	// also exposed on its own and every scope has one.
 	addrRes *addressResolver
+	// gap is the configuration's version gap, empty when its schema matched.
+	gap string
 }
 
 // Scope returns the scope the index covers.
 func (i *Index) Scope() config.Scope { return i.scope }
+
+// VersionGap returns the configuration's version gap, empty when it was read with
+// its own version's schema. Answers without a report, such as Refs and Containing,
+// are subject to it too; this is how a caller of those finds out.
+func (i *Index) VersionGap() string { return i.gap }
 
 // Interner returns the index's name table, so a caller can turn names into the
 // ids RulesWith takes.
@@ -196,6 +203,7 @@ func build(cfg *config.Config, sc config.Scope) (*Index, error) {
 		resolvers: wireResolvers(cfg.FieldKinds("rulebase/security/rules"), byKind),
 		profiles:  newProfileIndex(rules, profs, pgroups),
 		addrRes:   addrRes,
+		gap:       cfg.VersionGap(),
 	}, nil
 }
 

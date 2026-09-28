@@ -134,6 +134,9 @@ func sectionLoad(path string) (*config.Config, error) {
 
 	fmt.Printf("  file        %s\n", path)
 	fmt.Printf("  version     %s (patch %s)\n", cfg.Version(), cfg.DetailVersion())
+	if rep.VersionGap != "" {
+		fmt.Printf("  warning: %s\n", rep.VersionGap)
+	}
 	fmt.Printf("  load time   %v first, %v second\n",
 		first.Round(time.Microsecond), second.Round(time.Microsecond))
 	why("the first load decodes the schema digest and builds the reference table;")

@@ -72,6 +72,9 @@ func (v *View) Candidates(f Field, value string) (*roaring.Bitmap, Report) {
 	rep.Hits = dedupeHits(rep.Hits)
 	rep.Groups = dedupeStrings(rep.Groups)
 	rep.Unresolved = dedupeUnresolved(rep.Unresolved)
+	if i.gap != "" {
+		rep.Unresolved = append(rep.Unresolved, Unresolved{Value: value, Reason: i.gap})
+	}
 
 	// A value nothing recognised is an incomplete answer. A value that was
 	// recognised and matched nothing is a complete one, even with no hits: a URL

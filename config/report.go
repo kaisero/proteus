@@ -13,14 +13,21 @@ type Untyped struct {
 // configuration from a newer patch release still loads and the gap stays visible.
 type Report struct {
 	Untyped []Untyped
+	// VersionGap is set when the configuration was read with another version's
+	// schema digest. It says which two versions, and what that can cost.
+	VersionGap string
 }
 
 // HasUnknown reports whether anything went untyped.
 func (r Report) HasUnknown() bool { return len(r.Untyped) > 0 }
 
 func (r Report) String() string {
-	if !r.HasUnknown() {
-		return "no untyped elements"
+	s := "no untyped elements"
+	if r.HasUnknown() {
+		s = fmt.Sprintf("%d untyped elements, first at %s", len(r.Untyped), r.Untyped[0].XPath)
 	}
-	return fmt.Sprintf("%d untyped elements, first at %s", len(r.Untyped), r.Untyped[0].XPath)
+	if r.VersionGap != "" {
+		s += "; " + r.VersionGap
+	}
+	return s
 }

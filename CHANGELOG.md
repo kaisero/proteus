@@ -128,6 +128,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **The project is now `panos-analyst`.** The module path is
   `github.com/okaiser/panos-analyst`; update imports that used
   `github.com/okaiser/go-panos-schema`.
+- **A configuration from a release without a bundled schema now loads.** It is read
+  with the nearest schema this build carries, and every answer from it says which two
+  versions were involved, because a field that moved between them can make a lookup
+  miss rules without looking incomplete.
 
 ### Removed
 

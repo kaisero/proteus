@@ -57,16 +57,96 @@ func TestLoadReadsAFirewall(t *testing.T) {
 	}
 }
 
-func TestLoadRejectsAnUnsupportedVersion(t *testing.T) {
-	_, _, err := Load("../testdata/config/unsupported-version.xml")
-	if err == nil {
-		t.Fatal("want an error for an unsupported version")
+// A configuration newer than every digest is read with the highest one below it,
+// and the load says so. Spec §9: refusing blocks an estate on one upgrade.
+func TestLoadUsesTheNearestLowerDigest(t *testing.T) {
+	cfg, rep, err := Load("../testdata/config/firewall-version-12.2.xml")
+	if err != nil {
+		t.Fatalf("Load: %v", err)
 	}
-	if !strings.Contains(err.Error(), "11.2") {
-		t.Errorf("the error should name the nearest supported version, got: %v", err)
+	if cfg.Version() != "12.2.0" || cfg.DigestVersion() != "11.2.0" {
+		t.Errorf("version %s read with %s, want 12.2.0 read with 11.2.0", cfg.Version(), cfg.DigestVersion())
 	}
-	if !strings.Contains(err.Error(), "9.1.0") {
-		t.Errorf("the error should name the version it was given, got: %v", err)
+	for _, want := range []string{"12.2.0", "11.2.0"} {
+		if !strings.Contains(rep.VersionGap, want) {
+			t.Errorf("the report's gap must name %s, got %q", want, rep.VersionGap)
+		}
+	}
+	if cfg.VersionGap() != rep.VersionGap {
+		t.Error("the config and the report must describe the same gap")
+	}
+	if !strings.Contains(rep.String(), "12.2.0") {
+		t.Errorf("the report's String must carry the gap, got %q", rep.String())
+	}
+}
+
+// A configuration older than every digest is read with the lowest one.
+func TestLoadUsesTheLowestDigestWhenNoneIsLower(t *testing.T) {
+	cfg, rep, err := Load("../testdata/config/unsupported-version.xml")
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.DigestVersion() != "11.2.0" {
+		t.Errorf("9.1.0 read with %s, want 11.2.0", cfg.DigestVersion())
+	}
+	if !strings.Contains(rep.VersionGap, "9.1.0") {
+		t.Errorf("the gap must name 9.1.0, got %q", rep.VersionGap)
+	}
+}
+
+// An exact match has no gap.
+func TestLoadWithAnExactDigestHasNoGap(t *testing.T) {
+	cfg, rep, err := Load("../testdata/config/firewall-lab.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.VersionGap() != "" || rep.VersionGap != "" {
+		t.Errorf("gap = %q / %q, want none", cfg.VersionGap(), rep.VersionGap)
+	}
+	if cfg.DigestVersion() != cfg.Version() {
+		t.Errorf("digest %s, version %s", cfg.DigestVersion(), cfg.Version())
+	}
+}
+
+// A version that is not a PAN-OS version cannot be matched to anything.
+func TestLoadRejectsAMalformedVersion(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "bad.xml")
+	if err := os.WriteFile(path, []byte(`<config version="eleven"><devices/></config>`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := Load(path); err == nil || !strings.Contains(err.Error(), "eleven") {
+		t.Errorf("want an error naming the bad version, got %v", err)
+	}
+}
+
+func TestNearestDigest(t *testing.T) {
+	have := []string{"10.1.0", "11.2.0"}
+	for in, want := range map[string]string{
+		"11.2.0": "11.2.0",
+		"12.2.0": "11.2.0",
+		"11.0.0": "10.1.0",
+		"10.1.0": "10.1.0",
+		"9.1.0":  "10.1.0",
+	} {
+		got, err := nearestDigest(in, have)
+		if err != nil || got != want {
+			t.Errorf("nearestDigest(%s) = %q, %v; want %s", in, got, err, want)
+		}
+	}
+	if _, err := nearestDigest("11.2", have); err == nil {
+		t.Error("a two-part version must be rejected")
+	}
+	if _, err := nearestDigest("11.x.0", have); err == nil {
+		t.Error("a non-numeric version must be rejected")
+	}
+	if _, err := nearestDigest("11.2.0", nil); err == nil {
+		t.Error("a build with no digest must say so")
+	}
+}
+
+func TestDigestVersionsComeFromTheEmbeddedFiles(t *testing.T) {
+	if got := digestVersions(); len(got) != 1 || got[0] != "11.2.0" {
+		t.Errorf("digestVersions = %v, want [11.2.0]", got)
 	}
 }
 

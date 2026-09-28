@@ -220,7 +220,8 @@ sections and narrates what it does.
 
 The library reports each of these rather than hiding it.
 
-- **Only PAN-OS 11.2 digests ship.** `config.Load` refuses a 12.2 configuration.
+- **Only PAN-OS 11.2 digests ship.** Another version loads with the nearest digest,
+  and every answer carries a warning naming both versions.
 - **Panorama configurations are refused.** Read each firewall's own export instead.
 - **NAT translated addresses are not modelled.** The library reads the rulebase.
 - **Predefined content is unknown.** Regions, predefined applications and PAN-DB

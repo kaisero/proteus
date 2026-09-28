@@ -121,6 +121,9 @@ func withConfig(args []string, extra int, fn func(*config.Config, []string) erro
 	if rep.HasUnknown() {
 		fmt.Printf("  note: %s\n", rep)
 	}
+	if rep.VersionGap != "" {
+		fmt.Printf("  warning: %s\n", rep.VersionGap)
+	}
 	fmt.Println()
 	return fn(cfg, args[1:])
 }

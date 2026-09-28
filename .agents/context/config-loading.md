@@ -32,8 +32,11 @@ Two details are load-bearing and both have regression tests:
   the outermost one closes. Stopping at the first nested close found 1 reference
   edge where the correct walk finds 18.
 
-Only 11.2 digests ship. A 12.2 file is refused with a clear error rather than
-parsed against the wrong schema.
+Only 11.2 digests ship. Another version is read with the nearest digest: the
+highest not above it, else the lowest (spec §9). `Report.VersionGap` and
+`Config.VersionGap()` name both versions, and every index `Candidates` report
+carries it as an `Unresolved`, because a field that moved between releases yields
+no reference and a lookup can then miss rules without looking incomplete.
 
 ### The element tree
 
@@ -115,12 +118,14 @@ type Untyped struct{ ... }
 
 func (c *Config) DetailVersion() string
 func (c *Config) Digest() *schema.Node
+func (c *Config) DigestVersion() string
 func (c *Config) FieldKinds(suffix string) map[string][]string
 func (c *Config) KindContainer(kind string) []string
 func (c *Config) KindContainers(kind string) [][]string
 func (c *Config) Path() string
 func (c *Config) Root() *Element
 func (c *Config) Version() string
+func (c *Config) VersionGap() string
 func (c *Config) Walk(fn func(Event) bool) error
 func (c *Config) WalkPaths(fn func(Event) bool) error
 func (e *Element) Attr(name string) string

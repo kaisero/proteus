@@ -46,7 +46,8 @@ what the answers do not cover.
 | `firewall-lab.xml` | pushed shared pre- and post-rules around a vsys's own rules |
 | `firewall-nested-groups.xml` | three levels of group nesting |
 | `firewall-shadow.xml` | a vsys object shadowing a shared one |
-| `unsupported-version.xml` | a version this build has no digest for |
+| `unsupported-version.xml` | a version older than every digest, read with the lowest |
+| `firewall-version-12.2.xml` | a version newer than every digest, read with the nearest |
 | `panorama-rejected.xml` | a Panorama configuration, which is refused |
 
 ---
@@ -84,11 +85,13 @@ The first `Load` in a process decodes the schema digest, which costs about 55 ms
 Every `Load` after that costs about 0.12 ms. Both figures have a benchmark in
 `config/bench_test.go`.
 
-Only PAN-OS 11.2 digests ship. Another version fails with a clear message:
+Only PAN-OS 11.2 digests ship. Another version loads with the nearest digest, and
+says so:
 
 ```
-$ ./bin/panos-explore info testdata/config/unsupported-version.xml
-panos-explore: config: no schema for PAN-OS 9.1.0; this build supports 11.2.0
+$ ./bin/panos-explore info testdata/config/firewall-version-12.2.xml
+loaded testdata/config/firewall-version-12.2.xml in 56.493ms: PAN-OS 12.2.0 (12.2.1)
+  warning: the configuration is PAN-OS 12.2.0 but was read with the 11.2.0 schema, the nearest this build carries; a field added or moved between them yields no reference, so this answer can miss rules
 ```
 
 A Panorama configuration is refused. Read each firewall's own export instead.

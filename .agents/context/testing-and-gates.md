@@ -61,7 +61,8 @@ internal/codegen 93.0, internal/digest 71.8, cmd/panos-schemagen 57.6.
 | `firewall-zones.xml`, `firewall-zones-shared.xml` | every interface shape, routes, limits |
 | `firewall-apps.xml` | custom application, group, filter, container |
 | `firewall-ipv6.xml` | v6 containment and range decomposition |
-| `unsupported-version.xml` | a version refusal |
+| `unsupported-version.xml` | a version older than every digest, read with the lowest |
+| `firewall-version-12.2.xml` | a version newer than every digest, and the gap it reports |
 | `panorama-rejected.xml` | a Panorama refusal |
 
 ### The device probe
