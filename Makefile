@@ -122,9 +122,10 @@ digest-check: ## Fail if the embedded digests differ from the committed original
 	done
 	@echo "embedded digests match the originals"
 
-tools-bin: ## Build the exploration commands for local use
+tools-bin: ## Build panos-explore, panos-demo and panos-analyst for local use
 	CGO_ENABLED=0 go build -ldflags '$(LDFLAGS)' -o $(BIN_DIR)/panos-explore ./cmd/panos-explore
 	CGO_ENABLED=0 go build -ldflags '$(LDFLAGS)' -o $(BIN_DIR)/panos-demo ./cmd/panos-demo
+	CGO_ENABLED=0 go build -ldflags '$(LDFLAGS)' -o $(BIN_DIR)/panos-analyst ./cmd/panos-analyst
 
 build: ## Cross-compile a static linux/amd64 generator binary
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags '$(LDFLAGS)' -o $(BIN_DIR)/$(BINARY) $(PKG)

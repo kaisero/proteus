@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Fetch a firewall into a snapshot store.** `panos-analyst init` writes an
+  inventory, `panos-analyst fetch` logs in with a username and password, and stores
+  the running configuration, interfaces, forwarding table and system info as a
+  timestamped snapshot, so every analysis can be repeated against exactly what the
+  device said. TLS certificate verification is off by default for self-signed lab
+  devices, and the inventory says so and shows how to turn it on.
 - **A lookup now says how it reached its answer.** Asking which rules a value can
   reach returns the objects that matched and the value in each that matched it — a
   prefix, an FQDN — so the reasoning can be checked instead of trusted.
