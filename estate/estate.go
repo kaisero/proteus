@@ -101,24 +101,28 @@ func scopes(device string, sn *store.Snapshot, cfg *config.Config, rep config.Re
 	for _, v := range vsys {
 		want[v] = true
 	}
+	missing := map[string]bool{}
+	for v := range want {
+		missing[v] = true
+	}
 	var out []Target
 	for _, v := range have {
 		if len(want) > 0 && !want[v] {
 			continue
 		}
-		delete(want, v)
+		delete(missing, v)
 		out = append(out, Target{
 			Device: device, Vsys: v, Scope: config.Scope{Sort: config.ScopeVsys, Name: v},
 			Snapshot: sn, Config: cfg, Report: rep, Notes: notes,
 		})
 	}
 	var holes []Hole
-	missing := make([]string, 0, len(want))
-	for v := range want {
-		missing = append(missing, v)
+	names := make([]string, 0, len(missing))
+	for v := range missing {
+		names = append(names, v)
 	}
-	sort.Strings(missing)
-	for _, v := range missing {
+	sort.Strings(names)
+	for _, v := range names {
 		holes = append(holes, Hole{Device: device, Vsys: v, Reason: fmt.Sprintf("no vsys %s; it has %v", v, have)})
 	}
 	return out, holes

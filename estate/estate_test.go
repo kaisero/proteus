@@ -134,3 +134,14 @@ func TestParseAt(t *testing.T) {
 		t.Error("garbage must be an error")
 	}
 }
+
+// Asking for the first vsys must not let the later ones through.
+func TestVsysFilterHoldsForEveryVsys(t *testing.T) {
+	ts, holes, err := OpenFile("../testdata/config/firewall-multivsys.xml", []string{"vsys1"})
+	if err != nil || len(holes) != 0 {
+		t.Fatal(err, holes)
+	}
+	if got := names(ts); got != "file/vsys1" {
+		t.Errorf("targets = %s, want only file/vsys1", got)
+	}
+}
