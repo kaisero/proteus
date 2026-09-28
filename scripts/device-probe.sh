@@ -6,12 +6,15 @@
 # library over-matches, which is the safe direction for a candidate set. This
 # script exists to show where they disagree and why, not to require agreement.
 #
-# Usage: PANOS_HOST=... PANOS_API_KEY=... scripts/device-probe.sh <config.xml> <scope> [explore-binary]
+# Usage: PANOS_HOST=... PANOS_API_KEY=... scripts/device-probe.sh <config.xml> <vsys> [panos-analyst]
+#
+# <vsys> is vsys1 or vsys:vsys1.
 set -uo pipefail
 
 cfg=${1:?config file}
-scope=${2:?scope, e.g. vsys:vsys1}
-explore=${3:-bin/panos-explore}
+vsys=${2:?vsys, e.g. vsys1}
+vsys=${vsys#vsys:}
+analyst=${3:-bin/panos-analyst}
 
 : "${PANOS_HOST:?set PANOS_HOST}"
 : "${PANOS_API_KEY:?set PANOS_API_KEY}"
@@ -58,7 +61,8 @@ printf '%-15s %-15s %-9s %-23s %-23s %s\n' SOURCE DESTINATION FROM-ZONE DEVICE L
 for p in "${probes[@]}"; do
   read -r src dst fz tz app port target <<<"$p"
   dev=$(device_match "$src" "$dst" "$fz" "$tz" "$app" "$port")
-  lib=$("$explore" simulate "$cfg" "$scope" "$src" "$dst" "$fz" "$tz" 2>/dev/null \
+  lib=$("$analyst" simulate secpolicy "$src" "$dst" --file "$cfg" --vsys "$vsys" \
+        --from-zone "$fz" --to-zone "$tz" --port "$port" --application "$app" 2>/dev/null \
         | sed -n 's/^first match: \([^ ]*\).*/\1/p')
   lib=${lib:-no-match}
   total=$((total + 1))
