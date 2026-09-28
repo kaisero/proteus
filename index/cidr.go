@@ -39,6 +39,10 @@ func newCIDRIndex(objs []resolve.Object) *cidrIndex {
 	return c
 }
 
+// PrefixesOf turns an address value — an address, a prefix, or a range written
+// a-b — into prefixes. Any other value yields none.
+func PrefixesOf(value string) []netip.Prefix { return prefixesOf(value) }
+
 // prefixesOf turns an address object's value into prefixes. An fqdn yields none,
 // because the firewall resolves it at runtime and the configuration holds no
 // addresses for it.

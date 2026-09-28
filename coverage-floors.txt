@@ -22,3 +22,4 @@ github.com/okaiser/panos-analyst/fetch  96.5
 github.com/okaiser/panos-analyst/store  88.1
 github.com/okaiser/panos-analyst/cmd/panos-analyst  83.3
 github.com/okaiser/panos-analyst/estate  100.0
+github.com/okaiser/panos-analyst/search  96.6

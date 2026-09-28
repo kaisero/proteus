@@ -133,7 +133,9 @@ Check: `go test ./index -run TestClosureRepresentation`
 `config`, `resolve` and `index` import no `net`, `net/http`, `net/url` or
 `os/exec`, and no package of this module except each other, `internal/schema`
 and `internal/digest`. `index` does not import `simulate`. `fetch` imports
-neither `simulate` nor `estate`. `store` does not import `fetch`.
+neither `simulate` nor `estate`. `store` does not import `fetch`. `search` and
+`drift` answer from one configuration and import none of `fetch`, `store` or
+`estate`.
 
 The core's freedom from I/O is an absolute property today. A fetcher in the same
 module makes it a conditional one, and conditional invariants decay unless a test

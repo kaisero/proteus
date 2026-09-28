@@ -1,6 +1,7 @@
 package index
 
 import (
+	"sort"
 	"strings"
 	"sync"
 
@@ -151,6 +152,27 @@ func (i *Index) GroupsOf(name string) []string {
 // Their membership is missing from the index, and this is how a caller finds out.
 func (i *Index) UnparsedFilters() []UnparsedFilter {
 	return append([]UnparsedFilter{}, i.closure.unparsed...)
+}
+
+// DirectGroupsOf returns the groups that name a member directly, not through
+// another group. It answers "which group do I edit", which the transitive list of
+// GroupsOf hides.
+func (i *Index) DirectGroupsOf(name string) []string {
+	id, known := i.in.Lookup(name)
+	if !known {
+		return nil
+	}
+	var out []string
+	for g, members := range i.closure.direct {
+		for _, m := range members {
+			if m == id {
+				out = append(out, i.in.Name(g))
+				break
+			}
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 // MembersOf returns the transitive members of a group.

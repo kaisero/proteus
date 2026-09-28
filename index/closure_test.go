@@ -115,3 +115,23 @@ func TestUnparsedFiltersAreReported(t *testing.T) {
 		t.Error("UnparsedFilters returned the index's own slice; it must return a copy")
 	}
 }
+
+// Direct groups answer "which group do I edit": only the one naming the member.
+func TestDirectGroupsOf(t *testing.T) {
+	idx := nestedIndex(t)
+	if got := idx.DirectGroupsOf("h-1"); len(got) != 1 || got[0] != "g-inner" {
+		t.Errorf("DirectGroupsOf(h-1) = %v, want [g-inner]", got)
+	}
+	if got := idx.DirectGroupsOf("g-inner"); len(got) != 1 || got[0] != "g-middle" {
+		t.Errorf("DirectGroupsOf(g-inner) = %v, want [g-middle]", got)
+	}
+	if got := idx.DirectGroupsOf("unknown"); got != nil {
+		t.Errorf("an unknown name has no groups, got %v", got)
+	}
+}
+
+func TestPrefixesOfIsExported(t *testing.T) {
+	if got := PrefixesOf("10.0.0.0/8"); len(got) != 1 {
+		t.Errorf("PrefixesOf = %v", got)
+	}
+}

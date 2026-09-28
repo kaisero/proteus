@@ -45,6 +45,8 @@ var rules = []rule{
 	{from: "index", forbid: mod("simulate")},
 	{from: "fetch", forbid: mod("simulate", "estate")},
 	{from: "store", forbid: mod("fetch")},
+	{from: "search", forbid: mod("fetch", "store", "estate")},
+	{from: "drift", forbid: mod("fetch", "store", "estate")},
 }
 
 // violations reports every rule a graph breaks. graph maps a package of this
