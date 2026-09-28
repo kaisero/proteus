@@ -10,3 +10,6 @@
 # pristine checkout without them does not build, which means neither does a consumer
 # that runs go get. The Makefile keeps the copy in step with schemadigest/ and
 # digest-check verifies it.
+
+# A local inventory holds credentials or names the variables that do.
+config.yaml

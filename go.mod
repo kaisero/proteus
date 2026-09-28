@@ -5,6 +5,7 @@ go 1.26.6
 require (
 	github.com/RoaringBitmap/roaring/v2 v2.29.0
 	github.com/gaissmai/bart v0.30.0
+	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
