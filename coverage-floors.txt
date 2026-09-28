@@ -15,12 +15,12 @@ github.com/okaiser/panos-analyst/internal/digest  71.8
 github.com/okaiser/panos-analyst/internal/codegen  93.0
 github.com/okaiser/panos-analyst/cmd/panos-schemagen  57.6
 github.com/okaiser/panos-analyst/config  98.1
-github.com/okaiser/panos-analyst/resolve  95.7
+github.com/okaiser/panos-analyst/resolve  95.8
 github.com/okaiser/panos-analyst/index  95.1
 github.com/okaiser/panos-analyst/inventory  96.1
 github.com/okaiser/panos-analyst/fetch  96.5
 github.com/okaiser/panos-analyst/store  88.1
-github.com/okaiser/panos-analyst/cmd/panos-analyst  90.1
+github.com/okaiser/panos-analyst/cmd/panos-analyst  90.7
 github.com/okaiser/panos-analyst/estate  100.0
 github.com/okaiser/panos-analyst/search  97.3
 github.com/okaiser/panos-analyst/drift  91.1
