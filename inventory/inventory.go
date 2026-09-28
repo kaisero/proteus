@@ -14,6 +14,8 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
+	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -44,6 +46,12 @@ type Settings struct {
 	Username     string `yaml:"username"`
 	PasswordEnv  string `yaml:"password_env"`
 	Password     string `yaml:"password"`
+
+	// The analysis settings of spec §15 C14. Each can also come from a PANOS_*
+	// variable or a flag, which win over the file.
+	Store          string `yaml:"store"`            // snapshot store root
+	MaxSnapshotAge string `yaml:"max_snapshot_age"` // e.g. 24h or 7d
+	Output         string `yaml:"output"`           // text or json
 }
 
 // Device is one firewall.
@@ -119,6 +127,16 @@ func (inv *Inventory) validate() error {
 	if inv.Defaults.Timeout < 0 || inv.Defaults.SnapshotKeep < 0 {
 		return errors.New("inventory: defaults: timeout and snapshot_keep must not be negative")
 	}
+	if a := inv.Defaults.MaxSnapshotAge; a != "" {
+		if _, err := ParseAge(a); err != nil {
+			return fmt.Errorf("inventory: defaults: max_snapshot_age: %w", err)
+		}
+	}
+	switch inv.Defaults.Output {
+	case "", "text", "json":
+	default:
+		return fmt.Errorf("inventory: defaults: output %q, want text or json", inv.Defaults.Output)
+	}
 	seen := map[string]bool{}
 	for i, d := range inv.Devices {
 		switch {
@@ -143,6 +161,71 @@ func (inv *Inventory) Names() []string {
 		out[i] = d.Name
 	}
 	return out
+}
+
+// Select returns the names of the devices a selection names, in file order.
+//
+// A device is selected when its name is among devices (if any are given) and it
+// carries every key=value in labels (if any are given). No selector selects every
+// device. Spec §15 C7.
+func (inv *Inventory) Select(devices, labels []string) ([]string, error) {
+	want := map[string]bool{}
+	for _, d := range devices {
+		if !inv.has(d) {
+			return nil, fmt.Errorf("inventory: no device named %q; the inventory has %v", d, inv.Names())
+		}
+		want[d] = true
+	}
+	need := map[string]string{}
+	for _, l := range labels {
+		k, v, ok := strings.Cut(l, "=")
+		if !ok || k == "" {
+			return nil, fmt.Errorf("inventory: label %q must be key=value", l)
+		}
+		need[k] = v
+	}
+	var out []string
+	for _, d := range inv.Devices {
+		if len(want) > 0 && !want[d.Name] {
+			continue
+		}
+		match := true
+		for k, v := range need {
+			if d.Labels[k] != v {
+				match = false
+			}
+		}
+		if match {
+			out = append(out, d.Name)
+		}
+	}
+	return out, nil
+}
+
+func (inv *Inventory) has(name string) bool {
+	for _, d := range inv.Devices {
+		if d.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+// ParseAge reads a snapshot age limit: a Go duration such as 90m or 24h, or a whole
+// number of days such as 7d.
+func ParseAge(s string) (time.Duration, error) {
+	if n, ok := strings.CutSuffix(s, "d"); ok {
+		days, err := strconv.Atoi(n)
+		if err != nil || days < 0 {
+			return 0, fmt.Errorf("age %q: want a duration like 24h or a day count like 7d", s)
+		}
+		return time.Duration(days) * 24 * time.Hour, nil
+	}
+	d, err := time.ParseDuration(s)
+	if err != nil || d < 0 {
+		return 0, fmt.Errorf("age %q: want a duration like 24h or a day count like 7d", s)
+	}
+	return d, nil
 }
 
 // Resolve returns one device with the defaults applied and its password read.

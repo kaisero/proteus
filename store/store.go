@@ -242,6 +242,31 @@ func (s *Store) Get(device, id string) (Snapshot, error) {
 	return Snapshot{Device: device, ID: id, Dir: dir, Meta: m}, nil
 }
 
+// AtOrBefore returns the newest snapshot of a device that holds a configuration and
+// was taken at or before t. Devices are fetched at different moments, so one time
+// picks a different snapshot on each. Spec §15 C8.
+func (s *Store) AtOrBefore(device string, t time.Time) (Snapshot, error) {
+	ids, err := s.List(device)
+	if err != nil {
+		return Snapshot{}, err
+	}
+	for _, id := range ids { // newest first
+		taken, _ := time.Parse(idLayout, id)
+		if taken.After(t) {
+			continue
+		}
+		sn, err := s.Get(device, id)
+		if err != nil {
+			return Snapshot{}, err
+		}
+		if sn.Has(ConfigDoc) {
+			return sn, nil
+		}
+	}
+	return Snapshot{}, fmt.Errorf("store: %s has no snapshot with a configuration at or before %s",
+		device, t.UTC().Format(time.RFC3339))
+}
+
 // Resolve reads a snapshot reference: a device name for its latest snapshot, or
 // device@id for one in particular.
 func (s *Store) Resolve(ref string) (Snapshot, error) {

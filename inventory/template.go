@@ -26,6 +26,9 @@ defaults:
   snapshot_keep: 20              # snapshots kept per device
   username: admin                # the login used to fetch an API key
   password_env: PANOS_PASSWORD   # the environment variable holding its password
+  max_snapshot_age: 24h          # answers from older snapshots carry a note
+  output: text                   # text or json
+  # store: ~/.local/share/panos-analyst   # where snapshots are kept
 
 devices:
   - name: fw01

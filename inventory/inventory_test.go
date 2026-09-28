@@ -205,3 +205,65 @@ func TestDefaultPath(t *testing.T) {
 		t.Errorf("home default = %s, %v", got, err)
 	}
 }
+
+func TestSelect(t *testing.T) {
+	inv, err := Parse(strings.NewReader(`version: 1
+devices:
+  - {name: a, host: h, labels: {site: vienna, tier: edge}}
+  - {name: b, host: h, labels: {site: vienna, tier: core}}
+  - {name: c, host: h, labels: {site: graz, tier: edge}}
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		devices, labels []string
+		want            string
+	}{
+		{nil, nil, "a,b,c"},
+		{[]string{"c", "a"}, nil, "a,c"},
+		{nil, []string{"site=vienna"}, "a,b"},
+		{nil, []string{"site=vienna", "tier=edge"}, "a"},
+		{[]string{"b", "c"}, []string{"tier=edge"}, "c"},
+		{nil, []string{"site=linz"}, ""},
+	} {
+		got, err := inv.Select(tc.devices, tc.labels)
+		if err != nil || strings.Join(got, ",") != tc.want {
+			t.Errorf("Select(%v, %v) = %v, %v; want %s", tc.devices, tc.labels, got, err, tc.want)
+		}
+	}
+	if _, err := inv.Select([]string{"nope"}, nil); err == nil {
+		t.Error("an unknown device must be an error")
+	}
+	if _, err := inv.Select(nil, []string{"site"}); err == nil {
+		t.Error("a label without = must be an error")
+	}
+}
+
+func TestParseAge(t *testing.T) {
+	for in, want := range map[string]time.Duration{"24h": 24 * time.Hour, "7d": 7 * 24 * time.Hour, "0": 0, "90m": 90 * time.Minute} {
+		if got, err := ParseAge(in); err != nil || got != want {
+			t.Errorf("ParseAge(%s) = %v, %v", in, got, err)
+		}
+	}
+	for _, bad := range []string{"x", "-1h", "xd", "-2d"} {
+		if _, err := ParseAge(bad); err == nil {
+			t.Errorf("ParseAge(%s) must fail", bad)
+		}
+	}
+}
+
+func TestAnalysisSettingsAreValidated(t *testing.T) {
+	for _, doc := range []string{
+		"version: 1\ndefaults: {max_snapshot_age: soon}\ndevices: []\n",
+		"version: 1\ndefaults: {output: yaml}\ndevices: []\n",
+	} {
+		if _, err := Parse(strings.NewReader(doc)); err == nil {
+			t.Errorf("want an error for %q", doc)
+		}
+	}
+	inv, err := Parse(strings.NewReader("version: 1\ndefaults: {max_snapshot_age: 7d, output: json, store: /s}\ndevices: []\n"))
+	if err != nil || inv.Defaults.Output != "json" || inv.Defaults.Store != "/s" {
+		t.Errorf("got %+v, %v", inv, err)
+	}
+}

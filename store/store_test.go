@@ -240,3 +240,23 @@ func TestDefaultRoot(t *testing.T) {
 		t.Errorf("home default = %s, %v", got, err)
 	}
 }
+
+func TestAtOrBefore(t *testing.T) {
+	s := open(t)
+	a, _ := s.Write(Meta{Device: "fw01"}, docs(t, false), 20)     // 10:00
+	_, _ = s.Write(Meta{Device: "fw01"}, map[string][]byte{}, 20) // 10:01, no config
+	c, _ := s.Write(Meta{Device: "fw01"}, docs(t, false), 20)     // 10:02
+	at := func(h, m int) time.Time { return time.Date(2026, 9, 28, h, m, 30, 0, time.UTC) }
+	if _, err := s.AtOrBefore("fw01", at(9, 59)); err == nil {
+		t.Error("before the first snapshot there is none")
+	}
+	if got, err := s.AtOrBefore("fw01", at(10, 1)); err != nil || got.ID != a.ID {
+		t.Errorf("at 10:01:30 = %v, %v; want %s, skipping the snapshot without a configuration", got.ID, err, a.ID)
+	}
+	if got, err := s.AtOrBefore("fw01", at(11, 0)); err != nil || got.ID != c.ID {
+		t.Errorf("at 11:00 = %v, %v; want %s", got.ID, err, c.ID)
+	}
+	if _, err := s.AtOrBefore("fw02", at(11, 0)); err == nil {
+		t.Error("a device never fetched has none")
+	}
+}
