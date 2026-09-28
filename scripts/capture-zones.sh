@@ -22,7 +22,7 @@ op() {
 # afi=both so a device with IPv6 routes reports them; the argument is declared by the
 # operational schema, so it is safe to pass on any release that has the command.
 interfaces=$(op '<show><interface>all</interface></show>')
-fib=$(op '<show><advanced-routing><fib><afi>both</afi></afi></fib></advanced-routing></show>')
+fib=$(op '<show><advanced-routing><fib><afi>both</afi></fib></advanced-routing></show>')
 
 # A firewall not in Advanced Routing Mode rejects that command; the legacy one shares
 # the same handler on the device and therefore the same output shape.

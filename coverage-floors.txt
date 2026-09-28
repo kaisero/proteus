@@ -18,4 +18,4 @@ github.com/okaiser/panos-analyst/config  98.1
 github.com/okaiser/panos-analyst/resolve  95.7
 github.com/okaiser/panos-analyst/index  95.0
 github.com/okaiser/panos-analyst/inventory  94.3
-github.com/okaiser/panos-analyst/fetch  94.3
+github.com/okaiser/panos-analyst/fetch  96.5
