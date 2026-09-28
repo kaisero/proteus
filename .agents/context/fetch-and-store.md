@@ -8,7 +8,7 @@ Three packages sit above the read-only core. `inventory` says which firewalls th
 are and how to log in to each. `fetch` logs in and reads documents from a device's
 XML API. `store` keeps each fetch as a timestamped snapshot on disk. The core never
 imports any of them (R12); `cmd/panos-analyst` wires them together, and
-`panos-explore` reads a snapshot through `@<device>`.
+every `panos-analyst` question reads the selected devices' snapshots.
 
 ## How it works
 
@@ -66,7 +66,7 @@ and `fib`.
 
 - `go test ./inventory ./fetch ./store ./cmd/panos-analyst`
 - `./bin/panos-analyst init | fetch <device>… | fetch --all | snapshots <device>`
-- `./bin/panos-explore <command> @fw01 …` — any lookup, from the latest snapshot.
+- `./bin/panos-analyst search <term> --device fw01` — any question, from the latest snapshot.
 
 ## Public API
 
@@ -98,6 +98,7 @@ type Meta struct{ ... }
 type Snapshot struct{ ... }
 type Store struct{ ... }
 
+func (s *Store) AtOrBefore(device string, t time.Time) (Snapshot, error)
 func (s *Store) Get(device, id string) (Snapshot, error)
 func (s *Store) Latest(device string) (Snapshot, error)
 func (s *Store) List(device string) ([]string, error)
@@ -129,4 +130,4 @@ func Open(root string) (*Store, error)
 
 - `inventory/`, `fetch/`, `store/`, `cmd/panos-analyst/`, `internal/fakepanos/`
 - [providers](providers.md) — what the index does with a zone snapshot
-- [commands](commands.md) — the `panos-analyst` and `panos-explore` surface
+- [commands](commands.md) — the `panos-analyst` surface

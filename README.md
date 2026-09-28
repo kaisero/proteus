@@ -15,7 +15,7 @@ The object model is generated from the schema PAN-OS itself ships.
 
 - **Fetches what it analyses** — `panos-analyst fetch` logs in to each firewall in
   an inventory and stores its configuration and operational state as a timestamped
-  snapshot. Every `panos-explore` command also takes `@fw01` for the latest one.
+  snapshot. Every question then runs against the devices' latest snapshots.
 - **Reads what a firewall actually evaluates** — the library keys each policy by
   device **and** vsys, and orders the rule layers the way the firewall evaluates
   them: pushed shared pre-rules, the vsys's own rules, pushed shared post-rules.
@@ -40,27 +40,23 @@ The object model is generated from the schema PAN-OS itself ships.
 ## A first look
 
 ```text
-$ ./bin/panos-explore reaches testdata/config/firewall-urlcat.xml vsys:vsys1 \
-      category superlong.example.azureapps.microsoft.com
-loaded testdata/config/firewall-urlcat.xml in 53.311ms: PAN-OS 11.2.0 (11.2.5)
+$ ./bin/panos-analyst search superlong.example.azureapps.microsoft.com \
+      --file testdata/config/firewall-urlcat.xml
+search superlong.example.azureapps.microsoft.com (matches)
 
-which rules could category match superlong.example.azureapps.microsoft.com, in vsys:vsys1
-
-superlong.example.azureapps.microsoft.com matched via
-  custom-azuresite-group   custom-url-category superlong.example.azureapps.microsoft.com
-
-rules in evaluation order (2)
-    1. any-category-early         allow  [local       vsys:vsys1]
-    4. URL-Example                allow  [local       vsys:vsys1]
-
-some of those match only because their category is "any"
+file / vsys1   testdata/config/firewall-urlcat.xml
+  object     custom-url-category  custom-azuresite-group   superlong.example.azureapps.microsoft.com
+  reference  security rule        URL-Example              category -> custom-azuresite-group
+1 with results, 0 without, 0 holes
 ```
 
-See three things here. The answer names the rules in evaluation order. It names
-the object that matched and the value that matched it, so a reader can check the
-reasoning. And it says which rules join only because the field is `any`.
+See two things here. The answer names the object that matched and the value that
+matched it, so a reader can check the reasoning. And it follows the object to the
+rule that names it. Without `--file`, the same command answers for every device in
+the inventory, one block per device and vsys.
 
-The same question in Go:
+Which rules a value can reach, including the rules whose field is `any`, is a lookup
+in Go:
 
 ```go
 cfg, _, err := config.Load("testdata/config/firewall-urlcat.xml")
@@ -174,7 +170,7 @@ help strings.
 ### Build
 
 ```bash
-make tools-bin                 # bin/panos-explore and bin/panos-demo
+make tools-bin                 # bin/panos-analyst and bin/panos-demo
 make build-local               # the generator, bin/panos-schemagen
 ```
 
@@ -198,39 +194,34 @@ replace github.com/okaiser/panos-analyst => ../go-panos-schema
 
 ## Commands
 
-`panos-analyst` fetches devices into the snapshot store.
+One binary, `panos-analyst`. Questions are verbs; housekeeping is grouped by noun.
 
 | Command and arguments | What it does |
 | --- | --- |
-| `init` | Write an inventory template, mode 0600, with TLS verification off and how to turn it on |
-| `fetch <device>… \| --all` | Log in, fetch config, system info, interfaces and FIB, and store them as a snapshot |
-| `snapshots <device>` | List a device's snapshots, newest first; `*` marks latest |
+| `fetch <device>… \| --label k=v \| --all` | Log in, fetch config, system info, interfaces and FIB, store a snapshot; up to eight devices at once |
+| `inventory init` | Write an inventory template, mode 0600, with TLS verification off and how to turn it on |
+| `snapshot list <device>` | A device's snapshots, newest first; `*` marks latest |
+| `snapshot show` | Per device and vsys: snapshot, age, version, rule count, fetched documents |
+| `snapshot diff [--from] [--to]` | Objects and rules added, removed or changed between two snapshots |
+| `search <term>` | Every place a value or name appears: objects by value and by name, groups, references, literals |
+| `simulate secpolicy <src> <dst>` | The rules one flow could hit on one device, and the first match |
 
-`--config` and `--store`, or `PANOS_CONFIG` and `PANOS_STORE`, choose the inventory
-and the store.
+Every question takes the same selectors: `--device`, `--label k=v`, `--vsys`,
+`--at <time>` for older snapshots, `--fresh` to fetch first, or `--file <config.xml>`
+to read one file with no inventory. `search` takes `--exact`, `--within` or
+`--contains`, and `--kind`, `--field`, `--show` and `--direct` to narrow it.
 
-`panos-explore` answers every question the library answers, without any Go. Every
-`<config.xml>` below may also be `@<device>` or `@<device>@<id>`.
+`--output json` prints one versioned envelope. Exit codes: 0 complete, 1 error,
+2 usage, 3 answered with holes or unresolved entries.
 
-| Command and arguments | What it answers |
-| --- | --- |
-| `info <config.xml>` | Which version this file is, its vsys, and each vsys's rule count |
-| `groups <config.xml>` | The policy of every vsys, in evaluation order |
-| `target <config.xml> <device> <vsys>` | The scope chain, policy and visible addresses of one vsys |
-| `lookup <config.xml> <scope> <value>` | From an address or prefix: the objects covering it, the groups holding them, the rules naming either |
-| `reaches <config.xml> <scope> <field> <value>` | Which rules one field could match one value, in any value space |
-| `search <config.xml> <scope> <substring>` | Which objects hold a fragment of a value |
-| `uses <config.xml> <scope> <category\|url>` | Which rules apply a security profile that mentions a URL category |
-| `whereused <config.xml> <scope> <name>` | Every reference to a name, with the object kinds the schema permits there |
-| `simulate <config.xml> <scope> <source> <destination> [from-zone to-zone]` | The candidate rules for one address pair, and the first match |
-| `group <config.xml> <scope> <name>` | What an address group resolves to in one scope |
+Settings come from, in rising precedence, the defaults, the inventory's
+`defaults:`, `PANOS_*` variables and flags: the inventory (`PANOS_CONFIG`,
+`--config`), the store (`store:`, `PANOS_STORE`, `--store`), the snapshot age limit
+(`max_snapshot_age:`, `PANOS_MAX_SNAPSHOT_AGE`, `--max-age`) and the output
+(`output:`, `PANOS_OUTPUT`, `--output`). `PANOS_USERS` points at a user snapshot.
 
-A scope is `shared` or `vsys:<name>`. A field is `source`,
-`destination`, `category`, `application`, `service`, `from`, `to`, `source-user`
-or `tag`. `PANOS_USERS` points at a user snapshot.
-
-`panos-demo <config.xml> [-v]` runs every feature against one file in twelve
-sections and narrates what it does.
+`panos-demo <config.xml> [-v]` runs every library feature against one file in
+twelve sections and narrates what it does.
 
 ## Known limits
 
@@ -263,8 +254,7 @@ The library reports each of these rather than hiding it.
 ```
 go-panos-schema/
 ├── cmd/
-│   ├── panos-analyst/     # init, fetch and list stored snapshots
-│   ├── panos-explore/     # the CLI used throughout these docs
+│   ├── panos-analyst/     # fetch, snapshots, search, simulate: the CLI
 │   ├── panos-demo/        # a narrated tour of every feature
 │   └── panos-schemagen/   # digest a vendor schema, generate the Go model
 ├── config/                # Load, version detection, element tree, scopes
@@ -275,6 +265,9 @@ go-panos-schema/
 ├── inventory/             # devices, credentials and TLS choice, from YAML
 ├── fetch/                 # read-only XML API client and the document list
 ├── store/                 # timestamped on-disk snapshots, latest, retention
+├── estate/                # selectors and a time, to devices, vsys and configs
+├── search/                # every place a value or name appears, in one scope
+├── drift/                 # what changed between two configurations of a scope
 ├── schema/                # public: query the schema itself (design not settled)
 ├── internal/schema/       # parse the PAN-OS schema grammar
 ├── internal/digest/       # the committed digest format

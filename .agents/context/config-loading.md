@@ -100,7 +100,7 @@ that might hit an ambiguous kind uses `KindContainers` and chooses, then reads w
 ## Build / run pointers
 
 - `go test ./config/` — loading, the tree, the walk, the schema questions.
-- `./bin/panos-explore info <cfg>` — version, vsys, load time.
+- `./bin/panos-analyst snapshot show --file <cfg>` — version, vsys, rule counts.
 - `make digest-check` — the two digest copies agree.
 
 ## Public API

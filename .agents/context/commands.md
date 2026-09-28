@@ -1,66 +1,48 @@
 # commands
 
-Validated against 86fd84f on 2026-09-27 · Purpose: the three binaries, what each is for, and which one to reach for.
+Validated against c173b67 on 2026-09-29 · Purpose: the three binaries, what each is for, and which one to reach for.
 
 ## Purpose & responsibilities
 
 The library is the product; the commands are how a human or an agent exercises it
-without writing Go. `panos-explore` is the query surface, `panos-demo` is a
-narrated tour used to check behaviour against a real configuration, and
-`panos-schemagen` is the build-time generator.
+without writing Go. `panos-analyst` is the one command surface: it fetches devices
+into the store and answers questions of them. `panos-demo` is a narrated tour used
+to check behaviour against a real configuration. `panos-schemagen` is the
+build-time generator. Spec: `docs/specs/2026-09-27-panos-analyst-scope.md` §15.
 
 `make tools-bin` builds the first two. `make build` cross-compiles only the
-generator for linux/amd64.
-
-## panos-explore
-
-```
-info      <cfg>                                      version, vsys, rule counts
-groups    <cfg>                                      the policy of every vsys
-target    <cfg> <device> <vsys>                      what one vsys evaluates
-lookup    <cfg> <scope> <value>                      the four paths, narrated step by step
-reaches   <cfg> <scope> <field> <value>              which rules one field could match
-search    <cfg> <scope> <substring>                  objects by a fragment of their value
-uses      <cfg> <scope> <category|url>               rule to category through profiles
-whereused <cfg> <scope> <name>                       every reference to a name
-simulate  <cfg> <scope> <src> <dst> [from to]        both sides, optionally zoned
-group     <cfg> <scope> <name>                       one address group in one scope
-```
-
-A scope is `shared` or `vsys:<name>`. A field is `source`,
-`destination`, `category`, `application`, `service`, `from`, `to`, `source-user`
-or `tag`. `PANOS_USERS` points at a user snapshot.
-
-### Which one to use
-
-- **`reaches`** is the general door. One field, one value, any kind of value.
-- **`lookup`** shows the same thing step by step, which is what to run when an
-  answer looks wrong.
-- **`simulate`** intersects source and destination. **Pass the zones.** Without
-  them it agrees with a device on 3 of 7 probes; with them, 7 of 7.
-- **`uses`** answers the question `reaches` cannot: which rules apply a profile
-  that mentions a category. It gives no allow-or-block verdict.
-- **`search`** is substring and is not matching. The output says so.
-
-### Conventions the commands follow
-
-- The incompleteness warning prints **before** the result, because the result on
-  its own looks complete.
-- Every match prints what matched and the value that matched it.
-- Each command names what it did not evaluate, and the wording differs with and
-  without zones.
+generator.
 
 ## panos-analyst
 
 ```
-init                      write an inventory template, mode 0600
-fetch <device>... | --all log in, fetch the documents, store a snapshot
-snapshots <device>        list snapshots, newest first; * marks latest
+fetch <device>... | --label k=v | --all     log in, fetch four documents, store a snapshot
+inventory init                              write an inventory template, mode 0600
+snapshot list <device>                      snapshots, newest first; * marks latest
+snapshot show                               per device and vsys: snapshot, age, version, rules
+snapshot diff [--from] [--to]               objects and rules added, removed, changed
+search <term>                               every place a value or name appears
+simulate secpolicy <src> <dst>              the rules one flow could hit, and the first match
 ```
 
-`--config`/`PANOS_CONFIG` pick the inventory, `--store`/`PANOS_STORE` the store.
-Every `panos-explore` `<cfg>` may be `@<device>` or `@<device>@<id>`; zone answers
-then come from the snapshot's forwarding table unless `PANOS_ZONES` is set.
+- **Two question verbs.** `search` answers "where does this appear" in five stages:
+  objects by value, objects by name, groups, references, literals. Rules whose field
+  is `any` are not in it; `simulate` answers "what would this traffic hit".
+- **Selectors** on every question: `--device`, `--label k=v` (AND), `--vsys`,
+  `--at <time>`, `--fresh`, `--file <config.xml>`. No selector means every device.
+- **Search modes:** the term's type sets the match (address covers, prefix overlaps,
+  port covers, URL by tokens, else exact); `--exact`, `--within`, `--contains`
+  override. Filters: `--kind`, `--field`, `--show objects,groups,refs,literals`,
+  `--direct`.
+- **`simulate secpolicy` is a stopgap** until the staged simulator (M4): today's
+  composition for one device and vsys; zones only when given. Its text ends with
+  `first match: <rule> (<action>)`, which `scripts/device-probe.sh` reads.
+- **Output and exit codes:** `--output text|json`; JSON is one envelope with
+  `format`, `command`, `input`, `results`, `holes`, `unresolved`, `notes`. Exit 0
+  complete, 1 error, 2 usage, 3 holes or unresolved.
+- **Settings**, rising precedence default < inventory `defaults:` < `PANOS_*` <
+  flag: inventory path, store root, `max_snapshot_age`, output. `PANOS_USERS` names
+  a user snapshot; a stored forwarding table supplies zones.
 
 ## panos-demo
 
@@ -77,9 +59,9 @@ digests into `config/v11_2/*/model.go`. See [schema-codegen](schema-codegen.md).
 
 ## Build / run pointers
 
-- `make tools-bin` — `bin/panos-explore`, `bin/panos-demo`.
+- `make tools-bin` — `bin/panos-analyst`, `bin/panos-demo`.
 - `make build-local` — `bin/panos-schemagen` for this machine.
-- Fixtures live in `testdata/config/`; no command needs a device.
+- Fixtures live in `testdata/config/`; with `--file` no command needs a device.
 
 ## Public API
 
@@ -87,16 +69,17 @@ Not a library surface. The commands are `main` packages under `cmd/`.
 
 ## Gotchas / invariants
 
-- **Commands hold no matching logic.** They compose library calls. The four paths
-  live in `index/candidates.go` and nowhere else; duplicating them is how the
-  `any` defect came to need fixing twice.
-- **A command must surface `Report.Unresolved`.** A guard nothing prints is not a
-  guard.
-- **`lookup` deduplicates by object.** An ip-range decomposes into several
-  prefixes and step one lists each, but group membership belongs to the object.
+- **Commands hold no matching logic.** They compose library calls: `estate` for
+  targets, `search` for findings, `drift` for changes, `index` for candidates. The
+  four paths live in `index/candidates.go` and nowhere else.
+- **An incomplete answer exits 3.** A hole or an unresolved entry is printed and
+  sets the exit code; a script must be able to refuse to act on it.
+- **A version gap is unresolved, a stale snapshot is a note.** The first can make
+  an answer miss rules; the second only qualifies it.
 
 ## See also
 
-- `cmd/panos-explore/main.go`, `cmd/panos-demo/main.go`
+- `cmd/panos-analyst/`, `cmd/panos-demo/main.go`
 - `QUICKSTART.md` — the same commands, task by task, with output
-- [reporting](reporting.md) — what the warning block means
+- [fetch-and-store](fetch-and-store.md) — what `fetch` and the store do
+- [reporting](reporting.md) — what `Unresolved` means

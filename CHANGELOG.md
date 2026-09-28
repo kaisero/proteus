@@ -9,15 +9,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **Fetch a firewall into a snapshot store.** `panos-analyst init` writes an
-  inventory, `panos-analyst fetch` logs in with a username and password, and stores
+- **Fetch a firewall into a snapshot store.** `panos-analyst inventory init` writes
+  an inventory, `panos-analyst fetch` logs in with a username and password, and stores
   the running configuration, interfaces, forwarding table and system info as a
-  timestamped snapshot, so every analysis can be repeated against exactly what the
-  device said. TLS certificate verification is off by default for self-signed lab
+  timestamped snapshot, up to eight devices at once, so every analysis can be
+  repeated against exactly what the device said. TLS certificate verification is off by default for self-signed lab
   devices, and the inventory says so and shows how to turn it on.
-- **Ask questions of a stored snapshot.** Every `panos-explore` command takes
-  `@fw01` for the device's latest snapshot, or `@fw01@<id>` for an earlier one, and
-  places addresses in zones from the forwarding table stored with it.
+- **Search every device for a value or a name in one command.** `panos-analyst
+  search 10.124.0.1` finds the objects holding it, the objects named by it, the
+  groups holding those, every reference to them and the rules that write it
+  directly, per device and vsys, across the whole inventory. `--exact`, `--within`
+  and `--contains` change how it matches; `--kind`, `--field`, `--show` and
+  `--direct` narrow it.
+- **See what changed between two snapshots.** `panos-analyst snapshot diff` lists
+  the objects and rules added, removed or changed per vsys since the previous
+  fetch, or between any two points in time.
+- **Choose devices, vsys and a point in time for every question.** `--device`,
+  `--label`, `--vsys`, `--at` and `--fresh` work the same everywhere, `--file` reads
+  one configuration with no inventory, `--output json` prints a versioned envelope
+  for scripts, and an answer with gaps exits 3 so a script can refuse to act on it.
 - **A lookup now says how it reached its answer.** Asking which rules a value can
   reach returns the objects that matched and the value in each that matched it — a
   prefix, an FQDN — so the reasoning can be checked instead of trusted.
@@ -143,6 +153,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   miss rules without looking incomplete.
 
 ### Removed
+
+- **`panos-explore` is gone.** Its questions live in `panos-analyst`: `reaches`,
+  `lookup`, `search`, `uses`, `whereused` and `group` are `search`; `simulate` is
+  `simulate secpolicy`; `info`, `groups` and `target` are `snapshot show`.
 
 - **Panorama configurations are no longer read.** panos-analyst works from each
   firewall's own configuration, so device groups, templates and the device-group

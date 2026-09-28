@@ -71,9 +71,8 @@ possibly a zone of its own.
 ## Build / run pointers
 
 - `go test ./resolve/` — the whole package.
-- `./bin/panos-explore target <cfg> <device> <vsys>` — what one vsys evaluates.
-- `./bin/panos-explore groups <cfg>` — the policy of every vsys.
-- `./bin/panos-explore group <cfg> <scope> <name>` — one group in one scope.
+- `./bin/panos-analyst snapshot show --file <cfg>` — every vsys and its rule count.
+- `./bin/panos-analyst search <address> --file <cfg>` — the groups holding it, per vsys.
 
 ## Public API
 
@@ -112,6 +111,7 @@ func (t *Target) Vsys() string
 func DynamicRoutingProtocols(cfg *config.Config) []string
 func GroupInScope(cfg *config.Config, sc config.Scope, name string) (Members, error)
 func InterfaceAddresses(cfg *config.Config) ([]InterfaceAddress, error)
+func ObjectKinds(cfg *config.Config) []string
 func ObjectsAt(cfg *config.Config, sc config.Scope, kind string, within []string) ([]Object, error)
 func ObjectsInScope(cfg *config.Config, sc config.Scope, kind string) ([]Object, error)
 func ParseTagFilter(raw string) (*TagFilter, error)

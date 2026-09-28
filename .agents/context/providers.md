@@ -101,7 +101,7 @@ comment. `scripts/capture-zones.sh` captures one.
 ## Build / run pointers
 
 - `go test ./index/ -run 'User|Snapshot'`
-- `PANOS_USERS=testdata/users-snapshot.json ./bin/panos-explore reaches <cfg> <scope> source-user alice`
+- `PANOS_USERS=testdata/users-snapshot.json ./bin/panos-analyst search 'ACME\carol' --file testdata/config/firewall-users.xml`
 
 ## Public API
 
@@ -132,6 +132,7 @@ func (i *Index) CandidatesFor(f Field, addr netip.Addr) *roaring.Bitmap
 func (i *Index) CandidatesForName(f Field, name string) *roaring.Bitmap
 func (i *Index) CandidatesForPrefix(f Field, p netip.Prefix) *roaring.Bitmap
 func (i *Index) Containing(addr netip.Addr) []Match
+func (i *Index) DirectGroupsOf(name string) []string
 func (i *Index) Disabled() *roaring.Bitmap
 func (i *Index) GroupsOf(name string) []string
 func (i *Index) Interner() *Interner
@@ -166,6 +167,7 @@ func LoadUserSnapshot(r io.Reader) (*UserSnapshot, error)
 func LoadZoneSnapshot(r io.Reader) (*ZoneSnapshot, error)
 func NewInterner() *Interner
 func NewZoneSnapshot(takenAt time.Time, source string, interfaces, fib io.Reader) (*ZoneSnapshot, error)
+func PrefixesOf(value string) []netip.Prefix
 ```
 <!-- /GENERATED:api -->
 

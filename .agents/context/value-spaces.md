@@ -107,7 +107,7 @@ already answers it.
 ## Build / run pointers
 
 - `go test ./index/ -run 'Resolver|Candidates'` — the value-space tests.
-- `./bin/panos-explore reaches <cfg> <scope> <field> <value>` — one field, one value.
+- `./bin/panos-analyst search <value> --file <cfg>` — every value space at once.
 - `scripts/device-probe.sh` — compares the first match against a real firewall.
 
 ## Public API
@@ -139,6 +139,7 @@ func (i *Index) CandidatesFor(f Field, addr netip.Addr) *roaring.Bitmap
 func (i *Index) CandidatesForName(f Field, name string) *roaring.Bitmap
 func (i *Index) CandidatesForPrefix(f Field, p netip.Prefix) *roaring.Bitmap
 func (i *Index) Containing(addr netip.Addr) []Match
+func (i *Index) DirectGroupsOf(name string) []string
 func (i *Index) Disabled() *roaring.Bitmap
 func (i *Index) GroupsOf(name string) []string
 func (i *Index) Interner() *Interner
@@ -173,6 +174,7 @@ func LoadUserSnapshot(r io.Reader) (*UserSnapshot, error)
 func LoadZoneSnapshot(r io.Reader) (*ZoneSnapshot, error)
 func NewInterner() *Interner
 func NewZoneSnapshot(takenAt time.Time, source string, interfaces, fib io.Reader) (*ZoneSnapshot, error)
+func PrefixesOf(value string) []netip.Prefix
 ```
 <!-- /GENERATED:api -->
 

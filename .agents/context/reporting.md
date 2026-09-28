@@ -70,8 +70,8 @@ returning.
 ## Build / run pointers
 
 - `go test ./index/ -run 'Unresolved|Report'`
-- `./bin/panos-explore reaches <cfg> <scope> <field> <value>` — prints the warning
-  block **before** the result, because the result on its own looks complete.
+- `./bin/panos-analyst search <term> --file <cfg>` — prints unresolved entries and exits 3,
+  because the result on its own looks complete.
 
 ## Public API
 
@@ -102,6 +102,7 @@ func (i *Index) CandidatesFor(f Field, addr netip.Addr) *roaring.Bitmap
 func (i *Index) CandidatesForName(f Field, name string) *roaring.Bitmap
 func (i *Index) CandidatesForPrefix(f Field, p netip.Prefix) *roaring.Bitmap
 func (i *Index) Containing(addr netip.Addr) []Match
+func (i *Index) DirectGroupsOf(name string) []string
 func (i *Index) Disabled() *roaring.Bitmap
 func (i *Index) GroupsOf(name string) []string
 func (i *Index) Interner() *Interner
@@ -136,6 +137,7 @@ func LoadUserSnapshot(r io.Reader) (*UserSnapshot, error)
 func LoadZoneSnapshot(r io.Reader) (*ZoneSnapshot, error)
 func NewInterner() *Interner
 func NewZoneSnapshot(takenAt time.Time, source string, interfaces, fib io.Reader) (*ZoneSnapshot, error)
+func PrefixesOf(value string) []netip.Prefix
 ```
 <!-- /GENERATED:api -->
 

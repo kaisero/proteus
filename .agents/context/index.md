@@ -54,9 +54,10 @@ Repo map:
   `refs.go`, `profileuse.go`, `snapshot.go`, `intern.go`.
 - `internal/schema`, `internal/digest`, `internal/codegen` — schema parsing,
   digest format, code generation. `internal/archtest` — the R12 import check.
+- `estate/` — selectors and a time to targets and holes; `search/` — five-stage findings for one term; `drift/` — changes between two configurations.
 - `inventory/` — the YAML device list and credentials; `fetch/` — the read-only XML
   API client and the `Document` list; `store/` — timestamped snapshots, `latest`.
-- `cmd/` — `panos-analyst` (init, fetch, snapshots), `panos-explore` (the query surface), `panos-demo` (narrated tour),
+- `cmd/` — `panos-analyst` (fetch, snapshots, search, simulate), `panos-demo` (narrated tour),
   `panos-schemagen` (digest + generate).
 - `scripts/` — `coverage-gate.sh`, `device-probe.sh`, `context-api.py`.
 
@@ -79,6 +80,7 @@ Hard invariants:
   schema digest, and the schema questions `config` answers.
 - [scope-semantics](scope-semantics.md): targets, rule order, scoped visibility,
   shadowing, group membership.
+- [questions](questions.md): `estate`, `search`, `drift` — how a question becomes targets, findings and changes.
 - [fetch-and-store](fetch-and-store.md): the inventory, the read-only fetcher, and
   the snapshot store.
 - [value-spaces](value-spaces.md): the resolver seam, the four paths that reach a
@@ -89,7 +91,7 @@ Hard invariants:
   the user snapshot format.
 - [schema-codegen](schema-codegen.md): digest, shape deduplication, the generated
   model, and the drift gates.
-- [commands](commands.md): `panos-explore`, `panos-demo`, `panos-schemagen`.
+- [commands](commands.md): `panos-analyst`, `panos-demo`, `panos-schemagen`.
 - [testing-and-gates](testing-and-gates.md): `make ci`, the coverage ratchet, the
   fixtures, and the device probe.
 
