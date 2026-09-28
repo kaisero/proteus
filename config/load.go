@@ -70,7 +70,7 @@ func Load(path string) (*Config, Report, error) {
 			"panos-analyst reads each firewall's own configuration", path)
 	}
 
-	dv, err := nearestDigest(version, digestVersions())
+	dv, err := nearestDigest(version, digestVersions(digestFS))
 	if err != nil {
 		return nil, rep, fmt.Errorf("config: %s: %w", path, err)
 	}
@@ -105,10 +105,11 @@ func (c *Config) VersionGap() string {
 		"reference, so this answer can miss rules", c.version, c.digestVersion)
 }
 
-// digestVersions lists the PAN-OS versions this build carries a firewall digest for,
-// oldest first. It reads the embedded files, so adding a digest needs no edit here.
-func digestVersions() []string {
-	entries, err := fs.ReadDir(digestFS, "schemadigest")
+// digestVersions lists the PAN-OS versions a file system carries a firewall digest
+// for, oldest first. Load passes the embedded files, so adding a digest needs no
+// edit here.
+func digestVersions(fsys fs.FS) []string {
+	entries, err := fs.ReadDir(fsys, "schemadigest")
 	if err != nil {
 		return nil
 	}

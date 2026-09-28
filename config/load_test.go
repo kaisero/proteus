@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"testing/fstest"
 )
 
 func TestLoadBareConfig(t *testing.T) {
@@ -145,8 +146,38 @@ func TestNearestDigest(t *testing.T) {
 }
 
 func TestDigestVersionsComeFromTheEmbeddedFiles(t *testing.T) {
-	if got := digestVersions(); len(got) != 1 || got[0] != "11.2.0" {
+	if got := digestVersions(digestFS); len(got) != 1 || got[0] != "11.2.0" {
 		t.Errorf("digestVersions = %v, want [11.2.0]", got)
+	}
+}
+
+// Only firewall digests with a well-formed version count, sorted by version rather
+// than by name: 9.1.0 sorts after 11.2.0 as a string.
+func TestDigestVersionsFilterAndSort(t *testing.T) {
+	fsys := fstest.MapFS{
+		"schemadigest/panos-11.2.0-firewall.json.gz": {},
+		"schemadigest/panos-9.1.0-firewall.json.gz":  {},
+		"schemadigest/panos-10.1.0-panorama.json.gz": {},
+		"schemadigest/panos-x.y.z-firewall.json.gz":  {},
+		"schemadigest/README":                        {},
+	}
+	if got := strings.Join(digestVersions(fsys), ","); got != "9.1.0,11.2.0" {
+		t.Errorf("digestVersions = %s, want 9.1.0,11.2.0", got)
+	}
+	if got := digestVersions(fstest.MapFS{}); got != nil {
+		t.Errorf("no directory must yield nothing, got %v", got)
+	}
+}
+
+func TestNearestDigestSkipsAMalformedEntry(t *testing.T) {
+	if got, err := nearestDigest("11.2.0", []string{"bad", "11.2.0"}); err != nil || got != "11.2.0" {
+		t.Errorf("got %q, %v", got, err)
+	}
+}
+
+func TestLoadDigestReportsAMissingFile(t *testing.T) {
+	if _, err := loadDigest("0.0.1"); err == nil || !strings.Contains(err.Error(), "0.0.1") {
+		t.Errorf("want an error naming the version, got %v", err)
 	}
 }
 

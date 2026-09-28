@@ -179,6 +179,12 @@ func TestCommands(t *testing.T) {
 		return out.String(), err
 	}
 
+	if _, err := run("fetch", "fw01"); err == nil {
+		t.Error("fetch without an inventory must fail")
+	}
+	if _, err := run("snapshots", "fw01"); err == nil {
+		t.Error("snapshots of a device never fetched must fail")
+	}
 	if out, err := run("init"); err != nil || !strings.Contains(out, "wrote") {
 		t.Fatalf("init: %v\n%s", err, out)
 	}
@@ -196,6 +202,9 @@ func TestCommands(t *testing.T) {
 	}
 	if out, err := run("fetch", "--all"); err != nil || !strings.Contains(out, "stored fw01@") {
 		t.Fatalf("fetch --all: %v\n%s", err, out)
+	}
+	if _, err := run("snapshots", "../x"); err == nil {
+		t.Error("snapshots must refuse an unsafe device name")
 	}
 	out, err := run("snapshots", "fw01")
 	if err != nil || !strings.HasPrefix(out, "* ") || !strings.Contains(out, "4 documents, 0 failed") {
