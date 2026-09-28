@@ -430,3 +430,19 @@ func TestAgo(t *testing.T) {
 		}
 	}
 }
+
+func TestSearchWithAUserSnapshot(t *testing.T) {
+	c := newCLI(t)
+	file := "../../testdata/config/firewall-users.xml"
+	if out := c.want(0, "search", `ACME\carol`, "--file", file); strings.Contains(out, "engineering-allowed") {
+		t.Errorf("without PANOS_USERS carol reaches nothing:\n%s", out)
+	}
+	c.env["PANOS_USERS"] = "../../testdata/users-snapshot.json"
+	if out := c.want(0, "search", `ACME\carol`, "--file", file); !strings.Contains(out, "engineering-allowed") {
+		t.Errorf("with PANOS_USERS carol reaches engineering-allowed:\n%s", out)
+	}
+	c.env["PANOS_USERS"] = "../../testdata/missing.json"
+	c.want(1, "search", "x", "--file", file)
+	c.env["PANOS_USERS"] = "../../testdata/config/firewall-lab.xml"
+	c.want(1, "search", "x", "--file", file)
+}

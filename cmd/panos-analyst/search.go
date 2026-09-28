@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -56,9 +57,19 @@ func (a *app) searchCmd() *cobra.Command {
 				search.Finding
 				Scope string `json:"scope"`
 			}
+			users, err := a.userSnapshot()
+			if err != nil {
+				return err
+			}
 			var results []result
 			byTarget := make([][]search.Finding, len(ts))
 			for i, t := range ts {
+				q.Providers = index.Providers{Users: users}
+				if t.Snapshot != nil {
+					if z, err := t.Snapshot.Zones(); err == nil {
+						q.Providers.Zones = z
+					}
+				}
 				idx, err := index.For(t.Config, t.Scope)
 				if err != nil {
 					holes = append(holes, estate.Hole{Device: t.Device, Vsys: t.Vsys, Reason: err.Error()})
@@ -124,6 +135,25 @@ func contains2(xs []search.Stage, x search.Stage) bool {
 		}
 	}
 	return false
+}
+
+// userSnapshot reads PANOS_USERS, the user-to-group mapping a configuration does
+// not hold. None set is no mapping.
+func (a *app) userSnapshot() (index.UserDirectory, error) {
+	path := a.getenv("PANOS_USERS")
+	if path == "" {
+		return nil, nil
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("PANOS_USERS: %w", err)
+	}
+	defer func() { _ = f.Close() }()
+	snap, err := index.LoadUserSnapshot(f)
+	if err != nil {
+		return nil, fmt.Errorf("PANOS_USERS: %w", err)
+	}
+	return snap, nil
 }
 
 // modeName says how the term was matched, for the header.

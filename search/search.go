@@ -54,6 +54,10 @@ type Query struct {
 	Fields []string // references and literals from these fields only; empty means every field
 	Show   []Stage  // these stages only; empty means every stage
 	Direct bool     // groups one level up only
+
+	// Providers supply what a configuration does not hold: the directory groups a
+	// user belongs to, and the zones the device places an address in.
+	Providers index.Providers
 }
 
 // Finding is one place the term appears.
@@ -150,8 +154,9 @@ func (s *searcher) objects() {
 	default:
 		// Every value space the schema wires to a rule field answers for itself: a
 		// port finds services, a URL finds categories, a user finds groups.
+		view := s.idx.With(s.q.Providers)
 		for f := index.Source; f <= index.Tag; f++ {
-			_, rep := s.idx.Candidates(f, s.q.Term)
+			_, rep := view.Candidates(f, s.q.Term)
 			for _, h := range rep.Hits {
 				s.addObject(h.Kind, h.Name, h.Scope, h.Via)
 			}

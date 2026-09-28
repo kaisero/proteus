@@ -3,6 +3,7 @@ package search
 import (
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 
@@ -217,5 +218,27 @@ func TestReferrer(t *testing.T) {
 		if k+" "+n != want {
 			t.Errorf("referrer(%s) = %s %s, want %s", path, k, n, want)
 		}
+	}
+}
+
+// A directory user reaches the rules naming its directory groups when a user
+// snapshot supplies them.
+func TestAUserSnapshotResolvesDirectoryGroups(t *testing.T) {
+	f, err := os.Open("../testdata/users-snapshot.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	users, err := index.LoadUserSnapshot(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	without := run(t, "firewall-users.xml", "vsys1", Query{Term: `ACME\carol`})
+	with := run(t, "firewall-users.xml", "vsys1", Query{Term: `ACME\carol`, Providers: index.Providers{Users: users}})
+	if has(without, "reference security rule engineering-allowed") {
+		t.Errorf("without a snapshot carol's directory group is unknown:\n%s", dump(without))
+	}
+	if !has(with, "reference security rule engineering-allowed source-user engineering") {
+		t.Errorf("with a snapshot carol reaches engineering-allowed:\n%s", dump(with))
 	}
 }
