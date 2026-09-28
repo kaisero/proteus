@@ -6,8 +6,8 @@ Validated against 86fd84f on 2026-09-27 · Purpose: how facts a configuration do
 
 Some questions cannot be answered from a file. Which groups a user belongs to comes
 from User-ID, which learns it from a directory. The library defines the shape of
-that data and reads it. **The caller fetches it.** The library performs no network
-access at all.
+that data and reads it. **The caller fetches it.** The core performs no network
+access at all; `store.Snapshot.Zones()` builds a zone snapshot from a fetched one.
 
 ## How it works
 

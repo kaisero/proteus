@@ -37,7 +37,11 @@ fails if a package drops below its floor.
 tests, not a lower number. This was got wrong once and the commit had to be amended.
 
 Current floors: config 98.1, resolve 95.7, index 95.0, internal/schema 85.9,
-internal/codegen 93.0, internal/digest 71.8, cmd/panos-schemagen 57.6.
+internal/codegen 93.0, internal/digest 71.8, cmd/panos-schemagen 57.6,
+inventory 94.3, fetch 96.5, store 86.9, cmd/panos-analyst 82.2.
+
+The fetcher's tests run against `internal/fakepanos`, a fake XML API over TLS on
+127.0.0.1. No test touches a device.
 
 ### Fixtures
 

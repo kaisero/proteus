@@ -9,7 +9,9 @@
 The library is read-only. It loads a configuration file, resolves PAN-OS
 semantics over it, and builds lookup structures that answer two questions fast:
 *does an object with this value exist*, and *which rules can this value reach*.
-It never writes a configuration and it never opens a network connection.
+It never writes a configuration, and the core never opens a network connection.
+Above the core, `inventory`, `fetch` and `store` read devices into on-disk
+snapshots; see [fetch-and-store](fetch-and-store.md).
 
 Three packages, dependency order strictly one-way — `config` <- `resolve` <- `index`:
 
@@ -52,7 +54,9 @@ Repo map:
   `refs.go`, `profileuse.go`, `snapshot.go`, `intern.go`.
 - `internal/schema`, `internal/digest`, `internal/codegen` — schema parsing,
   digest format, code generation. `internal/archtest` — the R12 import check.
-- `cmd/` — `panos-explore` (the query surface), `panos-demo` (narrated tour),
+- `inventory/` — the YAML device list and credentials; `fetch/` — the read-only XML
+  API client and the `Document` list; `store/` — timestamped snapshots, `latest`.
+- `cmd/` — `panos-analyst` (init, fetch, snapshots), `panos-explore` (the query surface), `panos-demo` (narrated tour),
   `panos-schemagen` (digest + generate).
 - `scripts/` — `coverage-gate.sh`, `device-probe.sh`, `context-api.py`.
 
@@ -75,6 +79,8 @@ Hard invariants:
   schema digest, and the schema questions `config` answers.
 - [scope-semantics](scope-semantics.md): targets, rule order, scoped visibility,
   shadowing, group membership.
+- [fetch-and-store](fetch-and-store.md): the inventory, the read-only fetcher, and
+  the snapshot store.
 - [value-spaces](value-spaces.md): the resolver seam, the four paths that reach a
   value, and each implemented value space.
 - [reporting](reporting.md): `Report`, `Hit`, `Unresolved`, and the difference

@@ -15,8 +15,9 @@ Each command first prints a `loaded ...` line with the file and the version. The
 make tools-bin
 ```
 
-That builds `bin/panos-explore` and `bin/panos-demo`. Every command below uses
-the fixtures in `testdata/config/`, so you need no device and no network.
+That builds `bin/panos-explore`, `bin/panos-demo` and `bin/panos-analyst`. Section 0
+fetches from a real firewall. Every command from section 1 on uses the fixtures in
+`testdata/config/`, so you need no device and no network.
 
 ## See everything at once
 
@@ -51,6 +52,28 @@ what the answers do not cover.
 | `panorama-rejected.xml` | a Panorama configuration, which is refused |
 
 ---
+
+## 0. Fetch a firewall
+
+Everything below also works on a snapshot fetched from a device.
+
+```bash
+./bin/panos-analyst init                  # writes ~/.config/panos-analyst/config.yaml, mode 0600
+$EDITOR ~/.config/panos-analyst/config.yaml
+export PANOS_PASSWORD=...                 # the variable the inventory names
+./bin/panos-analyst fetch fw01
+./bin/panos-explore info @fw01
+```
+
+`fetch` logs in with the inventory's username and password, and stores the running
+configuration, `show system info`, `show interface all` and the forwarding table as
+one snapshot under `~/.local/share/panos-analyst/fw01/`. `@fw01` is the latest
+snapshot with a configuration, `@fw01@<id>` an earlier one, and zone answers then
+come from the stored forwarding table.
+
+The inventory template turns TLS certificate verification off, because lab
+firewalls present self-signed certificates, and every fetch says so. Set
+`insecure_tls: false` once your devices present certificates this machine trusts.
 
 ## 1. Load a configuration
 

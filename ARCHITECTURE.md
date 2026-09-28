@@ -8,7 +8,10 @@ A read-only Go interface to a PAN-OS firewall configuration file, with the
 object model generated from PAN-OS's own schema.
 
 It is a library. Other tools consume it — an analysis platform, an MCP server, a
-policy simulator. It does not talk to devices and it does not write.
+policy simulator. The read-only core (`config`, `resolve`, `index`) does not talk to
+devices and it does not write. Above it, `fetch` reads devices with show commands
+and a configuration export, `store` keeps what it read as timestamped snapshots,
+and `inventory` says which devices there are. R12 keeps the core free of I/O.
 
 ## Why generate from the schema
 
@@ -79,6 +82,10 @@ config/                public: Load, version detection, the Model interface
 config/v11_2/…         public: generated model per PAN-OS minor
 resolve/               public: PAN-OS semantics (targets, rule order, scoped visibility)
 index/                 public: scope-keyed indexes (refs, closure, CIDR, rules)
+inventory/             public: devices, credentials and TLS choice, from YAML
+fetch/                 public: read-only XML API client and the document list
+store/                 public: timestamped on-disk snapshots, latest, retention
+cmd/panos-analyst/     init, fetch, and list stored snapshots
 schemadigest/          committed firewall digests, ~0.2 MB each
 testdata/              trimmed schema fragments and config fixtures
 schemas/               vendor schema files, pulled from an appliance, not committed

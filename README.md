@@ -2,7 +2,8 @@
 
 `panos-analyst` is a read-only Go library. It loads a PAN-OS firewall
 configuration file and answers questions about it. It never writes a
-configuration and it never contacts a device.
+configuration. `panos-analyst fetch` reads devices with show commands and a
+configuration export, and the analysis never contacts a device.
 
 The library exists for tools and AI agents. They ask two kinds of question.
 *Does an object with this value exist?* And *which rules can this value reach?*
@@ -12,6 +13,9 @@ The object model is generated from the schema PAN-OS itself ships.
 
 ## What it does
 
+- **Fetches what it analyses** — `panos-analyst fetch` logs in to each firewall in
+  an inventory and stores its configuration and operational state as a timestamped
+  snapshot. Every `panos-explore` command also takes `@fw01` for the latest one.
 - **Reads what a firewall actually evaluates** — the library keys each policy by
   device **and** vsys, and orders the rule layers the way the firewall evaluates
   them: pushed shared pre-rules, the vsys's own rules, pushed shared post-rules.
@@ -194,7 +198,19 @@ replace github.com/okaiser/panos-analyst => ../go-panos-schema
 
 ## Commands
 
-`panos-explore` answers every question the library answers, without any Go.
+`panos-analyst` fetches devices into the snapshot store.
+
+| Command and arguments | What it does |
+| --- | --- |
+| `init` | Write an inventory template, mode 0600, with TLS verification off and how to turn it on |
+| `fetch <device>… \| --all` | Log in, fetch config, system info, interfaces and FIB, and store them as a snapshot |
+| `snapshots <device>` | List a device's snapshots, newest first; `*` marks latest |
+
+`--config` and `--store`, or `PANOS_CONFIG` and `PANOS_STORE`, choose the inventory
+and the store.
+
+`panos-explore` answers every question the library answers, without any Go. Every
+`<config.xml>` below may also be `@<device>` or `@<device>@<id>`.
 
 | Command and arguments | What it answers |
 | --- | --- |
@@ -247,6 +263,7 @@ The library reports each of these rather than hiding it.
 ```
 go-panos-schema/
 ├── cmd/
+│   ├── panos-analyst/     # init, fetch and list stored snapshots
 │   ├── panos-explore/     # the CLI used throughout these docs
 │   ├── panos-demo/        # a narrated tour of every feature
 │   └── panos-schemagen/   # digest a vendor schema, generate the Go model
@@ -255,11 +272,15 @@ go-panos-schema/
 ├── resolve/               # PAN-OS semantics: targets per vsys, rule order,
 │                          #   objects, groups, tag filters, URL patterns, zones
 ├── index/                 # lookup structures, value-space resolvers, reports
+├── inventory/             # devices, credentials and TLS choice, from YAML
+├── fetch/                 # read-only XML API client and the document list
+├── store/                 # timestamped on-disk snapshots, latest, retention
 ├── schema/                # public: query the schema itself (design not settled)
 ├── internal/schema/       # parse the PAN-OS schema grammar
 ├── internal/digest/       # the committed digest format
 ├── internal/codegen/      # emit Go from a digest
 ├── internal/archtest/     # the import-direction check (R12)
+├── internal/fakepanos/    # a fake PAN-OS XML API for tests
 ├── schemadigest/          # committed firewall digests, roughly 0.2 MB each
 ├── testdata/config/       # configuration fixtures, one per behaviour
 ├── ARCHITECTURE.md        # the reasoning, and where the library's line sits

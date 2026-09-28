@@ -50,6 +50,18 @@ or `tag`. `PANOS_USERS` points at a user snapshot.
 - Each command names what it did not evaluate, and the wording differs with and
   without zones.
 
+## panos-analyst
+
+```
+init                      write an inventory template, mode 0600
+fetch <device>... | --all log in, fetch the documents, store a snapshot
+snapshots <device>        list snapshots, newest first; * marks latest
+```
+
+`--config`/`PANOS_CONFIG` pick the inventory, `--store`/`PANOS_STORE` the store.
+Every `panos-explore` `<cfg>` may be `@<device>` or `@<device>@<id>`; zone answers
+then come from the snapshot's forwarding table unless `PANOS_ZONES` is set.
+
 ## panos-demo
 
 `panos-demo <cfg>` walks twelve sections over one configuration: load, scopes,

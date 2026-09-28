@@ -26,7 +26,12 @@ a model type. The library answers questions; it never changes anything.
 A loaded index is immutable once built. A reload produces a new index and
 replaces the pointer.
 
+The fetcher is the one package that talks to a device. It asks for an API key, runs
+`<show>` commands and exports the configuration; `fetch.Client` refuses any other
+op command before it reaches the device, and has no method for anything else.
+
 Check: `go test ./... -run TestPublicAPIIsReadOnly`
+Check: `go test ./fetch -run TestOnlyReadCalls`
 
 ## R3 — Nothing is dropped silently
 
