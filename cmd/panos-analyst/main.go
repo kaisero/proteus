@@ -1,168 +1,140 @@
-// Command panos-analyst fetches firewall configurations and operational state into
-// an on-disk store, so that panos-explore can answer from what a device said.
+// Command panos-analyst fetches PAN-OS firewalls into a snapshot store and answers
+// questions about them. Spec: docs/specs/2026-09-27-panos-analyst-scope.md §15.
 //
 // Usage:
 //
-//	panos-analyst init                 write an inventory template
-//	panos-analyst fetch <device>...    fetch devices into the store
-//	panos-analyst fetch --all          fetch every device in the inventory
-//	panos-analyst snapshots <device>   list a device's stored snapshots
+//	panos-analyst fetch <device>... | --label k=v | --all
+//	panos-analyst inventory init
+//	panos-analyst snapshot list <device>
+//	panos-analyst snapshot show [selectors]
+//	panos-analyst snapshot diff [selectors] [--from <time>] [--to <time>]
+//	panos-analyst search <term> [selectors] [--exact|--within|--contains] [filters]
+//	panos-analyst simulate secpolicy <source> <destination> [selectors] [flow flags]
+//
+// Exit codes: 0 answered completely, 1 error, 2 usage, 3 answered with holes or
+// unresolved entries (spec §15 C11).
 package main
 
 import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
+	"time"
 
 	"github.com/spf13/cobra"
-
-	"github.com/okaiser/panos-analyst/inventory"
-	"github.com/okaiser/panos-analyst/store"
 )
 
 // version is set at build time via -ldflags.
 var version = "dev"
 
+// The exit codes of spec §15 C11.
+const (
+	exitOK         = 0
+	exitError      = 1
+	exitUsage      = 2
+	exitIncomplete = 3
+)
+
+// exitErr carries an exit code. A usage error prints its message; an incomplete
+// answer has already printed its output and says nothing more.
+type exitErr struct {
+	code int
+	err  error
+}
+
+func (e *exitErr) Error() string {
+	if e.err == nil {
+		return fmt.Sprintf("exit %d", e.code)
+	}
+	return e.err.Error()
+}
+
+func (e *exitErr) Unwrap() error { return e.err }
+
+func usageErr(format string, args ...any) error {
+	return &exitErr{code: exitUsage, err: fmt.Errorf(format, args...)}
+}
+
+// errIncomplete is returned after an answer with holes or unresolved entries.
+var errIncomplete = &exitErr{code: exitIncomplete}
+
+// exitCode maps a command's error to the process exit code, printing it when there
+// is something to say.
+func exitCode(err error, stderr io.Writer) int {
+	if err == nil {
+		return exitOK
+	}
+	var e *exitErr
+	if errors.As(err, &e) {
+		if e.err != nil {
+			fmt.Fprintf(stderr, "panos-analyst: %v\n", e.err)
+		}
+		return e.code
+	}
+	fmt.Fprintf(stderr, "panos-analyst: %v\n", err)
+	return exitError
+}
+
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
-	err := root().ExecuteContext(ctx)
+	err := newApp(os.Stdout, os.Stderr, os.Getenv, time.Now).root().ExecuteContext(ctx)
 	stop()
-	if err != nil {
-		os.Exit(1)
-	}
+	os.Exit(exitCode(err, os.Stderr))
 }
 
-func root() *cobra.Command {
-	var configPath, storePath string
+// app holds what every command shares: where it writes, how it reads the
+// environment and the clock, and the persistent flags.
+type app struct {
+	stdout, stderr io.Writer
+	getenv         func(string) string
+	now            func() time.Time
+
+	configFlag, storeFlag, outputFlag, maxAgeFlag string
+}
+
+func newApp(stdout, stderr io.Writer, getenv func(string) string, now func() time.Time) *app {
+	return &app{stdout: stdout, stderr: stderr, getenv: getenv, now: now}
+}
+
+func (a *app) root() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:          "panos-analyst",
-		Short:        "Fetch PAN-OS firewalls into a snapshot store",
-		Version:      version,
-		SilenceUsage: true,
+		Use:           "panos-analyst",
+		Short:         "Fetch PAN-OS firewalls into a snapshot store and ask questions of them",
+		Version:       version,
+		SilenceUsage:  true,
+		SilenceErrors: true,
 	}
-	cmd.PersistentFlags().StringVar(&configPath, "config", "",
-		"inventory file (default $PANOS_CONFIG or ~/.config/panos-analyst/config.yaml)")
-	cmd.PersistentFlags().StringVar(&storePath, "store", "",
-		"snapshot store (default $PANOS_STORE or ~/.local/share/panos-analyst)")
+	cmd.SetOut(a.stdout)
+	cmd.SetErr(a.stderr)
+	cmd.SetFlagErrorFunc(func(_ *cobra.Command, err error) error {
+		return &exitErr{code: exitUsage, err: err}
+	})
+	pf := cmd.PersistentFlags()
+	pf.StringVar(&a.configFlag, "config", "", "inventory file (default $PANOS_CONFIG or ~/.config/panos-analyst/config.yaml)")
+	pf.StringVar(&a.storeFlag, "store", "", "snapshot store (default $PANOS_STORE, the inventory's store, or ~/.local/share/panos-analyst)")
+	pf.StringVar(&a.outputFlag, "output", "", "text or json (default $PANOS_OUTPUT, the inventory's output, or text)")
+	pf.StringVar(&a.maxAgeFlag, "max-age", "", "note snapshots older than this, e.g. 24h or 7d (default $PANOS_MAX_SNAPSHOT_AGE, the inventory's, or 24h)")
 
-	// paths applies the precedence default < PANOS_* env < flag (spec S7) to the
-	// inventory file and the store root.
-	paths := func() (string, string, error) {
-		c, s := configPath, storePath
-		var err error
-		if c == "" {
-			if c, err = inventory.DefaultPath(os.Getenv); err != nil {
-				return "", "", err
-			}
-		}
-		if s == "" {
-			if s, err = store.DefaultRoot(os.Getenv); err != nil {
-				return "", "", err
-			}
-		}
-		return c, s, nil
-	}
+	inv := &cobra.Command{Use: "inventory", Short: "Manage the device inventory"}
+	inv.AddCommand(a.inventoryInitCmd())
+	snap := &cobra.Command{Use: "snapshot", Short: "List, show and compare stored snapshots"}
+	snap.AddCommand(a.snapshotListCmd(), a.snapshotShowCmd(), a.snapshotDiffCmd())
+	sim := &cobra.Command{Use: "simulate", Short: "Simulate what a device would do"}
+	sim.AddCommand(a.secpolicyCmd())
 
-	cmd.AddCommand(initCmd(paths), fetchCmd(paths), snapshotsCmd(paths))
+	cmd.AddCommand(a.fetchCmd(), inv, snap, a.searchCmd(), sim)
 	return cmd
 }
 
-type pathsFunc func() (configPath, storeRoot string, err error)
-
-func initCmd(paths pathsFunc) *cobra.Command {
-	return &cobra.Command{
-		Use:   "init",
-		Short: "Write an inventory template",
-		Args:  cobra.NoArgs,
-		RunE: func(c *cobra.Command, _ []string) error {
-			cfgPath, _, err := paths()
-			if err != nil {
-				return err
-			}
-			if err := inventory.WriteTemplate(cfgPath); err != nil {
-				return err
-			}
-			fmt.Fprintf(c.OutOrStdout(), "wrote %s (mode 0600)\n"+
-				"set the hosts and credentials, then run: panos-analyst fetch --all\n", cfgPath)
-			return nil
-		},
-	}
-}
-
-func fetchCmd(paths pathsFunc) *cobra.Command {
-	var all bool
-	cmd := &cobra.Command{
-		Use:   "fetch [device...]",
-		Short: "Fetch devices into the store",
-		RunE: func(c *cobra.Command, args []string) error {
-			cfgPath, storeRoot, err := paths()
-			if err != nil {
-				return err
-			}
-			inv, err := inventory.Load(cfgPath)
-			if err != nil {
-				return err
-			}
-			names := args
-			switch {
-			case all && len(args) > 0:
-				return errors.New("name devices or pass --all, not both")
-			case all:
-				names = inv.Names()
-			case len(args) == 0:
-				return errors.New("name at least one device, or pass --all")
-			}
-			st, err := store.Open(storeRoot)
-			if err != nil {
-				return err
-			}
-			return fetchDevices(c.Context(), c.OutOrStdout(), inv, st, names, os.Getenv)
-		},
-	}
-	cmd.Flags().BoolVar(&all, "all", false, "fetch every device in the inventory")
-	return cmd
-}
-
-func snapshotsCmd(paths pathsFunc) *cobra.Command {
-	return &cobra.Command{
-		Use:   "snapshots <device>",
-		Short: "List a device's stored snapshots, newest first; * marks latest",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(c *cobra.Command, args []string) error {
-			_, storeRoot, err := paths()
-			if err != nil {
-				return err
-			}
-			st, err := store.Open(storeRoot)
-			if err != nil {
-				return err
-			}
-			ids, err := st.List(args[0])
-			if err != nil {
-				return err
-			}
-			latest, _ := st.Latest(args[0])
-			for _, id := range ids {
-				sn, err := st.Get(args[0], id)
-				if err != nil {
-					return err
-				}
-				mark := " "
-				if id == latest.ID {
-					mark = "*"
-				}
-				failed := 0
-				for _, d := range sn.Meta.Documents {
-					if d.Error != "" {
-						failed++
-					}
-				}
-				fmt.Fprintf(c.OutOrStdout(), "%s %s  PAN-OS %-8s %d documents, %d failed\n",
-					mark, id, sn.Meta.SWVersion, len(sn.Meta.Documents), failed)
-			}
-			return nil
-		},
+// args wraps a cobra argument check so a wrong count is a usage error.
+func args(check cobra.PositionalArgs) cobra.PositionalArgs {
+	return func(cmd *cobra.Command, a []string) error {
+		if err := check(cmd, a); err != nil {
+			return &exitErr{code: exitUsage, err: err}
+		}
+		return nil
 	}
 }
