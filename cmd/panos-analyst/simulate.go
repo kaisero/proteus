@@ -116,9 +116,7 @@ func (a *app) secpolicyCmd() *cobra.Command {
 				fmt.Fprintf(a.stdout, "/%d", fl.port)
 			}
 			fmt.Fprintf(a.stdout, "\n%s\n", header(t, a.now()))
-			for _, n := range t.Notes {
-				fmt.Fprintf(a.stdout, "  note: %s\n", n)
-			}
+			printNotes(a, t)
 			if zoned {
 				fmt.Fprintf(a.stdout, "  zones: from %s, to %s\n", fl.fromZone, fl.toZone)
 			}

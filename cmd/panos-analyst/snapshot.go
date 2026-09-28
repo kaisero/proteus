@@ -118,9 +118,7 @@ func (a *app) snapshotShowCmd() *cobra.Command {
 				if r.Device != last {
 					last = r.Device
 					fmt.Fprintf(a.stdout, "%s   %s\n", r.Device, source(ts[i], a.now()))
-					for _, n := range ts[i].Notes {
-						fmt.Fprintf(a.stdout, "  note: %s\n", n)
-					}
+					printNotes(a, ts[i])
 					if r.Host != "" {
 						fmt.Fprintf(a.stdout, "  %s, %s, serial %s\n", r.Host, r.Model, r.Serial)
 					}

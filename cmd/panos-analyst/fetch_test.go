@@ -16,6 +16,7 @@ import (
 	"github.com/okaiser/panos-analyst/index"
 	"github.com/okaiser/panos-analyst/internal/fakepanos"
 	"github.com/okaiser/panos-analyst/inventory"
+	"github.com/okaiser/panos-analyst/search"
 	"github.com/okaiser/panos-analyst/store"
 )
 
@@ -448,4 +449,12 @@ func TestSearchWithAUserSnapshot(t *testing.T) {
 	c.want(1, "search", "x", "--file", file)
 	c.env["PANOS_USERS"] = "../../testdata/config/firewall-lab.xml"
 	c.want(1, "search", "x", "--file", file)
+}
+
+func TestModeName(t *testing.T) {
+	for term, want := range map[string]string{"10.0.0.1": "covers", "tcp/443": "covers", "443": "covers", "10.0.0.0/8": "overlaps", "web": "matches"} {
+		if got := modeName(search.Query{Term: term}); got != want {
+			t.Errorf("modeName(%s) = %s, want %s", term, got, want)
+		}
+	}
 }

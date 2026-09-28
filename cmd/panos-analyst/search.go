@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 
@@ -105,9 +106,7 @@ func (a *app) searchCmd() *cobra.Command {
 				}
 				with++
 				fmt.Fprintln(a.stdout, header(t, a.now()))
-				for _, n := range t.Notes {
-					fmt.Fprintf(a.stdout, "  note: %s\n", n)
-				}
+				printNotes(a, t)
 				for _, f := range byTarget[i] {
 					fmt.Fprintf(a.stdout, "  %-10s %-20s %-24s %s\n", f.Stage, f.Kind, f.Name, detail(f))
 				}
@@ -128,6 +127,9 @@ func (a *app) searchCmd() *cobra.Command {
 	f.BoolVar(&direct, "direct", false, "groups one level up only")
 	return cmd
 }
+
+// portTerm is a port, bare or with its protocol: 443, tcp/443.
+var portTerm = regexp.MustCompile(`^((tcp|udp|sctp)/)?[0-9]+$`)
 
 // showNames are the --show values of spec §15 C6.
 var showNames = map[string]search.Stage{
@@ -165,7 +167,7 @@ func modeName(q search.Query) string {
 		return "contains"
 	}
 	switch ps := index.PrefixesOf(q.Term); {
-	case len(ps) == 1 && ps[0].IsSingleIP():
+	case len(ps) == 1 && ps[0].IsSingleIP(), portTerm.MatchString(q.Term):
 		return "covers"
 	case len(ps) > 0:
 		return "overlaps"
@@ -196,6 +198,16 @@ func source(t estate.Target, now time.Time) string {
 		return t.Config.Path()
 	}
 	return fmt.Sprintf("snapshot %s (%s)", t.Snapshot.ID, ago(now.Sub(t.Snapshot.Meta.TakenAt)))
+}
+
+// printNotes prints a target's notes under its header. A version gap is left for
+// printQualifiers, because it makes the answer incomplete rather than qualifying it.
+func printNotes(a *app, t estate.Target) {
+	for _, n := range t.Notes {
+		if n != t.Report.VersionGap {
+			fmt.Fprintf(a.stdout, "  note: %s\n", n)
+		}
+	}
 }
 
 // printQualifiers prints holes, unresolved entries and notes after an answer.
