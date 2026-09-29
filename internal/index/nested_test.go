@@ -12,6 +12,7 @@ import (
 // This is the lookup a policy question actually needs, and every step of it has to
 // compose. The fixture nests three levels deep on purpose.
 func TestNestedChainFromValueToRule(t *testing.T) {
+	t.Parallel()
 	idx := nestedIndex(t)
 	in := idx.Interner()
 

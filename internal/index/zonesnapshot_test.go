@@ -25,6 +25,7 @@ func zoneSnap(t *testing.T) *ZoneSnapshot {
 // The device's own forwarding table places the addresses the configuration cannot,
 // and names the interface and route that did it.
 func TestZoneSnapshotPlacesAnAddress(t *testing.T) {
+	t.Parallel()
 	s := zoneSnap(t)
 
 	for _, c := range []struct{ addr, zone, iface, route string }{
@@ -48,6 +49,7 @@ func TestZoneSnapshotPlacesAnAddress(t *testing.T) {
 
 // Longest prefix wins inside a router: a host route beats the network holding it.
 func TestZoneSnapshotPrefersTheMoreSpecificRoute(t *testing.T) {
+	t.Parallel()
 	s := zoneSnap(t)
 
 	got := s.ZonesOf(netip.MustParseAddr("198.18.10.1"))
@@ -61,6 +63,7 @@ func TestZoneSnapshotPrefersTheMoreSpecificRoute(t *testing.T) {
 // Two routers can cover one address, and neither is the answer. This is the reason
 // ZonesOf returns a set.
 func TestZoneSnapshotReportsEveryRouter(t *testing.T) {
+	t.Parallel()
 	s := zoneSnap(t)
 
 	got := s.ZonesOf(netip.MustParseAddr("198.19.11.5"))
@@ -81,6 +84,7 @@ func TestZoneSnapshotReportsEveryRouter(t *testing.T) {
 
 // An address no route covers places nothing, rather than falling back to a guess.
 func TestZoneSnapshotPlacesNothingWithoutARoute(t *testing.T) {
+	t.Parallel()
 	s := zoneSnap(t)
 
 	// Every IPv4 address is covered by the default route here, so use IPv6: the
@@ -92,6 +96,7 @@ func TestZoneSnapshotPlacesNothingWithoutARoute(t *testing.T) {
 
 // A snapshot can be built from two responses without assembling JSON.
 func TestNewZoneSnapshotFromTwoDocuments(t *testing.T) {
+	t.Parallel()
 	fi, err := os.Open("../../testdata/opdata/fw01-interface-all.xml")
 	if err != nil {
 		t.Fatal(err)
@@ -118,6 +123,7 @@ func TestNewZoneSnapshotFromTwoDocuments(t *testing.T) {
 // Two documents from different devices, or the wrong document entirely, are refused
 // rather than silently producing an empty table.
 func TestLoadZoneSnapshotRejectsBadInput(t *testing.T) {
+	t.Parallel()
 	for name, body := range map[string]string{
 		"malformed json": `{`,
 		"no interfaces":  `{"interfaces_xml":"<result/>","fib_xml":"<result/>"}`,
@@ -133,6 +139,7 @@ func TestLoadZoneSnapshotRejectsBadInput(t *testing.T) {
 // tool supplies data fresh enough for the question, so the library does not
 // second-guess it.
 func TestZoneSnapshotDoesNotEnforceAge(t *testing.T) {
+	t.Parallel()
 	s := zoneSnap(t)
 	s.TakenAt = time.Now().Add(-365 * 24 * time.Hour)
 
@@ -148,6 +155,7 @@ func TestZoneSnapshotDoesNotEnforceAge(t *testing.T) {
 // reason is visible. A lab firewall's configured default route pointed at a tunnel
 // with no zone, which is how this case was found.
 func TestZoneSnapshotReportsUnroutedInterfaces(t *testing.T) {
+	t.Parallel()
 	s := zoneSnap(t)
 	// Put the default route on tunnel.99, which the device reports as zoneless.
 	s.FIBXML = strings.Replace(s.FIBXML,
@@ -169,6 +177,7 @@ func TestZoneSnapshotReportsUnroutedInterfaces(t *testing.T) {
 // Describe names whatever provenance the snapshot carries, and says so when it
 // carries none.
 func TestZoneSnapshotDescribe(t *testing.T) {
+	t.Parallel()
 	s := zoneSnap(t)
 	for _, want := range []string{"fw01", "serial", "taken"} {
 		if !strings.Contains(s.Describe(), want) {
@@ -183,6 +192,7 @@ func TestZoneSnapshotDescribe(t *testing.T) {
 
 // A reader that fails is reported rather than producing an empty snapshot.
 func TestNewZoneSnapshotReportsAReadFailure(t *testing.T) {
+	t.Parallel()
 	good, err := os.Open("../../testdata/opdata/fw01-interface-all.xml")
 	if err != nil {
 		t.Fatal(err)
@@ -206,6 +216,7 @@ var errRead = os.ErrClosed
 // Two documents that parse but describe nothing usable are refused, because an empty
 // table would answer "no zone" for every address and look like a finding.
 func TestLoadZoneSnapshotRefusesWhenNothingIsZoned(t *testing.T) {
+	t.Parallel()
 	body := `{"interfaces_xml":"<result><ifnet><entry><name>tunnel.99</name><vsys>1</vsys></entry></ifnet></result>",` +
 		`"fib_xml":"<result><fibs><entry><vr>default</vr><type>0</type><entries>` +
 		`<entry><dst>0.0.0.0/0</dst><interface>tunnel.99</interface></entry></entries></entry></fibs></result>"}`
@@ -221,6 +232,7 @@ func TestLoadZoneSnapshotRefusesWhenNothingIsZoned(t *testing.T) {
 // Two routes to the same destination in one router both survive, so an ECMP pair or a
 // duplicated entry does not silently lose a path.
 func TestZoneSnapshotKeepsBothRoutesToOneDestination(t *testing.T) {
+	t.Parallel()
 	body := `{"interfaces_xml":"<result><ifnet>` +
 		`<entry><name>ethernet1/1</name><vsys>1</vsys><zone>a</zone><fwd>lr:default</fwd></entry>` +
 		`<entry><name>ethernet1/2</name><vsys>1</vsys><zone>b</zone><fwd>lr:default</fwd></entry>` +
@@ -241,6 +253,7 @@ func TestZoneSnapshotKeepsBothRoutesToOneDestination(t *testing.T) {
 
 // NewZoneSnapshot reports a document that reads but does not parse.
 func TestNewZoneSnapshotReportsUnparsableDocuments(t *testing.T) {
+	t.Parallel()
 	if _, err := NewZoneSnapshot(time.Time{}, "x",
 		strings.NewReader("<result/>"), strings.NewReader("<result/>")); err == nil {
 		t.Error("empty documents were accepted")

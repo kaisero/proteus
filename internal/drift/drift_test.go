@@ -19,6 +19,7 @@ func load(t *testing.T, name string) *config.Config {
 var vsys1 = config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}
 
 func TestCompareFindsEachChange(t *testing.T) {
+	t.Parallel()
 	got := Compare(load(t, "firewall-lab.xml"), load(t, "firewall-lab-changed.xml"), vsys1)
 	var lines []string
 	for _, c := range got {
@@ -39,6 +40,7 @@ func TestCompareFindsEachChange(t *testing.T) {
 }
 
 func TestIdenticalConfigurationsDoNotDiffer(t *testing.T) {
+	t.Parallel()
 	if got := Compare(load(t, "firewall-lab.xml"), load(t, "firewall-lab.xml"), vsys1); len(got) != 0 {
 		t.Errorf("got %v", got)
 	}
@@ -46,6 +48,7 @@ func TestIdenticalConfigurationsDoNotDiffer(t *testing.T) {
 
 // Shared objects and rules are compared under shared, not repeated per vsys.
 func TestSharedIsItsOwnScope(t *testing.T) {
+	t.Parallel()
 	before := load(t, "firewall-lab.xml")
 	after := load(t, "firewall-multivsys.xml")
 	shared := config.Scope{Sort: config.ScopeShared}

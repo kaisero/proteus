@@ -49,6 +49,7 @@ func loggedIn(t *testing.T, d *fakepanos.Device) *Client {
 // Source: PAN-OS XML API, "Get Your API Key". The password goes in a POST body and
 // the key in a header, so neither is ever part of a URL.
 func TestKeygenKeepsSecretsOutOfURLs(t *testing.T) {
+	t.Parallel()
 	d := device()
 	c := loggedIn(t, d)
 	if _, err := c.Op(context.Background(), "<show><system><info/></system></show>"); err != nil {
@@ -69,6 +70,7 @@ func TestKeygenKeepsSecretsOutOfURLs(t *testing.T) {
 }
 
 func TestKeygenRefusalIsAnAPIErrorAndIsNotRetried(t *testing.T) {
+	t.Parallel()
 	d := device()
 	c := NewClient(target(d.Start(t)), nil)
 	err := c.Keygen(context.Background(), testUser, "wrong")
@@ -85,6 +87,7 @@ func TestKeygenRefusalIsAnAPIErrorAndIsNotRetried(t *testing.T) {
 }
 
 func TestKeygenNeedsAKeyInTheAnswer(t *testing.T) {
+	t.Parallel()
 	d := device()
 	d.Key = ""
 	c := NewClient(target(d.Start(t)), nil)
@@ -94,6 +97,7 @@ func TestKeygenNeedsAKeyInTheAnswer(t *testing.T) {
 }
 
 func TestOpReturnsTheResponseVerbatim(t *testing.T) {
+	t.Parallel()
 	c := loggedIn(t, device())
 	b, err := c.Op(context.Background(), "<show><system><info/></system></show>")
 	if err != nil {
@@ -106,6 +110,7 @@ func TestOpReturnsTheResponseVerbatim(t *testing.T) {
 
 // A device that answers status="error" with HTTP 200 has still refused.
 func TestOpRefusalIsAnAPIError(t *testing.T) {
+	t.Parallel()
 	c := loggedIn(t, device())
 	_, err := c.Op(context.Background(), "<show><nothing/></show>")
 	var api *APIError
@@ -118,6 +123,7 @@ func TestOpRefusalIsAnAPIError(t *testing.T) {
 }
 
 func TestAPIErrorWithoutCodeOrMessage(t *testing.T) {
+	t.Parallel()
 	e := &APIError{HTTPStatus: 502}
 	if got := e.Error(); got != "device refused (HTTP 502): no message" {
 		t.Errorf("Error() = %q", got)
@@ -125,6 +131,7 @@ func TestAPIErrorWithoutCodeOrMessage(t *testing.T) {
 }
 
 func TestExportConfigAcceptsABareConfig(t *testing.T) {
+	t.Parallel()
 	c := loggedIn(t, device())
 	b, err := c.ExportConfig(context.Background())
 	if err != nil {
@@ -136,6 +143,7 @@ func TestExportConfigAcceptsABareConfig(t *testing.T) {
 }
 
 func TestCallsNeedAKey(t *testing.T) {
+	t.Parallel()
 	c := NewClient(target(device().Start(t)), nil)
 	if _, err := c.ExportConfig(context.Background()); err == nil {
 		t.Error("a call before Keygen must fail")
@@ -144,6 +152,7 @@ func TestCallsNeedAKey(t *testing.T) {
 
 // A dropped connection is retried once; a second drop is the answer.
 func TestOneRetryOnATransportError(t *testing.T) {
+	t.Parallel()
 	d := device()
 	d.DropFirst = 1
 	c := quick(NewClient(target(d.Start(t)), nil))
@@ -163,6 +172,7 @@ func TestOneRetryOnATransportError(t *testing.T) {
 
 // A cancelled run stops at once rather than retrying.
 func TestACancelledContextIsNotRetried(t *testing.T) {
+	t.Parallel()
 	d := device()
 	d.DropFirst = 1
 	ctx, cancel := context.WithCancel(context.Background())
@@ -178,6 +188,7 @@ func TestACancelledContextIsNotRetried(t *testing.T) {
 // With verification on, the fake device's self-signed certificate is rejected. That
 // proves insecure_tls: false really verifies.
 func TestVerificationRejectsAnUntrustedCertificate(t *testing.T) {
+	t.Parallel()
 	tg := target(device().Start(t))
 	tg.InsecureTLS = false
 	err := NewClient(tg, nil).Keygen(context.Background(), testUser, testPass)
@@ -189,6 +200,7 @@ func TestVerificationRejectsAnUntrustedCertificate(t *testing.T) {
 // R2. The client reads: it can ask for a key, run show commands and export the
 // configuration, and nothing else reaches the device.
 func TestOnlyReadCalls(t *testing.T) {
+	t.Parallel()
 	d := device()
 	c := loggedIn(t, d)
 	for _, cmd := range []string{
@@ -217,6 +229,7 @@ func TestOnlyReadCalls(t *testing.T) {
 
 // A body cut off mid-read is a transport failure: retried once.
 func TestATruncatedBodyIsRetried(t *testing.T) {
+	t.Parallel()
 	d := device()
 	d.TruncateFirst = 1
 	if err := quick(NewClient(target(d.Start(t)), nil)).Keygen(context.Background(), testUser, testPass); err != nil {
@@ -230,6 +243,7 @@ func TestATruncatedBodyIsRetried(t *testing.T) {
 }
 
 func TestABadHostFailsBeforeSending(t *testing.T) {
+	t.Parallel()
 	if err := NewClient(target("bad host\x7f"), nil).Keygen(context.Background(), testUser, testPass); err == nil {
 		t.Error("an unparseable host must fail")
 	}
@@ -244,6 +258,7 @@ func quick(c *Client) *Client {
 // A certificate that fails verification fails the same way twice, so the client
 // does not try again.
 func TestACertificateErrorIsNotRetried(t *testing.T) {
+	t.Parallel()
 	tg := target(device().Start(t))
 	tg.InsecureTLS = false
 	l, err := runlog.Open(runlog.Options{Dir: t.TempDir(), Command: "fetch", Level: runlog.Debug})
@@ -262,6 +277,7 @@ func TestACertificateErrorIsNotRetried(t *testing.T) {
 
 // A run cancelled while the client waits to retry stops at once.
 func TestACancelDuringTheRetryPauseStops(t *testing.T) {
+	t.Parallel()
 	d := device()
 	d.DropFirst = 1
 	c := NewClient(target(d.Start(t)), nil)
@@ -277,6 +293,7 @@ func TestACancelDuringTheRetryPauseStops(t *testing.T) {
 
 // PAN-OS writes a refusal three ways, and an export answers with a bare <config>.
 func TestCheckResponse(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name    string
 		status  int
@@ -293,6 +310,7 @@ func TestCheckResponse(t *testing.T) {
 		{"an HTTP error without XML", 502, `Bad Gateway`, true, "", ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			err := checkResponse(tc.status, []byte(tc.body))
 			api, ok := errors.AsType[*APIError](err)
 			if ok != tc.refused || (ok && (api.Code != tc.code || api.Message != tc.message || api.HTTPStatus != tc.status)) {

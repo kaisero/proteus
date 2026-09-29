@@ -112,6 +112,7 @@ func reach(graph map[string][]string, from string) []string {
 
 // The checker must be able to fail, or a green run proves nothing.
 func TestViolationsCatchesABreach(t *testing.T) {
+	t.Parallel()
 	graph := map[string][]string{
 		module + "/internal/config":   {"fmt", module + "/internal/helper"},
 		module + "/internal/helper":   {"net/http"},
@@ -179,6 +180,7 @@ func loadGraph(t *testing.T, root string) map[string][]string {
 // R12. The read-only core imports no I/O and nothing of this module outside
 // itself, and the packages above it point one way.
 func TestImportDirection(t *testing.T) {
+	t.Parallel()
 	graph := loadGraph(t, "../..")
 	for _, r := range rules {
 		if _, ok := graph[module+"/"+r.from]; !ok {

@@ -26,6 +26,7 @@ func shadowLab(t *testing.T) *config.Config {
 }
 
 func TestScopedObjectsExcludeSiblings(t *testing.T) {
+	t.Parallel()
 	tg, err := TargetFor(vsysLab(t), "localhost.localdomain", "vsys1")
 	if err != nil {
 		t.Fatalf("TargetFor: %v", err)
@@ -45,6 +46,7 @@ func TestScopedObjectsExcludeSiblings(t *testing.T) {
 }
 
 func TestScopedObjectsCarryValueAndTags(t *testing.T) {
+	t.Parallel()
 	tg, _ := TargetFor(vsysLab(t), "localhost.localdomain", "vsys1")
 	objs := tg.Objects("address")
 	for _, o := range objs {
@@ -66,6 +68,7 @@ func TestScopedObjectsCarryValueAndTags(t *testing.T) {
 }
 
 func TestShadowingIsReported(t *testing.T) {
+	t.Parallel()
 	tg, err := TargetFor(shadowLab(t), "localhost.localdomain", "vsys1")
 	if err != nil {
 		t.Fatalf("TargetFor: %v", err)
@@ -108,6 +111,7 @@ func TestShadowingIsReported(t *testing.T) {
 // profiles/. Reading a kind as a direct child found none of them, so the objects
 // were invisible and so was every security profile.
 func TestObjectsFindsAKindNestedUnderProfiles(t *testing.T) {
+	t.Parallel()
 	cfg := loadT(t, "../../testdata/config/firewall-urlcat.xml")
 	sc := config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}
 
@@ -129,6 +133,7 @@ func TestObjectsFindsAKindNestedUnderProfiles(t *testing.T) {
 // A service keeps its port one level below the entry, under the protocol. Reading
 // only the top level reported every service as having no value at all.
 func TestObjectsReadsAServicePort(t *testing.T) {
+	t.Parallel()
 	cfg := loadT(t, "../../testdata/config/firewall-urlcat.xml")
 	sc := config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}
 
@@ -149,6 +154,7 @@ func TestObjectsReadsAServicePort(t *testing.T) {
 // type. The type decides how the object may be used, because a URL external list and
 // an IP external list share one container.
 func TestObjectSubtypeReadsBothForms(t *testing.T) {
+	t.Parallel()
 	cfg := loadT(t, "../../testdata/config/firewall-urlcat-edge.xml")
 	sc := config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}
 
@@ -175,6 +181,7 @@ func TestObjectSubtypeReadsBothForms(t *testing.T) {
 
 // An object with no type element has no subtype, rather than a guess.
 func TestObjectSubtypeIsEmptyWhenAbsent(t *testing.T) {
+	t.Parallel()
 	cfg := loadT(t, "../../testdata/config/firewall-urlcat.xml")
 	sc := config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}
 
@@ -190,6 +197,7 @@ func TestObjectSubtypeIsEmptyWhenAbsent(t *testing.T) {
 // "static". Reading only "static" left every service group with no value, and so with
 // no members in the group closure.
 func TestObjectsReadsServiceGroupMembers(t *testing.T) {
+	t.Parallel()
 	cfg := loadT(t, "../../testdata/config/firewall-urlcat.xml")
 	sc := config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}
 
@@ -208,6 +216,7 @@ func TestObjectsReadsServiceGroupMembers(t *testing.T) {
 // by name alone finds a different array from the local user database, and the mistake
 // is invisible in the result.
 func TestObjectsAtReadsAnExplicitContainer(t *testing.T) {
+	t.Parallel()
 	cfg := loadT(t, "../../testdata/config/firewall-users.xml")
 	sc := config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}
 
@@ -232,6 +241,7 @@ func TestObjectsAtReadsAnExplicitContainer(t *testing.T) {
 // A local user group spells its membership "user", where an address group says "static"
 // and a service group says "members".
 func TestObjectsReadsUserGroupMembers(t *testing.T) {
+	t.Parallel()
 	cfg := loadT(t, "../../testdata/config/firewall-users.xml")
 	sc := config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}
 
@@ -248,6 +258,7 @@ func TestObjectsReadsUserGroupMembers(t *testing.T) {
 // the forms have to be read, or an object looks valueless and drops out of every
 // lookup that works on values.
 func TestObjectValueReadsEveryForm(t *testing.T) {
+	t.Parallel()
 	cfg := loadT(t, "../../testdata/config/firewall-urlcat-edge.xml")
 	sc := config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}
 
@@ -274,6 +285,7 @@ func TestObjectValueReadsEveryForm(t *testing.T) {
 // The config scope sits outside shared and every vsys, so it holds no objects of
 // its own; readers see only shared from it.
 func TestConfigScopeHoldsNoObjectsOfItsOwn(t *testing.T) {
+	t.Parallel()
 	cfg := fwLab(t)
 	sc := config.Scope{Sort: config.ScopeConfig}
 	objs := ObjectsInScope(cfg, sc, "address")

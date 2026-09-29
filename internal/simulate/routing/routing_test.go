@@ -99,6 +99,7 @@ func trail(p Path) string {
 }
 
 func TestAPathLeavesTheEstate(t *testing.T) {
+	t.Parallel()
 	run, p, err := simulateOn(t, labNet(), flow("198.18.10.5", "8.8.8.8"), nil)
 	if err != nil {
 		t.Fatal(err)
@@ -127,6 +128,7 @@ func TestAPathLeavesTheEstate(t *testing.T) {
 }
 
 func TestAPathIsDelivered(t *testing.T) {
+	t.Parallel()
 	run, p, err := simulateOn(t, labNet(), flow("198.18.1.10", "198.18.10.100"), nil)
 	if err != nil || trail(p) != "fw02(home->labor) fw01(transport->server)" || p.Outcome != Delivered ||
 		p.End != "198.18.10.100   delivered" {
@@ -140,6 +142,7 @@ func TestAPathIsDelivered(t *testing.T) {
 
 // The destination is fw02's own address on the link: the path ends on fw02.
 func TestAPathTerminatesOnAFirewall(t *testing.T) {
+	t.Parallel()
 	_, p, err := simulateOn(t, labNet(), flow("198.18.10.5", "198.19.0.1"), nil)
 	if err != nil || trail(p) != "fw01(server->transport) fw02(labor->labor)" || p.Outcome != Local ||
 		p.End != "198.19.0.1   terminates on fw02" {
@@ -148,6 +151,7 @@ func TestAPathTerminatesOnAFirewall(t *testing.T) {
 }
 
 func TestAPathLeavesByATunnel(t *testing.T) {
+	t.Parallel()
 	_, p, err := simulateOn(t, labNet(), flow("198.18.10.5", "198.19.255.254"), nil)
 	if err != nil || p.Outcome != LeftByInterface || p.End != "leaves by tunnel.1 (zone prisma)" {
 		t.Errorf("path = %+v, %v", p, err)
@@ -155,6 +159,7 @@ func TestAPathLeavesByATunnel(t *testing.T) {
 }
 
 func TestTheStartNeedsAChoice(t *testing.T) {
+	t.Parallel()
 	for name, tc := range map[string]struct {
 		f      simulate.Flow
 		params map[string]string
@@ -173,6 +178,7 @@ func TestTheStartNeedsAChoice(t *testing.T) {
 		}, nil, "IPv6"},
 	} {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 			_, _, err := simulateOn(t, labNet(), tc.f, tc.params)
 			var ce *simulate.ChoiceError
 			if !errors.As(err, &ce) || !strings.Contains(err.Error(), tc.want) {
@@ -186,6 +192,7 @@ func TestTheStartNeedsAChoice(t *testing.T) {
 }
 
 func TestAGivenStart(t *testing.T) {
+	t.Parallel()
 	// No source: the ingress is unknown.
 	_, p, err := simulateOn(t, labNet(), flow("", "8.8.8.8"), map[string]string{"device": "fw01", "router": "default"})
 	if err != nil || p.Placed != topology.PlacedGiven || p.Hops[0].Flow.FromZone != "" || !strings.Contains(strings.Join(p.Hops[0].Notes, ";"), "ingress is unknown") {
@@ -209,6 +216,7 @@ func TestAGivenStart(t *testing.T) {
 }
 
 func TestARoutedStartIsInferred(t *testing.T) {
+	t.Parallel()
 	run, p, err := simulateOn(t, labNet(), flow("198.18.20.5", "8.8.8.8"), nil)
 	if err != nil || p.Placed != topology.PlacedRouted || p.PlacedVia != "198.18.0.0/15" || p.Hops[0].Device != "fw02" ||
 		run.Stages[0].Fidelity.Level() != "inferred" {
@@ -217,6 +225,7 @@ func TestARoutedStartIsInferred(t *testing.T) {
 }
 
 func TestDropsAndUnknownRoutes(t *testing.T) {
+	t.Parallel()
 	n := netOf(dev("a", []resolve.InterfaceState{iface("e1", "in", "r", "10.0.0.1/24")},
 		route("r", "10.0.0.0/24", "e1", "0.0.0.0"),
 		resolve.FIBRoute{Router: "r", Destination: netip.MustParsePrefix("10.66.0.0/16"), Interface: "e1", NextHop: "0.0.0.0", NextHopType: "7"},
@@ -232,6 +241,7 @@ func TestDropsAndUnknownRoutes(t *testing.T) {
 }
 
 func TestECMPFollowsOneAndNamesTheOthers(t *testing.T) {
+	t.Parallel()
 	n := netOf(
 		dev("a", []resolve.InterfaceState{iface("e0", "in", "r", "10.9.0.1/24"), iface("e1", "out", "r", "10.0.0.1/24")},
 			route("r", "10.9.0.0/24", "e0", "0.0.0.0"),
@@ -253,6 +263,7 @@ func TestECMPFollowsOneAndNamesTheOthers(t *testing.T) {
 
 // Two devices sending a net to each other, with snapshots of different ages.
 func TestALoop(t *testing.T) {
+	t.Parallel()
 	a := dev("a", []resolve.InterfaceState{iface("e0", "in", "r", "10.9.0.1/24"), iface("e1", "z", "r", "10.0.0.1/30")},
 		route("r", "10.9.0.0/24", "e0", "0.0.0.0"), route("r", "0.0.0.0/0", "e1", "10.0.0.2"))
 	b := dev("b", []resolve.InterfaceState{iface("e1", "z", "r", "10.0.0.2/30")}, route("r", "0.0.0.0/0", "e1", "10.0.0.1"))
@@ -264,6 +275,7 @@ func TestALoop(t *testing.T) {
 }
 
 func TestTooManyHops(t *testing.T) {
+	t.Parallel()
 	var devs []simulate.DeviceData
 	for i := 0; i <= MaxHops; i++ {
 		ifs := []resolve.InterfaceState{iface("in", "z", "r", fmt.Sprintf("10.%d.0.2/30", i))}
@@ -280,6 +292,7 @@ func TestTooManyHops(t *testing.T) {
 }
 
 func TestANextHopWithTwoOwners(t *testing.T) {
+	t.Parallel()
 	n := netOf(
 		dev("a", []resolve.InterfaceState{iface("e0", "in", "r", "10.9.0.1/24"), iface("e1", "z", "r", "10.0.0.1/24")},
 			route("r", "10.9.0.0/24", "e0", "0.0.0.0"), route("r", "0.0.0.0/0", "e1", "10.0.0.2")),
@@ -293,6 +306,7 @@ func TestANextHopWithTwoOwners(t *testing.T) {
 }
 
 func TestADeviceWithoutASnapshotIsAHole(t *testing.T) {
+	t.Parallel()
 	n := labNet()
 	n.names = append(n.names, "fw03")
 	run, p, err := simulateOn(t, n, flow("198.18.10.5", "8.8.8.8"), nil)
@@ -303,6 +317,7 @@ func TestADeviceWithoutASnapshotIsAHole(t *testing.T) {
 }
 
 func TestRIBAlternates(t *testing.T) {
+	t.Parallel()
 	n := labNet()
 	d := n.data["fw01"]
 	d.RIB = []resolve.RIBRoute{
@@ -330,6 +345,7 @@ func TestRIBAlternates(t *testing.T) {
 // A path from vsys1 into vsys2 on one firewall: two boxes, joined by the external
 // zones of the configuration.
 func TestAVsysCrossing(t *testing.T) {
+	t.Parallel()
 	cfg, _, err := config.Load("../../../testdata/config/firewall-intervsys.xml")
 	if err != nil {
 		t.Fatal(err)
@@ -354,6 +370,7 @@ func TestAVsysCrossing(t *testing.T) {
 }
 
 func TestHiddenFirewalls(t *testing.T) {
+	t.Parallel()
 	n := labNet()
 	n.names = append(n.names, "fw05")
 	n.data["fw05"] = dev("fw05", []resolve.InterfaceState{iface("ethernet1/1", "vw-in", "")})
@@ -365,6 +382,7 @@ func TestHiddenFirewalls(t *testing.T) {
 }
 
 func TestAnFQDNNamesTheAddressesNotTraced(t *testing.T) {
+	t.Parallel()
 	f := flow("198.18.10.5", "8.8.8.8")
 	f.Destination = simulate.Endpoint{Name: "dns.example", Addrs: []netip.Addr{netip.MustParseAddr("8.8.8.8"), netip.MustParseAddr("8.8.4.4")}, Resolved: true}
 	_, p, _ := simulateOn(t, labNet(), f, nil)
@@ -374,6 +392,7 @@ func TestAnFQDNNamesTheAddressesNotTraced(t *testing.T) {
 }
 
 func TestDescribe(t *testing.T) {
+	t.Parallel()
 	s := Simulation{}
 	if s.Kind() != "routing" || s.Describe() == "" || len(s.Stages()) != 6 {
 		t.Error("describe")
@@ -385,6 +404,7 @@ func TestDescribe(t *testing.T) {
 
 // An ECMP member without a next-hop address reaches no node.
 func TestECMPMemberWithoutAnAddress(t *testing.T) {
+	t.Parallel()
 	n := netOf(dev("a", []resolve.InterfaceState{iface("e0", "in", "r", "10.9.0.1/24"), iface("e1", "out", "r", "10.0.0.1/24")},
 		route("r", "10.9.0.0/24", "e0", "0.0.0.0"),
 		route("r", "172.16.0.0/12", "e1", "10.0.0.2"),

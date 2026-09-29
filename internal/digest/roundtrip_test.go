@@ -34,6 +34,7 @@ func encoded(t *testing.T) []byte {
 }
 
 func TestRoundTripPreservesStructure(t *testing.T) {
+	t.Parallel()
 	root := fixture(t)
 	var buf bytes.Buffer
 	if err := Write(&buf, &Digest{
@@ -62,6 +63,7 @@ func TestRoundTripPreservesStructure(t *testing.T) {
 
 // Parent pointers are not serialised. Read must rebuild them, or Path breaks.
 func TestReadRebuildsParents(t *testing.T) {
+	t.Parallel()
 	got, err := Read(bytes.NewReader(encoded(t)))
 	if err != nil {
 		t.Fatalf("Read: %v", err)
@@ -80,6 +82,7 @@ func TestReadRebuildsParents(t *testing.T) {
 }
 
 func TestRoundTripPreservesAnnotations(t *testing.T) {
+	t.Parallel()
 	got, err := Read(bytes.NewReader(encoded(t)))
 	if err != nil {
 		t.Fatalf("Read: %v", err)
@@ -107,6 +110,7 @@ func TestRoundTripPreservesAnnotations(t *testing.T) {
 }
 
 func TestWriteIsGzipped(t *testing.T) {
+	t.Parallel()
 	b := encoded(t)
 	if len(b) < 2 || b[0] != 0x1f || b[1] != 0x8b {
 		t.Error("digest must be gzipped; magic bytes missing")
@@ -114,18 +118,21 @@ func TestWriteIsGzipped(t *testing.T) {
 }
 
 func TestFilename(t *testing.T) {
+	t.Parallel()
 	if got, want := Filename(PlatformFirewall, "11.2.0"), "panos-11.2.0-firewall.json.gz"; got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
 }
 
 func TestReadRejectsGarbage(t *testing.T) {
+	t.Parallel()
 	if _, err := Read(bytes.NewReader([]byte("not gzip"))); err == nil {
 		t.Error("want an error for non-gzip input")
 	}
 }
 
 func TestWriteRejectsAnUnknownPlatform(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	if err := Write(&buf, &Digest{Platform: "router", Version: "11.2.0", Root: fixture(t)}); err == nil {
 		t.Error("want an error for an unknown platform")

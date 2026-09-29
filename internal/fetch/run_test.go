@@ -31,6 +31,7 @@ func fullDevice(t *testing.T) *fakepanos.Device {
 }
 
 func TestRunFetchesEveryDocument(t *testing.T) {
+	t.Parallel()
 	d := fullDevice(t)
 	res, err := Run(context.Background(), target(d.Start(t)), Documents, nil)
 	if err != nil {
@@ -51,6 +52,7 @@ func TestRunFetchesEveryDocument(t *testing.T) {
 
 // Spec S10: a document that fails is recorded and the rest still arrive.
 func TestRunContinuesPastAFailedDocument(t *testing.T) {
+	t.Parallel()
 	d := fullDevice(t)
 	delete(d.Ops, "<show><interface>all</interface></show>")
 	res, err := Run(context.Background(), target(d.Start(t)), Documents, nil)
@@ -67,6 +69,7 @@ func TestRunContinuesPastAFailedDocument(t *testing.T) {
 
 // Without a key nothing can be read, so a failed login fails the run.
 func TestRunFailsWhenLoginFails(t *testing.T) {
+	t.Parallel()
 	d := fullDevice(t)
 	tg := target(d.Start(t))
 	tg.Password = "wrong"
@@ -78,6 +81,7 @@ func TestRunFailsWhenLoginFails(t *testing.T) {
 
 // A debug log records every call and never a password or a key.
 func TestRunLogsCallsWithoutSecrets(t *testing.T) {
+	t.Parallel()
 	d := fullDevice(t)
 	delete(d.Ops, "<show><advanced-routing><fib><afi>both</afi></fib></advanced-routing></show>")
 	d.Ops["<show><routing><fib/></routing></show>"] = "<response status=\"success\"><result/></response>"
@@ -115,6 +119,7 @@ func TestRunLogsCallsWithoutSecrets(t *testing.T) {
 // A document that fails for good is warned about once, by the caller that gives up
 // on it, not again by the client that saw the refusal.
 func TestAFailedDocumentIsWarnedAboutOnce(t *testing.T) {
+	t.Parallel()
 	d := fullDevice(t)
 	delete(d.Ops, "<show><interface>all</interface></show>")
 	l, err := runlog.Open(runlog.Options{Dir: t.TempDir(), Command: "fetch", Level: runlog.Debug})
@@ -143,6 +148,7 @@ func TestAFailedDocumentIsWarnedAboutOnce(t *testing.T) {
 // A run cancelled while the device hangs returns at once, and TestMain's leak check
 // proves it leaves no goroutine behind.
 func TestACancelledRunEndsPromptly(t *testing.T) {
+	t.Parallel()
 	d := fullDevice(t)
 	d.Stall = "export"
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)

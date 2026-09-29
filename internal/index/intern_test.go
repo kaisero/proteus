@@ -3,6 +3,7 @@ package index
 import "testing"
 
 func TestInternIsStableAndReversible(t *testing.T) {
+	t.Parallel()
 	in := NewInterner()
 	a := in.ID("net-labor")
 	b := in.ID("net-labor")
@@ -21,6 +22,7 @@ func TestInternIsStableAndReversible(t *testing.T) {
 }
 
 func TestInternLookupDoesNotInsert(t *testing.T) {
+	t.Parallel()
 	in := NewInterner()
 	if _, ok := in.Lookup("absent"); ok {
 		t.Error("Lookup must not report an absent name as present")
@@ -31,6 +33,7 @@ func TestInternLookupDoesNotInsert(t *testing.T) {
 }
 
 func TestInternNameOfUnknownIDIsEmpty(t *testing.T) {
+	t.Parallel()
 	in := NewInterner()
 	if got := in.Name(42); got != "" {
 		t.Errorf("Name(42) = %q, want empty", got)

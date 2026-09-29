@@ -7,6 +7,7 @@ import (
 )
 
 func TestWeakestFollowsTheOrder(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		in   []Fidelity
 		want string
@@ -26,6 +27,7 @@ func TestWeakestFollowsTheOrder(t *testing.T) {
 // Not evaluating a dimension can only add candidates, so it is OverMatch, and a run
 // that skips application is not reported as knowing nothing.
 func TestNotEvaluatedIsOverMatchWithDimensions(t *testing.T) {
+	t.Parallel()
 	f := NotEvaluated("application", "service")
 	if f.Level() != "overmatch" || strings.Join(f.Skipped(), ",") != "application,service" {
 		t.Errorf("got %s %v", f.Level(), f.Skipped())
@@ -40,6 +42,7 @@ func TestNotEvaluatedIsOverMatchWithDimensions(t *testing.T) {
 }
 
 func TestReasonsMerge(t *testing.T) {
+	t.Parallel()
 	w := Weakest(UnderMatch("a"), UnderMatch("b"), UnderMatch("a"), OverMatchBecause("c"))
 	if strings.Join(w.Reasons(), ";") != "a;b;c" {
 		t.Errorf("reasons = %v", w.Reasons())
@@ -50,6 +53,7 @@ func TestReasonsMerge(t *testing.T) {
 }
 
 func TestDeclaredAndString(t *testing.T) {
+	t.Parallel()
 	if (Fidelity{}).Declared() || !Exact.Declared() {
 		t.Error("the zero value is undeclared")
 	}
@@ -67,6 +71,7 @@ func TestDeclaredAndString(t *testing.T) {
 }
 
 func TestFidelityJSON(t *testing.T) {
+	t.Parallel()
 	b, err := json.Marshal(Weakest(UnderMatch("x"), NotEvaluated("application")))
 	if err != nil {
 		t.Fatal(err)

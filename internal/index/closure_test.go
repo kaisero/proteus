@@ -26,6 +26,7 @@ func nestedIndex(t *testing.T) *Index {
 }
 
 func TestGroupsOfIsTransitive(t *testing.T) {
+	t.Parallel()
 	idx := nestedIndex(t)
 	got := map[string]bool{}
 	for _, g := range idx.GroupsOf("h-1") {
@@ -39,6 +40,7 @@ func TestGroupsOfIsTransitive(t *testing.T) {
 }
 
 func TestMembersOfIsTransitive(t *testing.T) {
+	t.Parallel()
 	idx := nestedIndex(t)
 	got := map[string]bool{}
 	for _, m := range idx.MembersOf("g-outer") {
@@ -53,6 +55,7 @@ func TestMembersOfIsTransitive(t *testing.T) {
 
 // A cycle must not hang or overflow. The membership is still reported.
 func TestClosureSurvivesACycle(t *testing.T) {
+	t.Parallel()
 	idx := indexOf(t, "../../testdata/config/firewall-cyclic-groups.xml", "vsys1")
 	if got := idx.GroupsOf("h-1"); len(got) == 0 {
 		t.Error("a cyclic group definition still has members")
@@ -63,6 +66,7 @@ func TestClosureSurvivesACycle(t *testing.T) {
 // object, the object finds the dynamic group holding it by tag, and the group
 // finds the rule.
 func TestDynamicGroupExtendsTheChain(t *testing.T) {
+	t.Parallel()
 	cfg, _, err := config.Load("../../testdata/config/firewall-multivsys.xml")
 	if err != nil {
 		t.Fatal(err)
@@ -90,6 +94,7 @@ func TestDynamicGroupExtendsTheChain(t *testing.T) {
 // And the same dynamic group resolves differently in a sibling vsys, so the
 // closure is scope-bound like everything else.
 func TestDynamicClosureIsScopeBound(t *testing.T) {
+	t.Parallel()
 	graz := indexOf(t, "../../testdata/config/firewall-multivsys.xml", "vsys2")
 	if got := graz.MembersOf("corp-location"); len(got) != 1 || got[0] != "corp-location-graz" {
 		t.Errorf("in vsys2 the group holds %v, want [corp-location-graz]", got)
@@ -102,6 +107,7 @@ func TestDynamicClosureIsScopeBound(t *testing.T) {
 // A dynamic group whose filter cannot be read has no members in the index, and the
 // index says which group that is rather than leaving the caller to notice.
 func TestUnparsedFiltersAreReported(t *testing.T) {
+	t.Parallel()
 	idx := indexOf(t, "../../testdata/config/firewall-badfilter.xml", "vsys1")
 	got := idx.UnparsedFilters()
 	if len(got) != 1 || got[0].Group != "g-bad" {
@@ -118,6 +124,7 @@ func TestUnparsedFiltersAreReported(t *testing.T) {
 
 // Direct groups answer "which group do I edit": only the one naming the member.
 func TestDirectGroupsOf(t *testing.T) {
+	t.Parallel()
 	idx := nestedIndex(t)
 	if got := idx.DirectGroupsOf("h-1"); len(got) != 1 || got[0] != "g-inner" {
 		t.Errorf("DirectGroupsOf(h-1) = %v, want [g-inner]", got)
@@ -131,6 +138,7 @@ func TestDirectGroupsOf(t *testing.T) {
 }
 
 func TestPrefixesOfIsExported(t *testing.T) {
+	t.Parallel()
 	if got := PrefixesOf("10.0.0.0/8"); len(got) != 1 {
 		t.Errorf("PrefixesOf = %v", got)
 	}
@@ -138,6 +146,7 @@ func TestPrefixesOfIsExported(t *testing.T) {
 
 // A name the index never saw, and a name that is not a group, have no members.
 func TestMembersOfANonGroupIsEmpty(t *testing.T) {
+	t.Parallel()
 	idx := indexOf(t, "../../testdata/config/firewall-nested-groups.xml", "vsys1")
 	for _, name := range []string{"no-such-group", "h-1"} {
 		if got := idx.MembersOf(name); got != nil {

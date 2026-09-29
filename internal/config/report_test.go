@@ -6,6 +6,7 @@ import (
 )
 
 func TestReportEmpty(t *testing.T) {
+	t.Parallel()
 	var r Report
 	if r.HasUnknown() {
 		t.Error("an empty report has nothing unknown")
@@ -16,6 +17,7 @@ func TestReportEmpty(t *testing.T) {
 }
 
 func TestReportWithUntyped(t *testing.T) {
+	t.Parallel()
 	r := Report{Untyped: []Untyped{
 		{XPath: "/config/shared/foo", Digest: "11.2.0"},
 		{XPath: "/config/shared/bar", Digest: "11.2.0"},

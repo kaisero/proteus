@@ -12,6 +12,7 @@ import (
 const lookupFile = "../../testdata/config/firewall-lookup.xml"
 
 func TestLookupASimpleRule(t *testing.T) {
+	t.Parallel()
 	c := newCLI(t)
 	out := c.want(0, "lookup", "dc-to-pve", "--file", lookupFile)
 	want := `security rule  dc-to-pve                    position 1 of 2, local, enabled
@@ -46,6 +47,7 @@ func TestLookupASimpleRule(t *testing.T) {
 }
 
 func TestLookupALargeRule(t *testing.T) {
+	t.Parallel()
 	c := newCLI(t)
 	out := c.want(0, "lookup", "branch-to-dc", "--file", lookupFile)
 	for _, want := range []string{
@@ -90,6 +92,7 @@ func TestLookupALargeRule(t *testing.T) {
 }
 
 func TestLookupAnObject(t *testing.T) {
+	t.Parallel()
 	c := newCLI(t)
 	out := c.want(0, "lookup", "net-vienna", "--file", lookupFile, "--expand")
 	for _, want := range []string{
@@ -111,6 +114,7 @@ func TestLookupAnObject(t *testing.T) {
 }
 
 func TestLookupExitCodes(t *testing.T) {
+	t.Parallel()
 	c := newCLI(t)
 	_, errOut, code := c.run("lookup", "dc-mgmt", "--file", lookupFile)
 	if code != 2 || !strings.Contains(errOut, "address-group on file/vsys1") || !strings.Contains(errOut, "tag on file/vsys1") {
@@ -129,6 +133,7 @@ func TestLookupExitCodes(t *testing.T) {
 }
 
 func TestLookupAcrossTheEstate(t *testing.T) {
+	t.Parallel()
 	c := newCLI(t)
 	other := lab(t)
 	other.Config = read(t, lookupFile)
@@ -177,6 +182,7 @@ func TestLookupAcrossTheEstate(t *testing.T) {
 
 // Trees stop at three levels; lists stop at five items.
 func TestRendererCuts(t *testing.T) {
+	t.Parallel()
 	leaf := func(n string) card.Item { return card.Item{Name: n, Value: "v"} }
 	deep := card.Item{Name: "l1", Children: []card.Item{{Name: "l2", Children: []card.Item{
 		{Name: "l3", Children: []card.Item{{Name: "l4", Children: []card.Item{leaf("l5")}}, leaf("l4b")}},

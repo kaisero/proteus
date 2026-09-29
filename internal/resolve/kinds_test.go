@@ -6,6 +6,7 @@ import (
 )
 
 func TestObjectKindsComeFromTheSchema(t *testing.T) {
+	t.Parallel()
 	got := ObjectKinds(fwLab(t))
 	for _, want := range []string{"address", "address-group", "service", "service-group", "custom-url-category", "tag", "zone"} {
 		if !slices.Contains(got, want) {

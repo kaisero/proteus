@@ -14,6 +14,7 @@ func zonesCfg(t *testing.T) *config.Config {
 
 // A zone is a set of interfaces, and the interface list is what makes it usable.
 func TestZonesInScope(t *testing.T) {
+	t.Parallel()
 	sc := config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}
 
 	zones := ZonesInScope(zonesCfg(t), sc)
@@ -47,6 +48,7 @@ func TestZonesInScope(t *testing.T) {
 // subinterface behind layer3/units, and a loopback address directly under units.
 // Missing the layer3 wrapper silently dropped every base ethernet address.
 func TestInterfaceAddressesReadsEveryShape(t *testing.T) {
+	t.Parallel()
 	addrs := InterfaceAddresses(zonesCfg(t))
 	got := map[string]string{}
 	for _, a := range addrs {
@@ -76,6 +78,7 @@ func TestInterfaceAddressesReadsEveryShape(t *testing.T) {
 // A route with an egress interface is what ties a destination to a zone. One with only a
 // next hop resolves through another route, which a file cannot follow reliably.
 func TestStaticRoutes(t *testing.T) {
+	t.Parallel()
 	routes := StaticRoutes(zonesCfg(t))
 	got := map[string]StaticRoute{}
 	for _, r := range routes {
@@ -100,6 +103,7 @@ func TestStaticRoutes(t *testing.T) {
 // has to be reported. An absent enable counts as enabled, because PAN-OS defaults it on
 // once the protocol block exists.
 func TestDynamicRoutingProtocols(t *testing.T) {
+	t.Parallel()
 	got := DynamicRoutingProtocols(zonesCfg(t))
 	if len(got) != 1 || got[0] != "default/bgp" {
 		t.Errorf("protocols = %v, want [default/bgp]", got)
@@ -113,6 +117,7 @@ func TestDynamicRoutingProtocols(t *testing.T) {
 
 // A vsys that defines no zones has none, and that is an answer, not an error.
 func TestZonesInScopeOnAVsysWithNone(t *testing.T) {
+	t.Parallel()
 	zones := ZonesInScope(vsysLab(t), config.Scope{Sort: config.ScopeVsys, Name: "vsys3"})
 	if len(zones) != 0 {
 		t.Errorf("got %d zones in vsys3, want none: %+v", len(zones), zones)

@@ -34,6 +34,7 @@ func tree(t *testing.T) *Element {
 
 // The root is the config element, whether or not the file wraps it.
 func TestParseTreeAnchorsAtConfig(t *testing.T) {
+	t.Parallel()
 	root := tree(t)
 	if root.Name != "config" {
 		t.Fatalf("root = %q, want config", root.Name)
@@ -44,6 +45,7 @@ func TestParseTreeAnchorsAtConfig(t *testing.T) {
 }
 
 func TestElementChildAndChildren(t *testing.T) {
+	t.Parallel()
 	root := tree(t)
 	addr := root.Child("shared").Child("address")
 	if addr == nil {
@@ -65,6 +67,7 @@ func TestElementChildAndChildren(t *testing.T) {
 }
 
 func TestElementText(t *testing.T) {
+	t.Parallel()
 	root := tree(t)
 	e := root.Child("shared").Child("address").ChildrenNamed("entry")[0]
 	if got := e.Child("ip-netmask").Text; got != "10.0.0.1" {
@@ -76,6 +79,7 @@ func TestElementText(t *testing.T) {
 }
 
 func TestElementMembers(t *testing.T) {
+	t.Parallel()
 	root := tree(t)
 	e := root.Child("shared").Child("address").ChildrenNamed("entry")[0]
 	got := e.Child("tag").Members()
@@ -89,6 +93,7 @@ func TestElementMembers(t *testing.T) {
 
 // A schema path names arrays and sequences, not instances, so entry stays entry.
 func TestElementSchemaPath(t *testing.T) {
+	t.Parallel()
 	root := tree(t)
 	e := root.Child("devices").Child("entry").Child("device-group").ChildrenNamed("entry")[0]
 	if got, want := e.SchemaPath(), "/config/devices/entry/device-group/entry"; got != want {
@@ -98,6 +103,7 @@ func TestElementSchemaPath(t *testing.T) {
 
 // An instance path names the entries, so two device groups are distinguishable.
 func TestElementInstancePath(t *testing.T) {
+	t.Parallel()
 	root := tree(t)
 	e := root.Child("devices").Child("entry").Child("device-group").ChildrenNamed("entry")[0]
 	want := "/config/devices/localhost.localdomain/device-group/dg1"
@@ -108,6 +114,7 @@ func TestElementInstancePath(t *testing.T) {
 
 // Find follows a fixed element-name path, which is how the readers match exactly.
 func TestElementFind(t *testing.T) {
+	t.Parallel()
 	root := tree(t)
 	got := root.Find("devices", "entry", "device-group", "entry")
 	if len(got) != 1 || got[0].Attr("name") != "dg1" {
@@ -119,12 +126,14 @@ func TestElementFind(t *testing.T) {
 }
 
 func TestParseTreeRejectsAFileWithNoConfig(t *testing.T) {
+	t.Parallel()
 	if _, err := parseTree(strings.NewReader("<response><result/></response>")); err == nil {
 		t.Error("want an error when there is no config element")
 	}
 }
 
 func TestTextOr(t *testing.T) {
+	t.Parallel()
 	root := tree(t)
 	e := root.Child("devices").Child("entry").Child("device-group").ChildrenNamed("entry")[0]
 	if got := e.Child("description").TextOr("fallback"); got != "first" {
@@ -137,6 +146,7 @@ func TestTextOr(t *testing.T) {
 
 // Every accessor tolerates a nil receiver, so a lookup chain needs no checks.
 func TestNilElementAccessors(t *testing.T) {
+	t.Parallel()
 	var e *Element
 	if e.Attr("x") != "" {
 		t.Error("Attr on nil must be empty")
@@ -162,6 +172,7 @@ func TestNilElementAccessors(t *testing.T) {
 }
 
 func TestAttrAbsent(t *testing.T) {
+	t.Parallel()
 	root := tree(t)
 	if got := root.Attr("no-such-attr"); got != "" {
 		t.Errorf("absent attribute = %q, want empty", got)
@@ -169,6 +180,7 @@ func TestAttrAbsent(t *testing.T) {
 }
 
 func TestParseTreeRejectsMalformedXML(t *testing.T) {
+	t.Parallel()
 	if _, err := parseTree(strings.NewReader("<config><unclosed>")); err == nil {
 		t.Error("want an error for malformed XML")
 	}

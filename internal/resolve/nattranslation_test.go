@@ -29,6 +29,7 @@ func natRules(t *testing.T, file string) map[string]NATRule {
 // fw01's test rules (spec §18.5), as the device showed them in its running NAT
 // policy (testdata/opdata/fw01-running-nat-policy.xml).
 func TestNATTranslationsOfFw01(t *testing.T) {
+	t.Parallel()
 	rs := natRules(t, "firewall-nat.xml")
 	if r := rs["t-no-nat"]; r.Source != nil || r.Destination != nil {
 		t.Errorf("t-no-nat translates: %+v", r)
@@ -69,6 +70,7 @@ func TestNATTranslationsOfFw01(t *testing.T) {
 // Shapes the lab does not carry, synthetic: an unknown kind, an HA binding, a
 // dns-rewrite, dynamic-ip on an IPv6 interface, a floating address.
 func TestNATTranslationShapes(t *testing.T) {
+	t.Parallel()
 	rs := natRules(t, "firewall-nat-shapes.xml")
 	if s := rs["future"].Source; s == nil || s.Kind != UnknownKind+"magic-ip" {
 		t.Errorf("future = %+v", s)
@@ -96,6 +98,7 @@ func TestNATTranslationShapes(t *testing.T) {
 // A translated port that is not a port number keeps its text, so the NAT
 // simulation can say so instead of reading it as "unchanged".
 func TestATranslatedPortThatIsNoNumberIsKept(t *testing.T) {
+	t.Parallel()
 	src, err := os.ReadFile("../../testdata/config/firewall-nat.xml")
 	if err != nil {
 		t.Fatal(err)

@@ -9,6 +9,7 @@ import (
 // those hold is in Palo Alto's cloud rather than the configuration. Guessing would
 // be worse than saying so.
 func TestURLResolverReportsACategoryMatchCategory(t *testing.T) {
+	t.Parallel()
 	idx := indexOf(t, "../../testdata/config/firewall-urlcat-edge.xml", "vsys1")
 
 	_, rep := idx.Candidates(Category, "anything.example.com")
@@ -30,6 +31,7 @@ func TestURLResolverReportsACategoryMatchCategory(t *testing.T) {
 // A member the parser cannot read contributes no match and is reported, the way an
 // unreadable tag filter already is. The rest of the category still works.
 func TestURLResolverReportsAnUnreadableMemberAndKeepsTheRest(t *testing.T) {
+	t.Parallel()
 	idx := indexOf(t, "../../testdata/config/firewall-urlcat-edge.xml", "vsys1")
 
 	rules, rep := idx.Candidates(Category, "good.example.com")
@@ -54,6 +56,7 @@ func TestURLResolverReportsAnUnreadableMemberAndKeepsTheRest(t *testing.T) {
 // A bare word is a name, not a URL. Matching it as a URL would report every category
 // whose members happen to share a token.
 func TestURLResolverIgnoresAValueWithNoDotOrSlash(t *testing.T) {
+	t.Parallel()
 	idx := indexOf(t, "../../testdata/config/firewall-urlcat-edge.xml", "vsys1")
 
 	_, rep := idx.Candidates(Category, "cat-bad-member")
@@ -65,6 +68,7 @@ func TestURLResolverIgnoresAValueWithNoDotOrSlash(t *testing.T) {
 // A member with no wildcard covers the paths below its host: the path matches as a
 // prefix. The resolver once held such a member for exact lookup only.
 func TestAPlainMemberCoversPathsBelowIt(t *testing.T) {
+	t.Parallel()
 	idx := indexOf(t, "../../testdata/config/firewall-simulate.xml", "vsys1")
 	for _, url := range []string{"shop.example.com", "shop.example.com/cart", "http://shop.example.com/a/b"} {
 		_, rep := idx.Candidates(Category, url)

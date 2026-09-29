@@ -17,6 +17,8 @@ linters:
     - unconvert
     - unparam
     - errorlint
+    - paralleltest
+    - tparallel
   settings:
     errcheck:
       # Writes to an in-memory buffer or to stdout cannot be usefully handled.

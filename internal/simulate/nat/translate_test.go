@@ -48,6 +48,7 @@ func flowText(f simulate.Flow) string {
 // Each translation as fw01 showed it in `show running nat-policy` (translate-to)
 // and, for t-dnat-port and t-bidir's implicit rule, in its traffic log.
 func TestTranslationsFw01Showed(t *testing.T) {
+	t.Parallel()
 	tr := func(src, dst string, port uint16, from string) probe {
 		return probe{src: src, dst: dst, port: port, from: from, to: "transport", iface: "ethernet1/1"}
 	}
@@ -68,6 +69,7 @@ func TestTranslationsFw01Showed(t *testing.T) {
 		{"server-access: ethernet1/2 198.18.10.1", "198.18.10.1 -> 198.18.250.11:443", probe{src: "198.18.1.10", dst: "198.18.250.11", port: 443, from: "transport", to: "server", iface: "ethernet1/2"}, PortRuntime, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			r := translate(t, tc.p, nil)
 			if got := flowText(r.Flow); got != tc.flow {
 				t.Errorf("flow %s, want %s (unresolved %v)", got, tc.flow, r.Unresolved)
@@ -87,6 +89,7 @@ func TestTranslationsFw01Showed(t *testing.T) {
 }
 
 func TestDynamicDestination(t *testing.T) {
+	t.Parallel()
 	p := probe{src: "198.18.1.10", dst: "198.18.250.30", port: 443, from: "transport", to: "transport", iface: "ethernet1/1"}
 	// fw01 could not resolve dns.google, and neither could this run (spec §18 D8).
 	r := translate(t, p, nil)
@@ -101,6 +104,7 @@ func TestDynamicDestination(t *testing.T) {
 }
 
 func TestTranslationEdges(t *testing.T) {
+	t.Parallel()
 	// No match: the packet leaves as it came.
 	r := translate(t, probe{src: "198.18.1.10", dst: "198.18.250.30", port: 443, from: "transport", to: "server", iface: "ethernet1/2"}, nil)
 	if r.Rule == nil || r.Rule.Name != "server-access" {
@@ -144,6 +148,7 @@ func caseTranslate(t *testing.T, src, dst string) Result {
 }
 
 func TestTranslationCases(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct{ name, src, dst, want string }{
 		{"dynamic group pool", "10.9.9.9", "203.0.113.11", "dynamic group dyn-grp"},
 		{"pool object missing", "10.9.9.9", "203.0.113.12", "nope, which is runtime content"},
@@ -156,6 +161,7 @@ func TestTranslationCases(t *testing.T) {
 		{"destination of another size", "10.9.9.9", "203.0.113.20", "static translation of 203.0.113.20"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			r := caseTranslate(t, tc.src, tc.dst)
 			if len(r.Unresolved) == 0 || !strings.Contains(r.Unresolved[len(r.Unresolved)-1].Reason, tc.want) {
 				t.Errorf("rule %v: unresolved %+v", r.Rule, r.Unresolved)
@@ -190,6 +196,7 @@ func TestTranslationCases(t *testing.T) {
 // A translated port that is not a port number is reported, and the packet keeps
 // its original port rather than getting port 0.
 func TestABadTranslatedPortIsUnresolved(t *testing.T) {
+	t.Parallel()
 	src, err := os.ReadFile("../../../testdata/config/firewall-nat.xml")
 	if err != nil {
 		t.Fatal(err)

@@ -40,6 +40,7 @@ func content(t *testing.T, l *Logger) string {
 }
 
 func TestLevelsFilter(t *testing.T) {
+	t.Parallel()
 	l := open(t, Options{Command: "search", Level: Info})
 	l.Debugf(TagFind, "hidden detail")
 	l.Infof(TagRun, "shown")
@@ -60,6 +61,7 @@ func TestLevelsFilter(t *testing.T) {
 }
 
 func TestSecretsAreRedacted(t *testing.T) {
+	t.Parallel()
 	l := open(t, Options{Command: "fetch", Level: Debug})
 	l.Infof(TagAPI, "before: secret-password")
 	l.AddSecret("secret-password")
@@ -73,6 +75,7 @@ func TestSecretsAreRedacted(t *testing.T) {
 }
 
 func TestFileIsPrivate(t *testing.T) {
+	t.Parallel()
 	l := open(t, Options{Command: "simulate policy"})
 	fi, err := os.Stat(l.Path())
 	if err != nil {
@@ -87,6 +90,7 @@ func TestFileIsPrivate(t *testing.T) {
 }
 
 func TestRotationKeepsTheNewest(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	now := clock()
 	for _, cmd := range []string{"a", "b", "c", "d"} {
@@ -107,6 +111,7 @@ func TestRotationKeepsTheNewest(t *testing.T) {
 }
 
 func TestEchoAndNil(t *testing.T) {
+	t.Parallel()
 	var echo bytes.Buffer
 	l := open(t, Options{Command: "x", Level: Info, Echo: &echo})
 	l.Infof(TagRun, "hello")
@@ -125,17 +130,20 @@ func TestEchoAndNil(t *testing.T) {
 }
 
 func TestParseLevel(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		in   string
 		want Level
 	}{{"error", Error}, {"WARN", Warn}, {"Info", Info}, {"debug", Debug}} {
 		t.Run(tc.in, func(t *testing.T) {
+			t.Parallel()
 			if got, err := ParseLevel(tc.in); err != nil || got != tc.want {
 				t.Errorf("ParseLevel(%s) = %v, %v", tc.in, got, err)
 			}
 		})
 	}
 	t.Run("trace", func(t *testing.T) {
+		t.Parallel()
 		if _, err := ParseLevel("trace"); err == nil {
 			t.Error("an unknown level must be an error")
 		}
@@ -146,6 +154,7 @@ func TestParseLevel(t *testing.T) {
 }
 
 func TestOpenFails(t *testing.T) {
+	t.Parallel()
 	f := filepath.Join(t.TempDir(), "file")
 	if err := os.WriteFile(f, nil, 0o600); err != nil {
 		t.Fatal(err)

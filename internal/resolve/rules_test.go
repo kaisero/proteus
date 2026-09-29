@@ -9,6 +9,7 @@ import (
 
 // A sibling vsys's rules must never appear.
 func TestRulesExcludeASiblingVsys(t *testing.T) {
+	t.Parallel()
 	tg, _ := TargetFor(vsysLab(t), "localhost.localdomain", "vsys1")
 	rules := tg.Rules(Security)
 	if len(rules) != 1 || rules[0].Name != "Corp DC Access" {
@@ -29,6 +30,7 @@ func TestRulesExcludeASiblingVsys(t *testing.T) {
 
 // Every rule carries the scope it was read from and its place in the order.
 func TestFirewallRulesCarryScopeAndPosition(t *testing.T) {
+	t.Parallel()
 	tg, err := TargetFor(fwLab(t), "localhost.localdomain", "vsys1")
 	if err != nil {
 		t.Fatalf("TargetFor: %v", err)
@@ -57,6 +59,7 @@ func TestFirewallRulesCarryScopeAndPosition(t *testing.T) {
 
 // The NAT rulebase reads through the same path.
 func TestNatRulebaseIsEmptyInTheFixture(t *testing.T) {
+	t.Parallel()
 	tg, _ := TargetFor(fwLab(t), "localhost.localdomain", "vsys1")
 	got := tg.Rules(NAT)
 	if len(got) != 0 {
@@ -70,6 +73,7 @@ func TestNatRulebaseIsEmptyInTheFixture(t *testing.T) {
 // Source: PAN-OS documentation, "Device Group Policies". Not yet observed on a
 // Panorama-managed firewall; see docs/specs/2026-09-27-panos-analyst-scope.md §5.3.
 func TestLayersAreSharedPreLocalSharedPost(t *testing.T) {
+	t.Parallel()
 	got := []string{LayerSharedPre.String(), LayerLocal.String(), LayerSharedPost.String()}
 	if strings.Join(got, ",") != "shared-pre,local,shared-post" {
 		t.Errorf("layers = %v", got)
@@ -80,6 +84,7 @@ func TestLayersAreSharedPreLocalSharedPost(t *testing.T) {
 }
 
 func TestRulesReadNegation(t *testing.T) {
+	t.Parallel()
 	tg, err := TargetFor(loadT(t, "../../testdata/config/firewall-simulate.xml"), "localhost.localdomain", "vsys1")
 	if err != nil {
 		t.Fatal(err)
@@ -91,6 +96,7 @@ func TestRulesReadNegation(t *testing.T) {
 }
 
 func TestRulesReadWhatTheEditorShows(t *testing.T) {
+	t.Parallel()
 	tg, err := TargetFor(loadT(t, "../../testdata/config/firewall-lookup.xml"), "localhost.localdomain", "vsys1")
 	if err != nil {
 		t.Fatal(err)

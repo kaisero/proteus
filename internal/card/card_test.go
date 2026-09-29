@@ -69,6 +69,7 @@ func flat(items []Item) string {
 }
 
 func TestASimpleRule(t *testing.T) {
+	t.Parallel()
 	c := one(t, "firewall-lookup.xml", "dc-to-pve")
 	if c.Kind != KindRule || c.Position != 1 || c.Of != 2 || c.Layer != "local" || c.UUID != "46ad9c77-e15c-4bab-8246-8cfb2b8b70bc" {
 		t.Errorf("header = %+v", c)
@@ -96,6 +97,7 @@ func TestASimpleRule(t *testing.T) {
 }
 
 func TestALargeRule(t *testing.T) {
+	t.Parallel()
 	c := one(t, "firewall-lookup.xml", "branch-to-dc")
 	if c.Description == "" || strings.Join(c.Tags, ",") != "branch" {
 		t.Errorf("header = %+v", c)
@@ -126,6 +128,7 @@ func TestALargeRule(t *testing.T) {
 }
 
 func TestObjectCards(t *testing.T) {
+	t.Parallel()
 	a := one(t, "firewall-lookup.xml", "net-vienna")
 	if a.Kind != "address" || row(a, "value", "").Text != "10.20.0.0/16" || a.Description != "Vienna office" ||
 		strings.Join(a.Tags, ",") != "branch" || flat(row(a, "held by", "").Items) != "branch-networks" {
@@ -162,6 +165,7 @@ func TestObjectCards(t *testing.T) {
 }
 
 func TestACycleIsCut(t *testing.T) {
+	t.Parallel()
 	c := one(t, "firewall-cyclic-groups.xml", "g-outer")
 	got := flat(row(c, "members", "").Items)
 	if !strings.Contains(got, "g-outer(cycle)") {
@@ -171,6 +175,7 @@ func TestACycleIsCut(t *testing.T) {
 
 // One name can be a tag and an address group; the kind decides.
 func TestFindInfersTheKind(t *testing.T) {
+	t.Parallel()
 	cs := find(t, "firewall-lookup.xml", "dc-mgmt", "")
 	if len(cs) != 2 || cs[0].Kind != "address-group" || cs[1].Kind != "tag" {
 		t.Fatalf("cards = %v", cs)
@@ -192,6 +197,7 @@ func TestFindInfersTheKind(t *testing.T) {
 }
 
 func TestLogText(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct{ start, end, setting, want string }{
 		{"", "", "", "at session end"},
 		{"yes", "no", "", "at session start"},
@@ -205,6 +211,7 @@ func TestLogText(t *testing.T) {
 }
 
 func TestAddressValue(t *testing.T) {
+	t.Parallel()
 	for in, want := range map[string]string{
 		"10.0.0.1": "10.0.0.1/32", "10.0.0.0/8": "10.0.0.0/8", "10.0.0.1-10.0.0.9": "range 10.0.0.1-10.0.0.9",
 		"www.example.com": "fqdn www.example.com", "10.0.0.0/0.0.255.0": "wildcard 10.0.0.0/0.0.255.0",

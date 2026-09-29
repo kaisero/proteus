@@ -60,6 +60,7 @@ func routingDocs(t *testing.T, dev string, extra map[string][]byte) map[string][
 }
 
 func TestNetworkReadsEachDeviceOnce(t *testing.T) {
+	t.Parallel()
 	st := networkStore(t,
 		snap{dev: "fw01", serial: "S1", at: t0, docs: routingDocs(t, "fw01", nil)},
 		snap{dev: "fw02", serial: "S2", at: t0, docs: routingDocs(t, "fw02", map[string][]byte{store.RIBDoc: opdata(t, "fw02-advanced-routing-route.xml")})},
@@ -99,6 +100,7 @@ func TestNetworkReadsEachDeviceOnce(t *testing.T) {
 }
 
 func TestNetworkNeedsInterfacesAndTables(t *testing.T) {
+	t.Parallel()
 	st := networkStore(t,
 		snap{dev: "a", at: t0},
 		snap{dev: "b", at: t0, docs: map[string][]byte{store.InterfacesDoc: opdata(t, "fw02-interface-all.xml")}},
@@ -115,6 +117,7 @@ func TestNetworkNeedsInterfacesAndTables(t *testing.T) {
 
 // Both members of an HA pair in the inventory are one node: the active one answers.
 func TestNetworkCollapsesAnHAPair(t *testing.T) {
+	t.Parallel()
 	st := networkStore(t,
 		snap{dev: "fw-a", serial: "A", at: t0, docs: routingDocs(t, "fw01", map[string][]byte{store.HADoc: haDoc("passive", "A", "B")})},
 		snap{dev: "fw-b", serial: "B", at: t0.Add(time.Minute), docs: routingDocs(t, "fw02", map[string][]byte{store.HADoc: haDoc("active", "B", "A")})},
@@ -136,6 +139,7 @@ func TestNetworkCollapsesAnHAPair(t *testing.T) {
 // A passive entry fetched from its peer, next to a peer entry fetched before HA
 // state was stored: one node, and the note says where the data came from.
 func TestNetworkJoinsAMemberWithoutHAState(t *testing.T) {
+	t.Parallel()
 	st := networkStore(t,
 		snap{dev: "fw-a", serial: "B", from: "192.0.2.2", at: t0, docs: routingDocs(t, "fw02", map[string][]byte{store.HADoc: haDoc("active", "B", "A")})},
 		snap{dev: "fw-b", serial: "B", at: t0, docs: routingDocs(t, "fw02", nil)},
@@ -153,6 +157,7 @@ func TestNetworkJoinsAMemberWithoutHAState(t *testing.T) {
 // A routing table or HA state that is present but unreadable must not look like
 // one that is absent: the device's answers carry a note that says why.
 func TestNetworkNotesUnreadableOptionalDocuments(t *testing.T) {
+	t.Parallel()
 	garbage := []byte("<response status=\"success\"><result>")
 	st := networkStore(t,
 		snap{dev: "fw01", serial: "S1", at: t0, docs: routingDocs(t, "fw01", map[string][]byte{

@@ -26,6 +26,7 @@ func securityRule(root *Node) *Node {
 }
 
 func TestParseRoot(t *testing.T) {
+	t.Parallel()
 	root := load(t)
 	if root.Kind != KindSequence || root.Name != "config" {
 		t.Fatalf("got kind=%v name=%q, want sequence/config", root.Kind, root.Name)
@@ -33,6 +34,7 @@ func TestParseRoot(t *testing.T) {
 }
 
 func TestParseLeafAttributes(t *testing.T) {
+	t.Parallel()
 	root := load(t)
 	addr := root.Child("shared").Child("address").EntrySequence()
 	fqdn := addr.Child("fqdn")
@@ -49,6 +51,7 @@ func TestParseLeafAttributes(t *testing.T) {
 }
 
 func TestParseEnumValues(t *testing.T) {
+	t.Parallel()
 	root := load(t)
 	rules := securityRule(root)
 	action := rules.Child("action")
@@ -68,6 +71,7 @@ func TestParseEnumValues(t *testing.T) {
 
 // The distinction pango gets wrong. See AGENTS.md R4.
 func TestParseListShape(t *testing.T) {
+	t.Parallel()
 	root := load(t)
 	source := securityRule(root).Child("source")
 	if !source.IsMemberList() || source.IsEntryList() {
@@ -86,6 +90,7 @@ func TestParseListShape(t *testing.T) {
 }
 
 func TestParsePath(t *testing.T) {
+	t.Parallel()
 	root := load(t)
 	vsys := root.Child("devices").EntrySequence().Child("vsys")
 	want := "/config/devices/entry/vsys"
@@ -95,6 +100,7 @@ func TestParsePath(t *testing.T) {
 }
 
 func TestParseMemberOf(t *testing.T) {
+	t.Parallel()
 	root := load(t)
 	member := securityRule(root).Child("source").Child("member")
 	got := map[string]bool{}
@@ -112,6 +118,7 @@ func TestParseMemberOf(t *testing.T) {
 }
 
 func TestReadonlyIsEmpty(t *testing.T) {
+	t.Parallel()
 	// The schema declares readonly but describes nothing inside it, so a node
 	// that lives there must be hand-modelled. See AGENTS.md R8.
 	root := load(t)

@@ -9,6 +9,7 @@ import (
 // into prefixes. The arithmetic uses big.Int precisely because a v6 address does not fit
 // in a uint64, so this is the case that exercises it.
 func TestIPv6Containment(t *testing.T) {
+	t.Parallel()
 	idx := indexOf(t, "../../testdata/config/firewall-ipv6.xml", "vsys1")
 
 	rules, rep := idx.Candidates(Source, "2001:db8:1::5")
@@ -28,6 +29,7 @@ func TestIPv6Containment(t *testing.T) {
 
 // An IPv6 range decomposes into prefixes that cover it exactly, and nothing outside it.
 func TestIPv6RangeDecomposition(t *testing.T) {
+	t.Parallel()
 	idx := indexOf(t, "../../testdata/config/firewall-ipv6.xml", "vsys1")
 
 	for _, in := range []string{"2001:db8:2::1", "2001:db8:2::8", "2001:db8:2::10"} {
@@ -44,6 +46,7 @@ func TestIPv6RangeDecomposition(t *testing.T) {
 
 // A v6 prefix overlaps the objects inside it.
 func TestIPv6Overlapping(t *testing.T) {
+	t.Parallel()
 	idx := indexOf(t, "../../testdata/config/firewall-ipv6.xml", "vsys1")
 
 	got := idx.Overlapping(netip.MustParsePrefix("2001:db8:1::/64"))

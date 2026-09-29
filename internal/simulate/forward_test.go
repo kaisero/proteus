@@ -8,6 +8,7 @@ import (
 )
 
 func TestPortMatchAndChoice(t *testing.T) {
+	t.Parallel()
 	p := Port{Addr: netip.MustParsePrefix("10.0.0.1/24")}
 	if p.Link().String() != "10.0.0.0/24" {
 		t.Errorf("link = %s", p.Link())

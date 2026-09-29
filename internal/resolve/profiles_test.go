@@ -10,6 +10,7 @@ import (
 // sits in is the whole point, so it cannot be flattened to one value the way Object
 // does.
 func TestURLFilteringProfilesInScope(t *testing.T) {
+	t.Parallel()
 	cfg := loadT(t, "../../testdata/config/firewall-urlprofile.xml")
 	sc := config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}
 
@@ -35,6 +36,7 @@ func TestURLFilteringProfilesInScope(t *testing.T) {
 // A profile group names profiles by kind, and that is the other way a rule reaches a
 // url-filtering profile.
 func TestProfileGroupsInScope(t *testing.T) {
+	t.Parallel()
 	cfg := loadT(t, "../../testdata/config/firewall-urlprofile.xml")
 	sc := config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}
 
@@ -52,6 +54,7 @@ func TestProfileGroupsInScope(t *testing.T) {
 
 // A scope with none of a kind yields none, not an error.
 func TestProfileReadersOnAConfigurationWithNoProfiles(t *testing.T) {
+	t.Parallel()
 	cfg := loadT(t, "../../testdata/config/firewall-urlcat.xml")
 	sc := config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}
 
@@ -68,6 +71,7 @@ func TestProfileReadersOnAConfigurationWithNoProfiles(t *testing.T) {
 // A rule's profile setting is read both ways PAN-OS writes it, and it is not a
 // matching field.
 func TestRulesReadProfileSettings(t *testing.T) {
+	t.Parallel()
 	cfg := loadT(t, "../../testdata/config/firewall-urlprofile.xml")
 	tgs := Targets(cfg)
 	rules := tgs[0].Rules(Security)
@@ -89,6 +93,7 @@ func TestRulesReadProfileSettings(t *testing.T) {
 // Shared profiles are visible in a vsys, and a vsys's own definition replaces a
 // shared one of the same name.
 func TestURLFilteringProfilesShadowShared(t *testing.T) {
+	t.Parallel()
 	cfg := loadT(t, "../../testdata/config/firewall-urlprofile-shadow.xml")
 	sc := config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}
 

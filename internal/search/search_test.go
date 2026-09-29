@@ -53,6 +53,7 @@ func dump(fs []Finding) string {
 // An address finds the objects covering it, the groups holding them (a shared
 // dynamic group by tag), and the rule naming the group.
 func TestAnAddressFollowsEveryStage(t *testing.T) {
+	t.Parallel()
 	got := run(t, "firewall-multivsys.xml", "vsys1", Query{Term: "10.124.0.1"})
 	for _, want := range []string{
 		"object address corp-dc-vienna  10.124.0.1/32",
@@ -76,6 +77,7 @@ func TestAnAddressFollowsEveryStage(t *testing.T) {
 }
 
 func TestGroupsAreTransitiveUnlessDirect(t *testing.T) {
+	t.Parallel()
 	got := run(t, "firewall-nested-groups.xml", "vsys1", Query{Term: "10.1.1.1"})
 	for _, g := range []string{"g-inner", "g-middle", "g-outer"} {
 		if !has(got, "group address-group "+g) {
@@ -92,6 +94,7 @@ func TestGroupsAreTransitiveUnlessDirect(t *testing.T) {
 }
 
 func TestLiteralsAreFound(t *testing.T) {
+	t.Parallel()
 	got := run(t, "firewall-literals.xml", "vsys1", Query{Term: "198.18.1.1"})
 	for _, want := range []string{
 		"literal security rule literal-host source 198.18.1.1/32",
@@ -107,6 +110,7 @@ func TestLiteralsAreFound(t *testing.T) {
 
 // A prefix overlaps; --within keeps only what lies inside; --exact only the equal.
 func TestAddressModes(t *testing.T) {
+	t.Parallel()
 	over := run(t, "firewall-multivsys.xml", "vsys1", Query{Term: "10.124.0.0/24"})
 	if !has(over, "object address corp-location-vienna") || !has(over, "object address corp-dc-vienna") {
 		t.Errorf("a prefix must overlap both:\n%s", dump(over))
@@ -126,6 +130,7 @@ func TestAddressModes(t *testing.T) {
 }
 
 func TestWithinNeedsAnAddress(t *testing.T) {
+	t.Parallel()
 	cfg, _, _ := config.Load("../../testdata/config/firewall-multivsys.xml")
 	idx, _ := index.For(cfg, config.Scope{Sort: config.ScopeVsys, Name: "vsys1"})
 	if _, err := Run(cfg, idx, Query{Term: "web", Mode: Within}); !errors.Is(err, ErrWithinNeedsAddress) {
@@ -134,6 +139,7 @@ func TestWithinNeedsAnAddress(t *testing.T) {
 }
 
 func TestContainsSearchesValuesAndNames(t *testing.T) {
+	t.Parallel()
 	got := run(t, "firewall-urlcat.xml", "vsys1", Query{Term: "azureapps", Mode: Contains})
 	if !has(got, "object custom-url-category custom-azuresite-group  superlong.example.azureapps.microsoft.com") {
 		t.Errorf("a value fragment must be found:\n%s", dump(got))
@@ -145,6 +151,7 @@ func TestContainsSearchesValuesAndNames(t *testing.T) {
 }
 
 func TestExactValueWithoutAnAddress(t *testing.T) {
+	t.Parallel()
 	got := run(t, "firewall-urlcat.xml", "vsys1", Query{Term: "superlong.example.azureapps.microsoft.com", Mode: Exact})
 	if !has(got, "object custom-url-category custom-azuresite-group") {
 		t.Errorf("an equal value must be found:\n%s", dump(got))
@@ -156,6 +163,7 @@ func TestExactValueWithoutAnAddress(t *testing.T) {
 
 // A URL reaches a rule through the category and through the rule's profiles.
 func TestAURLFollowsProfiles(t *testing.T) {
+	t.Parallel()
 	got := run(t, "firewall-urlprofile.xml", "vsys1", Query{Term: "demo-category"})
 	if !has(got, "object custom-url-category demo-category  name") {
 		t.Errorf("the category by name is missing:\n%s", dump(got))
@@ -168,6 +176,7 @@ func TestAURLFollowsProfiles(t *testing.T) {
 
 // Any-rules reach every value, but search is not a simulation: they never appear.
 func TestAnyRulesAreLeftOut(t *testing.T) {
+	t.Parallel()
 	got := run(t, "firewall-anyrule.xml", "vsys1", Query{Term: "10.0.0.1"})
 	for _, f := range got {
 		if f.Stage == StageLiteral || f.Stage == StageReference {
@@ -179,6 +188,7 @@ func TestAnyRulesAreLeftOut(t *testing.T) {
 }
 
 func TestFilters(t *testing.T) {
+	t.Parallel()
 	kinds := run(t, "firewall-multivsys.xml", "vsys1", Query{Term: "10.124.0.1", Kinds: []string{"address"}})
 	if has(kinds, "group ") {
 		t.Errorf("--kind address must drop groups:\n%s", dump(kinds))
@@ -197,6 +207,7 @@ func TestFilters(t *testing.T) {
 
 // A port or a service name finds services through the service value space.
 func TestAPortFindsServices(t *testing.T) {
+	t.Parallel()
 	got := run(t, "firewall-urlcat.xml", "vsys1", Query{Term: "tcp/8006"})
 	if !has(got, "object service svc-pve") || !has(got, "object service svc-range") {
 		t.Errorf("tcp/8006 must find the exact port and the range covering it:\n%s", dump(got))
@@ -208,6 +219,7 @@ func TestAPortFindsServices(t *testing.T) {
 }
 
 func TestReferrer(t *testing.T) {
+	t.Parallel()
 	for path, want := range map[string]string{
 		"/config/devices/x/vsys/vsys1/rulebase/security/rules/r1": "security rule r1",
 		"/config/devices/x/vsys/vsys1/rulebase/nat/rules/n1":      "nat rule n1",
@@ -224,6 +236,7 @@ func TestReferrer(t *testing.T) {
 // A directory user reaches the rules naming its directory groups when a user
 // snapshot supplies them.
 func TestAUserSnapshotResolvesDirectoryGroups(t *testing.T) {
+	t.Parallel()
 	f, err := os.Open("../../testdata/users-snapshot.json")
 	if err != nil {
 		t.Fatal(err)
@@ -246,6 +259,7 @@ func TestAUserSnapshotResolvesDirectoryGroups(t *testing.T) {
 // groupKind prefers a group kind, falls back to the first kind a name has, and
 // to "group" for a name nothing defines.
 func TestGroupKindPrefersAGroupKind(t *testing.T) {
+	t.Parallel()
 	s := &searcher{byName: map[string][]string{
 		"both": {"tag", "address-group"},
 		"tag":  {"tag"},

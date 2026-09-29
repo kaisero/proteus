@@ -8,6 +8,7 @@ import (
 
 // A firewall's policy targets are its vsys, one each, keyed by device and vsys.
 func TestTargetsAreKeyedByDeviceAndVsys(t *testing.T) {
+	t.Parallel()
 	got := Targets(vsysLab(t))
 	want := []string{
 		"localhost.localdomain/vsys1",
@@ -25,6 +26,7 @@ func TestTargetsAreKeyedByDeviceAndVsys(t *testing.T) {
 }
 
 func TestTargetForChain(t *testing.T) {
+	t.Parallel()
 	tg, err := TargetFor(vsysLab(t), "localhost.localdomain", "vsys1")
 	if err != nil {
 		t.Fatalf("TargetFor: %v", err)
@@ -45,6 +47,7 @@ func TestTargetForChain(t *testing.T) {
 }
 
 func TestTargetForRejectsUnknown(t *testing.T) {
+	t.Parallel()
 	cfg := vsysLab(t)
 	if _, err := TargetFor(cfg, "no-such-device", "vsys1"); err == nil {
 		t.Error("an unknown device must be an error")

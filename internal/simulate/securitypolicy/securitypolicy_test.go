@@ -77,6 +77,7 @@ func stage(r simulate.Run, slug string) simulate.Stage {
 }
 
 func TestGivenZones(t *testing.T) {
+	t.Parallel()
 	r, v := run(t, env(t, "firewall-zones.xml", false), simulate.Flow{
 		Source: ep("10.1.0.5"), Destination: ep("10.2.0.5"), FromZone: "inside", ToZone: "dmz",
 	})
@@ -99,6 +100,7 @@ func TestGivenZones(t *testing.T) {
 }
 
 func TestZonesFromTheConfiguration(t *testing.T) {
+	t.Parallel()
 	r, v := run(t, env(t, "firewall-zones.xml", false), simulate.Flow{Source: ep("10.1.0.5"), Destination: ep("10.2.0.5")})
 	if v.Zones.Source != "configuration" || stage(r, "derive-zones").Fidelity.Level() != "inferred" {
 		t.Errorf("zones %+v, fidelity %s", v.Zones, stage(r, "derive-zones").Fidelity)
@@ -110,6 +112,7 @@ func TestZonesFromTheConfiguration(t *testing.T) {
 
 // Zones derived from the stored forwarding table; the disabled rule never wins.
 func TestZonesFromTheForwardingTable(t *testing.T) {
+	t.Parallel()
 	r, v := run(t, env(t, "firewall-fw01-zones.xml", true), simulate.Flow{Source: ep("198.18.11.5"), Destination: ep("198.18.10.5")})
 	if first(v) != "client-to-server" {
 		t.Errorf("first match = %s; stages %+v", first(v), r.Stages)
@@ -126,6 +129,7 @@ func TestZonesFromTheForwardingTable(t *testing.T) {
 }
 
 func TestRelevance(t *testing.T) {
+	t.Parallel()
 	_, v := run(t, env(t, "firewall-fw01-zones.xml", true), simulate.Flow{Source: ep("8.8.8.8"), Destination: ep("1.1.1.1")})
 	if !v.Relevance.Known || v.Relevance.Relevant {
 		t.Errorf("only default routes: %+v", v.Relevance)
@@ -137,6 +141,7 @@ func TestRelevance(t *testing.T) {
 }
 
 func TestNegatedSource(t *testing.T) {
+	t.Parallel()
 	e := env(t, "firewall-simulate.xml", false)
 	if _, v := run(t, e, simulate.Flow{Source: ep("10.0.0.2"), Destination: ep("10.9.9.9")}); first(v) != "deny-untrusted" {
 		t.Errorf("an address outside the negated list matches: %s", first(v))
@@ -147,6 +152,7 @@ func TestNegatedSource(t *testing.T) {
 }
 
 func TestFQDN(t *testing.T) {
+	t.Parallel()
 	e := env(t, "firewall-simulate.xml", false)
 	resolved := simulate.Endpoint{Name: "www.example.com", Addrs: []netip.Addr{netip.MustParseAddr("203.0.113.10")}, Resolved: true}
 	r, v := run(t, e, simulate.Flow{Source: ep("10.0.0.1"), Destination: resolved})
@@ -170,6 +176,7 @@ func TestFQDN(t *testing.T) {
 }
 
 func TestServicesByPort(t *testing.T) {
+	t.Parallel()
 	e := env(t, "firewall-simulate.xml", false)
 	r, v := run(t, e, simulate.Flow{Source: ep("10.0.0.1"), Destination: ep("10.5.0.1"), DestPort: 8443})
 	names := ruleNames(v)
@@ -193,6 +200,7 @@ func TestServicesByPort(t *testing.T) {
 }
 
 func TestURLCategories(t *testing.T) {
+	t.Parallel()
 	e := env(t, "firewall-simulate.xml", false)
 	r, v := run(t, e, simulate.Flow{Source: ep("10.0.0.1"), Destination: ep("10.6.0.1"), URL: "shop.example.com/cart"})
 	if first(v) != "shop" || !strings.Contains(ruleNames(v), "social") {
@@ -216,6 +224,7 @@ func TestURLCategories(t *testing.T) {
 }
 
 func TestAnUnrecognisedValueIsUnderMatch(t *testing.T) {
+	t.Parallel()
 	r, v := run(t, env(t, "firewall-version-12.2.xml", false), simulate.Flow{Source: ep("198.18.10.100"), Destination: ep("198.18.1.5")})
 	if r.Fidelity.Level() != "undermatch" || !strings.Contains(r.Fidelity.String(), "12.2.0") {
 		t.Errorf("a version gap is undermatch: %s", r.Fidelity)
@@ -226,6 +235,7 @@ func TestAnUnrecognisedValueIsUnderMatch(t *testing.T) {
 }
 
 func TestNoMatch(t *testing.T) {
+	t.Parallel()
 	r, v := run(t, env(t, "firewall-zones.xml", false), simulate.Flow{Source: ep("10.1.0.5"), Destination: ep("10.2.0.5"), FromZone: "dmz", ToZone: "inside"})
 	if v.Rule != nil || stage(r, "first-match").Detail != "no enabled rule matches" {
 		t.Errorf("got %s", first(v))
@@ -235,6 +245,7 @@ func TestNoMatch(t *testing.T) {
 }
 
 func TestDescribeAndStages(t *testing.T) {
+	t.Parallel()
 	s := Simulation{}
 	if s.Kind() != "policy" || s.Describe() == "" {
 		t.Error("kind and description")
@@ -245,6 +256,7 @@ func TestDescribeAndStages(t *testing.T) {
 }
 
 func TestALoadFailureNamesTheDevice(t *testing.T) {
+	t.Parallel()
 	e := &simulate.Env{Load: func(string, string) (simulate.Target, error) { return simulate.Target{}, errors.New("no snapshot") }}
 	_, err := Simulation{}.Run(context.Background(), e, simulate.Input{Device: "fw09", Vsys: "vsys1"})
 	if err == nil || !strings.Contains(err.Error(), "fw09/vsys1") {
@@ -263,6 +275,7 @@ func ruleNames(v Verdict) string {
 // A rule without a category matches every URL; a rule without a service cannot be
 // judged on a port, so it stays and the stage says so.
 func TestAbsentFields(t *testing.T) {
+	t.Parallel()
 	e := env(t, "firewall-simulate.xml", false)
 	_, v := run(t, e, simulate.Flow{Source: ep("10.0.0.1"), Destination: ep("10.7.0.1"), URL: "shop.example.com"})
 	if first(v) != "anything" {
@@ -277,6 +290,7 @@ func TestAbsentFields(t *testing.T) {
 // A source placed only by a default route leaves the source zone open: a default
 // route does not say where a packet arrives.
 func TestADefaultRouteDoesNotPlaceTheSource(t *testing.T) {
+	t.Parallel()
 	r, v := run(t, env(t, "firewall-fw01-zones.xml", true), simulate.Flow{Source: ep("8.8.8.8"), Destination: ep("198.18.10.5")})
 	if len(v.Zones.From) != 0 || strings.Join(v.Zones.To, ",") != "server" {
 		t.Errorf("zones = %+v", v.Zones)

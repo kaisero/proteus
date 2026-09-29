@@ -36,6 +36,7 @@ func routingLab(t *testing.T, withHole bool) *cli {
 }
 
 func TestRoutingAcrossTwoFirewalls(t *testing.T) {
+	t.Parallel()
 	c := routingLab(t, false)
 	out := c.want(0, "simulate", "routing", "198.18.10.5", "8.8.8.8")
 	for _, want := range []string{
@@ -66,6 +67,7 @@ func TestRoutingAcrossTwoFirewalls(t *testing.T) {
 }
 
 func TestRoutingAsksWhereToStart(t *testing.T) {
+	t.Parallel()
 	c := routingLab(t, false)
 	_, errOut, code := c.run("simulate", "routing", "198.18.100.50", "8.8.8.8")
 	if code != 2 || !strings.Contains(errOut, "fw01 ethernet1/5, fw02 vlan.100") {
@@ -88,6 +90,7 @@ func TestRoutingAsksWhereToStart(t *testing.T) {
 }
 
 func TestRoutingRIBAndWhy(t *testing.T) {
+	t.Parallel()
 	c := routingLab(t, false)
 	out := c.want(0, "simulate", "routing", "198.18.1.10", "8.8.8.8", "--rib", "--why")
 	for _, want := range []string{
@@ -102,6 +105,7 @@ func TestRoutingRIBAndWhy(t *testing.T) {
 }
 
 func TestRoutingJSON(t *testing.T) {
+	t.Parallel()
 	c := routingLab(t, false)
 	out := c.want(0, "simulate", "routing", "198.18.10.5", "8.8.8.8", "--output", "json")
 	var env struct {
@@ -135,6 +139,7 @@ func TestRoutingJSON(t *testing.T) {
 
 // A device of the inventory without a snapshot may hide part of the path.
 func TestRoutingWithAHole(t *testing.T) {
+	t.Parallel()
 	c := routingLab(t, true)
 	out := c.want(3, "simulate", "routing", "198.18.10.5", "8.8.8.8")
 	if !strings.Contains(out, "unresolved: fw01: fw03 cannot be read") {

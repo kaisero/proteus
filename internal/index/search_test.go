@@ -9,6 +9,7 @@ import (
 // 31 characters and one of its members at 255, so a long URL cannot appear in the name
 // of the category holding it. Searching the values is the only way to find it.
 func TestSearchValuesFindsALongURLByFragment(t *testing.T) {
+	t.Parallel()
 	idx := indexOf(t, "../../testdata/config/firewall-urlcat.xml", "vsys1")
 
 	hits := idx.SearchValues("azureapps")
@@ -29,6 +30,7 @@ func TestSearchValuesFindsALongURLByFragment(t *testing.T) {
 
 // Searching is case-insensitive, because a human typing a URL does not match case.
 func TestSearchValuesIgnoresCase(t *testing.T) {
+	t.Parallel()
 	idx := indexOf(t, "../../testdata/config/firewall-urlcat.xml", "vsys1")
 
 	if got := len(idx.SearchValues("AZUREAPPS")); got != 1 {
@@ -38,6 +40,7 @@ func TestSearchValuesIgnoresCase(t *testing.T) {
 
 // Searching spans value spaces, so an address fragment works too.
 func TestSearchValuesFindsAddressesAndFQDNs(t *testing.T) {
+	t.Parallel()
 	idx := indexOf(t, "../../testdata/config/firewall-urlcat.xml", "vsys1")
 
 	if got := idx.SearchValues("198.18"); len(got) == 0 {
@@ -53,6 +56,7 @@ func TestSearchValuesFindsAddressesAndFQDNs(t *testing.T) {
 // the category here; a match does not, and that difference is the reason the two are
 // separate calls.
 func TestSearchValuesIsNotMatching(t *testing.T) {
+	t.Parallel()
 	idx := indexOf(t, "../../testdata/config/firewall-urlcat.xml", "vsys1")
 
 	const trap = "wildcard-example.com"
@@ -67,6 +71,7 @@ func TestSearchValuesIsNotMatching(t *testing.T) {
 
 // An empty or blank search returns nothing rather than everything.
 func TestSearchValuesRejectsAnEmptyFragment(t *testing.T) {
+	t.Parallel()
 	idx := indexOf(t, "../../testdata/config/firewall-urlcat.xml", "vsys1")
 
 	for _, q := range []string{"", "   "} {
@@ -80,6 +85,7 @@ func TestSearchValuesRejectsAnEmptyFragment(t *testing.T) {
 // more than once. The results are ordered by name and then by the value that
 // matched, so the output is stable.
 func TestSearchValuesOrdersSeveralHitsOnOneObject(t *testing.T) {
+	t.Parallel()
 	idx := indexOf(t, "../../testdata/config/firewall-urlcat.xml", "vsys1")
 
 	hits := idx.SearchValues("198.18.5.")

@@ -30,6 +30,7 @@ func snapshot(t *testing.T) *UserSnapshot {
 // rule naming a directory group is missing. This is the first value space a
 // configuration cannot answer on its own, so silence here would be a wrong answer.
 func TestUserResolverWithoutADirectorySaysWhatIsMissing(t *testing.T) {
+	t.Parallel()
 	idx := usersIndex(t)
 
 	rules, rep := idx.Candidates(SourceUser, "alice")
@@ -54,6 +55,7 @@ func TestUserResolverWithoutADirectorySaysWhatIsMissing(t *testing.T) {
 
 // With a directory the groups it reports are added, and the rules naming them follow.
 func TestUserResolverWithADirectory(t *testing.T) {
+	t.Parallel()
 	idx := usersIndex(t)
 
 	rules, rep := idx.With(Providers{Users: snapshot(t)}).Candidates(SourceUser, "alice")
@@ -79,6 +81,7 @@ func TestUserResolverWithADirectory(t *testing.T) {
 // A dynamic user group is filled in at runtime, so it is always reported rather than
 // matched, with or without a directory.
 func TestUserResolverAlwaysReportsDynamicUserGroups(t *testing.T) {
+	t.Parallel()
 	idx := usersIndex(t)
 
 	for label, p := range map[string]Providers{
@@ -100,6 +103,7 @@ func TestUserResolverAlwaysReportsDynamicUserGroups(t *testing.T) {
 
 // A user named directly by a rule is found without any directory at all.
 func TestUserResolverFindsAUserNamedByARule(t *testing.T) {
+	t.Parallel()
 	idx := usersIndex(t)
 
 	rules, _ := idx.Candidates(SourceUser, "bob")
@@ -111,6 +115,7 @@ func TestUserResolverFindsAUserNamedByARule(t *testing.T) {
 // A stale snapshot is reported rather than trusted. A mapping read days ago can put a
 // user in a group they have since left.
 func TestUserSnapshotReportsStaleness(t *testing.T) {
+	t.Parallel()
 	idx := usersIndex(t)
 	snap := snapshot(t)
 	snap.TakenAt = time.Now().Add(-72 * time.Hour)
@@ -139,6 +144,7 @@ func TestUserSnapshotReportsStaleness(t *testing.T) {
 
 // A snapshot with no timestamp is refused, because it could never be reported stale.
 func TestLoadUserSnapshotRequiresATimestamp(t *testing.T) {
+	t.Parallel()
 	_, err := LoadUserSnapshot(strings.NewReader(`{"groups":{"alice":["x"]}}`))
 	if err == nil {
 		t.Fatal("a snapshot with no taken_at was accepted")
@@ -150,6 +156,7 @@ func TestLoadUserSnapshotRequiresATimestamp(t *testing.T) {
 
 // Malformed JSON is reported, not ignored.
 func TestLoadUserSnapshotRejectsBadJSON(t *testing.T) {
+	t.Parallel()
 	if _, err := LoadUserSnapshot(strings.NewReader(`{`)); err == nil {
 		t.Error("malformed JSON was accepted")
 	}
@@ -157,6 +164,7 @@ func TestLoadUserSnapshotRejectsBadJSON(t *testing.T) {
 
 // A directory and a firewall rule rarely agree on case, so lookups ignore it.
 func TestUserSnapshotIsCaseInsensitive(t *testing.T) {
+	t.Parallel()
 	snap := snapshot(t)
 	for _, q := range []string{"alice", "ALICE", "Alice", `acme\carol`, `ACME\CAROL`} {
 		if len(snap.GroupsOf(q)) == 0 {
@@ -170,6 +178,7 @@ func TestUserSnapshotIsCaseInsensitive(t *testing.T) {
 
 // A value that plainly belongs to another value space is not reported as a user.
 func TestUserResolverIgnoresNonUserShapes(t *testing.T) {
+	t.Parallel()
 	idx := usersIndex(t)
 
 	for _, q := range []string{"10.0.0.0/8", "example.com/path", "a b"} {
@@ -186,6 +195,7 @@ func TestUserResolverIgnoresNonUserShapes(t *testing.T) {
 // fragment of a member finds the group, while a fragment of the group's own name does
 // not: a name is found by looking it up, which already works.
 func TestUserResolverSearchLooksAtMembership(t *testing.T) {
+	t.Parallel()
 	idx := usersIndex(t)
 
 	hits := idx.SearchValues("alic")

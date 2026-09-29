@@ -6,6 +6,7 @@ import "testing"
 // to agree with the device about what is even writable, or it will reject
 // configurations that exist or accept ones that cannot.
 func TestParseURLPatternMatchesTheDeviceValidator(t *testing.T) {
+	t.Parallel()
 	accept := []string{
 		"*.example.com",
 		"^.example.com",
@@ -41,6 +42,7 @@ func TestParseURLPatternMatchesTheDeviceValidator(t *testing.T) {
 // The device rejects a second asterisk even when the two are not adjacent, though
 // its error message only mentions consecutive ones.
 func TestParseURLPatternAllowsOneStarAndManyCarets(t *testing.T) {
+	t.Parallel()
 	if _, err := ParseURLPattern("*.a.example.com"); err != nil {
 		t.Errorf("one star rejected: %v", err)
 	}
@@ -56,6 +58,7 @@ func TestParseURLPatternAllowsOneStarAndManyCarets(t *testing.T) {
 // custom category. These cases pin the documented model so a later device check has
 // something exact to contradict.
 func TestURLPatternMatch(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		pattern string
 		url     string
@@ -109,6 +112,7 @@ func TestURLPatternMatch(t *testing.T) {
 
 // Raw keeps the member as written, so a hit can report what matched.
 func TestURLPatternRaw(t *testing.T) {
+	t.Parallel()
 	p, err := ParseURLPattern("  *.Example.COM  ")
 	if err != nil {
 		t.Fatal(err)

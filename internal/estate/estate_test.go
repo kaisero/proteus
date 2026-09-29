@@ -49,6 +49,7 @@ func names(ts []Target) string {
 }
 
 func TestOpenReadsLatest(t *testing.T) {
+	t.Parallel()
 	ts, holes := Open(storeWith(t), []string{"fw01", "fw02"}, nil, When{Now: t0.Add(2 * time.Hour)})
 	if len(holes) != 0 {
 		t.Errorf("holes = %v", holes)
@@ -62,6 +63,7 @@ func TestOpenReadsLatest(t *testing.T) {
 }
 
 func TestOpenAtAnEarlierTime(t *testing.T) {
+	t.Parallel()
 	ts, _ := Open(storeWith(t), []string{"fw01"}, nil, When{At: t0.Add(30 * time.Minute), Now: t0.Add(2 * time.Hour)})
 	if got := names(ts); got != "fw01/vsys1,fw01/vsys2" {
 		t.Errorf("at 10:30 fw01 is the lab config with two vsys, got %s", got)
@@ -70,6 +72,7 @@ func TestOpenAtAnEarlierTime(t *testing.T) {
 
 // S10: a device that cannot be read is a hole, and the rest still open.
 func TestOpenReportsHoles(t *testing.T) {
+	t.Parallel()
 	ts, holes := Open(storeWith(t), []string{"fw01", "nope"}, []string{"vsys2", "vsys9"}, When{Now: t0})
 	if got := names(ts); got != "fw01/vsys2" {
 		t.Errorf("targets = %s", got)
@@ -80,6 +83,7 @@ func TestOpenReportsHoles(t *testing.T) {
 }
 
 func TestStaleSnapshotsCarryANote(t *testing.T) {
+	t.Parallel()
 	st := storeWith(t)
 	ts, _ := Open(st, []string{"fw02"}, nil, When{MaxAge: time.Hour, Now: t0.Add(3 * time.Hour)})
 	if len(ts) == 0 || len(ts[0].Notes) != 1 || !strings.Contains(ts[0].Notes[0], "past the 1h0m0s limit") {
@@ -92,6 +96,7 @@ func TestStaleSnapshotsCarryANote(t *testing.T) {
 }
 
 func TestOpenFile(t *testing.T) {
+	t.Parallel()
 	ts, holes, err := OpenFile("../../testdata/config/firewall-version-12.2.xml", nil, nil)
 	if err != nil || len(holes) != 0 {
 		t.Fatal(err, holes)
@@ -108,6 +113,7 @@ func TestOpenFile(t *testing.T) {
 }
 
 func TestOpenReportsAnUnreadableConfiguration(t *testing.T) {
+	t.Parallel()
 	st, _ := store.Open(t.TempDir())
 	if _, err := st.Write(store.Meta{Device: "bad"}, map[string][]byte{store.ConfigDoc: []byte("<nope/>")}, 20); err != nil {
 		t.Fatal(err)
@@ -119,6 +125,7 @@ func TestOpenReportsAnUnreadableConfiguration(t *testing.T) {
 }
 
 func TestParseAt(t *testing.T) {
+	t.Parallel()
 	for in, want := range map[string]time.Time{
 		"2026-09-28T07-15-37Z":      time.Date(2026, 9, 28, 7, 15, 37, 0, time.UTC),
 		"2026-09-28T07:15:37Z":      time.Date(2026, 9, 28, 7, 15, 37, 0, time.UTC),
@@ -137,6 +144,7 @@ func TestParseAt(t *testing.T) {
 
 // Asking for the first vsys must not let the later ones through.
 func TestVsysFilterHoldsForEveryVsys(t *testing.T) {
+	t.Parallel()
 	ts, holes, err := OpenFile("../../testdata/config/firewall-multivsys.xml", []string{"vsys1"}, nil)
 	if err != nil || len(holes) != 0 {
 		t.Fatal(err, holes)

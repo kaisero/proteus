@@ -6,6 +6,7 @@ import (
 )
 
 func TestVersionOf(t *testing.T) {
+	t.Parallel()
 	vcs := func(rev, modified string) *debug.BuildInfo {
 		return &debug.BuildInfo{Main: debug.Module{Version: "(devel)"}, Settings: []debug.BuildSetting{
 			{Key: "vcs.revision", Value: rev}, {Key: "vcs.modified", Value: modified},
@@ -27,6 +28,7 @@ func TestVersionOf(t *testing.T) {
 		{"nothing to go on", "dev", &debug.BuildInfo{Main: debug.Module{Version: "(devel)"}}, true, "dev"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			if got := versionOf(tc.stamped, tc.info, tc.ok); got != tc.expected {
 				t.Errorf("got %q, want %q", got, tc.expected)
 			}

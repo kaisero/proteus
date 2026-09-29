@@ -20,6 +20,7 @@ func natLab(t *testing.T) *cli {
 
 // The port forward fw01 applied to real traffic (spec §18.5 traffic test 1).
 func TestSimulateNATPortForward(t *testing.T) {
+	t.Parallel()
 	c := natLab(t)
 	out := c.want(0, "simulate", "nat", "198.18.1.10", "198.18.250.10", "--device", "fw01", "--router", "default", "--from-zone", "transport", "--port", "8443")
 	want := `simulate nat 198.18.1.10 -> 198.18.250.10 tcp/8443 on fw01            fidelity: exact
@@ -56,6 +57,7 @@ security policy matches: 198.18.1.10 -> 198.18.250.10, port 8443, zones transpor
 }
 
 func TestSimulateNATRows(t *testing.T) {
+	t.Parallel()
 	c := natLab(t)
 	for _, tc := range []struct {
 		args []string
@@ -92,6 +94,7 @@ func TestSimulateNATRows(t *testing.T) {
 }
 
 func TestSimulateNATExits(t *testing.T) {
+	t.Parallel()
 	c := natLab(t)
 	for _, a := range [][]string{
 		{"198.18.1.10", "8.8.8.8"},
@@ -114,6 +117,7 @@ func TestSimulateNATExits(t *testing.T) {
 }
 
 func TestSimulateNATJSON(t *testing.T) {
+	t.Parallel()
 	c := natLab(t)
 	out := c.want(0, "simulate", "nat", "198.18.1.10", "198.18.250.10", "--device", "fw01", "--router", "default", "--from-zone", "transport", "--port", "8443", "--output", "json")
 	var env struct {
@@ -145,6 +149,7 @@ func TestSimulateNATJSON(t *testing.T) {
 // translated the destination to 198.18.10.100:443 in zone server, and t-allow-8443
 // allowed it (spec §18.5 traffic test 1).
 func TestPolicyUsesThePostNATZone(t *testing.T) {
+	t.Parallel()
 	c := natLab(t)
 	out := c.want(0, "simulate", "policy", "198.19.0.1", "198.18.250.10", "--device", "fw01", "--port", "8443", "--why")
 	for _, w := range []string{"to server (after NAT rule t-dnat-port)", "first match: t-allow-8443 (allow)"} {
@@ -163,6 +168,7 @@ func TestPolicyUsesThePostNATZone(t *testing.T) {
 // fw01's lte router has no route to 8.8.8.8: the packet is dropped before NAT, and
 // security policy matches nothing.
 func TestSimulateNATDroppedBeforeNAT(t *testing.T) {
+	t.Parallel()
 	c := natLab(t)
 	out := c.want(0, "simulate", "nat", "-", "8.8.8.8", "--device", "fw01", "--router", "lte", "--port", "443")
 	if !strings.Contains(out, "│  rule    none: no route to 8.8.8.8: dropped before NAT") || strings.Contains(out, "security policy matches") {

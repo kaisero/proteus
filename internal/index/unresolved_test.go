@@ -17,6 +17,7 @@ import (
 // for the URL used to return the any-rule alone, which reads as "any-category-early
 // handles this URL" — the URL was never evaluated.
 func TestCandidatesFindsARuleByURLValue(t *testing.T) {
+	t.Parallel()
 	idx := indexOf(t, "../../testdata/config/firewall-urlcat.xml", "vsys1")
 
 	const url = "superlong.example.azureapps.microsoft.com"
@@ -39,6 +40,7 @@ func TestCandidatesFindsARuleByURLValue(t *testing.T) {
 
 // A wildcard member reaches the rule, and reports which pattern did it.
 func TestCandidatesFindsARuleByWildcardURL(t *testing.T) {
+	t.Parallel()
 	idx := indexOf(t, "../../testdata/config/firewall-urlcat.xml", "vsys1")
 
 	for _, url := range []string{"foo.wildcard-example.com", "a.b.wildcard-example.com"} {
@@ -55,6 +57,7 @@ func TestCandidatesFindsARuleByWildcardURL(t *testing.T) {
 
 // The cases a substring match would get wrong, and the one a star cannot cover.
 func TestCandidatesDoesNotOvermatchAURL(t *testing.T) {
+	t.Parallel()
 	idx := indexOf(t, "../../testdata/config/firewall-urlcat.xml", "vsys1")
 
 	for _, url := range []string{
@@ -75,6 +78,7 @@ func TestCandidatesDoesNotOvermatchAURL(t *testing.T) {
 
 // A value no value space recognises is a different matter, and must be reported.
 func TestCandidatesReportsAValueNothingRecognises(t *testing.T) {
+	t.Parallel()
 	idx := indexOf(t, "../../testdata/config/firewall-urlcat.xml", "vsys1")
 
 	rules, rep := idx.Candidates(Category, "not-a-url-and-not-an-object")
@@ -92,6 +96,7 @@ func TestCandidatesReportsAValueNothingRecognises(t *testing.T) {
 // The category name is a different question from the URL value, and that one does
 // work. It must keep working, and must not be reported as unresolved.
 func TestCandidatesResolvesACategoryName(t *testing.T) {
+	t.Parallel()
 	idx := indexOf(t, "../../testdata/config/firewall-urlcat.xml", "vsys1")
 
 	rules, rep := idx.Candidates(Category, "custom-azuresite-group")
@@ -106,6 +111,7 @@ func TestCandidatesResolvesACategoryName(t *testing.T) {
 
 // An address and a prefix resolve, and say nothing about being incomplete.
 func TestCandidatesResolvesAddressesQuietly(t *testing.T) {
+	t.Parallel()
 	idx := indexOf(t, "../../testdata/config/firewall-urlcat.xml", "vsys1")
 
 	for _, v := range []string{"198.18.0.5", "198.18.0.0/24"} {
@@ -118,6 +124,7 @@ func TestCandidatesResolvesAddressesQuietly(t *testing.T) {
 // A query must never intern. The interner is an unlocked map and an index is
 // documented immutable, so interning on a lookup path both leaks and races.
 func TestQueriesDoNotInternNewNames(t *testing.T) {
+	t.Parallel()
 	idx := indexOf(t, "../../testdata/config/firewall-urlcat.xml", "vsys1")
 	before := idx.Interner().Len()
 
@@ -137,6 +144,7 @@ func TestQueriesDoNotInternNewNames(t *testing.T) {
 // callers asking about unknown names concurrently corrupted it. Under -race this
 // test fails on the old code.
 func TestConcurrentUnknownNameLookupsAreSafe(t *testing.T) {
+	t.Parallel()
 	idx := indexOf(t, "../../testdata/config/firewall-urlcat.xml", "vsys1")
 
 	var wg sync.WaitGroup
@@ -165,6 +173,7 @@ func ruleNames(idx *Index, b *roaring.Bitmap) map[string]bool {
 // name live on the device, not in the file. Both halves have to be said: the object
 // matched, and the answer is still incomplete.
 func TestCandidatesFindsAnFQDNObjectAndSaysWhatIsMissing(t *testing.T) {
+	t.Parallel()
 	idx := indexOf(t, "../../testdata/config/firewall-urlcat.xml", "vsys1")
 
 	rules, rep := idx.Candidates(Source, "host.example.com")
@@ -185,6 +194,7 @@ func TestCandidatesFindsAnFQDNObjectAndSaysWhatIsMissing(t *testing.T) {
 
 // Matching is case-insensitive for an fqdn, because DNS names are.
 func TestCandidatesMatchesAnFQDNIgnoringCase(t *testing.T) {
+	t.Parallel()
 	idx := indexOf(t, "../../testdata/config/firewall-urlcat.xml", "vsys1")
 
 	_, rep := idx.Candidates(Source, "HOST.Example.COM")
@@ -196,6 +206,7 @@ func TestCandidatesMatchesAnFQDNIgnoringCase(t *testing.T) {
 // A field's value spaces come from the schema, so source has an address resolver
 // even in a configuration whose every rule says "source any".
 func TestResolversComeFromTheSchemaNotTheConfiguration(t *testing.T) {
+	t.Parallel()
 	idx := indexOf(t, "../../testdata/config/firewall-urlcat.xml", "vsys1")
 
 	if len(idx.resolversFor(Source)) == 0 {
@@ -215,6 +226,7 @@ func TestResolversComeFromTheSchemaNotTheConfiguration(t *testing.T) {
 
 // An Unresolved prints its kind only when it has one.
 func TestUnresolvedString(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		u    Unresolved
 		want string

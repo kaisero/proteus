@@ -27,6 +27,7 @@ func zoneNames(rep Report) map[string]string {
 // an ethernet address sits behind layer3, a subinterface behind layer3/units, and a
 // loopback address directly under units with no layer3 at all.
 func TestZoneResolverPlacesAnAddressFromEveryInterfaceShape(t *testing.T) {
+	t.Parallel()
 	idx := zonesIndex(t)
 
 	for _, c := range []struct{ addr, zone, iface string }{
@@ -49,6 +50,7 @@ func TestZoneResolverPlacesAnAddressFromEveryInterfaceShape(t *testing.T) {
 
 // A placed address reaches the rules whose from-zone is that zone.
 func TestZoneResolverReachesTheRules(t *testing.T) {
+	t.Parallel()
 	idx := zonesIndex(t)
 
 	rules, _ := idx.Candidates(FromZone, "10.1.0.50")
@@ -64,6 +66,7 @@ func TestZoneResolverReachesTheRules(t *testing.T) {
 // Longest prefix wins, the way a router decides: a /32 on a loopback beats the /24 that
 // contains it on another interface.
 func TestZoneResolverPrefersTheMoreSpecificRoute(t *testing.T) {
+	t.Parallel()
 	idx := zonesIndex(t)
 
 	// 10.255.255.1/32 is in zone loop. Nothing else covers it.
@@ -78,6 +81,7 @@ func TestZoneResolverPrefersTheMoreSpecificRoute(t *testing.T) {
 // interface's zone. A route with only a next hop resolves through another route, which
 // a file cannot follow reliably, so it is left alone.
 func TestZoneResolverUsesStaticRoutesWithAnInterface(t *testing.T) {
+	t.Parallel()
 	idx := zonesIndex(t)
 
 	_, rep := idx.Candidates(FromZone, "172.16.5.5")
@@ -99,6 +103,7 @@ func TestZoneResolverUsesStaticRoutesWithAnInterface(t *testing.T) {
 // Every limit is reported rather than hidden: a zone with no interface, an interface in
 // no zone, a virtual router learning routes at runtime, and an address nothing covers.
 func TestZoneResolverReportsItsLimits(t *testing.T) {
+	t.Parallel()
 	idx := zonesIndex(t)
 
 	_, rep := idx.Candidates(FromZone, "203.0.113.9")
@@ -133,6 +138,7 @@ func TestZoneResolverReportsItsLimits(t *testing.T) {
 // The default route out a zoneless interface must not place an address. Reporting the
 // zone of an interface that carries no policy would be worse than saying nothing.
 func TestZoneResolverIgnoresADefaultRouteWithNoZone(t *testing.T) {
+	t.Parallel()
 	idx := zonesIndex(t)
 
 	_, rep := idx.Candidates(FromZone, "8.8.8.8")
@@ -143,6 +149,7 @@ func TestZoneResolverIgnoresADefaultRouteWithNoZone(t *testing.T) {
 
 // A vsys with no zones says so rather than returning nothing silently.
 func TestZoneResolverSaysWhenAScopeHasNoZones(t *testing.T) {
+	t.Parallel()
 	idx := indexOf(t, "../../testdata/config/firewall-multivsys.xml", "vsys3")
 
 	_, rep := idx.Candidates(FromZone, "10.0.0.1")
@@ -159,6 +166,7 @@ func TestZoneResolverSaysWhenAScopeHasNoZones(t *testing.T) {
 
 // A zone name still works, and is not affected by any of this.
 func TestZoneNameStillResolves(t *testing.T) {
+	t.Parallel()
 	idx := zonesIndex(t)
 
 	rules, rep := idx.Candidates(FromZone, "inside")
@@ -173,6 +181,7 @@ func TestZoneNameStillResolves(t *testing.T) {
 // A prefix is accepted as well as an address, so a caller can ask which zone a whole
 // network sits in.
 func TestZoneResolverAcceptsAPrefix(t *testing.T) {
+	t.Parallel()
 	idx := zonesIndex(t)
 
 	_, rep := idx.Candidates(FromZone, "10.1.0.0/24")
@@ -184,6 +193,7 @@ func TestZoneResolverAcceptsAPrefix(t *testing.T) {
 // Two interfaces in the same zone both place their prefixes, and one prefix reachable
 // through two zones reports both rather than choosing.
 func TestZoneResolverReportsEveryZoneForAPrefix(t *testing.T) {
+	t.Parallel()
 	idx := indexOf(t, "../../testdata/config/firewall-zones-shared.xml", "vsys1")
 
 	_, rep := idx.Candidates(FromZone, "10.50.0.5")
@@ -206,6 +216,7 @@ func TestZoneResolverReportsEveryZoneForAPrefix(t *testing.T) {
 
 // Searching finds a zone by a fragment of the prefix that reaches it.
 func TestZoneResolverSearch(t *testing.T) {
+	t.Parallel()
 	idx := zonesIndex(t)
 
 	hits := idx.SearchValues("10.255.255")
@@ -223,6 +234,7 @@ func TestZoneResolverSearch(t *testing.T) {
 // A snapshot is authoritative. Where it answers, the configuration is not consulted,
 // and the answer names the route that decided it.
 func TestZoneResolverPrefersTheSnapshot(t *testing.T) {
+	t.Parallel()
 	idx := indexOf(t, "../../testdata/config/firewall-zones.xml", "vsys1")
 	v := idx.With(Providers{Zones: zoneSnap(t)})
 
@@ -251,6 +263,7 @@ func TestZoneResolverPrefersTheSnapshot(t *testing.T) {
 // leaves 10.1.0.50 unplaceable by the snapshot while the configuration still places it
 // in "inside", which is exactly the case that must not fall back.
 func TestZoneResolverDoesNotFallBackWhenASnapshotIsPresent(t *testing.T) {
+	t.Parallel()
 	idx := indexOf(t, "../../testdata/config/firewall-zones.xml", "vsys1")
 
 	// The configuration can answer on its own.
@@ -284,6 +297,7 @@ func TestZoneResolverDoesNotFallBackWhenASnapshotIsPresent(t *testing.T) {
 // the firewall was told, and on a real device it was reasoning from a default route
 // that had since been replaced.
 func TestZoneResolverAlwaysReportsAConfigurationAnswer(t *testing.T) {
+	t.Parallel()
 	idx := indexOf(t, "../../testdata/config/firewall-zones.xml", "vsys1")
 
 	_, rep := idx.Candidates(FromZone, "10.1.0.50")
@@ -303,6 +317,7 @@ func TestZoneResolverAlwaysReportsAConfigurationAnswer(t *testing.T) {
 
 // Several routers covering one address is reported, not resolved by picking one.
 func TestZoneResolverReportsRouterAmbiguity(t *testing.T) {
+	t.Parallel()
 	idx := indexOf(t, "../../testdata/config/firewall-zones.xml", "vsys1")
 	v := idx.With(Providers{Zones: zoneSnap(t)})
 
@@ -324,6 +339,7 @@ func TestZoneResolverReportsRouterAmbiguity(t *testing.T) {
 // A zone is visible only inside the vsys that defines it, so a snapshot of a
 // multi-vsys firewall must not leak zones across a scope boundary.
 func TestZoneResolverFiltersByVsys(t *testing.T) {
+	t.Parallel()
 	idx := indexOf(t, "../../testdata/config/firewall-zones.xml", "vsys1")
 
 	// The same forwarding table, but every interface belongs to vsys 2.
@@ -356,6 +372,7 @@ func TestZoneResolverFiltersByVsys(t *testing.T) {
 // The resolver surfaces an unrouted interface, so an empty answer explains itself
 // rather than looking like "this address is nowhere".
 func TestZoneResolverSurfacesUnroutedInterfaces(t *testing.T) {
+	t.Parallel()
 	idx := indexOf(t, "../../testdata/config/firewall-zones.xml", "vsys1")
 	snap := zoneSnap(t)
 	snap.FIBXML = strings.Replace(snap.FIBXML,
@@ -379,6 +396,7 @@ func TestZoneResolverSurfacesUnroutedInterfaces(t *testing.T) {
 // The shared scope keeps every placement: a snapshot comes from one firewall, and
 // shared belongs to none of its vsys.
 func TestZoneResolverKeepsEveryPlacementForShared(t *testing.T) {
+	t.Parallel()
 	cfg, _, err := config.Load("../../testdata/config/firewall-multivsys.xml")
 	if err != nil {
 		t.Fatal(err)
@@ -396,6 +414,7 @@ func TestZoneResolverKeepsEveryPlacementForShared(t *testing.T) {
 // A forwarding entry with no router still places, and the ambiguity note is not
 // raised for it.
 func TestZoneResolverHandlesAnUnnamedRouter(t *testing.T) {
+	t.Parallel()
 	body := `{"interfaces_xml":"<result><ifnet><entry><name>ethernet1/1</name><vsys>1</vsys>` +
 		`<zone>a</zone><fwd>N/A</fwd></entry></ifnet></result>",` +
 		`"fib_xml":"<result><fibs><entry><vr></vr><type>0</type><entries>` +

@@ -13,6 +13,7 @@ func appsIndex(t *testing.T) *Index {
 // A custom application is in the file, and the group holding it resolves through the
 // ordinary group closure, so naming the application reaches the rule naming the group.
 func TestAppResolverFindsACustomApplicationThroughItsGroup(t *testing.T) {
+	t.Parallel()
 	idx := appsIndex(t)
 
 	rules, rep := idx.Candidates(Application, "custom-erp")
@@ -33,6 +34,7 @@ func TestAppResolverFindsACustomApplicationThroughItsGroup(t *testing.T) {
 // A predefined application is not in the file, but its name is still a name: a rule
 // naming it is found through the ordinary name path.
 func TestAppResolverFindsAPredefinedApplicationByName(t *testing.T) {
+	t.Parallel()
 	idx := appsIndex(t)
 
 	rules, _ := idx.Candidates(Application, "ssl")
@@ -45,6 +47,7 @@ func TestAppResolverFindsAPredefinedApplicationByName(t *testing.T) {
 // content database, so its membership is reported rather than guessed. The rule using it
 // is therefore never reported as a match for a specific application.
 func TestAppResolverReportsAnApplicationFilter(t *testing.T) {
+	t.Parallel()
 	idx := appsIndex(t)
 
 	rules, rep := idx.Candidates(Application, "custom-erp")
@@ -70,6 +73,7 @@ func TestAppResolverReportsAnApplicationFilter(t *testing.T) {
 // An application container groups predefined applications, and its members are in the
 // content database too.
 func TestAppResolverReportsAnApplicationContainer(t *testing.T) {
+	t.Parallel()
 	idx := appsIndex(t)
 
 	_, rep := idx.Candidates(Application, "custom-erp")
@@ -86,6 +90,7 @@ func TestAppResolverReportsAnApplicationContainer(t *testing.T) {
 
 // Searching finds a custom application by a fragment of its name.
 func TestAppResolverSearch(t *testing.T) {
+	t.Parallel()
 	idx := appsIndex(t)
 
 	var found bool
@@ -101,6 +106,7 @@ func TestAppResolverSearch(t *testing.T) {
 
 // A value that plainly belongs to another value space is not treated as an application.
 func TestAppResolverIgnoresOtherShapes(t *testing.T) {
+	t.Parallel()
 	idx := appsIndex(t)
 
 	for _, q := range []string{"10.0.0.0/8", "example.com/x", "a b"} {

@@ -18,6 +18,7 @@ func liveLikeIndex(t *testing.T, vsys string) *Index {
 // lookup has to reach those rules too, or a configuration written that way looks
 // empty.
 func TestRulesWithAddrFindsALiteralField(t *testing.T) {
+	t.Parallel()
 	idx := liveLikeIndex(t, "vsys1")
 
 	// The rule's source is exactly this address.
@@ -32,6 +33,7 @@ func TestRulesWithAddrFindsALiteralField(t *testing.T) {
 
 // The point of a trie: an address inside a literal prefix matches it.
 func TestRulesWithAddrMatchesInsideAPrefix(t *testing.T) {
+	t.Parallel()
 	idx := liveLikeIndex(t, "vsys1")
 	b := idx.RulesWithAddr(Source, netip.MustParseAddr("198.18.9.42"))
 	if b.IsEmpty() {
@@ -55,6 +57,7 @@ func TestRulesWithAddrMatchesInsideAPrefix(t *testing.T) {
 // also sits inside another rule's 198.18.0.0/16 source. 203.0.113.9 is the
 // destination of exactly one rule and a source of none.
 func TestRulesWithAddrIsPerField(t *testing.T) {
+	t.Parallel()
 	idx := liveLikeIndex(t, "vsys1")
 	dst := idx.RulesWithAddr(Destination, netip.MustParseAddr("203.0.113.9"))
 	if dst.IsEmpty() {
@@ -70,6 +73,7 @@ func TestRulesWithAddrIsPerField(t *testing.T) {
 
 // A named object and a literal both reach the rule, and the two paths combine.
 func TestLiteralAndNamedCombine(t *testing.T) {
+	t.Parallel()
 	idx := liveLikeIndex(t, "vsys1")
 	in := idx.Interner()
 
@@ -97,6 +101,7 @@ func TestLiteralAndNamedCombine(t *testing.T) {
 // 192.0.2.7 is outside every literal in the fixture, so the only way it could match
 // is through a keyword having been indexed as a prefix.
 func TestKeywordsAreNotLiterals(t *testing.T) {
+	t.Parallel()
 	idx := liveLikeIndex(t, "vsys1")
 	for _, f := range []Field{Source, Destination, Application, Service} {
 		if b := idx.RulesWithAddr(f, netip.MustParseAddr("192.0.2.7")); !b.IsEmpty() {
@@ -106,6 +111,7 @@ func TestKeywordsAreNotLiterals(t *testing.T) {
 }
 
 func TestRulesWithPrefixOverlaps(t *testing.T) {
+	t.Parallel()
 	idx := liveLikeIndex(t, "vsys1")
 	b := idx.RulesWithPrefix(Source, netip.MustParsePrefix("198.18.0.0/8"))
 	if b.GetCardinality() < 2 {
@@ -124,6 +130,7 @@ var _ = config.ScopeShared
 // reports ztnac-to-lab, rule 3, whose source is any. Address-only matching reported
 // lab-to-internet, rule 8.
 func TestRulesWithAnyIsNeededForAFirstMatch(t *testing.T) {
+	t.Parallel()
 	idx := indexOf(t, "../../testdata/config/firewall-anyrule.xml", "vsys1")
 	rules := idx.Rules()
 
@@ -166,6 +173,7 @@ func TestRulesWithAnyIsNeededForAFirstMatch(t *testing.T) {
 // any must not leak into the object-name path, or every address would match
 // every rule through the interner.
 func TestAnyIsNotAnObjectEdge(t *testing.T) {
+	t.Parallel()
 	idx := indexOf(t, "../../testdata/config/firewall-anyrule.xml", "vsys1")
 	if refs := idx.Refs("any"); len(refs) != 0 {
 		t.Errorf("any must not be a reference edge, got %d", len(refs))

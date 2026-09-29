@@ -45,6 +45,7 @@ func docs(t *testing.T, withZones bool) map[string][]byte {
 }
 
 func TestWriteThenLatest(t *testing.T) {
+	t.Parallel()
 	s := open(t)
 	sn, err := s.Write(Meta{Device: "fw01", Host: "192.0.2.10", Serial: "0001"}, docs(t, false), 20)
 	if err != nil {
@@ -75,6 +76,7 @@ func TestWriteThenLatest(t *testing.T) {
 // A document the caller already named, because it failed or succeeded, gets its
 // file and size filled in rather than a second entry.
 func TestWriteFillsANamedDocument(t *testing.T) {
+	t.Parallel()
 	s := open(t)
 	sn, err := s.Write(Meta{Device: "fw01", Documents: []DocumentMeta{{Name: ConfigDoc}, {Name: FIBDoc, Error: "refused"}}},
 		docs(t, false), 20)
@@ -89,6 +91,7 @@ func TestWriteFillsANamedDocument(t *testing.T) {
 // Nothing can be analysed without the configuration, so a fetch that lost it is
 // kept for the record but never becomes latest.
 func TestLatestMovesOnlyWithAConfiguration(t *testing.T) {
+	t.Parallel()
 	s := open(t)
 	first, _ := s.Write(Meta{Device: "fw01"}, docs(t, false), 20)
 	_, err := s.Write(Meta{Device: "fw01", Documents: []DocumentMeta{{Name: ConfigDoc, Error: "refused"}}},
@@ -107,6 +110,7 @@ func TestLatestMovesOnlyWithAConfiguration(t *testing.T) {
 }
 
 func TestRetentionKeepsTheNewest(t *testing.T) {
+	t.Parallel()
 	s := open(t)
 	for range 5 {
 		if _, err := s.Write(Meta{Device: "fw01"}, docs(t, false), 3); err != nil {
@@ -126,6 +130,7 @@ func TestRetentionKeepsTheNewest(t *testing.T) {
 // Retention never removes the snapshot latest names, even when newer ones lack a
 // configuration.
 func TestRetentionKeepsLatest(t *testing.T) {
+	t.Parallel()
 	s := open(t)
 	first, _ := s.Write(Meta{Device: "fw01"}, docs(t, false), 1)
 	if _, err := s.Write(Meta{Device: "fw01"}, map[string][]byte{}, 1); err != nil {
@@ -137,6 +142,7 @@ func TestRetentionKeepsLatest(t *testing.T) {
 }
 
 func TestWriteRefusesADuplicateID(t *testing.T) {
+	t.Parallel()
 	s, err := Open(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -151,6 +157,7 @@ func TestWriteRefusesADuplicateID(t *testing.T) {
 }
 
 func TestResolveAndGet(t *testing.T) {
+	t.Parallel()
 	s := open(t)
 	a, _ := s.Write(Meta{Device: "fw01"}, docs(t, false), 20)
 	b, _ := s.Write(Meta{Device: "fw01"}, docs(t, false), 20)
@@ -171,6 +178,7 @@ func TestResolveAndGet(t *testing.T) {
 }
 
 func TestGetRejectsACorruptMeta(t *testing.T) {
+	t.Parallel()
 	s := open(t)
 	sn, _ := s.Write(Meta{Device: "fw01"}, docs(t, false), 20)
 	if err := os.WriteFile(filepath.Join(sn.Dir, "meta.json"), []byte("{"), 0o600); err != nil {
@@ -182,6 +190,7 @@ func TestGetRejectsACorruptMeta(t *testing.T) {
 }
 
 func TestZonesFromAStoredSnapshot(t *testing.T) {
+	t.Parallel()
 	s := open(t)
 	sn, err := s.Write(Meta{Device: "fw01", Host: "192.0.2.10"}, docs(t, true), 20)
 	if err != nil {
@@ -209,6 +218,7 @@ func TestZonesFromAStoredSnapshot(t *testing.T) {
 // A reader never sees half a snapshot: nothing but finished snapshots and latest
 // sits in a device's directory.
 func TestNoPartialSnapshotIsLeft(t *testing.T) {
+	t.Parallel()
 	s := open(t)
 	if _, err := s.Write(Meta{Device: "fw01"}, docs(t, false), 20); err != nil {
 		t.Fatal(err)
@@ -222,12 +232,14 @@ func TestNoPartialSnapshotIsLeft(t *testing.T) {
 }
 
 func TestWriteRejectsAnUnsafeDeviceName(t *testing.T) {
+	t.Parallel()
 	if _, err := open(t).Write(Meta{Device: "../x"}, docs(t, false), 20); err == nil {
 		t.Error("a device name must never leave the store")
 	}
 }
 
 func TestDefaultRoot(t *testing.T) {
+	t.Parallel()
 	env := func(m map[string]string) func(string) string { return func(k string) string { return m[k] } }
 	if got, _ := DefaultRoot(env(map[string]string{"PROTEUS_STORE": "/s"})); got != "/s" {
 		t.Errorf("PROTEUS_STORE ignored: %s", got)
@@ -242,6 +254,7 @@ func TestDefaultRoot(t *testing.T) {
 }
 
 func TestAtOrBefore(t *testing.T) {
+	t.Parallel()
 	s := open(t)
 	a, _ := s.Write(Meta{Device: "fw01"}, docs(t, false), 20)     // 10:00
 	_, _ = s.Write(Meta{Device: "fw01"}, map[string][]byte{}, 20) // 10:01, no config

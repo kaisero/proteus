@@ -68,9 +68,11 @@ func input(cfg *config.Config, p probe) Input {
 // resolve: the device names no rule (spec §18 F17); the engine names the rule, and
 // its translation is unresolved (D8).
 func TestTheRuleFw01Named(t *testing.T) {
+	t.Parallel()
 	cfg := natConfig(t, "firewall-nat.xml")
 	for _, p := range probes(t, "fw01-nat-policy-match.tsv") {
 		t.Run(p.name, func(t *testing.T) {
+			t.Parallel()
 			m := Match(input(cfg, p))
 			got := ""
 			if m.Rule != nil {
@@ -88,6 +90,7 @@ func TestTheRuleFw01Named(t *testing.T) {
 }
 
 func TestTheImplicitRule(t *testing.T) {
+	t.Parallel()
 	cfg := natConfig(t, "firewall-nat.xml")
 	m := Match(input(cfg, probe{src: "198.18.1.10", dst: "198.18.250.20", port: 443, from: "transport", to: "transport", iface: "ethernet1/1"}))
 	if m.Rule == nil || m.Rule.Origin != "t-bidir" || m.Rule.Destination.Address != "198.18.19.50" || m.Rule.label() != "t-bidir (implicit)" {
@@ -105,6 +108,7 @@ func TestTheImplicitRule(t *testing.T) {
 }
 
 func TestDoubts(t *testing.T) {
+	t.Parallel()
 	cfg := natConfig(t, "firewall-nat.xml")
 	// No port: t-dnat-port may match, and internet-a surely does.
 	p := probe{src: "198.18.1.10", dst: "198.18.250.10", from: "transport", to: "transport", iface: "ethernet1/1"}
@@ -122,6 +126,7 @@ func TestDoubts(t *testing.T) {
 }
 
 func TestMatchEnds(t *testing.T) {
+	t.Parallel()
 	cfg := natConfig(t, "firewall-nat.xml")
 	in := input(cfg, probe{src: "198.18.1.10", dst: "198.18.250.10", port: 8443, from: "transport"})
 	in.PreNAT = &simulate.Forward{End: simulate.EndNoRoute}
@@ -162,6 +167,7 @@ func caseInput(t *testing.T, dst string, proto string, port uint16) Input {
 }
 
 func TestServicesAndTypes(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name, dst, proto string
 		port             uint16
@@ -176,6 +182,7 @@ func TestServicesAndTypes(t *testing.T) {
 		{"any service, no port", "198.51.100.1", "tcp", 0, "bound", ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			m := Match(caseInput(t, tc.dst, tc.proto, tc.port))
 			if m.Rule == nil || m.Rule.Name != tc.rule {
 				t.Fatalf("rule = %v, excluded %v", m.Rule, m.Excluded)
@@ -204,6 +211,7 @@ func TestServicesAndTypes(t *testing.T) {
 }
 
 func TestAVersionGapIsNoted(t *testing.T) {
+	t.Parallel()
 	in := input(natConfig(t, "firewall-version-12.2.xml"), probe{src: "10.0.0.1", dst: "10.0.0.2", port: 443, from: "trust", to: "untrust"})
 	m := Match(in)
 	if m.Rule != nil || len(m.Notes) != 1 || !strings.Contains(m.Notes[0], "NAT checked with the") || m.Fidelity.Level() != "inferred" {

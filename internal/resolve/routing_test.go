@@ -8,6 +8,7 @@ import (
 
 // Verified on fw02: FRR JSON inside <result><json>, one entry per route.
 func TestReadRIBRoutes(t *testing.T) {
+	t.Parallel()
 	got, err := ReadRIBRoutes(opFixture(t, "fw02-advanced-routing-route.xml"))
 	if err != nil {
 		t.Fatal(err)
@@ -40,6 +41,7 @@ func TestReadRIBRoutes(t *testing.T) {
 
 // On an Advanced Routing device, the legacy command reports success with a text.
 func TestReadRIBRoutesRefusesTheLegacyAnswer(t *testing.T) {
+	t.Parallel()
 	_, err := ReadRIBRoutes(opFixture(t, "fw02-routing-route-deprecated.xml"))
 	if err == nil || !strings.Contains(err.Error(), "deprecated") {
 		t.Errorf("err = %v", err)
@@ -61,6 +63,7 @@ func TestReadRIBRoutesRefusesTheLegacyAnswer(t *testing.T) {
 }
 
 func TestReadHAState(t *testing.T) {
+	t.Parallel()
 	st, err := ReadHAState(opFixture(t, "fw02-ha-state.xml"))
 	if err != nil || st.Enabled {
 		t.Errorf("fw02 without HA = %+v, %v", st, err)
@@ -85,6 +88,7 @@ func TestReadHAState(t *testing.T) {
 
 // Verified on fw02: nh_type 3 is the device's own address; the rest is 0.
 func TestFIBRoutesCarryTheNextHopType(t *testing.T) {
+	t.Parallel()
 	got, err := ReadFIBRoutes(opFixture(t, "fw02-advanced-routing-fib.xml"))
 	if err != nil {
 		t.Fatal(err)
@@ -102,6 +106,7 @@ func TestFIBRoutesCarryTheNextHopType(t *testing.T) {
 
 // A second dataplane block repeating the table must not repeat its routes.
 func TestFIBRoutesAreKeptOnce(t *testing.T) {
+	t.Parallel()
 	table := `<entry><vr>default</vr><type>0</type><ecmp>1</ecmp><entries>
 	  <entry><dst>10.0.0.0/8</dst><interface>ethernet1/1</interface><nexthop>192.0.2.1</nexthop><flags>ug</flags><nh_type>0</nh_type></entry>
 	</entries></entry>`
@@ -113,6 +118,7 @@ func TestFIBRoutesAreKeptOnce(t *testing.T) {
 }
 
 func TestInterfaceStatesHoldEveryAddress(t *testing.T) {
+	t.Parallel()
 	got, err := ReadInterfaceStates(opFixture(t, "fw02-interface-all.xml"))
 	if err != nil {
 		t.Fatal(err)
@@ -141,6 +147,7 @@ func TestInterfaceStatesHoldEveryAddress(t *testing.T) {
 // Verified on fw01 (PAN-OS 11.2.5): the table also holds entries it did not
 // select, such as the local twin of each loopback's connected route.
 func TestReadRIBRoutesKeepsUnselectedEntries(t *testing.T) {
+	t.Parallel()
 	got, err := ReadRIBRoutes(opFixture(t, "fw01-advanced-routing-route.xml"))
 	if err != nil {
 		t.Fatal(err)

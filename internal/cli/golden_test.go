@@ -60,7 +60,7 @@ func fixture(name string) string { return "../../testdata/config/" + name }
 
 // Every command's --output json, from files and from a fetched store.
 func TestGoldenJSON(t *testing.T) {
-	c := newCLI(t)
+	t.Parallel()
 	for _, tc := range []struct {
 		name string
 		code int
@@ -72,11 +72,13 @@ func TestGoldenJSON(t *testing.T) {
 		{"simulate-policy", 0, []string{"simulate", "policy", "10.1.0.5", "10.2.0.5", "--port", "443", "--file", fixture("firewall-zones.xml")}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			golden(t, tc.name, c.want(tc.code, append(tc.args, "--output", "json")...))
+			t.Parallel()
+			golden(t, tc.name, newCLI(t).want(tc.code, append(tc.args, "--output", "json")...))
 		})
 	}
 
 	t.Run("store", func(t *testing.T) {
+		t.Parallel()
 		d := lab(t)
 		c := newCLI(t)
 		c.inventory(inventoryFor(d.Start(t)))
@@ -89,12 +91,14 @@ func TestGoldenJSON(t *testing.T) {
 	})
 
 	t.Run("simulate-nat", func(t *testing.T) {
+		t.Parallel()
 		out := natLab(t).want(0, "simulate", "nat", "198.18.1.10", "198.18.250.10", "--device", "fw01",
 			"--router", "default", "--from-zone", "transport", "--port", "8443", "--output", "json")
 		golden(t, "simulate-nat", out)
 	})
 
 	t.Run("simulate-routing", func(t *testing.T) {
+		t.Parallel()
 		out := routingLab(t, false).want(0, "simulate", "routing", "198.18.10.5", "8.8.8.8", "--output", "json")
 		golden(t, "simulate-routing", out)
 	})

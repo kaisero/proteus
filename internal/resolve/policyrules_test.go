@@ -20,6 +20,7 @@ func routingTarget(t *testing.T) *Target {
 }
 
 func TestPBFRules(t *testing.T) {
+	t.Parallel()
 	rs := routingTarget(t).PBFRules()
 	if len(rs) != 5 {
 		t.Fatalf("got %d PBF rules", len(rs))
@@ -46,6 +47,7 @@ func TestPBFRules(t *testing.T) {
 }
 
 func TestNATRules(t *testing.T) {
+	t.Parallel()
 	rs := routingTarget(t).NATRules()
 	if len(rs) != 4 {
 		t.Fatalf("got %d NAT rules", len(rs))

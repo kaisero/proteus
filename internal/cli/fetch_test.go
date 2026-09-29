@@ -81,6 +81,7 @@ func getenv(k string) string {
 // M2's exit criterion (spec S15): an inventory with one device, fetched into the
 // store, and a lookup answered from latest.
 func TestFetchThenAnswerFromLatest(t *testing.T) {
+	t.Parallel()
 	inv, st := setup(t, lab(t).Start(t))
 	var out bytes.Buffer
 	if err := (fetcher{inv: inv, st: st, getenv: getenv}).devices(context.Background(), &out, []string{"fw01"}); err != nil {
@@ -115,6 +116,7 @@ func TestFetchThenAnswerFromLatest(t *testing.T) {
 
 // Spec §15 C11: a device stored with a missing document is a partial failure.
 func TestFetchReportsAFailedDocument(t *testing.T) {
+	t.Parallel()
 	d := lab(t)
 	delete(d.Ops, "<show><interface>all</interface></show>")
 	inv, st := setup(t, d.Start(t))
@@ -134,6 +136,7 @@ func TestFetchReportsAFailedDocument(t *testing.T) {
 // Spec S10: a device that cannot be reached does not stop the next one; nothing
 // stored at all is an error.
 func TestFetchContinuesPastAFailedDevice(t *testing.T) {
+	t.Parallel()
 	inv, st := setup(t, lab(t).Start(t))
 	var out bytes.Buffer
 	err := (fetcher{inv: inv, st: st, getenv: getenv}).devices(context.Background(), &out, []string{"nope", "fw01"})
@@ -149,6 +152,7 @@ func TestFetchContinuesPastAFailedDevice(t *testing.T) {
 }
 
 func TestVerificationOnIsSaid(t *testing.T) {
+	t.Parallel()
 	inv, err := inventory.Parse(strings.NewReader(strings.Replace(inventoryFor(lab(t).Start(t)),
 		"insecure_tls: true", "insecure_tls: false", 1)))
 	if err != nil {
@@ -164,6 +168,7 @@ func TestVerificationOnIsSaid(t *testing.T) {
 
 // Store names the documents it reads; they must be fetch's names.
 func TestStoreAndFetchAgreeOnDocumentNames(t *testing.T) {
+	t.Parallel()
 	for got, want := range map[string]string{
 		store.ConfigDoc:     fetch.RunningConfig.Name,
 		store.InterfacesDoc: fetch.Interfaces.Name,
@@ -226,6 +231,7 @@ func (c *cli) want(code int, args ...string) string {
 }
 
 func TestHousekeeping(t *testing.T) {
+	t.Parallel()
 	c := newCLI(t)
 	c.want(1, "fetch", "fw01")
 	c.want(1, "snapshot", "list", "fw01")
@@ -260,6 +266,7 @@ func TestHousekeeping(t *testing.T) {
 
 // Parallel fetch stores every device and reports them in the order named.
 func TestParallelFetchKeepsOrder(t *testing.T) {
+	t.Parallel()
 	c := newCLI(t)
 	c.inventory(inventoryFor(lab(t).Start(t), lab(t).Start(t), lab(t).Start(t)))
 	out := c.want(0, "fetch", "fw03", "fw01", "fw02")
@@ -270,6 +277,7 @@ func TestParallelFetchKeepsOrder(t *testing.T) {
 }
 
 func TestSearchAcrossTheEstate(t *testing.T) {
+	t.Parallel()
 	c := newCLI(t)
 	c.inventory(inventoryFor(lab(t).Start(t), "127.0.0.1:1"))
 	c.want(0, "fetch", "fw01")
@@ -314,6 +322,7 @@ func TestSearchAcrossTheEstate(t *testing.T) {
 // --fresh fetches before answering; a device it could not fetch keeps its old
 // snapshot and says so.
 func TestFreshSearch(t *testing.T) {
+	t.Parallel()
 	c := newCLI(t)
 	d := lab(t)
 	c.inventory(inventoryFor(d.Start(t)))
@@ -326,6 +335,7 @@ func TestFreshSearch(t *testing.T) {
 }
 
 func TestSettingsPrecedence(t *testing.T) {
+	t.Parallel()
 	c := newCLI(t)
 	c.inventory(inventoryFor(lab(t).Start(t)))
 	c.want(0, "fetch", "fw01")
@@ -356,6 +366,7 @@ func TestSettingsPrecedence(t *testing.T) {
 }
 
 func TestSnapshotDiff(t *testing.T) {
+	t.Parallel()
 	c := newCLI(t)
 	d := lab(t)
 	c.inventory(inventoryFor(d.Start(t)))
@@ -393,6 +404,7 @@ func TestSnapshotDiff(t *testing.T) {
 }
 
 func TestSimulatePolicy(t *testing.T) {
+	t.Parallel()
 	c := newCLI(t)
 	file := "../../testdata/config/firewall-zones.xml"
 	out := c.want(0, "simulate", "policy", "10.1.0.5", "10.2.0.5", "--file", file, "--vsys", "vsys1", "--why")
@@ -434,6 +446,7 @@ func TestSimulatePolicy(t *testing.T) {
 
 // A URL and a port narrow the candidates; an FQDN resolves through DNS.
 func TestSimulateDimensions(t *testing.T) {
+	t.Parallel()
 	c := newCLI(t)
 	file := "../../testdata/config/firewall-simulate.xml"
 	out := c.want(0, "simulate", "policy", "10.0.0.1", "10.6.0.1", "--file", file, "--url", "shop.example.com/cart")
@@ -451,6 +464,7 @@ func TestSimulateDimensions(t *testing.T) {
 }
 
 func TestSimulateResolvesAnFQDN(t *testing.T) {
+	t.Parallel()
 	var out, errOut bytes.Buffer
 	dir := t.TempDir()
 	a := newApp(&out, &errOut, func(k string) string {
@@ -482,6 +496,7 @@ func TestSimulateResolvesAnFQDN(t *testing.T) {
 
 // Zones derive from a fetched device's forwarding table.
 func TestSimulateDerivesZonesFromTheStore(t *testing.T) {
+	t.Parallel()
 	c := newCLI(t)
 	d := lab(t)
 	d.Config = read(t, "../../testdata/config/firewall-fw01-zones.xml")
@@ -500,6 +515,7 @@ func TestSimulateDerivesZonesFromTheStore(t *testing.T) {
 }
 
 func TestExitCode(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name   string
 		err    error
@@ -512,6 +528,7 @@ func TestExitCode(t *testing.T) {
 		{"an incomplete answer says nothing more", errIncomplete, 3, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			var errOut bytes.Buffer
 			if got := exitCode(tc.err, &errOut); got != tc.want || errOut.String() != tc.stderr {
 				t.Errorf("exitCode(%v) = %d, stderr %q; want %d, %q", tc.err, got, errOut.String(), tc.want, tc.stderr)
@@ -524,6 +541,7 @@ func TestExitCode(t *testing.T) {
 }
 
 func TestAgo(t *testing.T) {
+	t.Parallel()
 	for d, want := range map[time.Duration]string{45 * time.Minute: "45m", 3 * time.Hour: "3h", 72 * time.Hour: "3d"} {
 		if got := ago(d); got != want {
 			t.Errorf("ago(%v) = %s, want %s", d, got, want)
@@ -532,6 +550,7 @@ func TestAgo(t *testing.T) {
 }
 
 func TestSearchWithAUserSnapshot(t *testing.T) {
+	t.Parallel()
 	c := newCLI(t)
 	file := "../../testdata/config/firewall-users.xml"
 	if out := c.want(0, "search", `ACME\carol`, "--file", file); strings.Contains(out, "engineering-allowed") {
@@ -548,6 +567,7 @@ func TestSearchWithAUserSnapshot(t *testing.T) {
 }
 
 func TestModeName(t *testing.T) {
+	t.Parallel()
 	for term, want := range map[string]string{"10.0.0.1": "covers", "tcp/443": "covers", "443": "covers", "10.0.0.0/8": "overlaps", "web": "matches"} {
 		if got := modeName(search.Query{Term: term}); got != want {
 			t.Errorf("modeName(%s) = %s, want %s", term, got, want)
@@ -558,6 +578,7 @@ func TestModeName(t *testing.T) {
 // Every run writes a log with its command, settings, snapshots and exit; a run that
 // ends badly prints where the log is.
 func TestRunLog(t *testing.T) {
+	t.Parallel()
 	c := newCLI(t)
 	c.inventory(inventoryFor(lab(t).Start(t)))
 	c.want(0, "fetch", "fw01", "--log-level", "debug")
@@ -597,6 +618,7 @@ func TestRunLog(t *testing.T) {
 // With no flags and no PROTEUS_STORE or PROTEUS_LOG_DIR, the store and the log follow
 // the XDG directories, and the inventory comes from PROTEUS_CONFIG.
 func TestDefaultsFromTheEnvironment(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	cfg := filepath.Join(dir, "inv.yaml")
 	if err := os.WriteFile(cfg, []byte(inventoryFor(lab(t).Start(t))), 0o600); err != nil {
@@ -630,6 +652,7 @@ func TestDefaultsFromTheEnvironment(t *testing.T) {
 // An inventory entry naming the passive HA peer stores the active peer's data and
 // says so. The pair shape is synthetic: no lab device runs HA.
 func TestFetchFollowsThePassivePeer(t *testing.T) {
+	t.Parallel()
 	haCmd := "<show><high-availability><state/></high-availability></show>"
 	state := func(local, localSerial, peer, peerSerial string) string {
 		return fakepanos.Success(`<enabled>yes</enabled><group><mode>active-passive</mode><local-info><state>` + local +
@@ -657,6 +680,7 @@ func TestFetchFollowsThePassivePeer(t *testing.T) {
 
 // Run is what main calls. It must report the version main passes in.
 func TestRunReportsTheBuildVersion(t *testing.T) {
+	t.Parallel()
 	var out, errOut bytes.Buffer
 	dir := t.TempDir()
 	env := map[string]string{"HOME": dir, "PROTEUS_LOG_DIR": dir, "PROTEUS_CONFIG": filepath.Join(dir, "none.yaml")}
@@ -668,6 +692,7 @@ func TestRunReportsTheBuildVersion(t *testing.T) {
 
 // Each match flag reaches search with its mode; the docs show these two runs.
 func TestSearchModeFlags(t *testing.T) {
+	t.Parallel()
 	c := newCLI(t)
 	out := c.want(0, "search", "10.124.0.0/16", "--exact", "--show", "objects", "--vsys", "vsys1",
 		"--file", "../../testdata/config/firewall-multivsys.xml")
@@ -683,6 +708,7 @@ func TestSearchModeFlags(t *testing.T) {
 // A fan-out cancelled while one device hangs returns at once with the other
 // device stored, and TestMain's leak check proves no goroutine is left behind.
 func TestACancelledFanOutEndsPromptly(t *testing.T) {
+	t.Parallel()
 	hung := lab(t)
 	hung.Stall = "export"
 	inv, err := inventory.Parse(strings.NewReader(inventoryFor(lab(t).Start(t), hung.Start(t))))

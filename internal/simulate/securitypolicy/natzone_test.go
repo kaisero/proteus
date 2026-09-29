@@ -45,6 +45,7 @@ func natEnv(t *testing.T) *simulate.Env {
 
 // The destination zone is the post-NAT one (spec §18 F5, N10), as fw01 showed.
 func TestThePostNATZone(t *testing.T) {
+	t.Parallel()
 	r, v := run(t, natEnv(t), simulate.Flow{Source: ep("198.19.0.1"), Destination: ep("198.18.250.10"), DestPort: 8443})
 	if strings.Join(v.Zones.To, ",") != "server" || !strings.Contains(stage(r, "derive-zones").Detail, "to server (after NAT rule t-dnat-port)") ||
 		v.Zones.Source != "forwarding table, after NAT rule t-dnat-port" ||
@@ -59,6 +60,7 @@ func TestThePostNATZone(t *testing.T) {
 }
 
 func TestGivenZonesWinOverNAT(t *testing.T) {
+	t.Parallel()
 	r, v := run(t, natEnv(t), simulate.Flow{Source: ep("198.19.0.1"), Destination: ep("198.18.250.10"), DestPort: 8443, FromZone: "transport", ToZone: "transport"})
 	if strings.Join(v.Zones.To, ",") != "transport" || !strings.Contains(stage(r, "derive-zones").Detail, "note: NAT would give to server") {
 		t.Errorf("given: %+v, %q", v.Zones, stage(r, "derive-zones").Detail)
@@ -71,6 +73,7 @@ func TestGivenZonesWinOverNAT(t *testing.T) {
 }
 
 func TestNATIsSkippedWithoutTables(t *testing.T) {
+	t.Parallel()
 	s := &state{in: simulate.Input{Device: "fw01", Flow: simulate.Flow{Destination: ep("198.18.250.10")}}}
 	if z := s.postNATZones(nil); !strings.Contains(z.skipped, "no stored interfaces") {
 		t.Errorf("no network: %+v", z)
@@ -91,6 +94,7 @@ func TestNATIsSkippedWithoutTables(t *testing.T) {
 // fw01 reduced to its default router: a source only a default route reaches gives
 // no source zone, so NAT runs once with the ingress unknown.
 func TestNATWithOneRouterAndNoSourceZone(t *testing.T) {
+	t.Parallel()
 	n := fw01Network(t)
 	var ifs []resolve.InterfaceState
 	for _, i := range n.d.Interfaces {

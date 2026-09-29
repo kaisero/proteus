@@ -71,6 +71,7 @@ func slugs(r simulate.Run) string {
 // The port forward fw01 applied to real traffic: from transport to 198.18.250.10:8443,
 // translated to 198.18.10.100:443 and routed into server (spec §18.5 traffic test 1).
 func TestSimulateThePortForward(t *testing.T) {
+	t.Parallel()
 	r, res, err := run(t, fw01Env(t, "firewall-nat.xml"), "198.18.1.10", "198.18.250.10", 8443, map[string]string{"router": "default"})
 	if err != nil {
 		t.Fatal(err)
@@ -91,6 +92,7 @@ func TestSimulateThePortForward(t *testing.T) {
 }
 
 func TestSimulateIngress(t *testing.T) {
+	t.Parallel()
 	env := fw01Env(t, "firewall-nat.xml")
 	// Connected in client: t-dip-pool with its pool.
 	if r, res, _ := run(t, env, "198.18.11.5", "198.18.250.200", 443, nil); res.Rule.Name != "t-dip-pool" || r.Stages[0].Fidelity.Level() != "exact" {
@@ -117,6 +119,7 @@ func TestSimulateIngress(t *testing.T) {
 }
 
 func TestSimulateResolvesTheDynamicDestination(t *testing.T) {
+	t.Parallel()
 	env := fw01Env(t, "firewall-nat.xml")
 	env.Resolve = func(_ context.Context, name string) ([]netip.Addr, error) {
 		if name != "dns.google" {
@@ -131,6 +134,7 @@ func TestSimulateResolvesTheDynamicDestination(t *testing.T) {
 }
 
 func TestSimulatePBFAndChoices(t *testing.T) {
+	t.Parallel()
 	// firewall-routing.xml's PBF rule for branch-vpn, on fw01's tables.
 	env := fw01Env(t, "firewall-routing.xml")
 	r, res, _ := run(t, env, "10.20.5.5", "8.8.8.8", 443, map[string]string{"from-zone": "branch-vpn", "router": "default"})

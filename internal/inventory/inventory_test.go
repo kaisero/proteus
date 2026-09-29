@@ -33,6 +33,7 @@ devices:
 `
 
 func TestResolveAppliesDefaults(t *testing.T) {
+	t.Parallel()
 	inv, err := Parse(strings.NewReader(sample))
 	if err != nil {
 		t.Fatal(err)
@@ -49,6 +50,7 @@ func TestResolveAppliesDefaults(t *testing.T) {
 }
 
 func TestADeviceOverridesTheDefaults(t *testing.T) {
+	t.Parallel()
 	inv, _ := Parse(strings.NewReader(sample))
 	got, err := inv.Resolve("fw02", env(map[string]string{"FW02_PASSWORD": "secret-2"}))
 	if err != nil {
@@ -63,6 +65,7 @@ func TestADeviceOverridesTheDefaults(t *testing.T) {
 // With nothing said, TLS verification is off (spec S8), a call waits 60 s and 20
 // snapshots are kept.
 func TestBuiltInDefaults(t *testing.T) {
+	t.Parallel()
 	inv, err := Parse(strings.NewReader("version: 1\ndevices:\n  - name: a\n    host: h\n    username: u\n    password: p\n"))
 	if err != nil {
 		t.Fatal(err)
@@ -78,6 +81,7 @@ func TestBuiltInDefaults(t *testing.T) {
 
 // One account for every device: a literal password under defaults.
 func TestADefaultLiteralPassword(t *testing.T) {
+	t.Parallel()
 	inv, err := Parse(strings.NewReader("version: 1\ndefaults: {username: u, password: shared}\ndevices:\n  - {name: a, host: h}\n"))
 	if err != nil {
 		t.Fatal(err)
@@ -89,6 +93,7 @@ func TestADefaultLiteralPassword(t *testing.T) {
 }
 
 func TestResolveNeedsCredentials(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name, doc, device, want string
 	}{
@@ -98,6 +103,7 @@ func TestResolveNeedsCredentials(t *testing.T) {
 		{"no password", "version: 1\ndevices:\n  - {name: a, host: h, username: u}\n", "a", "password"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			inv, err := Parse(strings.NewReader(tc.doc))
 			if err != nil {
 				t.Fatal(err)
@@ -110,6 +116,7 @@ func TestResolveNeedsCredentials(t *testing.T) {
 }
 
 func TestParseRejects(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct{ name, doc string }{
 		{"wrong version", "version: 2\ndevices: []\n"},
 		{"unknown field", "version: 1\ndevices:\n  - name: a\n    host: h\n    hots: typo\n"},
@@ -121,6 +128,7 @@ func TestParseRejects(t *testing.T) {
 		{"not yaml", "version: [\n"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			if _, err := Parse(strings.NewReader(tc.doc)); err == nil {
 				t.Error("want an error")
 			}
@@ -129,6 +137,7 @@ func TestParseRejects(t *testing.T) {
 }
 
 func TestNamesAreInFileOrder(t *testing.T) {
+	t.Parallel()
 	inv, _ := Parse(strings.NewReader(sample))
 	if got := strings.Join(inv.Names(), ","); got != "fw01,fw02" {
 		t.Errorf("Names = %s", got)
@@ -137,6 +146,7 @@ func TestNamesAreInFileOrder(t *testing.T) {
 
 // The file holds credentials, so it must be private to its owner.
 func TestLoadRefusesAReadableFile(t *testing.T) {
+	t.Parallel()
 	path := filepath.Join(t.TempDir(), "config.yaml")
 	if err := os.WriteFile(path, []byte(sample), 0o644); err != nil {
 		t.Fatal(err)
@@ -164,6 +174,7 @@ func TestLoadRefusesAReadableFile(t *testing.T) {
 
 // The template is a working inventory, and it states the TLS choice explicitly.
 func TestTemplateParsesAndShowsTheTLSChoice(t *testing.T) {
+	t.Parallel()
 	inv, err := Parse(strings.NewReader(Template))
 	if err != nil {
 		t.Fatalf("the template does not parse: %v", err)
@@ -180,6 +191,7 @@ func TestTemplateParsesAndShowsTheTLSChoice(t *testing.T) {
 }
 
 func TestWriteTemplate(t *testing.T) {
+	t.Parallel()
 	path := filepath.Join(t.TempDir(), "sub", "config.yaml")
 	if err := WriteTemplate(path); err != nil {
 		t.Fatal(err)
@@ -200,6 +212,7 @@ func TestWriteTemplate(t *testing.T) {
 }
 
 func TestDefaultPath(t *testing.T) {
+	t.Parallel()
 	if got, _ := DefaultPath(env(map[string]string{"PROTEUS_CONFIG": "/x/y.yaml"})); got != "/x/y.yaml" {
 		t.Errorf("PROTEUS_CONFIG ignored: %s", got)
 	}
@@ -213,6 +226,7 @@ func TestDefaultPath(t *testing.T) {
 }
 
 func TestSelect(t *testing.T) {
+	t.Parallel()
 	inv, err := Parse(strings.NewReader(`version: 1
 devices:
   - {name: a, host: h, labels: {site: vienna, tier: edge}}
@@ -247,6 +261,7 @@ devices:
 }
 
 func TestParseAge(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		in   string
 		want time.Duration
@@ -262,6 +277,7 @@ func TestParseAge(t *testing.T) {
 		{"-2d", 0, false},
 	} {
 		t.Run(tc.in, func(t *testing.T) {
+			t.Parallel()
 			got, err := ParseAge(tc.in)
 			if (err == nil) != tc.ok || got != tc.want {
 				t.Errorf("ParseAge(%s) = %v, %v; want %v, ok %v", tc.in, got, err, tc.want, tc.ok)
@@ -271,6 +287,7 @@ func TestParseAge(t *testing.T) {
 }
 
 func TestAnalysisSettingsAreValidated(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct{ name, doc string }{
 		{"max_snapshot_age", "version: 1\ndefaults: {max_snapshot_age: soon}\ndevices: []\n"},
 		{"output", "version: 1\ndefaults: {output: yaml}\ndevices: []\n"},
@@ -278,6 +295,7 @@ func TestAnalysisSettingsAreValidated(t *testing.T) {
 		{"log_keep", "version: 1\ndefaults: {log_keep: -1}\ndevices: []\n"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			if _, err := Parse(strings.NewReader(tc.doc)); err == nil {
 				t.Errorf("want an error for %q", tc.doc)
 			}

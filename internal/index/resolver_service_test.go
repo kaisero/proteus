@@ -6,6 +6,7 @@ import "testing"
 // containment. The same question the address resolver answers with a trie, asked of a
 // different kind of value.
 func TestServiceResolverMatchesAPortInARange(t *testing.T) {
+	t.Parallel()
 	idx := indexOf(t, "../../testdata/config/firewall-urlcat.xml", "vsys1")
 
 	for _, q := range []string{"tcp/8050", "8050", "8050/tcp"} {
@@ -22,6 +23,7 @@ func TestServiceResolverMatchesAPortInARange(t *testing.T) {
 
 // The boundaries of a range are inside it, and one past either end is not.
 func TestServiceResolverRangeBoundaries(t *testing.T) {
+	t.Parallel()
 	idx := indexOf(t, "../../testdata/config/firewall-urlcat.xml", "vsys1")
 
 	for _, in := range []string{"tcp/8000", "tcp/8100", "tcp/9000"} {
@@ -39,6 +41,7 @@ func TestServiceResolverRangeBoundaries(t *testing.T) {
 // A protocol has to agree. The same port number on another protocol is a different
 // service.
 func TestServiceResolverRespectsTheProtocol(t *testing.T) {
+	t.Parallel()
 	idx := indexOf(t, "../../testdata/config/firewall-urlcat.xml", "vsys1")
 
 	if _, rep := idx.Candidates(Service, "udp/53"); len(rep.Hits) != 1 || rep.Hits[0].Name != "svc-dns" {
@@ -56,6 +59,7 @@ func TestServiceResolverRespectsTheProtocol(t *testing.T) {
 // A service group reaches its rule the same way an address group does, through the
 // closure.
 func TestServiceGroupReachesItsRule(t *testing.T) {
+	t.Parallel()
 	idx := indexOf(t, "../../testdata/config/firewall-urlcat.xml", "vsys1")
 
 	rules, rep := idx.Candidates(Service, "tcp/8006")
@@ -76,6 +80,7 @@ func TestServiceGroupReachesItsRule(t *testing.T) {
 // A value that is not a port is not this resolver's business, and must not be
 // reported as a service.
 func TestServiceResolverIgnoresNonPorts(t *testing.T) {
+	t.Parallel()
 	idx := indexOf(t, "../../testdata/config/firewall-urlcat.xml", "vsys1")
 
 	for _, q := range []string{"tcp/notaport", "70000", "tcp/70000", "web-browsing"} {
@@ -88,6 +93,7 @@ func TestServiceResolverIgnoresNonPorts(t *testing.T) {
 // A port no service covers reaches only the rules whose service is any, and that is a
 // complete answer rather than an incomplete one.
 func TestServiceResolverPortNothingCovers(t *testing.T) {
+	t.Parallel()
 	idx := indexOf(t, "../../testdata/config/firewall-urlcat.xml", "vsys1")
 
 	_, rep := idx.Candidates(Service, "tcp/12345")
@@ -101,6 +107,7 @@ func TestServiceResolverPortNothingCovers(t *testing.T) {
 
 // Searching finds a service by a fragment of its port specification.
 func TestServiceResolverSearch(t *testing.T) {
+	t.Parallel()
 	idx := indexOf(t, "../../testdata/config/firewall-urlcat.xml", "vsys1")
 
 	hits := idx.SearchValues("8000-8100")
@@ -112,6 +119,7 @@ func TestServiceResolverSearch(t *testing.T) {
 // A port specification the parser cannot read contributes no range, and the rest of
 // the same object still works. A service with no protocol at all contributes nothing.
 func TestServiceResolverSkipsUnreadablePorts(t *testing.T) {
+	t.Parallel()
 	idx := indexOf(t, "../../testdata/config/firewall-urlcat-edge.xml", "vsys1")
 
 	// Reversed, non-numeric and out-of-range specifications yield no service.

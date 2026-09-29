@@ -6,6 +6,7 @@ import (
 )
 
 func TestParseTargetConfigScope(t *testing.T) {
+	t.Parallel()
 	got, err := ParseTarget("#config/shared/address/entry/@name")
 	if err != nil {
 		t.Fatalf("ParseTarget: %v", err)
@@ -16,6 +17,7 @@ func TestParseTargetConfigScope(t *testing.T) {
 }
 
 func TestParseTargetPredefined(t *testing.T) {
+	t.Parallel()
 	got, err := ParseTarget("##/predefined/region/entry/@name")
 	if err != nil {
 		t.Fatalf("ParseTarget: %v", err)
@@ -26,6 +28,7 @@ func TestParseTargetPredefined(t *testing.T) {
 }
 
 func TestParseTargetStripsPredicate(t *testing.T) {
+	t.Parallel()
 	got, err := ParseTarget("#config/shared/address/entry[not(ip-wildcard)]/@name")
 	if err != nil {
 		t.Fatalf("ParseTarget: %v", err)
@@ -39,12 +42,14 @@ func TestParseTargetStripsPredicate(t *testing.T) {
 }
 
 func TestParseTargetRejectsLiteral(t *testing.T) {
+	t.Parallel()
 	if _, err := ParseTarget("string('vlan')"); err == nil {
 		t.Error("a string literal is not a reference target; want an error")
 	}
 }
 
 func TestReferencesFromRuleFields(t *testing.T) {
+	t.Parallel()
 	root := load(t)
 	byField := map[string][]string{}
 	for _, fr := range References(securityRule(root)) {
@@ -62,6 +67,7 @@ func TestReferencesFromRuleFields(t *testing.T) {
 
 // Almost every real target sits inside a <validate>. Both forms must work.
 func TestReferencesInsideValidate(t *testing.T) {
+	t.Parallel()
 	const doc = `<sequence name="config">
 	  <array name="thing">
 	    <sequence name="entry">
@@ -97,6 +103,7 @@ func TestReferencesInsideValidate(t *testing.T) {
 }
 
 func TestClassifyTargetForms(t *testing.T) {
+	t.Parallel()
 	for raw, want := range map[string]TargetForm{
 		"#config/shared/address/entry/@name":                       FormObject,
 		"##/predefined/region/entry/@name":                         FormPredefined,
@@ -115,6 +122,7 @@ func TestClassifyTargetForms(t *testing.T) {
 // 36 of the targets in the 11.2 firewall schema begin substring(, which a
 // leading-string( check misses. Each one accepted becomes a false index edge.
 func TestParseTargetRejectsEveryExpression(t *testing.T) {
+	t.Parallel()
 	for _, raw := range []string{
 		"string('vlan')",
 		"substring(string('tunnel'), 1, 6*(not('$tunip'='')))",
@@ -127,6 +135,7 @@ func TestParseTargetRejectsEveryExpression(t *testing.T) {
 }
 
 func TestParseTargetRejectsRuleFieldReference(t *testing.T) {
+	t.Parallel()
 	// This names another rule's field, not an object, so it is not an edge.
 	if _, err := ParseTarget("##/shared/pre-rulebase/*/rules/entry/from/member"); err == nil {
 		t.Error("a wildcard rule-field target must not parse as an object reference")
@@ -135,6 +144,7 @@ func TestParseTargetRejectsRuleFieldReference(t *testing.T) {
 
 // A field usually has several candidate kinds, so References groups by field.
 func TestReferencesGroupCandidatesByField(t *testing.T) {
+	t.Parallel()
 	root := load(t)
 	got := References(securityRule(root))
 

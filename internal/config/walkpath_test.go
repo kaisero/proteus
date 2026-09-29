@@ -38,6 +38,7 @@ func testConfigs(t testing.TB) []string {
 // every shape, so the old edge set is a subset of the new one — with the trailing
 // "/member" trimmed, which is the only naming difference between them.
 func TestWalkPathsLosesNothingWalkFound(t *testing.T) {
+	t.Parallel()
 	for _, p := range testConfigs(t) {
 		c, _, err := Load(p)
 		if err != nil {
@@ -59,6 +60,7 @@ func TestWalkPathsLosesNothingWalkFound(t *testing.T) {
 // value-bearing element's SchemaPath is one of them. Any disagreement means the
 // schema paths and the configuration paths have drifted apart.
 func TestWalkPathsAgreesWithAFullPathOracle(t *testing.T) {
+	t.Parallel()
 	for _, p := range testConfigs(t) {
 		c, _, err := Load(p)
 		if err != nil {
@@ -132,6 +134,7 @@ func TestWalkPathsAgreesWithAFullPathOracle(t *testing.T) {
 // The leaves a security rule declares. 16 of these 30 were reachable before
 // WalkPaths: the three scalars and everything under profile-setting were not.
 func TestSecurityRuleDeclaresThirtyReferenceLeaves(t *testing.T) {
+	t.Parallel()
 	c, _, err := Load("../../testdata/config/firewall-refpaths.xml")
 	if err != nil {
 		t.Fatal(err)
@@ -171,6 +174,7 @@ func TestSecurityRuleDeclaresThirtyReferenceLeaves(t *testing.T) {
 
 // The edges those leaves actually yield, and where each one is attributed.
 func TestWalkPathsFindsNestedAndScalarEdges(t *testing.T) {
+	t.Parallel()
 	c, _, err := Load("../../testdata/config/firewall-refpaths.xml")
 	if err != nil {
 		t.Fatal(err)
@@ -200,6 +204,7 @@ func TestWalkPathsFindsNestedAndScalarEdges(t *testing.T) {
 }
 
 func TestFieldNameDropsOnlyATrailingMember(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		in   []string
 		want string
@@ -222,6 +227,7 @@ func slicesContains(s []string, v string) bool {
 // The callback stops the walk, and it must stop at once: the descent is
 // recursive, so a stop has to unwind through the trie as well as the tree.
 func TestWalkPathsStopsWhenTheCallbackSaysSo(t *testing.T) {
+	t.Parallel()
 	c, _, err := Load("../../testdata/config/firewall-refpaths.xml")
 	if err != nil {
 		t.Fatal(err)
@@ -246,6 +252,7 @@ func TestWalkPathsStopsWhenTheCallbackSaysSo(t *testing.T) {
 // A file whose version the schema does not cover still walks; it simply matches
 // no entry array and yields nothing.
 func TestWalkPathsOnAConfigWithNoKnownArrays(t *testing.T) {
+	t.Parallel()
 	c, _, err := Load("../../testdata/config/firewall-shadow.xml")
 	if err != nil {
 		t.Skip(err)

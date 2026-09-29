@@ -3,6 +3,7 @@ package resolve
 import "testing"
 
 func TestTagFilterSingleTag(t *testing.T) {
+	t.Parallel()
 	f, err := ParseTagFilter("'corp-location'")
 	if err != nil {
 		t.Fatalf("ParseTagFilter: %v", err)
@@ -19,6 +20,7 @@ func TestTagFilterSingleTag(t *testing.T) {
 }
 
 func TestTagFilterAnd(t *testing.T) {
+	t.Parallel()
 	f, err := ParseTagFilter("'a' and 'b'")
 	if err != nil {
 		t.Fatalf("ParseTagFilter: %v", err)
@@ -32,6 +34,7 @@ func TestTagFilterAnd(t *testing.T) {
 }
 
 func TestTagFilterOr(t *testing.T) {
+	t.Parallel()
 	f, err := ParseTagFilter("'a' or 'b'")
 	if err != nil {
 		t.Fatalf("ParseTagFilter: %v", err)
@@ -45,6 +48,7 @@ func TestTagFilterOr(t *testing.T) {
 }
 
 func TestTagFilterNot(t *testing.T) {
+	t.Parallel()
 	f, err := ParseTagFilter("'a' and not 'b'")
 	if err != nil {
 		t.Fatalf("ParseTagFilter: %v", err)
@@ -59,6 +63,7 @@ func TestTagFilterNot(t *testing.T) {
 
 // and binds tighter than or, as in PAN-OS.
 func TestTagFilterPrecedence(t *testing.T) {
+	t.Parallel()
 	f, err := ParseTagFilter("'a' and 'b' or 'c'")
 	if err != nil {
 		t.Fatalf("ParseTagFilter: %v", err)
@@ -80,6 +85,7 @@ func TestTagFilterPrecedence(t *testing.T) {
 }
 
 func TestTagFilterParentheses(t *testing.T) {
+	t.Parallel()
 	f, err := ParseTagFilter("('a' or 'b') and 'c'")
 	if err != nil {
 		t.Fatalf("ParseTagFilter: %v", err)
@@ -93,6 +99,7 @@ func TestTagFilterParentheses(t *testing.T) {
 }
 
 func TestTagFilterTags(t *testing.T) {
+	t.Parallel()
 	f, _ := ParseTagFilter("'a' and not 'b' or 'c'")
 	got := f.Tags()
 	want := map[string]bool{"a": true, "b": true, "c": true}
@@ -107,6 +114,7 @@ func TestTagFilterTags(t *testing.T) {
 }
 
 func TestTagFilterRejectsGarbage(t *testing.T) {
+	t.Parallel()
 	for _, bad := range []string{"", "and", "'a' and", "'a' 'b'", "('a'", "'a')", "$unquoted"} {
 		if _, err := ParseTagFilter(bad); err == nil {
 			t.Errorf("ParseTagFilter(%q) must fail", bad)
@@ -117,6 +125,7 @@ func TestTagFilterRejectsGarbage(t *testing.T) {
 // A nil filter matches nothing and names no tags, and a parsed one prints as
 // written.
 func TestTagFilterNilAndString(t *testing.T) {
+	t.Parallel()
 	var none *TagFilter
 	if none.Match([]string{"a"}) {
 		t.Error("a nil filter must match nothing")

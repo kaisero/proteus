@@ -12,6 +12,7 @@ import (
 // Panorama 11.2.7-h1 across sibling device groups; sibling vsys on one firewall
 // stand in the same relation.
 func TestDynamicGroupResolvesPerScope(t *testing.T) {
+	t.Parallel()
 	tg, err := TargetFor(vsysLab(t), "localhost.localdomain", "vsys1")
 	if err != nil {
 		t.Fatalf("TargetFor: %v", err)
@@ -34,6 +35,7 @@ func TestDynamicGroupResolvesPerScope(t *testing.T) {
 // The sibling vsys holds the Graz objects, so the same group resolves differently
 // there. This is the case a global index would get wrong.
 func TestDynamicGroupDiffersInASibling(t *testing.T) {
+	t.Parallel()
 	got, err := GroupInScope(vsysLab(t), config.Scope{Sort: config.ScopeVsys, Name: "vsys2"}, "corp-location")
 	if err != nil {
 		t.Fatalf("GroupInScope: %v", err)
@@ -46,6 +48,7 @@ func TestDynamicGroupDiffersInASibling(t *testing.T) {
 // A vsys with no tagged objects of its own resolves the same group to nothing,
 // which is the honest answer rather than the sibling's members.
 func TestDynamicGroupIsEmptyWhereNothingIsTagged(t *testing.T) {
+	t.Parallel()
 	got, err := GroupInScope(vsysLab(t), config.Scope{Sort: config.ScopeVsys, Name: "vsys3"}, "corp-location")
 	if err != nil {
 		t.Fatalf("GroupInScope: %v", err)
@@ -56,6 +59,7 @@ func TestDynamicGroupIsEmptyWhereNothingIsTagged(t *testing.T) {
 }
 
 func TestResolveGroupRejectsAnUnknownName(t *testing.T) {
+	t.Parallel()
 	tg, _ := TargetFor(vsysLab(t), "localhost.localdomain", "vsys1")
 	if _, err := tg.ResolveGroup("no-such-group"); err == nil {
 		t.Error("an unknown group must be an error")
@@ -65,6 +69,7 @@ func TestResolveGroupRejectsAnUnknownName(t *testing.T) {
 // A filter PAN-OS accepts but this parser does not must yield nothing and say so,
 // rather than guess a membership.
 func TestUnparseableFilterIsReported(t *testing.T) {
+	t.Parallel()
 	cfg := loadT(t, "../../testdata/config/firewall-badfilter.xml")
 	got, err := GroupInScope(cfg, config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}, "g-bad")
 	if err != nil {
@@ -80,6 +85,7 @@ func TestUnparseableFilterIsReported(t *testing.T) {
 
 // A boolean filter resolves, not just a single tag.
 func TestBooleanFilterResolves(t *testing.T) {
+	t.Parallel()
 	cfg := loadT(t, "../../testdata/config/firewall-badfilter.xml")
 	sc := config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}
 	and, err := GroupInScope(cfg, sc, "g-and")
@@ -100,6 +106,7 @@ func TestBooleanFilterResolves(t *testing.T) {
 
 // A static group reports its member list, not a filter.
 func TestStaticGroupResolvesToItsMembers(t *testing.T) {
+	t.Parallel()
 	tg, err := TargetFor(fwLab(t), "localhost.localdomain", "vsys1")
 	if err != nil {
 		t.Fatal(err)

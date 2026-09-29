@@ -23,6 +23,7 @@ func vsysLab(t *testing.T) *config.Config {
 }
 
 func TestVsysesFromAFirewall(t *testing.T) {
+	t.Parallel()
 	got := Vsyses(fwLab(t))
 	if len(got) != 2 || got[0] != "vsys1" || got[1] != "vsys2" {
 		t.Errorf("got %v, want [vsys1 vsys2]", got)
@@ -32,6 +33,7 @@ func TestVsysesFromAFirewall(t *testing.T) {
 // A firewall's own rules sit in the plain rulebase, not pre or post, and they
 // evaluate after any pushed pre-rules and before any pushed post-rules.
 func TestFirewallRuleOrderIncludesTheLocalLayer(t *testing.T) {
+	t.Parallel()
 	tgs := Targets(fwLab(t))
 	if len(tgs) != 2 {
 		t.Fatalf("got %d targets, want one per vsys", len(tgs))
@@ -80,6 +82,7 @@ func TestFirewallRuleOrderIncludesTheLocalLayer(t *testing.T) {
 
 // One vsys must not see another's rules or objects.
 func TestVsysesAreIsolated(t *testing.T) {
+	t.Parallel()
 	tgs := Targets(fwLab(t))
 	for _, tg := range tgs {
 		rules := tg.Rules(Security)

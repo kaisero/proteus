@@ -9,6 +9,7 @@ import (
 )
 
 func TestLoadBareConfig(t *testing.T) {
+	t.Parallel()
 	cfg, rep, err := Load("../../testdata/config/firewall-multivsys.xml")
 	if err != nil {
 		t.Fatalf("Load: %v", err)
@@ -24,6 +25,7 @@ func TestLoadBareConfig(t *testing.T) {
 
 // The same configuration arrives wrapped when it comes from the XML API.
 func TestLoadWrappedConfig(t *testing.T) {
+	t.Parallel()
 	cfg, _, err := Load("../../testdata/config/firewall-multivsys-wrapped.xml")
 	if err != nil {
 		t.Fatalf("Load: %v", err)
@@ -39,6 +41,7 @@ func TestLoadWrappedConfig(t *testing.T) {
 // A Panorama configuration is refused by name, not loaded against the wrong
 // schema. proteus reads each firewall's own configuration.
 func TestLoadRejectsPanorama(t *testing.T) {
+	t.Parallel()
 	_, _, err := Load("../../testdata/config/panorama-rejected.xml")
 	if err == nil {
 		t.Fatal("a Panorama configuration must be an error")
@@ -49,6 +52,7 @@ func TestLoadRejectsPanorama(t *testing.T) {
 }
 
 func TestLoadReadsAFirewall(t *testing.T) {
+	t.Parallel()
 	cfg, _, err := Load("../../testdata/config/firewall-lab.xml")
 	if err != nil {
 		t.Fatalf("Load: %v", err)
@@ -61,6 +65,7 @@ func TestLoadReadsAFirewall(t *testing.T) {
 // A configuration newer than every digest is read with the highest one below it,
 // and the load says so. Spec §9: refusing blocks an estate on one upgrade.
 func TestLoadUsesTheNearestLowerDigest(t *testing.T) {
+	t.Parallel()
 	cfg, rep, err := Load("../../testdata/config/firewall-version-12.2.xml")
 	if err != nil {
 		t.Fatalf("Load: %v", err)
@@ -83,6 +88,7 @@ func TestLoadUsesTheNearestLowerDigest(t *testing.T) {
 
 // A configuration older than every digest is read with the lowest one.
 func TestLoadUsesTheLowestDigestWhenNoneIsLower(t *testing.T) {
+	t.Parallel()
 	cfg, rep, err := Load("../../testdata/config/unsupported-version.xml")
 	if err != nil {
 		t.Fatalf("Load: %v", err)
@@ -97,6 +103,7 @@ func TestLoadUsesTheLowestDigestWhenNoneIsLower(t *testing.T) {
 
 // An exact match has no gap.
 func TestLoadWithAnExactDigestHasNoGap(t *testing.T) {
+	t.Parallel()
 	cfg, rep, err := Load("../../testdata/config/firewall-lab.xml")
 	if err != nil {
 		t.Fatal(err)
@@ -111,6 +118,7 @@ func TestLoadWithAnExactDigestHasNoGap(t *testing.T) {
 
 // A version that is not a PAN-OS version cannot be matched to anything.
 func TestLoadRejectsAMalformedVersion(t *testing.T) {
+	t.Parallel()
 	path := filepath.Join(t.TempDir(), "bad.xml")
 	if err := os.WriteFile(path, []byte(`<config version="eleven"><devices/></config>`), 0o600); err != nil {
 		t.Fatal(err)
@@ -121,6 +129,7 @@ func TestLoadRejectsAMalformedVersion(t *testing.T) {
 }
 
 func TestNearestDigest(t *testing.T) {
+	t.Parallel()
 	have := []string{"10.1.0", "11.2.0"}
 	for in, want := range map[string]string{
 		"11.2.0": "11.2.0",
@@ -146,6 +155,7 @@ func TestNearestDigest(t *testing.T) {
 }
 
 func TestDigestVersionsComeFromTheEmbeddedFiles(t *testing.T) {
+	t.Parallel()
 	if got := digestVersions(digestFS); len(got) != 1 || got[0] != "11.2.0" {
 		t.Errorf("digestVersions = %v, want [11.2.0]", got)
 	}
@@ -154,6 +164,7 @@ func TestDigestVersionsComeFromTheEmbeddedFiles(t *testing.T) {
 // Only firewall digests with a well-formed version count, sorted by version rather
 // than by name: 9.1.0 sorts after 11.2.0 as a string.
 func TestDigestVersionsFilterAndSort(t *testing.T) {
+	t.Parallel()
 	fsys := fstest.MapFS{
 		"schemadigest/panos-11.2.0-firewall.json.gz": {},
 		"schemadigest/panos-9.1.0-firewall.json.gz":  {},
@@ -170,30 +181,35 @@ func TestDigestVersionsFilterAndSort(t *testing.T) {
 }
 
 func TestNearestDigestSkipsAMalformedEntry(t *testing.T) {
+	t.Parallel()
 	if got, err := nearestDigest("11.2.0", []string{"bad", "11.2.0"}); err != nil || got != "11.2.0" {
 		t.Errorf("got %q, %v", got, err)
 	}
 }
 
 func TestLoadDigestReportsAMissingFile(t *testing.T) {
+	t.Parallel()
 	if _, err := loadDigest("0.0.1"); err == nil || !strings.Contains(err.Error(), "0.0.1") {
 		t.Errorf("want an error naming the version, got %v", err)
 	}
 }
 
 func TestLoadRejectsMissingFile(t *testing.T) {
+	t.Parallel()
 	if _, _, err := Load("../../testdata/config/does-not-exist.xml"); err == nil {
 		t.Fatal("want an error for a missing file")
 	}
 }
 
 func TestLoadRejectsAFileWithNoConfigElement(t *testing.T) {
+	t.Parallel()
 	if _, _, err := Load("../../testdata/schema/schema-trimmed.xml"); err == nil {
 		t.Fatal("want an error for a file with no <config> element")
 	}
 }
 
 func TestConfigAccessors(t *testing.T) {
+	t.Parallel()
 	const path = "../../testdata/config/firewall-multivsys.xml"
 	cfg, _, err := Load(path)
 	if err != nil {
@@ -217,6 +233,7 @@ func TestConfigAccessors(t *testing.T) {
 // The schema is decoded once per process and shared, so two loads of the same
 // version get the same schema.
 func TestSchemaIsSharedBetweenLoads(t *testing.T) {
+	t.Parallel()
 	a, _, err := Load("../../testdata/config/firewall-multivsys.xml")
 	if err != nil {
 		t.Fatal(err)
@@ -235,6 +252,7 @@ func TestSchemaIsSharedBetweenLoads(t *testing.T) {
 
 // A <config> element without a version cannot be matched to a schema.
 func TestLoadRejectsAConfigWithNoVersion(t *testing.T) {
+	t.Parallel()
 	path := filepath.Join(t.TempDir(), "noversion.xml")
 	if err := os.WriteFile(path, []byte("<config><devices/></config>"), 0o600); err != nil {
 		t.Fatal(err)

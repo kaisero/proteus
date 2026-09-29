@@ -67,6 +67,7 @@ func lab() *Topology {
 }
 
 func TestPlaceConnected(t *testing.T) {
+	t.Parallel()
 	pl, err := lab().Place(ip("198.18.10.5"))
 	if err != nil || pl.How != PlacedConnected || pl.Port.Device != "fw01" || pl.Port.Interface != "ethernet1/2" ||
 		pl.Port.Zone != "server" || len(pl.Ties) != 0 {
@@ -76,6 +77,7 @@ func TestPlaceConnected(t *testing.T) {
 
 // 198.18.100.0/24 is connected on both lab devices: a tie the admin resolves.
 func TestPlaceTie(t *testing.T) {
+	t.Parallel()
 	pl, err := lab().Place(ip("198.18.100.50"))
 	if err != nil || len(pl.Ties) != 2 || pl.Ties[0].Device != "fw01" || pl.Ties[1].Device != "fw02" {
 		t.Errorf("placement = %+v, %v", pl, err)
@@ -85,6 +87,7 @@ func TestPlaceTie(t *testing.T) {
 // 198.18.20.5 is connected nowhere. fw02's 198.18.0.0/15 leads to fw01, but fw01
 // reaches it only by its default route, so the walk stops and fw02 is the start.
 func TestPlaceRouted(t *testing.T) {
+	t.Parallel()
 	pl, err := lab().Place(ip("198.18.20.5"))
 	if err != nil || pl.How != PlacedRouted || pl.Port.Device != "fw02" || pl.Port.Interface != "vlan.32" ||
 		pl.Via.String() != "198.18.0.0/15" {
@@ -94,6 +97,7 @@ func TestPlaceRouted(t *testing.T) {
 
 // A transit node's route leads to the node nearer the source: the start is there.
 func TestPlaceWalksTowardTheSource(t *testing.T) {
+	t.Parallel()
 	topo := NewTopology([]simulate.DeviceData{
 		dev("edge", []resolve.InterfaceState{iface("e1", "out", "r", "10.0.0.1/30")},
 			route("r", "172.16.0.0/12", "e1", "10.0.0.2")),
@@ -108,12 +112,14 @@ func TestPlaceWalksTowardTheSource(t *testing.T) {
 }
 
 func TestPlaceDefaultOnly(t *testing.T) {
+	t.Parallel()
 	if _, err := lab().Place(ip("8.8.8.8")); !errors.Is(err, ErrUnplaced) {
 		t.Errorf("err = %v", err)
 	}
 }
 
 func TestPlaceRoutedTie(t *testing.T) {
+	t.Parallel()
 	topo := NewTopology([]simulate.DeviceData{
 		dev("a", []resolve.InterfaceState{iface("e1", "z", "r", "10.0.0.1/30")}, route("r", "172.16.0.0/16", "e1", "10.0.0.2")),
 		dev("b", []resolve.InterfaceState{iface("e1", "z", "r", "10.1.0.1/30")}, route("r", "172.16.0.0/16", "e1", "10.1.0.2")),
@@ -126,6 +132,7 @@ func TestPlaceRoutedTie(t *testing.T) {
 
 // ECMP entries apart in the table come back grouped and ordered by next hop.
 func TestLookupGroupsECMP(t *testing.T) {
+	t.Parallel()
 	topo := NewTopology([]simulate.DeviceData{dev("a", []resolve.InterfaceState{iface("e1", "z", "r", "10.0.0.1/24")},
 		route("r", "10.50.0.0/16", "e1", "10.0.0.9"),
 		route("r", "10.0.0.0/24", "e1", "0.0.0.0"),
@@ -151,6 +158,7 @@ func TestLookupGroupsECMP(t *testing.T) {
 
 // Secondary and DHCP addresses own their address too; a /31 link works.
 func TestOwnersAndPeers(t *testing.T) {
+	t.Parallel()
 	topo := NewTopology([]simulate.DeviceData{
 		dev("a", []resolve.InterfaceState{iface("e1", "z", "r", "10.0.0.0/31", "10.5.0.1/24", "203.0.113.5/29")}),
 		dev("b", []resolve.InterfaceState{iface("e1", "z", "r", "10.0.0.1/31"), iface("e2", "z", "r", "2001:db8::1/64")}),
@@ -172,6 +180,7 @@ func TestOwnersAndPeers(t *testing.T) {
 }
 
 func TestInterfaceWithoutAddress(t *testing.T) {
+	t.Parallel()
 	p, ok := lab().Interface("fw01", "tunnel.1")
 	if !ok || p.Zone != "prisma" || p.Addr.IsValid() {
 		t.Errorf("tunnel.1 = %+v", p)
@@ -185,6 +194,7 @@ func TestInterfaceWithoutAddress(t *testing.T) {
 }
 
 func TestStart(t *testing.T) {
+	t.Parallel()
 	topo := lab()
 	var ce *simulate.ChoiceError
 	if _, _, err := topo.Start("fw01", "", ip("8.8.8.8")); !errors.As(err, &ce) || !strings.Contains(err.Error(), "default, lte") {
@@ -208,6 +218,7 @@ func TestStart(t *testing.T) {
 }
 
 func TestForward(t *testing.T) {
+	t.Parallel()
 	topo := NewTopology([]simulate.DeviceData{dev("a",
 		[]resolve.InterfaceState{iface("e1", "out", "r", "10.0.0.1/24"), iface("e2", "in", "r", "10.9.0.1/24")},
 		route("r", "0.0.0.0/0", "e1", "10.0.0.2"),

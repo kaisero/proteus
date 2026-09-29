@@ -40,6 +40,7 @@ func pair(t *testing.T, passiveHA, activeHA string) (string, ActiveOptions) {
 func hostname(r Result) string { return r.System.Hostname }
 
 func TestRunActiveFollowsAConfirmedPeer(t *testing.T) {
+	t.Parallel()
 	host, opts := pair(t,
 		ha("Active-Passive", "passive", "A", "active", "B", "192.0.2.2/24"),
 		ha("Active-Passive", "active", "B", "passive", "A", "192.0.2.1"))
@@ -50,6 +51,7 @@ func TestRunActiveFollowsAConfirmedPeer(t *testing.T) {
 }
 
 func TestRunActiveStaysWhenInDoubt(t *testing.T) {
+	t.Parallel()
 	for name, tc := range map[string]struct{ passive, active, note string }{
 		"peer not active": {ha("active-passive", "passive", "A", "suspended", "B", "192.0.2.2"), "", `peer is "suspended"`},
 		"peer disagrees": {
@@ -60,6 +62,7 @@ func TestRunActiveStaysWhenInDoubt(t *testing.T) {
 		"suspended":     {ha("active-passive", "suspended", "A", "active", "B", "192.0.2.2"), "", `HA state "suspended"`},
 	} {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 			host, opts := pair(t, tc.passive, tc.active)
 			res, err := RunActive(context.Background(), target(host), []Document{SystemInfo}, opts, nil)
 			if err != nil || hostname(res) != "passive" || res.FetchedFrom != "" ||
@@ -71,6 +74,7 @@ func TestRunActiveStaysWhenInDoubt(t *testing.T) {
 }
 
 func TestRunActiveWithoutHA(t *testing.T) {
+	t.Parallel()
 	d := member("alone")
 	d.Ops[haStateCmd] = fakepanos.Success("<enabled>no</enabled>")
 	res, err := RunActive(context.Background(), target(d.Start(t)), []Document{SystemInfo}, ActiveOptions{}, nil)
@@ -92,6 +96,7 @@ func TestRunActiveWithoutHA(t *testing.T) {
 }
 
 func TestRunActivePeerUnreachable(t *testing.T) {
+	t.Parallel()
 	d := member("passive")
 	d.Ops[haStateCmd] = ha("active-passive", "passive", "A", "active", "B", "192.0.2.2")
 	_, err := RunActive(context.Background(), target(d.Start(t)), []Document{SystemInfo},
@@ -106,6 +111,7 @@ func TestRunActivePeerUnreachable(t *testing.T) {
 
 // ha_peer in the inventory wins over the reported address.
 func TestRunActiveUsesTheInventoryPeer(t *testing.T) {
+	t.Parallel()
 	p, a := member("passive"), member("active")
 	p.Ops[haStateCmd] = ha("active-passive", "passive", "A", "active", "B", "192.0.2.2")
 	a.Ops[haStateCmd] = ha("active-passive", "active", "B", "passive", "A", "192.0.2.1")

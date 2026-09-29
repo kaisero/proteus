@@ -18,6 +18,7 @@ func siblingIndex(t *testing.T, vsys string) *Index {
 // The name means different things on each side — both-sides is 10.1.0.0/24 in
 // vsys1 and 10.2.0.0/24 in vsys2 — so a merged answer is wrong, not incomplete.
 func TestNoGlobalIndex(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct{ vsys, wantRule, notRule string }{
 		{"vsys1", "left-rule", "right-rule"},
 		{"vsys2", "right-rule", "left-rule"},
@@ -38,6 +39,7 @@ func TestNoGlobalIndex(t *testing.T) {
 
 // A scope still inherits shared, which is why the filter cannot simply be equality.
 func TestAnIndexSeesSharedEdges(t *testing.T) {
+	t.Parallel()
 	for _, vsys := range []string{"vsys1", "vsys2"} {
 		refs := siblingIndex(t, vsys).Refs("everywhere")
 		if len(refs) != 1 {
@@ -52,6 +54,7 @@ func TestAnIndexSeesSharedEdges(t *testing.T) {
 
 // The file is read once however many scopes ask for it.
 func TestTheEdgeListIsReadOnce(t *testing.T) {
+	t.Parallel()
 	cfg, _, err := config.Load("../../testdata/config/firewall-siblings.xml")
 	if err != nil {
 		t.Fatal(err)

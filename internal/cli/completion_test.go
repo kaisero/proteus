@@ -28,6 +28,7 @@ func (c *cli) complete(args ...string) []string {
 }
 
 func TestCompletionOffersDeviceNamesAndFixedValues(t *testing.T) {
+	t.Parallel()
 	c := newCLI(t)
 	c.inventory(inventoryFor("a.example", "b.example"))
 	for _, tc := range []struct {
@@ -45,6 +46,7 @@ func TestCompletionOffersDeviceNamesAndFixedValues(t *testing.T) {
 		{"--log-level", []string{"fetch", "--log-level", ""}, "error,warn,info,debug"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			if got := strings.Join(c.complete(tc.args...), ","); got != tc.want {
 				t.Errorf("got %q, want %q", got, tc.want)
 			}
@@ -54,6 +56,7 @@ func TestCompletionOffersDeviceNamesAndFixedValues(t *testing.T) {
 
 // Without an inventory there is nothing to offer, and completion still succeeds.
 func TestCompletionWithoutAnInventory(t *testing.T) {
+	t.Parallel()
 	c := newCLI(t)
 	if got := c.complete("fetch", ""); len(got) != 0 {
 		t.Errorf("got %v", got)

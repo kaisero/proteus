@@ -17,6 +17,7 @@ func opFixture(t *testing.T, name string) []byte {
 // The ifnet section carries interface, zone, vsys, router and address together. It is
 // what the configuration-derived reader has to infer from three separate places.
 func TestReadInterfaceStates(t *testing.T) {
+	t.Parallel()
 	got, err := ReadInterfaceStates(opFixture(t, "fw01-interface-all.xml"))
 	if err != nil {
 		t.Fatal(err)
@@ -65,6 +66,7 @@ func TestReadInterfaceStates(t *testing.T) {
 // One table per router per address family. The lab firewall has two routers whose
 // space overlaps, which is the case that makes a single answer impossible.
 func TestReadFIBRoutes(t *testing.T) {
+	t.Parallel()
 	got, err := ReadFIBRoutes(opFixture(t, "fw01-advanced-routing-fib.xml"))
 	if err != nil {
 		t.Fatal(err)
@@ -103,6 +105,7 @@ func TestReadFIBRoutes(t *testing.T) {
 
 // A destination is masked, so a route written as an address keeps a usable prefix.
 func TestReadFIBRoutesMasksDestinations(t *testing.T) {
+	t.Parallel()
 	got, err := ReadFIBRoutes(opFixture(t, "fw01-advanced-routing-fib.xml"))
 	if err != nil {
 		t.Fatal(err)
@@ -117,6 +120,7 @@ func TestReadFIBRoutesMasksDestinations(t *testing.T) {
 // The CLI prints a bare result with op-command-xml-output on, while the API wraps it.
 // Both have to load.
 func TestReadOpDataAcceptsBothEnvelopes(t *testing.T) {
+	t.Parallel()
 	wrapped := opFixture(t, "fw01-interface-all.xml")
 	if _, err := ReadInterfaceStates(wrapped); err != nil {
 		t.Fatalf("wrapped: %v", err)
@@ -134,6 +138,7 @@ func TestReadOpDataAcceptsBothEnvelopes(t *testing.T) {
 
 // The wrong document, or a failed command, is reported rather than read as empty.
 func TestReadOpDataRejectsWrongInput(t *testing.T) {
+	t.Parallel()
 	fib := opFixture(t, "fw01-advanced-routing-fib.xml")
 	if _, err := ReadInterfaceStates(fib); err == nil {
 		t.Error("a fib was accepted as an interface list")
@@ -152,6 +157,7 @@ func TestReadOpDataRejectsWrongInput(t *testing.T) {
 
 // An older release names a virtual router rather than a logical one.
 func TestRouterOfBothSpellings(t *testing.T) {
+	t.Parallel()
 	for in, want := range map[string]string{
 		"lr:default": "default", "vr:trust": "trust", "N/A": "", "": "",
 	} {
@@ -164,6 +170,7 @@ func TestRouterOfBothSpellings(t *testing.T) {
 // A route whose destination cannot be read is skipped rather than failing the whole
 // document: one malformed entry must not lose the other twenty-four.
 func TestReadFIBRoutesSkipsUnreadableEntries(t *testing.T) {
+	t.Parallel()
 	body := []byte(`<result><fibs>
 	  <entry><vr>default</vr><type>0</type><entries>
 	    <entry><dst>not-a-prefix</dst><interface>ethernet1/1</interface></entry>
@@ -181,6 +188,7 @@ func TestReadFIBRoutesSkipsUnreadableEntries(t *testing.T) {
 
 // An entry with no name is not an interface.
 func TestReadInterfaceStatesSkipsNamelessEntries(t *testing.T) {
+	t.Parallel()
 	body := []byte(`<result><ifnet>
 	  <entry><zone>z</zone></entry>
 	  <entry><name>ethernet1/1</name><zone>z</zone></entry>
@@ -197,6 +205,7 @@ func TestReadInterfaceStatesSkipsNamelessEntries(t *testing.T) {
 // An IPv6 table is read as one, so a device with v6 routes is not silently mixed in
 // with v4.
 func TestReadFIBRoutesMarksIPv6(t *testing.T) {
+	t.Parallel()
 	body := []byte(`<result><fibs>
 	  <entry><vr>default</vr><type>1</type><entries>
 	    <entry><dst>2001:db8::/32</dst><interface>ethernet1/1</interface></entry>

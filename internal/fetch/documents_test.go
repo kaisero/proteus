@@ -11,6 +11,7 @@ import (
 
 // Every document is stored as <name>.xml, so a name must be unique and file-safe.
 func TestDocumentNamesAreUniqueAndFileSafe(t *testing.T) {
+	t.Parallel()
 	safe := regexp.MustCompile(`^[a-z0-9-]+$`)
 	seen := map[string]bool{}
 	for _, d := range Documents {
@@ -30,6 +31,7 @@ func TestDocumentNamesAreUniqueAndFileSafe(t *testing.T) {
 // Advanced Routing off: the device refuses the new command and the legacy one
 // answers with the same shape.
 func TestRoutingFIBFallsBackToTheLegacyCommand(t *testing.T) {
+	t.Parallel()
 	d := device()
 	d.Ops["<show><routing><fib/></routing></show>"] = fakepanos.Success("<fibs/>")
 	c := loggedIn(t, d)
@@ -45,6 +47,7 @@ func TestRoutingFIBFallsBackToTheLegacyCommand(t *testing.T) {
 }
 
 func TestOpDocumentReportsEveryRefusal(t *testing.T) {
+	t.Parallel()
 	c := loggedIn(t, device())
 	_, err := OpDocument("x", "<show><a/></show>", "<show><b/></show>").Fetch(context.Background(), c)
 	if err == nil {
@@ -54,6 +57,7 @@ func TestOpDocumentReportsEveryRefusal(t *testing.T) {
 
 // A device that stops answering is not asked the fallback.
 func TestOpDocumentStopsOnATransportError(t *testing.T) {
+	t.Parallel()
 	d := device()
 	c := loggedIn(t, d)
 	d.DropFirst = 2
@@ -69,6 +73,7 @@ func TestOpDocumentStopsOnATransportError(t *testing.T) {
 }
 
 func TestParseSystemInfo(t *testing.T) {
+	t.Parallel()
 	b, err := os.ReadFile("../../testdata/opdata/fw01-system-info.xml")
 	if err != nil {
 		t.Fatal(err)

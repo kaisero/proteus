@@ -3,6 +3,7 @@ package config
 import "testing"
 
 func TestScopeString(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		s    Scope
 		want string
@@ -17,6 +18,7 @@ func TestScopeString(t *testing.T) {
 }
 
 func TestParseScope(t *testing.T) {
+	t.Parallel()
 	for in, want := range map[string]Scope{
 		"shared":     {Sort: ScopeShared},
 		"vsys:vsys1": {Sort: ScopeVsys, Name: "vsys1"},
@@ -38,6 +40,7 @@ func TestParseScope(t *testing.T) {
 
 // A scope round-trips through its string form, which is what the index caches on.
 func TestScopeRoundTrips(t *testing.T) {
+	t.Parallel()
 	for _, s := range []Scope{
 		{Sort: ScopeShared},
 		{Sort: ScopeVsys, Name: "vsys1"},

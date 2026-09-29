@@ -3,6 +3,7 @@ package schema
 import "testing"
 
 func TestEntryTypesFound(t *testing.T) {
+	t.Parallel()
 	root := load(t)
 	got := EntryTypes(root)
 	if len(got) < 6 {

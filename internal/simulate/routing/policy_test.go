@@ -59,6 +59,7 @@ func policyRun(t *testing.T, file, src, dst string) Path {
 func notes(h Hop) string { return strings.Join(h.Notes, "; ") }
 
 func TestPBFForwardAndSourceNAT(t *testing.T) {
+	t.Parallel()
 	p := policyRun(t, "firewall-routing.xml", "10.20.5.5", "10.1.10.100")
 	h := p.Hops[0]
 	want := "pbf rule branch-to-zscaler may forward this packet to tunnel.1 via 198.19.255.254; " +
@@ -70,6 +71,7 @@ func TestPBFForwardAndSourceNAT(t *testing.T) {
 
 // A PBF rule by interface, with a negated destination.
 func TestPBFByInterface(t *testing.T) {
+	t.Parallel()
 	if h := policyRun(t, "firewall-routing.xml", "10.99.0.5", "10.1.10.50").Hops[0]; notes(h) != "pbf rule lab-by-interface may drop this packet" {
 		t.Errorf("notes = %q", notes(h))
 	}
@@ -82,6 +84,7 @@ func TestPBFByInterface(t *testing.T) {
 // no-pbf leaves the packet to routing; a static NAT translates the source, and
 // the next hop sees the translated packet (spec §18 N5).
 func TestNoPBFAndATranslationCarriesOn(t *testing.T) {
+	t.Parallel()
 	p := policyRun(t, "firewall-routing.xml", "10.1.100.250", "8.8.8.8")
 	if notes(p.Hops[0]) != "nat rule static-pve (datacenter -> sdwan): source 10.1.100.250 -> 198.51.100.20" {
 		t.Errorf("hop 1 notes = %q", notes(p.Hops[0]))
@@ -93,6 +96,7 @@ func TestNoPBFAndATranslationCarriesOn(t *testing.T) {
 
 // A pool translation: later hops match against its first address, and say so.
 func TestAPoolCarriesANote(t *testing.T) {
+	t.Parallel()
 	p := policyRun(t, "firewall-nat-routing.xml", "10.1.100.250", "8.8.8.8")
 	if len(p.Hops) != 2 || notes(p.Hops[1]) != "nat on fw translates the source to one of 198.51.100.64/29" ||
 		p.Hops[1].Flow.Source.String() != "198.51.100.64" {
@@ -103,6 +107,7 @@ func TestAPoolCarriesANote(t *testing.T) {
 // A destination NAT replaces the egress with the lookup of the translated
 // destination, and the box shows both lookups (spec §18 N5).
 func TestDestinationNAT(t *testing.T) {
+	t.Parallel()
 	n, load := policyNet(t, "firewall-routing.xml")
 	f := flow("10.30.0.7", "198.51.100.10")
 	f.DestPort = 3389
@@ -125,6 +130,7 @@ func TestDestinationNAT(t *testing.T) {
 }
 
 func TestAVersionGapIsInferredNotUnresolved(t *testing.T) {
+	t.Parallel()
 	cfg, _, err := config.Load("../../../testdata/config/firewall-version-12.2.xml")
 	if err != nil || cfg.VersionGap() == "" {
 		t.Fatalf("fixture: %v", err)
@@ -145,6 +151,7 @@ func TestAVersionGapIsInferredNotUnresolved(t *testing.T) {
 
 // With no source, any source could match; a sdwan arrival is sent to vsys2.
 func TestPBFToAnotherVsysWithoutASource(t *testing.T) {
+	t.Parallel()
 	n, load := policyNet(t, "firewall-routing.xml")
 	run, err := Simulation{}.Run(context.Background(), &simulate.Env{Network: n, Load: load},
 		simulate.Input{Flow: flow("10.30.0.7", "10.1.10.9"), Params: map[string]string{"device": "fw"}})
@@ -163,6 +170,7 @@ func TestPBFToAnotherVsysWithoutASource(t *testing.T) {
 }
 
 func TestPolicyLoadsOnlyAKnownVsys(t *testing.T) {
+	t.Parallel()
 	n, load := policyNet(t, "firewall-routing.xml")
 	s := newState(&simulate.Env{Network: n, Load: load}, simulate.Input{Flow: flow("10.1.5.5", "10.1.10.9")})
 	if _, ok := s.policy(&Hop{Device: "fw", Vsys: "vsys9"}); ok {
@@ -175,6 +183,7 @@ func TestPolicyLoadsOnlyAKnownVsys(t *testing.T) {
 
 // A translated port, and a dynamic destination resolved through Env.Resolve.
 func TestDestinationNATPortAndFQDN(t *testing.T) {
+	t.Parallel()
 	n, load := policyNet(t, "firewall-nat-routing.xml")
 	env := &simulate.Env{Network: n, Load: load, Resolve: func(_ context.Context, name string) ([]netip.Addr, error) {
 		if name != "portal.example.com" {
@@ -197,6 +206,7 @@ func TestDestinationNATPortAndFQDN(t *testing.T) {
 // A translated destination the firewall has no route to is dropped there: the
 // rule translates to 10.1.10.100, and this firewall has no route to it.
 func TestTheTranslatedDestinationHasNoRoute(t *testing.T) {
+	t.Parallel()
 	cfg, _, err := config.Load("../../../testdata/config/firewall-nat-routing.xml")
 	if err != nil {
 		t.Fatal(err)

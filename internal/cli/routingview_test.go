@@ -84,6 +84,7 @@ func render(t *testing.T, src, dst string, params map[string]string, why bool) s
 }
 
 func TestRenderAPath(t *testing.T) {
+	t.Parallel()
 	got := render(t, "198.18.20.5", "198.18.10.9", nil, false)
 	want := `simulate routing 198.18.20.5 -> 198.18.10.9            fidelity: inferred
 
@@ -115,6 +116,7 @@ may be incomplete: not evaluated: policy-based forwarding, NAT
 
 // Every box of a path is as wide as the widest; --rib and --why add rows.
 func TestRenderRIBAndWhy(t *testing.T) {
+	t.Parallel()
 	got := render(t, "198.18.10.5", "8.8.8.8", map[string]string{"rib": "true"}, true)
 	for _, want := range []string{
 		"│  route   0.0.0.0/0 via 198.19.0.1   static                       │\n",
@@ -131,6 +133,7 @@ func TestRenderRIBAndWhy(t *testing.T) {
 }
 
 func TestRenderWithoutASource(t *testing.T) {
+	t.Parallel()
 	got := render(t, "", "198.18.10.9", map[string]string{"device": "fw01"}, false)
 	for _, want := range []string{
 		"simulate routing (no source) -> 198.18.10.9", "  start on fw01, router default\n",
@@ -145,6 +148,7 @@ func TestRenderWithoutASource(t *testing.T) {
 
 // Hand-built paths for the rows a two-device lab does not produce.
 func TestRenderRowsAndEnds(t *testing.T) {
+	t.Parallel()
 	pfx := netip.MustParsePrefix
 	lk := routing.Lookup{Router: "r", Match: simulate.Match{
 		Destination: pfx("10.0.0.0/8"),

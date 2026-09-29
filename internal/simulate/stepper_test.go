@@ -31,6 +31,7 @@ func step(slug string, f Fidelity, keep ...uint32) Step[state] {
 }
 
 func TestStagesRunInOrderAndRecordWhatTheyDid(t *testing.T) {
+	t.Parallel()
 	s := &state{set: roaring.BitmapOf(1, 2, 3, 4)}
 	stages, err := Execute(context.Background(), "demo", s,
 		[]Step[state]{step("a", Exact, 1, 2, 3), step("b", Inferred), step("c", NotEvaluated("application"), 2, 3)}, false, nil)
@@ -56,6 +57,7 @@ func TestStagesRunInOrderAndRecordWhatTheyDid(t *testing.T) {
 }
 
 func TestKeptBitmapsAreSnapshots(t *testing.T) {
+	t.Parallel()
 	s := &state{set: roaring.BitmapOf(1, 2, 3)}
 	stages, err := Execute(context.Background(), "demo", s, []Step[state]{step("a", Exact, 1, 2), step("b", Exact, 2)}, true, nil)
 	if err != nil {
@@ -68,6 +70,7 @@ func TestKeptBitmapsAreSnapshots(t *testing.T) {
 
 // An undeclared fidelity is a failed run, surfaced as an error, never a panic.
 func TestUndeclaredFidelityFailsTheRun(t *testing.T) {
+	t.Parallel()
 	s := &state{set: roaring.New()}
 	stages, err := Execute(context.Background(), "demo", s, []Step[state]{step("a", Fidelity{}), step("b", Exact)}, false, nil)
 	if err == nil || err.Error() != "demo/a: stage declared no fidelity" {
@@ -79,6 +82,7 @@ func TestUndeclaredFidelityFailsTheRun(t *testing.T) {
 }
 
 func TestAStepErrorIsWrapped(t *testing.T) {
+	t.Parallel()
 	boom := Step[state]{Slug: "x", Do: func(context.Context, *state) (Outcome, error) { return Outcome{}, errors.New("boom") }}
 	_, err := Execute(context.Background(), "demo", &state{}, []Step[state]{boom, step("y", Exact)}, false, nil)
 	if err == nil || err.Error() != "demo/x: boom" {
@@ -87,6 +91,7 @@ func TestAStepErrorIsWrapped(t *testing.T) {
 }
 
 func TestACancelledContextRunsNothing(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	s := &state{}
@@ -100,6 +105,7 @@ func TestACancelledContextRunsNothing(t *testing.T) {
 
 // Each stage is one STEP line at info; what explains it is at debug.
 func TestStagesAreLogged(t *testing.T) {
+	t.Parallel()
 	l, err := runlog.Open(runlog.Options{Dir: t.TempDir(), Command: "sim", Level: runlog.Debug})
 	if err != nil {
 		t.Fatal(err)
@@ -119,6 +125,7 @@ func TestStagesAreLogged(t *testing.T) {
 }
 
 func TestEndpoint(t *testing.T) {
+	t.Parallel()
 	a := Addr(netip.MustParseAddr("10.0.0.1"))
 	if a.String() != "10.0.0.1" || (Endpoint{Name: "x.example"}).String() != "x.example" || (Endpoint{}).String() != "" {
 		t.Error("Endpoint.String")

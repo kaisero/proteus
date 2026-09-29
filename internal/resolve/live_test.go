@@ -20,6 +20,7 @@ import (
 //
 //	PROTEUS_LIVE_CONFIG=/path/to/export.xml go test -tags live ./resolve/
 func TestLiveConfigLoads(t *testing.T) {
+	t.Parallel()
 	path := os.Getenv("PROTEUS_LIVE_CONFIG")
 	if path == "" {
 		t.Skip("set PROTEUS_LIVE_CONFIG to a configuration exported from a device")

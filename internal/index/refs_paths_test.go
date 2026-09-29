@@ -26,6 +26,7 @@ func refpathsIndex(t *testing.T) (*config.Config, *Index) {
 // security profile and a log-forwarding profile. Every one of these answered
 // "nothing references it" before the walk saw more than one reference shape.
 func TestRefsReachesProfileAndScalarEdges(t *testing.T) {
+	t.Parallel()
 	_, idx := refpathsIndex(t)
 	for _, tc := range []struct {
 		name, field string
@@ -55,6 +56,7 @@ func TestRefsReachesProfileAndScalarEdges(t *testing.T) {
 // the union of everything below the top-level field. profile-setting used to
 // merge a profile group with all ten profile kinds.
 func TestRefsCandidatesArePerLeaf(t *testing.T) {
+	t.Parallel()
 	_, idx := refpathsIndex(t)
 	for _, r := range idx.Refs("baseline") {
 		if r.Field != "profile-setting/group" {
@@ -72,6 +74,7 @@ func TestRefsCandidatesArePerLeaf(t *testing.T) {
 // schema. They must agree, because they are two readers of the same XML and it
 // was their silent disagreement that hid the missing edges for so long.
 func TestRefsAgreeWithResolveOnProfileEdges(t *testing.T) {
+	t.Parallel()
 	_, idx := refpathsIndex(t)
 	rules := idx.Rules()
 

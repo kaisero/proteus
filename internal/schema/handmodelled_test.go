@@ -4,6 +4,7 @@ import "testing"
 
 // R8. Every registered node carries its reason and its owner.
 func TestHandModelledIsDeclared(t *testing.T) {
+	t.Parallel()
 	for _, h := range HandModelled() {
 		if h.Path == "" {
 			t.Error("a hand-modelled node has no path")
@@ -18,6 +19,7 @@ func TestHandModelledIsDeclared(t *testing.T) {
 }
 
 func TestHandModelledIsACopy(t *testing.T) {
+	t.Parallel()
 	saved := handModelled
 	defer func() { handModelled = saved }()
 	handModelled = []HandModel{{Path: "/config/x", Reason: "r", Owner: "o"}}

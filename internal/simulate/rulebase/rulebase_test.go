@@ -28,6 +28,7 @@ func routingVsys(t *testing.T) Vsys {
 }
 
 func TestLoad(t *testing.T) {
+	t.Parallel()
 	load := func(string, string) (simulate.Target, error) { return simulate.Target{}, errors.New("none") }
 	if _, ok := Load(load, "fw", "vsys1"); ok {
 		t.Error("a failing loader")
@@ -51,6 +52,7 @@ func pbf(t *testing.T, v Vsys, src, dst string, in simulate.Port) PBFMatch {
 }
 
 func TestPBF(t *testing.T) {
+	t.Parallel()
 	v := routingVsys(t)
 	branch := simulate.Port{Zone: "branch-vpn", Interface: "ethernet1/3"}
 	if m := pbf(t, v, "10.20.5.5", "10.1.10.100", branch); !m.Found || m.Rule.Name != "branch-to-zscaler" ||
@@ -77,6 +79,7 @@ func TestPBF(t *testing.T) {
 // A rulebase that cannot be indexed yields no rule and says so, never a silent
 // "no rule": that would be a wrong answer that looks complete.
 func TestAnUnbuildableIndexIsUnresolved(t *testing.T) {
+	t.Parallel()
 	bad := routingVsys(t)
 	bad.Scope = config.Scope{Sort: config.ScopeVsys, Name: "vsys9"}
 	noNegation := func(int) (bool, bool) { return false, false }
@@ -90,6 +93,7 @@ func TestAnUnbuildableIndexIsUnresolved(t *testing.T) {
 }
 
 func TestSidesAndHolds(t *testing.T) {
+	t.Parallel()
 	v := routingVsys(t)
 	src, dst, un := v.Sides(resolve.NAT, netip.Addr{}, ip("198.51.100.10"), func(int) (bool, bool) { return false, false })
 	if len(un) != 0 || src.GetCardinality() != 4 || !dst.Contains(1) {
@@ -101,6 +105,7 @@ func TestSidesAndHolds(t *testing.T) {
 }
 
 func TestFromFits(t *testing.T) {
+	t.Parallel()
 	if !FromFits(resolve.PBFRule{From: []string{"any"}}, simulate.Port{Zone: "x"}) ||
 		!FromFits(resolve.PBFRule{FromKind: "interface", From: []string{"e1"}}, simulate.Port{}) ||
 		FromFits(resolve.PBFRule{FromKind: "zone", From: []string{"a"}}, simulate.Port{Zone: "b"}) {
@@ -109,6 +114,7 @@ func TestFromFits(t *testing.T) {
 }
 
 func TestCertainty(t *testing.T) {
+	t.Parallel()
 	if f := Certainty(resolve.NAT, nil); f.String() != simulate.Exact.String() {
 		t.Errorf("no unresolved value: %s", f)
 	}
@@ -119,6 +125,7 @@ func TestCertainty(t *testing.T) {
 }
 
 func TestWithoutGap(t *testing.T) {
+	t.Parallel()
 	un := []index.Unresolved{{Value: "a", Reason: "gap"}, {Value: "b", Reason: "other"}}
 	if got := withoutGap(un, "gap"); len(got) != 1 || got[0].Value != "b" {
 		t.Errorf("with a gap: %v", got)

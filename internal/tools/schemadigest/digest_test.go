@@ -25,6 +25,7 @@ func seedSchema(t *testing.T, dir string) {
 }
 
 func TestDigestWritesAReadableDigest(t *testing.T) {
+	t.Parallel()
 	tmp := t.TempDir()
 	schemaDir := filepath.Join(tmp, "schemas")
 	digestDir := filepath.Join(tmp, "digest")
@@ -48,6 +49,7 @@ func TestDigestWritesAReadableDigest(t *testing.T) {
 }
 
 func TestDigestRejectsAnEmptyDirectory(t *testing.T) {
+	t.Parallel()
 	err := runDigest(t.TempDir(), t.TempDir(), "11.2.0")
 	if err == nil {
 		t.Fatal("want an error when no schema file is present")
@@ -60,6 +62,7 @@ func TestDigestRejectsAnEmptyDirectory(t *testing.T) {
 // A schema whose parse finds no memberof target means the parser is dropping
 // <validate>. The tool must refuse to write that digest.
 func TestDigestRefusesASchemaWithNoReferences(t *testing.T) {
+	t.Parallel()
 	dir, out := t.TempDir(), t.TempDir()
 	doc := `<sequence name="config"><array name="thing"><sequence name="entry">` +
 		`<attr-req name="name" type="string"/></sequence></array></sequence>`
@@ -76,6 +79,7 @@ func TestDigestRefusesASchemaWithNoReferences(t *testing.T) {
 }
 
 func TestDigestReportsAParseError(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "schema.xml"), []byte("<sequence"), 0o644); err != nil {
 		t.Fatal(err)

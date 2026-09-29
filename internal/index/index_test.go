@@ -17,6 +17,7 @@ func labIndex(t *testing.T) *Index {
 }
 
 func TestIndexIsCachedPerScope(t *testing.T) {
+	t.Parallel()
 	cfg, _, err := config.Load("../../testdata/config/firewall-multivsys.xml")
 	if err != nil {
 		t.Fatal(err)
@@ -43,6 +44,7 @@ func TestIndexIsCachedPerScope(t *testing.T) {
 }
 
 func TestContainingFindsEveryCoveringObject(t *testing.T) {
+	t.Parallel()
 	idx := labIndex(t)
 	names := map[string]bool{}
 	for _, m := range idx.Containing(netip.MustParseAddr("10.124.0.1")) {
@@ -58,6 +60,7 @@ func TestContainingFindsEveryCoveringObject(t *testing.T) {
 
 // The sibling vsys's objects must not appear, whatever the address.
 func TestContainingIsScopeBound(t *testing.T) {
+	t.Parallel()
 	idx := labIndex(t)
 	for _, m := range idx.Containing(netip.MustParseAddr("10.125.0.1")) {
 		t.Errorf("a Graz object leaked into the Vienna index: %s", m.Name)
@@ -75,6 +78,7 @@ func TestContainingIsScopeBound(t *testing.T) {
 }
 
 func TestOverlappingMatchesABroaderPrefix(t *testing.T) {
+	t.Parallel()
 	idx := labIndex(t)
 	if got := idx.Overlapping(netip.MustParsePrefix("10.124.0.0/8")); len(got) == 0 {
 		t.Error("a /8 overlaps the Vienna /16 and its host, so both must match")
@@ -82,6 +86,7 @@ func TestOverlappingMatchesABroaderPrefix(t *testing.T) {
 }
 
 func TestRefsFindTheRuleThatUsesAGroup(t *testing.T) {
+	t.Parallel()
 	idx := labIndex(t)
 	got := idx.Refs("corp-location")
 	if len(got) == 0 {
@@ -107,6 +112,7 @@ func TestRefsFindTheRuleThatUsesAGroup(t *testing.T) {
 // The whole point: source and destination intersect, and the lowest bit is the
 // first matching rule.
 func TestFirstMatchIsTheLowestBit(t *testing.T) {
+	t.Parallel()
 	idx := labIndex(t)
 	in := idx.Interner()
 	src := idx.RulesWith(Source, in.ID("corp-location"))
@@ -125,6 +131,7 @@ func TestFirstMatchIsTheLowestBit(t *testing.T) {
 // A rule reached through a nested group is still found, which is what the closure
 // is for.
 func TestFirstMatchThroughNestedGroups(t *testing.T) {
+	t.Parallel()
 	idx := nestedIndex(t)
 	in := idx.Interner()
 
@@ -143,6 +150,7 @@ func TestFirstMatchThroughNestedGroups(t *testing.T) {
 }
 
 func TestDisabledRulesAreMasked(t *testing.T) {
+	t.Parallel()
 	idx := indexOf(t, "../../testdata/config/firewall-lab.xml", "vsys1")
 	mask := idx.Disabled()
 	if mask.IsEmpty() {
@@ -159,6 +167,7 @@ func TestDisabledRulesAreMasked(t *testing.T) {
 // A firewall's vsys is a policy scope like a device group, and its own rulebase is
 // part of the effective policy.
 func TestIndexForAFirewallVsys(t *testing.T) {
+	t.Parallel()
 	cfg, _, err := config.Load("../../testdata/config/firewall-lab.xml")
 	if err != nil {
 		t.Fatal(err)
@@ -204,6 +213,7 @@ func TestIndexForAFirewallVsys(t *testing.T) {
 }
 
 func TestIndexRejectsAnUnknownVsys(t *testing.T) {
+	t.Parallel()
 	cfg, _, _ := config.Load("../../testdata/config/firewall-lab.xml")
 	if _, err := For(cfg, config.Scope{Sort: config.ScopeVsys, Name: "vsys9"}); err == nil {
 		t.Error("an unknown vsys must be an error")
@@ -213,6 +223,7 @@ func TestIndexRejectsAnUnknownVsys(t *testing.T) {
 // A NAT or PBF index answers with the same matching as the security index: a
 // member of a nested group reaches the rule naming the outer group.
 func TestAnIndexPerRulebase(t *testing.T) {
+	t.Parallel()
 	cfg, _, err := config.Load("../../testdata/config/firewall-routing.xml")
 	if err != nil {
 		t.Fatal(err)

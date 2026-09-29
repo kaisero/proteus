@@ -6,6 +6,7 @@ import (
 )
 
 func TestWalkYieldsScopedReferenceEvents(t *testing.T) {
+	t.Parallel()
 	cfg, _, err := Load("../../testdata/config/firewall-multivsys.xml")
 	if err != nil {
 		t.Fatalf("Load: %v", err)
@@ -49,6 +50,7 @@ func TestWalkYieldsScopedReferenceEvents(t *testing.T) {
 // Two vsys can hold an object of the same name, so an event's path must identify
 // the instance, not the schema location.
 func TestWalkEntryPathsAreInstancePaths(t *testing.T) {
+	t.Parallel()
 	cfg, _, _ := Load("../../testdata/config/firewall-multivsys.xml")
 	seen := map[string]bool{}
 	_ = cfg.Walk(func(e Event) bool {
@@ -71,6 +73,7 @@ func TestWalkEntryPathsAreInstancePaths(t *testing.T) {
 
 // any is a keyword, not an object, and must never be yielded as a reference.
 func TestWalkExcludesKeywords(t *testing.T) {
+	t.Parallel()
 	cfg, _, _ := Load("../../testdata/config/firewall-literals.xml")
 	_ = cfg.Walk(func(e Event) bool {
 		for _, v := range e.Values {
@@ -84,6 +87,7 @@ func TestWalkExcludesKeywords(t *testing.T) {
 
 // Returning false from the callback stops the walk.
 func TestWalkStops(t *testing.T) {
+	t.Parallel()
 	cfg, _, _ := Load("../../testdata/config/firewall-multivsys.xml")
 	n := 0
 	_ = cfg.Walk(func(Event) bool {
@@ -97,6 +101,7 @@ func TestWalkStops(t *testing.T) {
 
 // The walk reads the wrapped form too.
 func TestWalkHandlesTheWrappedForm(t *testing.T) {
+	t.Parallel()
 	bare, _, _ := Load("../../testdata/config/firewall-multivsys.xml")
 	wrapped, _, _ := Load("../../testdata/config/firewall-multivsys-wrapped.xml")
 	count := func(c *Config) int {
@@ -117,6 +122,7 @@ func TestWalkHandlesTheWrappedForm(t *testing.T) {
 // The fixture puts shared/log-settings/config before the vsys, so every vsys
 // event here arrives only if the walk continued.
 func TestWalkContinuesPastANestedConfigElement(t *testing.T) {
+	t.Parallel()
 	cfg, _, err := Load("../../testdata/config/firewall-multivsys.xml")
 	if err != nil {
 		t.Fatalf("Load: %v", err)
@@ -141,6 +147,7 @@ func TestWalkContinuesPastANestedConfigElement(t *testing.T) {
 // whose every rule says "source any" would otherwise look as though source names
 // nothing, and a lookup wired from the configuration would have no resolver for it.
 func TestFieldKindsComeFromTheSchema(t *testing.T) {
+	t.Parallel()
 	cfg, _, err := Load("../../testdata/config/firewall-urlcat.xml")
 	if err != nil {
 		t.Fatal(err)
@@ -170,6 +177,7 @@ func TestFieldKindsComeFromTheSchema(t *testing.T) {
 
 // A suffix that matches no entry array yields nothing rather than everything.
 func TestFieldKindsUnknownSuffix(t *testing.T) {
+	t.Parallel()
 	cfg, _, err := Load("../../testdata/config/firewall-urlcat.xml")
 	if err != nil {
 		t.Fatal(err)
@@ -183,6 +191,7 @@ func TestFieldKindsUnknownSuffix(t *testing.T) {
 // kind. A Panorama schema holds the rules array three times, as pre-rulebase,
 // rulebase and post-rulebase; a firewall schema holds it once, under vsys.
 func TestFieldKindsMergesArraysWithoutRepeating(t *testing.T) {
+	t.Parallel()
 	cfg, _, err := Load("../../testdata/config/firewall-multivsys.xml")
 	if err != nil {
 		t.Fatal(err)
@@ -207,6 +216,7 @@ func TestFieldKindsMergesArraysWithoutRepeating(t *testing.T) {
 // code. Most kinds are direct children; a custom URL category and every security
 // profile are one level down, under profiles/.
 func TestKindContainerComesFromTheSchema(t *testing.T) {
+	t.Parallel()
 	cfg, _, err := Load("../../testdata/config/firewall-urlcat.xml")
 	if err != nil {
 		t.Fatal(err)
@@ -236,6 +246,7 @@ func TestKindContainerComesFromTheSchema(t *testing.T) {
 // different things. KindContainer returns the shallowest, which for this kind is the
 // wrong one, so a caller that might hit an ambiguous kind has to look at all of them.
 func TestKindContainersReportsAmbiguity(t *testing.T) {
+	t.Parallel()
 	cfg, _, err := Load("../../testdata/config/firewall-users.xml")
 	if err != nil {
 		t.Fatal(err)
@@ -284,6 +295,7 @@ func TestKindContainersReportsAmbiguity(t *testing.T) {
 // A broad suffix matches several rules arrays — security, NAT, policy-based
 // forwarding and more — and every field still lists each kind once.
 func TestFieldKindsMergesSeveralArrays(t *testing.T) {
+	t.Parallel()
 	cfg, _, err := Load("../../testdata/config/firewall-lab.xml")
 	if err != nil {
 		t.Fatal(err)
