@@ -14,9 +14,11 @@
 # --routing compares simulate routing's first lookup on <device> (a device of the
 # inventory, fetched) with the device's own: its fib-lookup when the XML API offers
 # it, else the longest prefix match of its live forwarding table, computed here.
-# PAN-OS 12.2 refuses fib-lookup through the XML API (fw02, 2026-09-29). The two
-# agree when the egress interface is the same and the library's next hop is one of
-# the device's (ECMP picks by hash).
+# Measured 2026-09-29: the Advanced Routing fib-lookup is "Unsupported command"
+# through the XML API on 11.2 and 12.2; the legacy test routing fib-lookup answers
+# on 11.2 for the router named default (fw01) and refuses other logical routers and
+# every router on 12.2 (fw02). The two agree when the egress interface is the same
+# and the library's next hop is one of the device's (ECMP picks by hash).
 set -uo pipefail
 
 routing_probe() {
@@ -30,16 +32,26 @@ routing_probe() {
   printf '%-16s %-40s %-40s %s\n' DESTINATION DEVICE LIBRARY AGREE
   for dst in "$@"; do
     local ref lib
-    ref=$(curl -sk --max-time 40 -G "https://$PANOS_HOST/api/" \
+    ref=$( { curl -sk --max-time 40 -G "https://$PANOS_HOST/api/" \
       --data-urlencode "type=op" --data-urlencode "key=$PANOS_API_KEY" \
-      --data-urlencode "cmd=<test><advanced-routing><fib-lookup><ip>$dst</ip><logical-router>$router</logical-router></fib-lookup></advanced-routing></test>" \
-      | LIVE="$live" python3 -c '
+      --data-urlencode "cmd=<test><advanced-routing><fib-lookup><ip>$dst</ip><logical-router>$router</logical-router></fib-lookup></advanced-routing></test>"
+      echo "<!--next-->"
+      curl -sk --max-time 40 -G "https://$PANOS_HOST/api/" \
+      --data-urlencode "type=op" --data-urlencode "key=$PANOS_API_KEY" \
+      --data-urlencode "cmd=<test><routing><fib-lookup><ip>$dst</ip><virtual-router>$router</virtual-router></fib-lookup></routing></test>"
+      } | LIVE="$live" python3 -c '
 import ipaddress, os, sys, xml.etree.ElementTree as ET
 dst, router = ipaddress.ip_address(sys.argv[1]), sys.argv[2]
-t = ET.fromstring(sys.stdin.read())
-if t.get("status") == "success" and t.find(".//interface") is not None:
-    print("fib-lookup:%s:%s" % (t.findtext(".//interface"), t.findtext(".//nexthop") or "0.0.0.0"))
-    raise SystemExit
+for part in sys.stdin.read().split("<!--next-->"):
+    try:
+        t = ET.fromstring(part.strip())
+    except ET.ParseError:
+        continue
+    if t.get("status") == "success" and t.find(".//interface") is not None:
+        # verified on fw01 (11.2): <nh>ip|recv</nh>, <interface>, <ip> the next hop
+        # when there is one; a connected or own address has none.
+        print("fib-lookup:%s:%s" % (t.findtext(".//interface"), t.findtext("result/ip") or "0.0.0.0"))
+        raise SystemExit
 best = None
 for fib in ET.fromstring(os.environ["LIVE"]).iter("fibs"):
     for vr in fib.findall("entry"):

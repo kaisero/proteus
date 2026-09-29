@@ -17,6 +17,7 @@ func labFW02(t *testing.T) *fakepanos.Device {
 		"<system><hostname>fw02</hostname><model>PA-440</model><serial>000000000002</serial><sw-version>12.2.2</sw-version></system>")
 	d.Ops["<show><interface>all</interface></show>"] = read(t, "../../testdata/opdata/fw02-interface-all.xml")
 	d.Ops["<show><advanced-routing><fib><afi>both</afi></fib></advanced-routing></show>"] = read(t, "../../testdata/opdata/fw02-advanced-routing-fib.xml")
+	d.Ops["<show><advanced-routing><route><afi>ipv4</afi></route></advanced-routing></show>"] = read(t, "../../testdata/opdata/fw02-advanced-routing-route.xml")
 	return d
 }
 
@@ -44,6 +45,7 @@ func TestRoutingAcrossTwoFirewalls(t *testing.T) {
 		"┌─ fw02 ─ vsys1 ─ router default ─ snapshot 1m",
 		"  192.168.0.1   leaves the estate (not in the inventory)\n",
 		"firewalls on the path: fw01 (server -> transport), fw02 (labor -> wan)\n",
+		"│  route   0.0.0.0/0 via 198.19.0.1   static",
 		"may be incomplete:",
 	} {
 		if !strings.Contains(out, want) {

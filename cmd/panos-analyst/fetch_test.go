@@ -40,9 +40,9 @@ func lab(t *testing.T) *fakepanos.Device {
 			"<show><interface>all</interface></show>": read(t, "../../testdata/opdata/fw01-interface-all.xml"),
 			"<show><advanced-routing><fib><afi>both</afi></fib></advanced-routing></show>": read(t,
 				"../../testdata/opdata/fw01-advanced-routing-fib.xml"),
-			// fw01 has no captured routing table or HA state; fw02's stand in.
 			"<show><advanced-routing><route><afi>ipv4</afi></route></advanced-routing></show>": read(t,
-				"../../testdata/opdata/fw02-advanced-routing-route.xml"),
+				"../../testdata/opdata/fw01-advanced-routing-route.xml"),
+			// fw01 runs no HA, so its state is fw02's: both say not enabled.
 			"<show><high-availability><state/></high-availability></show>": read(t, "../../testdata/opdata/fw02-ha-state.xml"),
 		},
 	}

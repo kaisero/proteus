@@ -137,3 +137,31 @@ func TestInterfaceStatesHoldEveryAddress(t *testing.T) {
 		t.Errorf("got %+v, %v", sts, err)
 	}
 }
+
+// Verified on fw01 (PAN-OS 11.2.5): the table also holds entries it did not
+// select, such as the local twin of each loopback's connected route.
+func TestReadRIBRoutesKeepsUnselectedEntries(t *testing.T) {
+	got, err := ReadRIBRoutes(opFixture(t, "fw01-advanced-routing-route.xml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var selected, unselected int
+	routers := map[string]bool{}
+	for _, r := range got {
+		routers[r.Router] = true
+		if r.Destination.String() != "198.19.255.1/32" {
+			continue
+		}
+		if r.Selected {
+			selected++
+			if r.Protocol != "connected" {
+				t.Errorf("selected = %+v", r)
+			}
+		} else {
+			unselected++
+		}
+	}
+	if selected != 1 || unselected != 1 || !routers["default"] || !routers["lte"] {
+		t.Errorf("selected %d, unselected %d, routers %v", selected, unselected, routers)
+	}
+}
