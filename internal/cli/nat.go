@@ -32,9 +32,6 @@ func (a *app) natCmd(sim simulate.Simulation) *cobra.Command {
 			"Stages: place, pbf, lookup, match, translate, post-lookup",
 		Args: args(cobra.ExactArgs(2)),
 		RunE: func(c *cobra.Command, argv []string) error {
-			if fromZone != "" && fromIf != "" {
-				return usageErr("give --from-zone or --from-interface, not both")
-			}
 			flow, err := parseFlow(fl)
 			if err != nil {
 				return err
@@ -118,6 +115,7 @@ func (a *app) natCmd(sim simulate.Simulation) *cobra.Command {
 	f.StringVar(&router, "router", "", "the logical router, when the firewall has several")
 	f.StringVar(&fromZone, "from-zone", "", "the zone the packet arrives in")
 	f.StringVar(&fromIf, "from-interface", "", "the interface the packet arrives on")
+	cmd.MarkFlagsMutuallyExclusive("from-zone", "from-interface")
 	f.StringVar(&fl.protocol, "protocol", "tcp", "tcp, udp, sctp, icmp or a protocol number")
 	f.StringVar(&fl.port, "port", "", "destination port: 443 or tcp/443")
 	f.IntVar(&fl.sourcePort, "source-port", 0, "source port")

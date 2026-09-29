@@ -138,7 +138,7 @@ func (a *app) snapshotShowCmd() *cobra.Command {
 			return finish(holes, un)
 		},
 	}
-	sel.bind(cmd.Flags(), true)
+	sel.bind(cmd, true)
 	return cmd
 }
 
@@ -241,7 +241,7 @@ func (a *app) snapshotDiffCmd() *cobra.Command {
 			return finish(holes, nil)
 		},
 	}
-	sel.bind(cmd.Flags(), false)
+	sel.bind(cmd, false)
 	cmd.Flags().StringVar(&from, "from", "", "compare from the newest snapshot at or before this time (default: the one before --to)")
 	cmd.Flags().StringVar(&to, "to", "", "compare to the newest snapshot at or before this time (default: latest)")
 	return cmd

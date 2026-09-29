@@ -52,7 +52,7 @@ func (a *app) fetchCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return fetchDevices(c.Context(), a.stdout, s.inv, st, names, a.getenv, a.log)
+			return a.fetcher(s.inv, st).devices(c.Context(), a.stdout, names)
 		},
 	}
 	cmd.Flags().BoolVar(&all, "all", false, "fetch every device in the inventory")
@@ -60,14 +60,28 @@ func (a *app) fetchCmd() *cobra.Command {
 	return cmd
 }
 
-// fetchDevices fetches the named devices, up to fetchConcurrency at once, and prints
+// fetcher fetches devices into one store. It holds what every device's fetch
+// shares, so its methods take only what changes per call.
+type fetcher struct {
+	inv    *inventory.Inventory
+	st     *store.Store
+	getenv func(string) string
+	log    *runlog.Logger
+	// peerHost maps an HA peer's reported management address to a host; nil uses
+	// the address.
+	peerHost func(mgmtIP string) string
+}
+
+func (a *app) fetcher(inv *inventory.Inventory, st *store.Store) fetcher {
+	return fetcher{inv: inv, st: st, getenv: a.getenv, log: a.log, peerHost: a.peerHost}
+}
+
+// devices fetches the named devices, up to fetchConcurrency at once, and prints
 // each device's report in the order the devices were named. A device that fails is
 // reported and the rest still run (spec S10). Some failures exit 3; all of them
 // exit 1.
-func fetchDevices(ctx context.Context, out io.Writer, inv *inventory.Inventory, st *store.Store,
-	names []string, getenv func(string) string, log *runlog.Logger,
-) error {
-	errs, stored := fetchEach(ctx, out, inv, st, names, getenv, log)
+func (f fetcher) devices(ctx context.Context, out io.Writer, names []string) error {
+	errs, stored := f.each(ctx, out, names)
 	var joined []error
 	anyStored := false
 	for i, name := range names {
@@ -86,12 +100,10 @@ func fetchDevices(ctx context.Context, out io.Writer, inv *inventory.Inventory, 
 	}
 }
 
-// fetchEach fetches the devices in parallel and returns, per device and in order,
-// its error and whether a snapshot was stored. Each device's report is printed
-// whole, so reports never interleave.
-func fetchEach(ctx context.Context, out io.Writer, inv *inventory.Inventory, st *store.Store,
-	names []string, getenv func(string) string, log *runlog.Logger,
-) ([]error, []bool) {
+// each fetches the devices in parallel and returns, per device and in order, its
+// error and whether a snapshot was stored. Each device's report is printed whole,
+// so reports never interleave.
+func (f fetcher) each(ctx context.Context, out io.Writer, names []string) ([]error, []bool) {
 	reports := make([]bytes.Buffer, len(names))
 	errs := make([]error, len(names))
 	stored := make([]bool, len(names))
@@ -101,7 +113,7 @@ func fetchEach(ctx context.Context, out io.Writer, inv *inventory.Inventory, st 
 		wg.Go(func() {
 			sem <- struct{}{}
 			defer func() { <-sem }()
-			stored[i], errs[i] = fetchOne(ctx, &reports[i], inv, st, name, getenv, log)
+			stored[i], errs[i] = f.one(ctx, &reports[i], name)
 			if errs[i] != nil {
 				fmt.Fprintf(&reports[i], "%s: %v\n", name, errs[i])
 			}
@@ -114,24 +126,22 @@ func fetchEach(ctx context.Context, out io.Writer, inv *inventory.Inventory, st 
 	return errs, stored
 }
 
-// peerHost maps an HA peer's reported management address to a host; nil uses the
-// address. Tests point it at a second fake device.
-var peerHost func(mgmtIP string) string
-
-func fetchOne(ctx context.Context, out io.Writer, inv *inventory.Inventory, st *store.Store,
-	name string, getenv func(string) string, log *runlog.Logger,
-) (bool, error) {
-	t, err := inv.Resolve(name, getenv)
+// one fetches one device and stores its snapshot. It reports whether a snapshot was
+// stored, and every document that failed.
+func (f fetcher) one(ctx context.Context, out io.Writer, name string) (bool, error) {
+	t, err := f.inv.Resolve(name, f.getenv)
 	if err != nil {
 		return false, err
 	}
+	verification := "on"
 	if t.InsecureTLS {
+		verification = "off"
 		fmt.Fprintf(out, "%s: TLS certificate verification OFF (insecure_tls: true)\n", name)
 	} else {
 		fmt.Fprintf(out, "%s: TLS certificate verification on\n", name)
 	}
-	log.Infof(runlog.TagAPI, "%s: fetching %s, TLS verification %s", name, t.Host, map[bool]string{true: "off", false: "on"}[t.InsecureTLS])
-	res, err := fetch.RunActive(ctx, t, fetch.Documents, fetch.ActiveOptions{PeerHost: peerHost}, log)
+	f.log.Infof(runlog.TagAPI, "%s: fetching %s, TLS verification %s", name, t.Host, verification)
+	res, err := fetch.RunActive(ctx, t, fetch.Documents, fetch.ActiveOptions{PeerHost: f.peerHost}, f.log)
 	if err != nil {
 		return false, err
 	}
@@ -158,13 +168,13 @@ func fetchOne(ctx context.Context, out io.Writer, inv *inventory.Inventory, st *
 		meta.Documents = append(meta.Documents, store.DocumentMeta{Name: o.Name})
 		fmt.Fprintf(out, "  %-12s %8d bytes\n", o.Name, o.Bytes)
 	}
-	sn, err := st.Write(meta, res.Docs, t.SnapshotKeep)
+	sn, err := f.st.Write(meta, res.Docs, t.SnapshotKeep)
 	if err != nil {
 		return false, err
 	}
 	fmt.Fprintf(out, "  stored %s@%s (%s, PAN-OS %s, serial %s)\n",
 		sn.Device, sn.ID, res.System.Model, res.System.SWVersion, res.System.Serial)
-	log.Infof(runlog.TagSnap, "%s: stored %s", name, sn.ID)
+	f.log.Infof(runlog.TagSnap, "%s: stored %s", name, sn.ID)
 	return true, errors.Join(docErrs...)
 }
 

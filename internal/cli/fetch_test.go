@@ -83,7 +83,7 @@ func getenv(k string) string {
 func TestFetchThenAnswerFromLatest(t *testing.T) {
 	inv, st := setup(t, lab(t).Start(t))
 	var out bytes.Buffer
-	if err := fetchDevices(context.Background(), &out, inv, st, []string{"fw01"}, getenv, nil); err != nil {
+	if err := (fetcher{inv: inv, st: st, getenv: getenv}).devices(context.Background(), &out, []string{"fw01"}); err != nil {
 		t.Fatalf("fetch: %v\n%s", err, out.String())
 	}
 	if !strings.Contains(out.String(), "TLS certificate verification OFF") {
@@ -119,7 +119,7 @@ func TestFetchReportsAFailedDocument(t *testing.T) {
 	delete(d.Ops, "<show><interface>all</interface></show>")
 	inv, st := setup(t, d.Start(t))
 	var out bytes.Buffer
-	err := fetchDevices(context.Background(), &out, inv, st, []string{"fw01"}, getenv, nil)
+	err := (fetcher{inv: inv, st: st, getenv: getenv}).devices(context.Background(), &out, []string{"fw01"})
 	if !errors.Is(err, errIncomplete) {
 		t.Errorf("a stored device with a missing document exits 3, got %v", err)
 	}
@@ -136,14 +136,14 @@ func TestFetchReportsAFailedDocument(t *testing.T) {
 func TestFetchContinuesPastAFailedDevice(t *testing.T) {
 	inv, st := setup(t, lab(t).Start(t))
 	var out bytes.Buffer
-	err := fetchDevices(context.Background(), &out, inv, st, []string{"nope", "fw01"}, getenv, nil)
+	err := (fetcher{inv: inv, st: st, getenv: getenv}).devices(context.Background(), &out, []string{"nope", "fw01"})
 	if !errors.Is(err, errIncomplete) || !strings.Contains(out.String(), "nope:") {
 		t.Errorf("got %v\n%s", err, out.String())
 	}
 	if _, err := st.Latest("fw01"); err != nil {
 		t.Error("fw01 must still be fetched after the failure")
 	}
-	if err := fetchDevices(context.Background(), &out, inv, st, []string{"nope"}, getenv, nil); err == nil || errors.Is(err, errIncomplete) {
+	if err := (fetcher{inv: inv, st: st, getenv: getenv}).devices(context.Background(), &out, []string{"nope"}); err == nil || errors.Is(err, errIncomplete) {
 		t.Errorf("nothing stored is an error, got %v", err)
 	}
 }
@@ -156,7 +156,7 @@ func TestVerificationOnIsSaid(t *testing.T) {
 	}
 	st, _ := store.Open(t.TempDir())
 	var out bytes.Buffer
-	_ = fetchDevices(context.Background(), &out, inv, st, []string{"fw01"}, getenv, nil)
+	_ = (fetcher{inv: inv, st: st, getenv: getenv}).devices(context.Background(), &out, []string{"fw01"})
 	if !strings.Contains(out.String(), "TLS certificate verification on") {
 		t.Errorf("the run must say verification is on:\n%s", out.String())
 	}
@@ -182,6 +182,8 @@ type cli struct {
 	env     map[string]string
 	clock   time.Time
 	cfgPath string
+	// peerHost is passed to every app the harness builds.
+	peerHost func(string) string
 }
 
 func newCLI(t *testing.T) *cli {
@@ -209,6 +211,7 @@ func (c *cli) run(args ...string) (string, string, int) {
 	now := c.clock
 	c.clock = c.clock.Add(time.Minute)
 	a := newApp(&out, &errOut, func(k string) string { return c.env[k] }, func() time.Time { return now })
+	a.peerHost = c.peerHost
 	code := a.execute(context.Background(), append(args, "--config", c.cfgPath))
 	return out.String(), errOut.String(), code
 }
@@ -410,6 +413,7 @@ func TestSimulatePolicy(t *testing.T) {
 	c.want(2, "simulate", "policy", "1.1.1.1", "2.2.2.2", "--file", file, "--source-port", "70000")
 	c.want(1, "simulate", "policy", "1.1.1.1", "2.2.2.2", "--file", file, "--vsys", "vsys9")
 	out = c.want(0, "simulate", "policy", "10.1.0.5", "10.2.0.5", "--file", file, "--from-zone", "dmz", "--to-zone", "inside")
+	c.want(2, "simulate", "policy", "10.1.0.5", "10.2.0.5", "--file", file, "--from-zone", "dmz")
 	if !strings.Contains(out, "no enabled rule matches") {
 		t.Errorf("no match:\n%s", out)
 	}
@@ -635,10 +639,8 @@ func TestFetchFollowsThePassivePeer(t *testing.T) {
 	passive.Ops[haCmd] = state("passive", "A", "active", "B")
 	active.Ops[haCmd] = state("active", "B", "passive", "A")
 	activeHost := active.Start(t)
-	peerHost = func(string) string { return activeHost }
-	t.Cleanup(func() { peerHost = nil })
-
 	c := newCLI(t)
+	c.peerHost = func(string) string { return activeHost }
 	c.inventory(inventoryFor(passive.Start(t)))
 	if out := c.want(0, "fetch", "fw01"); !strings.Contains(out, "fw01 is the passive HA peer; fetched from the active peer "+activeHost) {
 		t.Errorf("fetch:\n%s", out)
@@ -660,5 +662,19 @@ func TestRunReportsTheBuildVersion(t *testing.T) {
 	code := Run(context.Background(), "1.2.3", []string{"--version"}, &out, &errOut, func(k string) string { return env[k] })
 	if code != exitOK || !strings.Contains(out.String(), "1.2.3") {
 		t.Errorf("exit %d, stdout %q, stderr %q", code, out.String(), errOut.String())
+	}
+}
+
+// Each match flag reaches search with its mode; the docs show these two runs.
+func TestSearchModeFlags(t *testing.T) {
+	c := newCLI(t)
+	out := c.want(0, "search", "10.124.0.0/16", "--exact", "--show", "objects", "--vsys", "vsys1",
+		"--file", "../../testdata/config/firewall-multivsys.xml")
+	if !strings.Contains(out, "(exact)") || !strings.Contains(out, "corp-location-vienna") {
+		t.Errorf("--exact:\n%s", out)
+	}
+	out = c.want(0, "search", "azureapps", "--contains", "--file", "../../testdata/config/firewall-urlcat.xml")
+	if !strings.Contains(out, "(contains)") || !strings.Contains(out, "custom-azuresite-group") {
+		t.Errorf("--contains:\n%s", out)
 	}
 }

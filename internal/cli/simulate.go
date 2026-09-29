@@ -66,13 +66,14 @@ func (a *app) simulateCmd(sim simulate.Simulation) *cobra.Command {
 			return a.runSimulation(c.Context(), sim, sel, fl, argv[0], argv[1])
 		},
 	}
-	sel.bind(cmd.Flags(), true)
+	sel.bind(cmd, true)
 	f := cmd.Flags()
 	f.StringVar(&fl.protocol, "protocol", "tcp", "tcp, udp, sctp, icmp or a protocol number")
 	f.StringVar(&fl.port, "port", "", "destination port: 443 or tcp/443")
 	f.IntVar(&fl.sourcePort, "source-port", 0, "source port")
 	f.StringVar(&fl.fromZone, "from-zone", "", "source zone; derived when absent")
 	f.StringVar(&fl.toZone, "to-zone", "", "destination zone; derived when absent")
+	cmd.MarkFlagsRequiredTogether("from-zone", "to-zone")
 	f.StringVar(&fl.url, "url", "", "URL, matched against URL categories")
 	f.StringVar(&fl.application, "application", "", "application (not evaluated yet)")
 	f.StringVar(&fl.user, "user", "", "source user (not evaluated yet)")
@@ -82,9 +83,6 @@ func (a *app) simulateCmd(sim simulate.Simulation) *cobra.Command {
 }
 
 func (a *app) runSimulation(ctx context.Context, sim simulate.Simulation, sel selection, fl flowFlags, src, dst string) error {
-	if (fl.fromZone == "") != (fl.toZone == "") {
-		return usageErr("give both --from-zone and --to-zone, or neither")
-	}
 	flow, err := parseFlow(fl)
 	if err != nil {
 		return err

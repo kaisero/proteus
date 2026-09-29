@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
 
 	"github.com/okaiser/proteus/internal/estate"
 	"github.com/okaiser/proteus/internal/inventory"
@@ -20,17 +19,25 @@ import (
 	"github.com/okaiser/proteus/internal/store"
 )
 
+// loadInventory reads the inventory once for the command. A missing or unreadable
+// file is kept as invErr: whether that is fatal is each command's to decide.
+func (a *app) loadInventory() {
+	a.invPath = a.configFlag
+	if a.invPath == "" {
+		if a.invPath, a.invErr = inventory.DefaultPath(a.getenv); a.invErr != nil {
+			return
+		}
+	}
+	a.inv, a.invErr = inventory.Load(a.invPath)
+}
+
 // openLog opens the run log for a command: its level, directory and retention come
 // from the same precedence as every other setting. It records the command line and
 // the resolved settings.
 func (a *app) openLog(c *cobra.Command) error {
 	var def inventory.Settings
-	path := a.configFlag
-	if path == "" {
-		path, _ = inventory.DefaultPath(a.getenv)
-	}
-	if inv, err := inventory.Load(path); err == nil {
-		def = inv.Defaults
+	if a.inv != nil {
+		def = a.inv.Defaults
 	}
 	level, err := runlog.ParseLevel(first(a.logLevelFlag, a.getenv("PROTEUS_LOG_LEVEL"), def.LogLevel, "info"))
 	if err != nil {
@@ -82,18 +89,11 @@ type settings struct {
 
 // settings resolves the settings. needInventory makes a missing inventory an error.
 func (a *app) settings(needInventory bool) (settings, error) {
-	var s settings
 	var err error
-	s.invPath = a.configFlag
-	if s.invPath == "" {
-		if s.invPath, err = inventory.DefaultPath(a.getenv); err != nil {
-			return s, err
-		}
-	}
-	s.inv, err = inventory.Load(s.invPath)
-	if err != nil {
-		if needInventory || !errors.Is(err, fs.ErrNotExist) {
-			return s, err
+	s := settings{invPath: a.invPath, inv: a.inv}
+	if a.invErr != nil {
+		if needInventory || !errors.Is(a.invErr, fs.ErrNotExist) {
+			return s, a.invErr
 		}
 		s.inv = nil
 	}
@@ -156,14 +156,20 @@ type selection struct {
 	fresh                 bool
 }
 
-func (sel *selection) bind(fs *pflag.FlagSet, withFresh bool) {
+func (sel *selection) bind(cmd *cobra.Command, withFresh bool) {
+	fs := cmd.Flags()
 	fs.StringSliceVar(&sel.devices, "device", nil, "only these devices (repeatable)")
 	fs.StringArrayVar(&sel.labels, "label", nil, "only devices with this key=value label (repeatable; all must hold)")
 	fs.StringSliceVar(&sel.vsys, "vsys", nil, "only these vsys (repeatable; default every vsys)")
 	fs.StringVar(&sel.file, "file", "", "read one configuration file instead of the store")
 	fs.StringVar(&sel.at, "at", "", "read each device's newest snapshot at or before this time (id, RFC 3339 or date)")
+	// --file reads one configuration; the store's selectors mean nothing with it.
+	for _, other := range []string{"device", "label", "at"} {
+		cmd.MarkFlagsMutuallyExclusive("file", other)
+	}
 	if withFresh {
 		fs.BoolVar(&sel.fresh, "fresh", false, "fetch the selected devices first")
+		cmd.MarkFlagsMutuallyExclusive("file", "fresh")
 	}
 }
 
@@ -172,9 +178,6 @@ func (sel *selection) bind(fs *pflag.FlagSet, withFresh bool) {
 // a note to that device's targets.
 func (a *app) targets(ctx context.Context, sel selection, s settings, progress io.Writer) ([]estate.Target, []estate.Hole, error) {
 	if sel.file != "" {
-		if len(sel.devices) > 0 || len(sel.labels) > 0 || sel.at != "" || sel.fresh {
-			return nil, nil, usageErr("--file reads one configuration; it cannot be combined with --device, --label, --at or --fresh")
-		}
 		return estate.OpenFile(sel.file, sel.vsys, a.log)
 	}
 	if s.inv == nil {
@@ -200,7 +203,7 @@ func (a *app) targets(ctx context.Context, sel selection, s settings, progress i
 	}
 	failed := map[string]string{}
 	if sel.fresh {
-		errs, _ := fetchEach(ctx, progress, s.inv, st, names, a.getenv, a.log)
+		errs, _ := a.fetcher(s.inv, st).each(ctx, progress, names)
 		for i, e := range errs {
 			if e != nil {
 				failed[names[i]] = e.Error()

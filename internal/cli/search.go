@@ -30,15 +30,13 @@ func (a *app) searchCmd() *cobra.Command {
 		Args: args(cobra.ExactArgs(1)),
 		RunE: func(c *cobra.Command, argv []string) error {
 			q := search.Query{Term: argv[0], Kinds: kinds, Fields: fields, Direct: direct}
-			modes := 0
-			for m, on := range map[search.Mode]bool{search.Exact: exact, search.Within: within, search.Contains: contains} {
-				if on {
-					q.Mode = m
-					modes++
-				}
-			}
-			if modes > 1 {
-				return usageErr("--exact, --within and --contains exclude each other")
+			switch { // the flags exclude each other; the root command checks that
+			case exact:
+				q.Mode = search.Exact
+			case within:
+				q.Mode = search.Within
+			case contains:
+				q.Mode = search.Contains
 			}
 			for _, st := range show {
 				stage, ok := showNames[st]
@@ -123,11 +121,12 @@ func (a *app) searchCmd() *cobra.Command {
 			return finish(holes, un)
 		},
 	}
-	sel.bind(cmd.Flags(), true)
+	sel.bind(cmd, true)
 	f := cmd.Flags()
 	f.BoolVar(&exact, "exact", false, "the value equals the term")
 	f.BoolVar(&within, "within", false, "the value lies inside the term (addresses, prefixes, ranges)")
 	f.BoolVar(&contains, "contains", false, "the value or name holds the term as text; not a match")
+	cmd.MarkFlagsMutuallyExclusive("exact", "within", "contains")
 	f.StringSliceVar(&kinds, "kind", nil, "only objects and groups of these kinds")
 	f.StringSliceVar(&fields, "field", nil, "only references and literals from these fields")
 	f.StringSliceVar(&show, "show", nil, "only these stages: objects, groups, refs, literals")

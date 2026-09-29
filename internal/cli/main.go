@@ -26,6 +26,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/okaiser/proteus/internal/inventory"
 	"github.com/okaiser/proteus/internal/runlog"
 )
 
@@ -126,6 +127,15 @@ type app struct {
 	argv   []string
 	log    *runlog.Logger // the run log; nil until the command starts
 	lookup func(ctx context.Context, name string) ([]netip.Addr, error)
+	// peerHost maps an HA peer's reported management address to a host; nil uses
+	// the address. Tests point it at a second fake device.
+	peerHost func(mgmtIP string) string
+
+	// The inventory, read once per command by loadInventory before the run log
+	// opens, so the log settings and every other setting come from one file.
+	invPath string
+	inv     *inventory.Inventory
+	invErr  error
 }
 
 func newApp(stdout, stderr io.Writer, getenv func(string) string, now func() time.Time) *app {
@@ -153,7 +163,18 @@ func (a *app) root() *cobra.Command {
 	pf.StringVar(&a.logLevelFlag, "log-level", "", "error, warn, info or debug (default $PROTEUS_LOG_LEVEL, the inventory's, or info)")
 	pf.StringVar(&a.logDirFlag, "log-dir", "", "where run logs go (default $PROTEUS_LOG_DIR, the inventory's, or ~/.local/state/proteus/log)")
 	pf.BoolVar(&a.verbose, "verbose", false, "echo the run log to stderr")
-	cmd.PersistentPreRunE = func(c *cobra.Command, _ []string) error { return a.openLog(c) }
+	cmd.PersistentPreRunE = func(c *cobra.Command, _ []string) error {
+		a.loadInventory()
+		if err := a.openLog(c); err != nil {
+			return err
+		}
+		// Cobra checks flag groups after this hook and returns a plain error, which
+		// would exit 1. Checking here keeps a flag conflict a usage error (exit 2).
+		if err := c.ValidateFlagGroups(); err != nil {
+			return &exitErr{code: exitUsage, err: err}
+		}
+		return nil
+	}
 
 	inv := &cobra.Command{Use: "inventory", Short: "Manage the device inventory"}
 	inv.AddCommand(a.inventoryInitCmd())

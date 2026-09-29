@@ -115,7 +115,7 @@ func (a *app) lookupCmd() *cobra.Command {
 			return finish(holes, un)
 		},
 	}
-	sel.bind(cmd.Flags(), true)
+	sel.bind(cmd, true)
 	f := cmd.Flags()
 	f.StringVar(&kind, "kind", "", "the kind of element: security-rule or an object kind")
 	f.BoolVar(&expand, "expand", false, "show each name's value and every group's members")
