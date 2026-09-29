@@ -51,7 +51,7 @@ func networkStore(t *testing.T, snaps ...snap) *store.Store {
 	return st
 }
 
-func routing(t *testing.T, dev string, extra map[string][]byte) map[string][]byte {
+func routingDocs(t *testing.T, dev string, extra map[string][]byte) map[string][]byte {
 	out := map[string][]byte{
 		store.InterfacesDoc: opdata(t, dev+"-interface-all.xml"),
 		store.FIBDoc:        opdata(t, dev+"-advanced-routing-fib.xml"),
@@ -64,9 +64,9 @@ func routing(t *testing.T, dev string, extra map[string][]byte) map[string][]byt
 
 func TestNetworkReadsEachDeviceOnce(t *testing.T) {
 	st := networkStore(t,
-		snap{dev: "fw01", serial: "S1", at: t0, docs: routing(t, "fw01", nil)},
-		snap{dev: "fw02", serial: "S2", at: t0, docs: routing(t, "fw02", map[string][]byte{store.RIBDoc: opdata(t, "fw02-advanced-routing-route.xml")})},
-		snap{dev: "fw01", serial: "S1", at: t0.Add(time.Hour), docs: routing(t, "fw02", nil)},
+		snap{dev: "fw01", serial: "S1", at: t0, docs: routingDocs(t, "fw01", nil)},
+		snap{dev: "fw02", serial: "S2", at: t0, docs: routingDocs(t, "fw02", map[string][]byte{store.RIBDoc: opdata(t, "fw02-advanced-routing-route.xml")})},
+		snap{dev: "fw01", serial: "S1", at: t0.Add(time.Hour), docs: routingDocs(t, "fw02", nil)},
 	)
 	n := NewNetwork(st, []string{"fw01", "fw02", "fw03"}, When{Now: t0.Add(3 * time.Hour), MaxAge: 2 * time.Hour})
 	if strings.Join(n.Devices(), ",") != "fw01,fw02,fw03" {
@@ -119,9 +119,9 @@ func TestNetworkNeedsInterfacesAndTables(t *testing.T) {
 // Both members of an HA pair in the inventory are one node: the active one answers.
 func TestNetworkCollapsesAnHAPair(t *testing.T) {
 	st := networkStore(t,
-		snap{dev: "fw-a", serial: "A", at: t0, docs: routing(t, "fw01", map[string][]byte{store.HADoc: haDoc("passive", "A", "B")})},
-		snap{dev: "fw-b", serial: "B", at: t0.Add(time.Minute), docs: routing(t, "fw02", map[string][]byte{store.HADoc: haDoc("active", "B", "A")})},
-		snap{dev: "other", serial: "C", at: t0, docs: routing(t, "fw01", nil)},
+		snap{dev: "fw-a", serial: "A", at: t0, docs: routingDocs(t, "fw01", map[string][]byte{store.HADoc: haDoc("passive", "A", "B")})},
+		snap{dev: "fw-b", serial: "B", at: t0.Add(time.Minute), docs: routingDocs(t, "fw02", map[string][]byte{store.HADoc: haDoc("active", "B", "A")})},
+		snap{dev: "other", serial: "C", at: t0, docs: routingDocs(t, "fw01", nil)},
 	)
 	n := NewNetwork(st, []string{"fw-a", "fw-b", "other"}, When{})
 	if strings.Join(n.Devices(), ",") != "fw-a,other" {
@@ -140,8 +140,8 @@ func TestNetworkCollapsesAnHAPair(t *testing.T) {
 // state was stored: one node, and the note says where the data came from.
 func TestNetworkJoinsAMemberWithoutHAState(t *testing.T) {
 	st := networkStore(t,
-		snap{dev: "fw-a", serial: "B", from: "192.0.2.2", at: t0, docs: routing(t, "fw02", map[string][]byte{store.HADoc: haDoc("active", "B", "A")})},
-		snap{dev: "fw-b", serial: "B", at: t0, docs: routing(t, "fw02", nil)},
+		snap{dev: "fw-a", serial: "B", from: "192.0.2.2", at: t0, docs: routingDocs(t, "fw02", map[string][]byte{store.HADoc: haDoc("active", "B", "A")})},
+		snap{dev: "fw-b", serial: "B", at: t0, docs: routingDocs(t, "fw02", nil)},
 	)
 	n := NewNetwork(st, []string{"fw-a", "fw-b"}, When{})
 	if strings.Join(n.Devices(), ",") != "fw-a" {

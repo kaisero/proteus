@@ -16,6 +16,7 @@ import (
 	"github.com/okaiser/panos-analyst/resolve"
 	"github.com/okaiser/panos-analyst/runlog"
 	"github.com/okaiser/panos-analyst/simulate"
+	"github.com/okaiser/panos-analyst/simulate/routing"
 	"github.com/okaiser/panos-analyst/simulate/securitypolicy"
 )
 
@@ -27,12 +28,23 @@ type flowFlags struct {
 	why, noDNS                             bool
 }
 
-// simulateCmds returns one subcommand per registered simulation kind. Every kind
-// takes the same flow; a new kind is a registry entry, not a command change.
+// kindCommands are the kinds whose input is not one flow on one device, and so
+// need a command of their own.
+var kindCommands = map[string]func(*app, simulate.Simulation) *cobra.Command{
+	routing.Kind: (*app).routingCmd,
+}
+
+// simulateCmds returns one subcommand per registered simulation kind. A kind takes
+// the flow command unless it has its own; a new flow kind is a registry entry, not a
+// command change.
 func (a *app) simulateCmds() []*cobra.Command {
 	var out []*cobra.Command
 	for _, kind := range estate.Kinds() {
-		out = append(out, a.simulateCmd(estate.Simulations[kind]))
+		build := (*app).simulateCmd
+		if own, ok := kindCommands[kind]; ok {
+			build = own
+		}
+		out = append(out, build(a, estate.Simulations[kind]))
 	}
 	return out
 }

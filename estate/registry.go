@@ -4,6 +4,7 @@ import (
 	"sort"
 
 	"github.com/okaiser/panos-analyst/simulate"
+	"github.com/okaiser/panos-analyst/simulate/routing"
 	"github.com/okaiser/panos-analyst/simulate/securitypolicy"
 )
 
@@ -12,6 +13,7 @@ import (
 // (spec §11.5). A new kind is one entry, and the command gives it a subcommand.
 var Simulations = map[string]simulate.Simulation{
 	securitypolicy.Kind: securitypolicy.Simulation{},
+	routing.Kind:        routing.Simulation{},
 }
 
 // Kinds lists the registered simulation kinds, sorted.
