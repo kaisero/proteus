@@ -66,7 +66,8 @@ func (s *state) hop() *Hop { return &s.path.Hops[len(s.path.Hops)-1] }
 // newHop opens a hop at the current ingress.
 func (s *state) newHop() {
 	h := Hop{
-		Device: s.port.Device, Vsys: vsysName(s.port.Vsys), SnapshotID: s.data[s.port.Device].SnapshotID,
+		Device: s.port.Device, Vsys: vsysName(s.port.Vsys),
+		SnapshotID: s.data[s.port.Device].SnapshotID, TakenAt: s.data[s.port.Device].TakenAt,
 		In: s.port, Flow: s.flow(),
 	}
 	if n := len(s.path.Hops); n == 0 || s.path.Hops[n-1].Device != h.Device {
@@ -183,7 +184,7 @@ func lookup(_ context.Context, s *state) (simulate.Outcome, error) {
 		s.end(Dropped, fmt.Sprintf("dropped on %s: no route to %s", h.Device, s.dst))
 		return simulate.Outcome{Fidelity: simulate.Exact, Detail: "no route"}, nil
 	}
-	h.Lookups = append(h.Lookups, Lookup{Router: s.router, Match: m})
+	h.Lookups = append(h.Lookups, Lookup{Router: s.router, Match: m, Protocol: s.protocol(h.Device, m.Destination)})
 	first := m.First()
 	out := simulate.Outcome{
 		Fidelity: simulate.Exact,
@@ -211,6 +212,16 @@ func lookup(_ context.Context, s *state) (simulate.Outcome, error) {
 		}
 	}
 	return out, nil
+}
+
+// protocol is the routing table's protocol for the selected route to dst.
+func (s *state) protocol(node string, dst netip.Prefix) string {
+	for _, r := range s.data[node].RIB {
+		if r.Router == s.router && r.Destination == dst && r.Selected {
+			return r.Protocol
+		}
+	}
+	return ""
 }
 
 // reaches names the node an ECMP next hop leads to, if any.

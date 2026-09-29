@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/netip"
 	"strings"
+	"time"
 
 	"github.com/okaiser/panos-analyst/resolve"
 	"github.com/okaiser/panos-analyst/simulate"
@@ -53,8 +54,9 @@ const (
 
 // Lookup is one route lookup in one router.
 type Lookup struct {
-	Router string `json:"router"`
-	Match  Match  `json:"route"`
+	Router   string `json:"router"`
+	Match    Match  `json:"route"`
+	Protocol string `json:"protocol,omitempty"` // from the routing table; empty without one
 }
 
 // NotFollowed is an ECMP next hop the path did not take, and the node it reaches.
@@ -68,6 +70,7 @@ type Hop struct {
 	Device     string             `json:"device"`
 	Vsys       string             `json:"vsys"`
 	SnapshotID string             `json:"snapshot,omitempty"`
+	TakenAt    time.Time          `json:"taken_at,omitzero"`
 	In         Port               `json:"in"`
 	Out        Port               `json:"out"`
 	Lookups    []Lookup           `json:"lookups"`

@@ -313,6 +313,9 @@ func TestRIBAlternates(t *testing.T) {
 	n.data["fw01"] = d
 	_, p, _ := simulateOn(t, n, flow("198.18.10.5", "8.8.8.8"), map[string]string{"rib": "true"})
 	alts := p.Hops[0].Alternates
+	if p.Hops[0].Lookups[0].Protocol != "static" || p.Hops[1].Lookups[0].Protocol != "" {
+		t.Errorf("protocols = %+v %+v", p.Hops[0].Lookups, p.Hops[1].Lookups)
+	}
 	if len(alts) != 3 || !alts[0].Selected || alts[1].Protocol != "bgp" || alts[2].Distance != 200 {
 		t.Errorf("alternates = %+v", alts)
 	}
