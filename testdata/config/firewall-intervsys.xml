@@ -1,0 +1,22 @@
+<config version="11.2.0" urldb="paloaltonetworks" detail-version="11.2.5">
+  <!-- Two vsys joined by external zones, for a path that crosses from vsys1 into
+       vsys2 on one firewall. Synthetic: no lab device runs several vsys. -->
+  <devices>
+    <entry name="localhost.localdomain">
+      <vsys>
+        <entry name="vsys1">
+          <zone>
+            <entry name="trust"><network><layer3><member>ethernet1/1</member></layer3></network></entry>
+            <entry name="to-vsys2"><network><external><member>vsys2</member></external></network></entry>
+          </zone>
+        </entry>
+        <entry name="vsys2">
+          <zone>
+            <entry name="dmz"><network><layer3><member>ethernet1/2</member></layer3></network></entry>
+            <entry name="from-vsys1"><network><external><member>vsys1</member></external></network></entry>
+          </zone>
+        </entry>
+      </vsys>
+    </entry>
+  </devices>
+</config>

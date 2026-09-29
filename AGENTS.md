@@ -138,7 +138,9 @@ neither `simulate` nor `estate`. `store` does not import `fetch`. `search` and
 `estate`. `card` builds lookup's cards from one configuration and imports none of
 `fetch`, `store`, `estate` or `simulate`. `simulate` is a leaf: it imports no simulation implementation and none of
 `estate`, `store`, `fetch`, `search` or `drift`. `simulate/securitypolicy` imports
-none of `estate`, `store` or `fetch`.
+none of `estate`, `store` or `fetch`. `simulate/routing` imports none of `estate`,
+`store`, `fetch`, `search` or `drift`, and no I/O package: every device's data
+reaches it through `simulate.Network`.
 
 The core's freedom from I/O is an absolute property today. A fetcher in the same
 module makes it a conditional one, and conditional invariants decay unless a test

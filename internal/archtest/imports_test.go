@@ -48,8 +48,9 @@ var rules = []rule{
 	{from: "search", forbid: mod("fetch", "store", "estate")},
 	{from: "card", forbid: mod("fetch", "store", "estate", "simulate")},
 	{from: "drift", forbid: mod("fetch", "store", "estate")},
-	{from: "simulate", forbid: mod("estate", "store", "fetch", "search", "drift", "simulate/securitypolicy")},
+	{from: "simulate", forbid: mod("estate", "store", "fetch", "search", "drift", "simulate/securitypolicy", "simulate/routing")},
 	{from: "simulate/securitypolicy", forbid: mod("estate", "store", "fetch")},
+	{from: "simulate/routing", forbid: append(mod("estate", "store", "fetch", "search", "drift"), ioPackages...)},
 }
 
 // violations reports every rule a graph breaks. graph maps a package of this
