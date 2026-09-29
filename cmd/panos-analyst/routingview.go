@@ -10,6 +10,7 @@ import (
 	"github.com/okaiser/panos-analyst/resolve"
 	"github.com/okaiser/panos-analyst/simulate"
 	"github.com/okaiser/panos-analyst/simulate/routing"
+	"github.com/okaiser/panos-analyst/simulate/topology"
 )
 
 // minBox is the narrowest box; a longer row widens it, never wraps.
@@ -29,7 +30,7 @@ func renderPath(w io.Writer, run simulate.Run, p routing.Path, now time.Time, wh
 	if len(p.Hops) > 0 {
 		first := p.Hops[0]
 		switch {
-		case p.Placed == routing.PlacedRouted:
+		case p.Placed == topology.PlacedRouted:
 			fmt.Fprintf(w, "  %s   placed by route %s on %s (inferred)\n", p.Source, p.PlacedVia, first.Device)
 		case len(p.Source.Addrs) == 0:
 			fmt.Fprintf(w, "  start on %s, router %s\n", first.Device, first.Lookups[0].Router)
@@ -194,7 +195,7 @@ func (b hopBox) draw(w io.Writer, width int, open bool) {
 	}
 }
 
-func portText(p routing.Port) string {
+func portText(p simulate.Port) string {
 	if !p.Addr.IsValid() {
 		return p.Interface
 	}
@@ -205,7 +206,7 @@ func portText(p routing.Port) string {
 // Only a route the routing table calls connected, or failing a routing table one
 // that stays inside the interface's own net, reads "connected": a static route
 // into a tunnel has no next hop either.
-func routeText(l routing.Lookup, out routing.Port) string {
+func routeText(l routing.Lookup, out simulate.Port) string {
 	first := l.Match.First()
 	via, ok := addrOrNone(first.NextHop)
 	connected := !ok && (l.Protocol == "connected" ||

@@ -1,8 +1,15 @@
-package routing
+// Package topology is the estate as a routing simulation sees it: every
+// firewall's interfaces and forwarding tables, who owns an address, which nets
+// are connected where, and where a packet from a source enters. It is built once
+// per run from simulate.Network data and is shared by the routing, NAT and
+// security-policy simulations (spec §17, §18.4).
+package topology
 
 import (
 	"errors"
+	"fmt"
 	"net/netip"
+	"slices"
 	"sort"
 
 	"github.com/gaissmai/bart"
@@ -10,29 +17,6 @@ import (
 	"github.com/okaiser/panos-analyst/resolve"
 	"github.com/okaiser/panos-analyst/simulate"
 )
-
-// Port is one interface of one node, with the address that placed it.
-type Port struct {
-	Device    string       `json:"device"`
-	Vsys      string       `json:"vsys"` // as the device reports it: "1"
-	Router    string       `json:"router"`
-	Interface string       `json:"interface"`
-	Zone      string       `json:"zone,omitempty"`
-	Addr      netip.Prefix `json:"address,omitzero"` // the interface address; its masked form is the link net
-}
-
-// Link is the net a port's address sits in.
-func (p Port) Link() netip.Prefix { return p.Addr.Masked() }
-
-// Match is the forwarding entry a lookup found: the destination prefix and every
-// next hop the table holds for it, sorted by next-hop address (spec §17 R4).
-type Match struct {
-	Destination netip.Prefix       `json:"destination"`
-	NextHops    []resolve.FIBRoute `json:"next_hops"`
-}
-
-// First is the next hop the path follows.
-func (m Match) First() resolve.FIBRoute { return m.NextHops[0] }
 
 // Placed says how the start of a path was found.
 type Placed string
@@ -47,10 +31,10 @@ const (
 // Placement is where a path starts: the node and the interface a packet from the
 // source arrives on.
 type Placement struct {
-	Port Port
+	Port simulate.Port
 	How  Placed
-	Via  netip.Prefix // the route that placed a routed start
-	Ties []Port       // several equally good starts; the caller asks for --device
+	Via  netip.Prefix    // the route that placed a routed start
+	Ties []simulate.Port // several equally good starts; the caller asks for --device
 }
 
 // ErrUnplaced is a source that only default routes reach: no node is nearer to it
@@ -62,23 +46,23 @@ var ErrUnplaced = errors.New("only default routes reach the source")
 // node's table sends an address. IPv4 only (spec §17 R9).
 type Topology struct {
 	nodes  []string
-	ports  map[string][]Port                                     // node -> routed ports with an address
-	byIf   map[string]map[string]Port                            // node -> interface -> port, address or not
+	ports  map[string][]simulate.Port                            // node -> routed ports with an address
+	byIf   map[string]map[string]simulate.Port                   // node -> interface -> port, address or not
 	tables map[string]map[string]*bart.Table[[]resolve.FIBRoute] // node -> router -> table
 }
 
 // NewTopology indexes the nodes' data.
 func NewTopology(devs []simulate.DeviceData) *Topology {
 	t := &Topology{
-		ports:  map[string][]Port{},
-		byIf:   map[string]map[string]Port{},
+		ports:  map[string][]simulate.Port{},
+		byIf:   map[string]map[string]simulate.Port{},
 		tables: map[string]map[string]*bart.Table[[]resolve.FIBRoute]{},
 	}
 	for _, d := range devs {
 		t.nodes = append(t.nodes, d.Name)
-		t.byIf[d.Name] = map[string]Port{}
+		t.byIf[d.Name] = map[string]simulate.Port{}
 		for _, i := range d.Interfaces {
-			p := Port{Device: d.Name, Vsys: i.Vsys, Router: i.Router, Interface: i.Name, Zone: i.Zone}
+			p := simulate.Port{Device: d.Name, Vsys: i.Vsys, Router: i.Router, Interface: i.Name, Zone: i.Zone}
 			t.byIf[d.Name][i.Name] = p
 			if i.Router == "" {
 				continue
@@ -122,7 +106,7 @@ func (t *Topology) Routers(node string) []string {
 }
 
 // Interface returns a node's interface by name, with or without an address.
-func (t *Topology) Interface(node, name string) (Port, bool) {
+func (t *Topology) Interface(node, name string) (simulate.Port, bool) {
 	p, ok := t.byIf[node][name]
 	if !ok {
 		return p, false
@@ -136,8 +120,8 @@ func (t *Topology) Interface(node, name string) (Port, bool) {
 }
 
 // Owners returns every port holding a as one of its addresses.
-func (t *Topology) Owners(a netip.Addr) []Port {
-	var out []Port
+func (t *Topology) Owners(a netip.Addr) []simulate.Port {
+	var out []simulate.Port
 	for _, n := range t.nodes {
 		for _, p := range t.ports[n] {
 			if p.Addr.Addr() == a {
@@ -151,8 +135,8 @@ func (t *Topology) Owners(a netip.Addr) []Port {
 // Peers returns the ports that own next hop nh in the link net of out: the
 // devices a packet leaving by out towards nh reaches (spec §17 R6). The link-net
 // check keeps two sites that reuse private addresses apart.
-func (t *Topology) Peers(out Port, nh netip.Addr) []Port {
-	var peers []Port
+func (t *Topology) Peers(out simulate.Port, nh netip.Addr) []simulate.Port {
+	var peers []simulate.Port
 	for _, p := range t.Owners(nh) {
 		if p.Device != out.Device && p.Link() == out.Link() {
 			peers = append(peers, p)
@@ -163,8 +147,8 @@ func (t *Topology) Peers(out Port, nh netip.Addr) []Port {
 
 // Connected returns the ports whose net holds a, most specific net first; only
 // the most specific length is kept, so a /30 inside a /24 wins.
-func (t *Topology) Connected(a netip.Addr) []Port {
-	var out []Port
+func (t *Topology) Connected(a netip.Addr) []simulate.Port {
+	var out []simulate.Port
 	best := -1
 	for _, n := range t.nodes {
 		for _, p := range t.ports[n] {
@@ -173,7 +157,7 @@ func (t *Topology) Connected(a netip.Addr) []Port {
 			}
 			switch bits := p.Addr.Bits(); {
 			case bits > best:
-				best, out = bits, []Port{p}
+				best, out = bits, []simulate.Port{p}
 			case bits == best:
 				out = append(out, p)
 			}
@@ -183,18 +167,18 @@ func (t *Topology) Connected(a netip.Addr) []Port {
 }
 
 // Lookup is a longest-prefix match of a in one router's table.
-func (t *Topology) Lookup(node, router string, a netip.Addr) (Match, bool) {
+func (t *Topology) Lookup(node, router string, a netip.Addr) (simulate.Match, bool) {
 	tb := t.tables[node][router]
 	if tb == nil {
-		return Match{}, false
+		return simulate.Match{}, false
 	}
 	rs, ok := tb.Lookup(a)
 	if !ok || len(rs) == 0 {
-		return Match{}, false
+		return simulate.Match{}, false
 	}
 	hops := append([]resolve.FIBRoute(nil), rs...)
 	sort.SliceStable(hops, func(i, k int) bool { return lessAddr(hops[i].NextHop, hops[k].NextHop) })
-	return Match{Destination: hops[0].Destination, NextHops: hops}, true
+	return simulate.Match{Destination: hops[0].Destination, NextHops: hops}, true
 }
 
 func lessAddr(a, b string) bool {
@@ -223,7 +207,7 @@ func (t *Topology) Place(src netip.Addr) (Placement, error) {
 		return pl, nil
 	}
 	type start struct {
-		port Port
+		port simulate.Port
 		via  netip.Prefix
 	}
 	var starts []start
@@ -269,9 +253,9 @@ func (t *Topology) Place(src netip.Addr) (Placement, error) {
 
 // towards is a node's most specific non-default route to a, over all its routers,
 // and the port it leaves by.
-func (t *Topology) towards(node string, a netip.Addr) (Match, Port, bool) {
-	var best Match
-	var port Port
+func (t *Topology) towards(node string, a netip.Addr) (simulate.Match, simulate.Port, bool) {
+	var best simulate.Match
+	var port simulate.Port
 	found := false
 	for _, r := range t.Routers(node) {
 		m, ok := t.Lookup(node, r, a)
@@ -291,7 +275,7 @@ func addrOf(s string) netip.Addr {
 	return a
 }
 
-func nodes(ps []Port) int {
+func nodes(ps []simulate.Port) int {
 	seen := map[string]bool{}
 	for _, p := range ps {
 		seen[p.Device] = true
@@ -306,4 +290,68 @@ func hasDevice[T any](in []T, dev string, of func(T) string) bool {
 		}
 	}
 	return false
+}
+
+// Start is the start of a path or a NAT answer on a named node: its only router or
+// the one named, and the ingress for src — the interface src is connected to
+// (connected is true), else the one its return route leaves by. With no source, or
+// no route back in that router, the ingress is the router alone.
+func (t *Topology) Start(node, router string, src netip.Addr) (simulate.Port, bool, error) {
+	routers := t.Routers(node)
+	switch {
+	case router != "" && !slices.Contains(routers, router):
+		return simulate.Port{}, false, &simulate.ChoiceError{Question: fmt.Sprintf("%s has no router %q", node, router), Options: routers}
+	case router == "" && len(routers) == 1:
+		router = routers[0]
+	case router == "":
+		return simulate.Port{}, false, &simulate.ChoiceError{Question: fmt.Sprintf("%s has several routers; name one with --router", node), Options: routers}
+	}
+	start := simulate.Port{Device: node, Router: router}
+	if !src.IsValid() {
+		return start, false, nil
+	}
+	for _, p := range t.Connected(src) {
+		if p.Device == node && p.Router == router {
+			return p, true, nil
+		}
+	}
+	if m, ok := t.Lookup(node, router, src); ok {
+		if p, ok := t.Interface(node, m.First().Interface); ok && p.Router == router {
+			return p, false, nil
+		}
+	}
+	return start, false, nil
+}
+
+// Next-hop types a lookup knows (spec §17.2, verified on fw01 and fw02).
+var knownNextHopTypes = map[string]bool{"": true, "0": true, resolve.NextHopLocal: true}
+
+// Forward is one lookup's whole answer in a router: the egress, or the interface
+// owning a local address, the route, the end when nothing is forwarded, and ECMP as
+// UnderMatch. A local end takes the zone of the interface owning the address (spec
+// §18 F15, verified on fw01).
+func (t *Topology) Forward(node, router string, a netip.Addr) simulate.Forward {
+	m, ok := t.Lookup(node, router, a)
+	if !ok {
+		return simulate.Forward{Out: simulate.Port{Device: node, Router: router}, End: simulate.EndNoRoute, Fidelity: simulate.Exact}
+	}
+	f := simulate.Forward{Routes: []simulate.Match{m}, Fidelity: simulate.Exact}
+	first := m.First()
+	f.Out, _ = t.Interface(node, first.Interface)
+	for _, p := range t.Owners(a) {
+		if p.Device == node {
+			f.Out, f.End = p, simulate.EndLocal
+			return f
+		}
+	}
+	switch {
+	case first.NextHopType == resolve.NextHopLocal:
+		f.End = simulate.EndLocal
+	case !knownNextHopTypes[first.NextHopType]:
+		f.End = simulate.EndUnknownType
+		f.Fidelity = simulate.UnderMatch(fmt.Sprintf("route %s on %s has next-hop type %s, which is not read yet", m.Destination, node, first.NextHopType))
+	case len(m.NextHops) > 1:
+		f.Fidelity = simulate.UnderMatch(fmt.Sprintf("ECMP on %s: %d other next hops not followed", node, len(m.NextHops)-1))
+	}
+	return f
 }

@@ -12,6 +12,7 @@ import (
 	"github.com/okaiser/panos-analyst/config"
 	"github.com/okaiser/panos-analyst/resolve"
 	"github.com/okaiser/panos-analyst/simulate"
+	"github.com/okaiser/panos-analyst/simulate/topology"
 )
 
 // network is simulate.Network over fixed data.
@@ -105,7 +106,7 @@ func TestAPathLeavesTheEstate(t *testing.T) {
 	if got := trail(p); got != "fw01(server->transport) fw02(labor->wan)" {
 		t.Errorf("trail = %s", got)
 	}
-	if p.Outcome != LeftEstate || p.End != "192.168.0.1   leaves the estate (not in the inventory)" || p.Placed != PlacedConnected {
+	if p.Outcome != LeftEstate || p.End != "192.168.0.1   leaves the estate (not in the inventory)" || p.Placed != topology.PlacedConnected {
 		t.Errorf("path = %+v", p)
 	}
 	if run.Fidelity.Level() != "undermatch" || run.Device != "fw01" || run.Vsys != "vsys1" {
@@ -173,7 +174,7 @@ func TestTheStartNeedsAChoice(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			_, _, err := simulateOn(t, labNet(), tc.f, tc.params)
-			var ce *ChoiceError
+			var ce *simulate.ChoiceError
 			if !errors.As(err, &ce) || !strings.Contains(err.Error(), tc.want) {
 				t.Errorf("err = %v", err)
 			}
@@ -187,7 +188,7 @@ func TestTheStartNeedsAChoice(t *testing.T) {
 func TestAGivenStart(t *testing.T) {
 	// No source: the ingress is unknown.
 	_, p, err := simulateOn(t, labNet(), flow("", "8.8.8.8"), map[string]string{"device": "fw01", "router": "default"})
-	if err != nil || p.Placed != PlacedGiven || p.Hops[0].Flow.FromZone != "" || !strings.Contains(strings.Join(p.Hops[0].Notes, ";"), "ingress is unknown") {
+	if err != nil || p.Placed != topology.PlacedGiven || p.Hops[0].Flow.FromZone != "" || !strings.Contains(strings.Join(p.Hops[0].Notes, ";"), "ingress is unknown") {
 		t.Errorf("path = %+v, %v", p, err)
 	}
 	// A source connected on the device gives the ingress.
@@ -209,7 +210,7 @@ func TestAGivenStart(t *testing.T) {
 
 func TestARoutedStartIsInferred(t *testing.T) {
 	run, p, err := simulateOn(t, labNet(), flow("198.18.20.5", "8.8.8.8"), nil)
-	if err != nil || p.Placed != PlacedRouted || p.PlacedVia != "198.18.0.0/15" || p.Hops[0].Device != "fw02" ||
+	if err != nil || p.Placed != topology.PlacedRouted || p.PlacedVia != "198.18.0.0/15" || p.Hops[0].Device != "fw02" ||
 		run.Stages[0].Fidelity.Level() != "inferred" {
 		t.Errorf("path = %+v, %v", p, err)
 	}
@@ -377,7 +378,7 @@ func TestDescribe(t *testing.T) {
 	if s.Kind() != "routing" || s.Describe() == "" || len(s.Stages()) != 6 {
 		t.Error("describe")
 	}
-	if (&ChoiceError{Question: "q"}).Error() != "q" || vsysName("vsys3") != "vsys3" || vsysName("") != "" {
+	if (&simulate.ChoiceError{Question: "q"}).Error() != "q" || vsysName("vsys3") != "vsys3" || vsysName("") != "" {
 		t.Error("helpers")
 	}
 }

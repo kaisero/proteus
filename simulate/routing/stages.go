@@ -13,20 +13,21 @@ import (
 	"github.com/okaiser/panos-analyst/index"
 	"github.com/okaiser/panos-analyst/resolve"
 	"github.com/okaiser/panos-analyst/simulate"
+	"github.com/okaiser/panos-analyst/simulate/topology"
 )
 
 // state is what the stages share across hops.
 type state struct {
 	env    *simulate.Env
 	in     simulate.Input
-	topo   *Topology
+	topo   *topology.Topology
 	data   map[string]simulate.DeviceData
 	holes  []index.Unresolved
 	src    netip.Addr // invalid when only a destination was given
 	dst    netip.Addr
 	path   Path
-	port   Port   // the current hop's ingress
-	router string // the current hop's router
+	port   simulate.Port // the current hop's ingress
+	router string        // the current hop's router
 	seen   map[string]bool
 	done   bool
 	// translated names the device where NAT may have changed the addresses;
@@ -56,7 +57,7 @@ func newState(env *simulate.Env, in simulate.Input) *state {
 		s.data[d.Name] = d
 		devs = append(devs, d)
 	}
-	s.topo = NewTopology(devs)
+	s.topo = topology.NewTopology(devs)
 	return s
 }
 
@@ -85,7 +86,9 @@ func (s *state) flow() simulate.Flow {
 
 func (s *state) closeHop(stages []simulate.Stage) { s.hop().Fidelity = simulate.Overall(stages) }
 
-func (s *state) key(p Port) string { return p.Device + "|" + vsysName(p.Vsys) + "|" + p.Router }
+func (s *state) key(p simulate.Port) string {
+	return p.Device + "|" + vsysName(p.Vsys) + "|" + p.Router
+}
 
 // ended is what a stage reports after an earlier stage of its hop ended the path.
 var ended = simulate.Outcome{Fidelity: simulate.Exact, Detail: "the path ended"}
@@ -103,25 +106,25 @@ func place(_ context.Context, s *state) (simulate.Outcome, error) {
 		if err := s.placeGiven(dev); err != nil {
 			return out, err
 		}
-		s.path.Placed = PlacedGiven
+		s.path.Placed = topology.PlacedGiven
 		out.Detail = fmt.Sprintf("given: %s, router %s", s.port.Device, s.router)
 	} else {
 		if !s.src.IsValid() {
-			return out, &ChoiceError{Question: "give a source, or a start device with --device"}
+			return out, &simulate.ChoiceError{Question: "give a source, or a start device with --device"}
 		}
 		pl, err := s.topo.Place(s.src)
-		if errors.Is(err, ErrUnplaced) {
-			return out, &ChoiceError{Question: fmt.Sprintf("only default routes reach %s, so its first firewall is unknown; name it with --device", s.src), Options: s.topo.Nodes()}
+		if errors.Is(err, topology.ErrUnplaced) {
+			return out, &simulate.ChoiceError{Question: fmt.Sprintf("only default routes reach %s, so its first firewall is unknown; name it with --device", s.src), Options: s.topo.Nodes()}
 		}
 		if len(pl.Ties) > 0 {
 			var opts []string
 			for _, p := range pl.Ties {
 				opts = append(opts, p.Device+" "+p.Interface)
 			}
-			return out, &ChoiceError{Question: fmt.Sprintf("%s could enter at several firewalls; name one with --device", s.src), Options: opts}
+			return out, &simulate.ChoiceError{Question: fmt.Sprintf("%s could enter at several firewalls; name one with --device", s.src), Options: opts}
 		}
 		s.port, s.router, s.path.Placed = pl.Port, pl.Port.Router, pl.How
-		if pl.How == PlacedRouted {
+		if pl.How == topology.PlacedRouted {
 			s.path.PlacedVia = pl.Via.String()
 			fid = simulate.Inferred
 			out.Detail = fmt.Sprintf("routed: %s by %s on %s; traffic is assumed to arrive where its return leaves", s.src, pl.Via, pl.Port.Device)
@@ -140,36 +143,13 @@ func place(_ context.Context, s *state) (simulate.Outcome, error) {
 func (s *state) placeGiven(dev string) error {
 	d, err := s.env.Network.Device(dev)
 	if err != nil {
-		return &ChoiceError{Question: fmt.Sprintf("cannot start on %s: %v", dev, err), Options: s.topo.Nodes()}
+		return &simulate.ChoiceError{Question: fmt.Sprintf("cannot start on %s: %v", dev, err), Options: s.topo.Nodes()}
 	}
-	node := d.Name
-	routers := s.topo.Routers(node)
-	router := s.in.Params["router"]
-	switch {
-	case router != "" && !slices.Contains(routers, router):
-		return &ChoiceError{Question: fmt.Sprintf("%s has no router %q", node, router), Options: routers}
-	case router == "" && len(routers) == 1:
-		router = routers[0]
-	case router == "":
-		return &ChoiceError{Question: fmt.Sprintf("%s has several routers; name one with --router", node), Options: routers}
+	port, _, err := s.topo.Start(d.Name, s.in.Params["router"], s.src)
+	if err != nil {
+		return err
 	}
-	s.port, s.router = Port{Device: node, Router: router}, router
-	if !s.src.IsValid() {
-		return nil
-	}
-	// The ingress is the interface the source is connected to, or the one its
-	// return route leaves by, in the router asked.
-	for _, p := range s.topo.Connected(s.src) {
-		if p.Device == node && p.Router == router {
-			s.port = p
-			return nil
-		}
-	}
-	if m, ok := s.topo.Lookup(node, router, s.src); ok {
-		if p, ok := s.topo.Interface(node, m.First().Interface); ok && p.Router == router {
-			s.port = p
-		}
-	}
+	s.port, s.router = port, port.Router
 	return nil
 }
 
@@ -344,7 +324,7 @@ func next(_ context.Context, s *state) (simulate.Outcome, error) {
 }
 
 // chain moves the path to the next hop's device.
-func (s *state) chain(p Port, out simulate.Outcome) (simulate.Outcome, error) {
+func (s *state) chain(p simulate.Port, out simulate.Outcome) (simulate.Outcome, error) {
 	if s.seen[s.key(p)] {
 		s.end(Loop, "loop: "+s.trail(p.Device))
 		if s.agesDiffer() {
@@ -372,14 +352,14 @@ func (s *state) crossVsys(h *Hop, out simulate.Outcome) (simulate.Outcome, error
 	fromExt, ok1 := s.externalZone(h.Device, h.In.Vsys, h.Out.Vsys)
 	toExt, ok2 := s.externalZone(h.Device, h.Out.Vsys, h.In.Vsys)
 	egress := h.Out
-	h.Out = Port{Device: h.Device, Vsys: h.In.Vsys, Router: s.router, Zone: fromExt}
+	h.Out = simulate.Port{Device: h.Device, Vsys: h.In.Vsys, Router: s.router, Zone: fromExt}
 	h.Flow.ToZone = fromExt
 	if !ok1 || !ok2 {
 		out.Fidelity = simulate.Inferred
 		h.Notes = append(h.Notes, "no external zone joins these vsys in the configuration; the zone names are placeholders")
 	}
 	out.Detail = fmt.Sprintf("into %s by the external zones", vsysName(egress.Vsys))
-	return s.chain(Port{Device: h.Device, Vsys: egress.Vsys, Router: s.router, Zone: toExt}, out)
+	return s.chain(simulate.Port{Device: h.Device, Vsys: egress.Vsys, Router: s.router, Zone: toExt}, out)
 }
 
 // externalZone is the external zone of vsys from that lists vsys to.

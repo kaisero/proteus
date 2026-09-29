@@ -29,3 +29,5 @@ github.com/okaiser/panos-analyst/runlog  93.0
 github.com/okaiser/panos-analyst/simulate  100.0
 github.com/okaiser/panos-analyst/simulate/securitypolicy  97.5
 github.com/okaiser/panos-analyst/simulate/routing  100.0
+github.com/okaiser/panos-analyst/simulate/topology  100.0
+github.com/okaiser/panos-analyst/simulate/policy  100.0

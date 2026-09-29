@@ -117,17 +117,6 @@ func TestAVersionGapIsInferredNotUnresolved(t *testing.T) {
 	}
 }
 
-func TestPolicyHelpers(t *testing.T) {
-	if !pbfFrom(resolve.PBFRule{From: []string{"any"}}, Port{Zone: "x"}) ||
-		!pbfFrom(resolve.PBFRule{FromKind: "interface", From: []string{"e1"}}, Port{}) ||
-		pbfFrom(resolve.PBFRule{FromKind: "zone", From: []string{"a"}}, Port{Zone: "b"}) {
-		t.Error("pbfFrom")
-	}
-	if joinAnd([]string{"a", "b"}) != "a and b" || joinAnd([]string{"a"}) != "a" {
-		t.Error("joinAnd")
-	}
-}
-
 // With no source, any source could match; a sdwan arrival is sent to vsys2.
 func TestPBFToAnotherVsysWithoutASource(t *testing.T) {
 	n, load := policyNet(t, "firewall-routing.xml")
@@ -153,17 +142,7 @@ func TestPolicyLoadsOnlyAKnownVsys(t *testing.T) {
 	if _, ok := s.policy(&Hop{Device: "fw", Vsys: "vsys9"}); ok {
 		t.Error("a vsys the configuration lacks has no policy")
 	}
-	hp, ok := s.policy(&Hop{Device: "fw", Vsys: "vsys1"})
-	if !ok {
-		t.Fatal("vsys1")
-	}
-	// An index that cannot be built rules nothing out.
-	bad := hp
-	bad.scope = config.Scope{Sort: config.ScopeVsys, Name: "vsys9"}
-	if src, dst := s.sides(bad, resolve.NAT, func(int) (bool, bool) { return false, false }); !src.IsEmpty() || !dst.IsEmpty() {
-		t.Errorf("sides = %v %v", src, dst)
-	}
-	if !s.holds(hp, "dc01", ip("10.1.10.100")) || s.holds(hp, "dc01", ip("10.1.10.101")) {
-		t.Error("holds resolves an address object")
+	if _, ok := s.policy(&Hop{Device: "fw", Vsys: "vsys1"}); !ok {
+		t.Error("vsys1")
 	}
 }

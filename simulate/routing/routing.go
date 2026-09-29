@@ -10,6 +10,7 @@ import (
 
 	"github.com/okaiser/panos-analyst/resolve"
 	"github.com/okaiser/panos-analyst/simulate"
+	"github.com/okaiser/panos-analyst/simulate/topology"
 )
 
 // Kind is the registry key and the command name.
@@ -54,9 +55,9 @@ const (
 
 // Lookup is one route lookup in one router.
 type Lookup struct {
-	Router   string `json:"router"`
-	Match    Match  `json:"route"`
-	Protocol string `json:"protocol,omitempty"` // from the routing table; empty without one
+	Router   string         `json:"router"`
+	Match    simulate.Match `json:"route"`
+	Protocol string         `json:"protocol,omitempty"` // from the routing table; empty without one
 }
 
 // NotFollowed is an ECMP next hop the path did not take, and the node it reaches.
@@ -71,8 +72,8 @@ type Hop struct {
 	Vsys       string             `json:"vsys"`
 	SnapshotID string             `json:"snapshot,omitempty"`
 	TakenAt    time.Time          `json:"taken_at,omitzero"`
-	In         Port               `json:"in"`
-	Out        Port               `json:"out"`
+	In         simulate.Port      `json:"in"`
+	Out        simulate.Port      `json:"out"`
 	Lookups    []Lookup           `json:"lookups"`
 	Flow       simulate.Flow      `json:"flow"`     // pre-NAT, with this hop's zones
 	PostNAT    *simulate.Flow     `json:"post_nat"` // nil until NAT is simulated
@@ -86,27 +87,13 @@ type Hop struct {
 type Path struct {
 	Source      simulate.Endpoint `json:"source"`
 	Destination simulate.Endpoint `json:"destination"`
-	Placed      Placed            `json:"placed"`
+	Placed      topology.Placed   `json:"placed"`
 	PlacedVia   string            `json:"placed_via,omitempty"`
 	Outcome     Outcome           `json:"outcome"`
 	End         string            `json:"end"` // the end line's text
 	Hops        []Hop             `json:"hops"`
 	Hidden      []string          `json:"hidden,omitempty"` // spec §17 R19
 	Notes       []string          `json:"notes,omitempty"`
-}
-
-// ChoiceError is a question only the user can answer: which device, which router,
-// which of several starts. The command turns it into a usage error.
-type ChoiceError struct {
-	Question string
-	Options  []string
-}
-
-func (e *ChoiceError) Error() string {
-	if len(e.Options) == 0 {
-		return e.Question
-	}
-	return e.Question + ": " + strings.Join(e.Options, ", ")
 }
 
 // Run implements simulate.Simulation.
@@ -119,10 +106,10 @@ func (Simulation) Run(ctx context.Context, env *simulate.Env, in simulate.Input)
 		return run, errors.New("routing: no network to read")
 	}
 	if len(in.Flow.Destination.Addrs) == 0 || !in.Flow.Destination.Addrs[0].Is4() {
-		return run, &ChoiceError{Question: "the destination must be an IPv4 address; IPv6 is not simulated yet"}
+		return run, &simulate.ChoiceError{Question: "the destination must be an IPv4 address; IPv6 is not simulated yet"}
 	}
 	if a := in.Flow.Source.Addrs; len(a) > 0 && !a[0].Is4() {
-		return run, &ChoiceError{Question: "the source must be an IPv4 address; IPv6 is not simulated yet"}
+		return run, &simulate.ChoiceError{Question: "the source must be an IPv4 address; IPv6 is not simulated yet"}
 	}
 	s := newState(env, in)
 	s.path.Notes = append(s.path.Notes, endpointNotes(in.Flow)...)

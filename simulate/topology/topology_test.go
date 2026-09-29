@@ -1,8 +1,9 @@
-package routing
+package topology
 
 import (
 	"errors"
 	"net/netip"
+	"strings"
 	"testing"
 
 	"github.com/okaiser/panos-analyst/resolve"
@@ -180,5 +181,54 @@ func TestInterfaceWithoutAddress(t *testing.T) {
 	}
 	if n := lab().Nodes(); len(n) != 2 {
 		t.Errorf("nodes = %v", n)
+	}
+}
+
+func TestStart(t *testing.T) {
+	topo := lab()
+	var ce *simulate.ChoiceError
+	if _, _, err := topo.Start("fw01", "", ip("8.8.8.8")); !errors.As(err, &ce) || !strings.Contains(err.Error(), "default, lte") {
+		t.Errorf("several routers: %v", err)
+	}
+	if _, _, err := topo.Start("fw01", "x", netip.Addr{}); !errors.As(err, &ce) {
+		t.Errorf("no such router: %v", err)
+	}
+	if p, connected, err := topo.Start("fw02", "", ip("198.18.100.7")); err != nil || !connected || p.Interface != "vlan.100" {
+		t.Errorf("connected: %+v %v %v", p, connected, err)
+	}
+	if p, connected, _ := topo.Start("fw02", "", ip("198.18.10.9")); connected || p.Interface != "vlan.32" {
+		t.Errorf("return route: %+v", p)
+	}
+	if p, _, _ := topo.Start("fw01", "lte", ip("10.9.9.9")); p.Interface != "" || p.Router != "lte" {
+		t.Errorf("no route back: %+v", p)
+	}
+	if p, _, _ := topo.Start("fw01", "default", netip.Addr{}); p.Interface != "" || p.Device != "fw01" {
+		t.Errorf("no source: %+v", p)
+	}
+}
+
+func TestForward(t *testing.T) {
+	topo := NewTopology([]simulate.DeviceData{dev("a",
+		[]resolve.InterfaceState{iface("e1", "out", "r", "10.0.0.1/24"), iface("e2", "in", "r", "10.9.0.1/24")},
+		route("r", "0.0.0.0/0", "e1", "10.0.0.2"),
+		route("r", "10.9.0.0/24", "e2", "0.0.0.0"),
+		route("r", "172.16.0.0/12", "e1", "10.0.0.3"), route("r", "172.16.0.0/12", "e1", "10.0.0.4"),
+		resolve.FIBRoute{Router: "r", Destination: netip.MustParsePrefix("10.66.0.0/16"), Interface: "e1", NextHop: "0.0.0.0", NextHopType: "7"},
+		resolve.FIBRoute{Router: "r", Destination: netip.MustParsePrefix("10.8.0.1/32"), Interface: "e1", NextHop: "0.0.0.0", NextHopType: resolve.NextHopLocal},
+	)})
+	for _, tc := range []struct{ addr, out, end, level string }{
+		{"8.8.8.8", "e1", "", "exact"},
+		{"10.9.0.1", "e2", simulate.EndLocal, "exact"},
+		{"10.8.0.1", "e1", simulate.EndLocal, "exact"},
+		{"10.66.1.1", "e1", simulate.EndUnknownType, "undermatch"},
+		{"172.16.1.1", "e1", "", "undermatch"},
+	} {
+		f := topo.Forward("a", "r", ip(tc.addr))
+		if f.Out.Interface != tc.out || f.End != tc.end || f.Fidelity.Level() != tc.level {
+			t.Errorf("%s: %+v", tc.addr, f)
+		}
+	}
+	if f := topo.Forward("a", "none", ip("8.8.8.8")); f.End != simulate.EndNoRoute || f.Out.Device != "a" {
+		t.Errorf("no route: %+v", f)
 	}
 }

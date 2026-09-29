@@ -140,7 +140,10 @@ neither `simulate` nor `estate`. `store` does not import `fetch`. `search` and
 `estate`, `store`, `fetch`, `search` or `drift`. `simulate/securitypolicy` imports
 none of `estate`, `store` or `fetch`. `simulate/routing` imports none of `estate`,
 `store`, `fetch`, `search` or `drift`, and no I/O package: every device's data
-reaches it through `simulate.Network`.
+reaches it through `simulate.Network`. No simulation imports another (`routing`,
+`nat`, `securitypolicy`); what they share lives in the leaf packages
+`simulate/topology` (interfaces, forwarding tables, placement) and `simulate/policy`
+(rulebase matching, PBF), which import no simulation and no I/O package.
 
 The core's freedom from I/O is an absolute property today. A fetcher in the same
 module makes it a conditional one, and conditional invariants decay unless a test

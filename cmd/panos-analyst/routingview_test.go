@@ -12,6 +12,7 @@ import (
 	"github.com/okaiser/panos-analyst/resolve"
 	"github.com/okaiser/panos-analyst/simulate"
 	"github.com/okaiser/panos-analyst/simulate/routing"
+	"github.com/okaiser/panos-analyst/simulate/topology"
 )
 
 type fixedNet map[string]simulate.DeviceData
@@ -145,15 +146,15 @@ func TestRenderWithoutASource(t *testing.T) {
 // Hand-built paths for the rows a two-device lab does not produce.
 func TestRenderRowsAndEnds(t *testing.T) {
 	pfx := netip.MustParsePrefix
-	lk := routing.Lookup{Router: "r", Match: routing.Match{
+	lk := routing.Lookup{Router: "r", Match: simulate.Match{
 		Destination: pfx("10.0.0.0/8"),
 		NextHops:    []resolve.FIBRoute{{NextHop: "10.1.0.2"}},
 	}}
 	hop := func(dev, vsys string, notes ...string) routing.Hop {
 		return routing.Hop{
 			Device: dev, Vsys: vsys, Lookups: []routing.Lookup{lk}, Notes: notes,
-			In:  routing.Port{Interface: "e1", Addr: pfx("10.0.0.1/24")},
-			Out: routing.Port{Interface: "tunnel.1"}, Flow: simulate.Flow{FromZone: "a", ToZone: "b"},
+			In:  simulate.Port{Interface: "e1", Addr: pfx("10.0.0.1/24")},
+			Out: simulate.Port{Interface: "tunnel.1"}, Flow: simulate.Flow{FromZone: "a", ToZone: "b"},
 		}
 	}
 	h1 := hop("fw", "vsys1", "pbf rule x may drop this packet", "nat rule y may change the source", "schema: PBF and NAT checked with the 11.2 digest", "other")
@@ -165,7 +166,7 @@ func TestRenderRowsAndEnds(t *testing.T) {
 	h2 := hop("fw", "vsys2")
 	p := routing.Path{
 		Source: simulate.Addr(netip.MustParseAddr("10.0.0.5")), Destination: simulate.Addr(netip.MustParseAddr("10.9.9.9")),
-		Placed: routing.PlacedConnected, Outcome: routing.LeftByInterface, End: "leaves by tunnel.1 (zone b)",
+		Placed: topology.PlacedConnected, Outcome: routing.LeftByInterface, End: "leaves by tunnel.1 (zone b)",
 		Hops: []routing.Hop{h1, h2}, Hidden: []string{"fw5 (Layer 2 or virtual wire)"}, Notes: []string{"n.example resolved to 2 addresses"},
 	}
 	var b bytes.Buffer
