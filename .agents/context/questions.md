@@ -50,7 +50,7 @@ what was added, removed or changed. Position is not compared.
 
 ## Build / run pointers
 
-- `go test ./estate ./search ./card ./drift`
+- `go test ./internal/estate ./internal/search ./internal/card ./internal/drift`
 - `./bin/proteus search <term> --file <cfg>`, `./bin/proteus lookup <name> --file <cfg> --expand`, `./bin/proteus snapshot diff`
 
 ## Public API

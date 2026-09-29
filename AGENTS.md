@@ -31,7 +31,7 @@ The fetcher is the one package that talks to a device. It asks for an API key, r
 op command before it reaches the device, and has no method for anything else.
 
 Check: `go test ./... -run TestPublicAPIIsReadOnly`
-Check: `go test ./fetch -run TestOnlyReadCalls`
+Check: `go test ./internal/fetch -run TestOnlyReadCalls`
 
 ## R3 — Nothing is dropped silently
 
@@ -44,7 +44,7 @@ This rule exists because pango types a device group's `vsys` as a member list
 while Panorama writes an entry list. pango returns an empty value and preserves
 nothing, so a round trip deletes the assignment.
 
-Check: `go test ./config -run TestRoundTripLosesNothing`
+Check: `go test ./internal/config -run TestRoundTripLosesNothing`
 
 ## R4 — List shape is read from the grammar, never guessed
 
@@ -64,7 +64,7 @@ A shared dynamic address group resolves to different members in different vsys.
 A global resolution silently merges sibling vsys and returns answers that are
 wrong rather than incomplete.
 
-Check: `go test ./config -run TestScopedResolution`
+Check: `go test ./internal/config -run TestScopedResolution`
 
 ## R6 — Generated code is committed, and drift is gated
 
@@ -114,7 +114,7 @@ relation. A merged answer is wrong, not merely incomplete.
 
 Rule bitmaps key on the vsys, because each vsys has its own rulebase.
 
-Check: `go test ./index -run TestNoGlobalIndex`
+Check: `go test ./internal/index -run TestNoGlobalIndex`
 
 ## R11 — Set-shaped state uses Roaring bitmaps
 
@@ -126,7 +126,7 @@ the slice form cost 1,875 ms and 1,193 MB; bitmaps cost 6 ms and 69 MB. Build th
 forward closure eagerly and memoise reverse lookups — building the reverse
 closure eagerly on the same data cost 26 s and 294 MB.
 
-Check: `go test ./index -run TestClosureRepresentation`
+Check: `go test ./internal/index -run TestClosureRepresentation`
 
 ## R12 — The read-only core imports no I/O, and dependencies point one way
 
