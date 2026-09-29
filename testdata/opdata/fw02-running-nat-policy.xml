@@ -1,0 +1,47 @@
+<response status="success"><result>
+  <member>Nat policy configured on vsys1:
+"mgmt-workaround; index: 1" {
+        nat-type ipv4;
+        from home;
+        source any;
+        source-region none;
+        to labor;
+        to-interface  ;
+        destination 198.18.100.0/24;
+        destination-region none;
+        service 0:any/any/any;
+        translate-to "src: vlan.100 198.18.100.254 (dynamic-ip-and-port) (pool idx: 1)";
+        terminal no;
+}
+
+"lab-access; index: 2" {
+        nat-type ipv4;
+        from home;
+        source any;
+        source-region none;
+        to labor;
+        to-interface  ;
+        destination any;
+        destination-region none;
+        service 0:any/any/any;
+        translate-to "src: vlan.32 198.19.0.1 (dynamic-ip-and-port) (pool idx: 2)";
+        terminal no;
+}
+
+"internet-access; index: 3" {
+        nat-type ipv4;
+        from any;
+        source 198.18.0.0/15;
+        source-region none;
+        to wan;
+        to-interface  ;
+        destination any;
+        destination-region none;
+        service 0:any/any/any;
+        translate-to "src: ethernet1/1 192.168.0.138(*) (dynamic-ip-and-port) (pool idx: 3)";
+        terminal no;
+}
+
+
+</member>
+</result></response>
