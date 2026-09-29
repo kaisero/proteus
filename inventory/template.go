@@ -38,6 +38,10 @@ devices:
     host: fw01.example.net
     labels:
       site: vienna
+    # When fw01 is the passive member of an HA pair, fetch reads its active peer at
+    # the management address fw01 reports. Set ha_peer when that address is not
+    # reachable from here.
+    # ha_peer: fw01-b.example.net
 `
 
 // WriteTemplate writes Template to path with mode 0600, creating its directory. It

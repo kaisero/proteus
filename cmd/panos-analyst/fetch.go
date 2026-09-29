@@ -116,6 +116,10 @@ func fetchEach(ctx context.Context, out io.Writer, inv *inventory.Inventory, st 
 	return errs, stored
 }
 
+// peerHost maps an HA peer's reported management address to a host; nil uses the
+// address. Tests point it at a second fake device.
+var peerHost func(mgmtIP string) string
+
 func fetchOne(ctx context.Context, out io.Writer, inv *inventory.Inventory, st *store.Store,
 	name string, getenv func(string) string, log *runlog.Logger,
 ) (bool, error) {
@@ -129,7 +133,7 @@ func fetchOne(ctx context.Context, out io.Writer, inv *inventory.Inventory, st *
 		fmt.Fprintf(out, "%s: TLS certificate verification on\n", name)
 	}
 	log.Infof(runlog.TagAPI, "%s: fetching %s, TLS verification %s", name, t.Host, map[bool]string{true: "off", false: "on"}[t.InsecureTLS])
-	res, err := fetch.Run(ctx, t, fetch.Documents, log)
+	res, err := fetch.RunActive(ctx, t, fetch.Documents, fetch.ActiveOptions{PeerHost: peerHost}, log)
 	if err != nil {
 		return false, err
 	}
@@ -137,6 +141,13 @@ func fetchOne(ctx context.Context, out io.Writer, inv *inventory.Inventory, st *
 		Device: t.Name, Host: t.Host,
 		Hostname: res.System.Hostname, Model: res.System.Model,
 		Serial: res.System.Serial, SWVersion: res.System.SWVersion,
+		FetchedFrom: res.FetchedFrom, Notes: res.Notes,
+	}
+	if res.FetchedFrom != "" {
+		fmt.Fprintf(out, "  %s is the passive HA peer; fetched from the active peer %s\n", name, res.FetchedFrom)
+	}
+	for _, n := range res.Notes {
+		fmt.Fprintf(out, "  note: %s\n", n)
 	}
 	var docErrs []error
 	for _, o := range res.Outcomes {

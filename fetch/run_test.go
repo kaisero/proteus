@@ -24,6 +24,8 @@ func fullDevice(t *testing.T) *fakepanos.Device {
 	d.Ops["<show><system><info/></system></show>"] = read("../testdata/opdata/fw01-system-info.xml")
 	d.Ops["<show><interface>all</interface></show>"] = read("../testdata/opdata/fw01-interface-all.xml")
 	d.Ops["<show><advanced-routing><fib><afi>both</afi></fib></advanced-routing></show>"] = read("../testdata/opdata/fw01-advanced-routing-fib.xml")
+	d.Ops[RoutingRIBCmd] = read("../testdata/opdata/fw02-advanced-routing-route.xml")
+	d.Ops[haStateCmd] = read("../testdata/opdata/fw02-ha-state.xml")
 	return d
 }
 

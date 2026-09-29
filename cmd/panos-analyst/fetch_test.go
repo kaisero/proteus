@@ -40,6 +40,10 @@ func lab(t *testing.T) *fakepanos.Device {
 			"<show><interface>all</interface></show>": read(t, "../../testdata/opdata/fw01-interface-all.xml"),
 			"<show><advanced-routing><fib><afi>both</afi></fib></advanced-routing></show>": read(t,
 				"../../testdata/opdata/fw01-advanced-routing-fib.xml"),
+			// fw01 has no captured routing table or HA state; fw02's stand in.
+			"<show><advanced-routing><route><afi>ipv4</afi></route></advanced-routing></show>": read(t,
+				"../../testdata/opdata/fw02-advanced-routing-route.xml"),
+			"<show><high-availability><state/></high-availability></show>": read(t, "../../testdata/opdata/fw02-ha-state.xml"),
 		},
 	}
 }
@@ -235,7 +239,7 @@ func TestHousekeeping(t *testing.T) {
 	c.want(0, "fetch", "--label", "site=s1")
 	c.want(1, "snapshot", "list", "../x")
 	out := c.want(0, "snapshot", "list", "fw01")
-	if !strings.HasPrefix(out, "* ") || !strings.Contains(out, "4 documents, 0 failed") {
+	if !strings.HasPrefix(out, "* ") || !strings.Contains(out, "6 documents, 0 failed") {
 		t.Errorf("snapshot list:\n%s", out)
 	}
 	var env struct{ Results []struct{ Latest bool } }
@@ -603,5 +607,35 @@ func TestDefaultsFromTheEnvironment(t *testing.T) {
 	}
 	if expandHome("/abs") != "/abs" {
 		t.Error("an absolute path stays")
+	}
+}
+
+// An inventory entry naming the passive HA peer stores the active peer's data and
+// says so. The pair shape is synthetic: no lab device runs HA.
+func TestFetchFollowsThePassivePeer(t *testing.T) {
+	haCmd := "<show><high-availability><state/></high-availability></show>"
+	state := func(local, localSerial, peer, peerSerial string) string {
+		return fakepanos.Success(`<enabled>yes</enabled><group><mode>active-passive</mode><local-info><state>` + local +
+			`</state><serial-num>` + localSerial + `</serial-num></local-info><peer-info><state>` + peer +
+			`</state><serial-num>` + peerSerial + `</serial-num><mgmt-ip>192.0.2.2</mgmt-ip></peer-info></group>`)
+	}
+	passive, active := lab(t), lab(t)
+	passive.Ops[haCmd] = state("passive", "A", "active", "B")
+	active.Ops[haCmd] = state("active", "B", "passive", "A")
+	activeHost := active.Start(t)
+	peerHost = func(string) string { return activeHost }
+	t.Cleanup(func() { peerHost = nil })
+
+	c := newCLI(t)
+	c.inventory(inventoryFor(passive.Start(t)))
+	if out := c.want(0, "fetch", "fw01"); !strings.Contains(out, "fw01 is the passive HA peer; fetched from the active peer "+activeHost) {
+		t.Errorf("fetch:\n%s", out)
+	}
+	if out := c.want(0, "snapshot", "show", "--device", "fw01"); !strings.Contains(out, "fetched from the active HA peer "+activeHost) {
+		t.Errorf("snapshot show:\n%s", out)
+	}
+	passive.Ops[haCmd] = state("passive", "A", "suspended", "B")
+	if out := c.want(0, "fetch", "fw01"); !strings.Contains(out, `note: passive, but the peer is "suspended"`) {
+		t.Errorf("fetch with a suspended peer:\n%s", out)
 	}
 }

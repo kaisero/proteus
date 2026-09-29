@@ -27,6 +27,8 @@ const (
 	ConfigDoc     = "config"
 	InterfacesDoc = "interfaces"
 	FIBDoc        = "fib"
+	RIBDoc        = "rib"
+	HADoc         = "ha"
 )
 
 const idLayout = "2006-01-02T15-04-05Z"
@@ -78,6 +80,10 @@ type Meta struct {
 	Serial    string         `json:"serial,omitempty"`
 	SWVersion string         `json:"sw_version,omitempty"`
 	Documents []DocumentMeta `json:"documents"`
+	// FetchedFrom is the host that answered when it is not the device's own: the
+	// active peer of a device found passive.
+	FetchedFrom string   `json:"fetched_from,omitempty"`
+	Notes       []string `json:"notes,omitempty"`
 }
 
 // DocumentMeta is what happened to one document.

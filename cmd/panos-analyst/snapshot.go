@@ -90,6 +90,7 @@ func (a *app) snapshotShowCmd() *cobra.Command {
 				Host     string               `json:"host,omitempty"`
 				Model    string               `json:"model,omitempty"`
 				Serial   string               `json:"serial,omitempty"`
+				From     string               `json:"fetched_from,omitempty"`
 				Document []store.DocumentMeta `json:"documents,omitempty"`
 			}
 			var rows []row
@@ -102,7 +103,7 @@ func (a *app) snapshotShowCmd() *cobra.Command {
 				}
 				if t.Snapshot != nil {
 					m := t.Snapshot.Meta
-					r.Host, r.Model, r.Serial, r.Document = m.Host, m.Model, m.Serial, m.Documents
+					r.Host, r.Model, r.Serial, r.From, r.Document = m.Host, m.Model, m.Serial, m.FetchedFrom, m.Documents
 				}
 				rows = append(rows, r)
 			}
@@ -121,6 +122,9 @@ func (a *app) snapshotShowCmd() *cobra.Command {
 					printNotes(a, ts[i])
 					if r.Host != "" {
 						fmt.Fprintf(a.stdout, "  %s, %s, serial %s\n", r.Host, r.Model, r.Serial)
+					}
+					if r.From != "" {
+						fmt.Fprintf(a.stdout, "  fetched from the active HA peer %s\n", r.From)
 					}
 					for _, d := range r.Document {
 						if d.Error != "" {

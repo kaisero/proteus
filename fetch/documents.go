@@ -65,9 +65,27 @@ var (
 		"<show><routing><fib/></routing></show>")
 )
 
+// The routing and HA documents.
+var (
+	// RoutingRIB is the routing table, installed or not. Advanced Routing answers
+	// with FRR JSON (verified on fw02, PAN-OS 12.2.2). On an Advanced Routing
+	// device the legacy command reports success with a deprecation text, so the
+	// Advanced Routing command must come first; the legacy one answers only where
+	// the first is refused.
+	RoutingRIB = OpDocument("rib", RoutingRIBCmd, "<show><routing><route/></routing></show>")
+
+	// HAState is the device's high-availability state and its peer's.
+	HAState = OpDocument("ha", haStateCmd)
+)
+
+// RoutingRIBCmd is the Advanced Routing form of the routing table command.
+const RoutingRIBCmd = "<show><advanced-routing><route><afi>ipv4</afi></route></advanced-routing></show>"
+
+const haStateCmd = "<show><high-availability><state/></high-availability></show>"
+
 // Documents is what every fetch collects, in order. The configuration comes first
 // because nothing can be analysed without it.
-var Documents = []Document{RunningConfig, SystemInfo, Interfaces, RoutingFIB}
+var Documents = []Document{RunningConfig, SystemInfo, Interfaces, RoutingFIB, RoutingRIB, HAState}
 
 // System is what a snapshot records from show system info.
 type System struct {

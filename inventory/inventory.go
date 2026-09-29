@@ -67,6 +67,9 @@ type Device struct {
 	InsecureTLS *bool             `yaml:"insecure_tls"`
 	Timeout     int               `yaml:"timeout"`
 	Labels      map[string]string `yaml:"labels"`
+	// HAPeer is the reachable host of the device's HA peer, for when the address
+	// the device reports is not reachable from here.
+	HAPeer string `yaml:"ha_peer"`
 }
 
 // Target is one device with every default applied and its password read.
@@ -79,6 +82,7 @@ type Target struct {
 	Timeout      time.Duration
 	SnapshotKeep int
 	Labels       map[string]string
+	HAPeer       string
 }
 
 var nameRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
@@ -260,6 +264,7 @@ func (inv *Inventory) resolve(d Device, getenv func(string) string) (Target, err
 		Timeout:      DefaultTimeout,
 		SnapshotKeep: DefaultSnapshotKeep,
 		Labels:       d.Labels,
+		HAPeer:       d.HAPeer,
 	}
 	if t.Username == "" {
 		t.Username = def.Username

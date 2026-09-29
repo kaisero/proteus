@@ -29,6 +29,7 @@ devices:
     password_env: FW02_PASSWORD
     insecure_tls: false
     timeout: 90
+    ha_peer: fw02-b.example.net
 `
 
 func TestResolveAppliesDefaults(t *testing.T) {
@@ -53,7 +54,8 @@ func TestADeviceOverridesTheDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Username != "other" || got.Password != "secret-2" || got.InsecureTLS || got.Timeout != 90*time.Second {
+	if got.Username != "other" || got.Password != "secret-2" || got.InsecureTLS || got.Timeout != 90*time.Second ||
+		got.HAPeer != "fw02-b.example.net" {
 		t.Errorf("fw02 = %+v", got)
 	}
 }

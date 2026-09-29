@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Fetch stores the routing table and reads the active firewall of an HA pair.**
+  Every `fetch` now also stores the routing table and the HA state. When an
+  inventory entry names the passive member of an active-passive pair, `fetch` reads
+  the active peer instead and says so; `ha_peer` sets the peer's host when the
+  address the device reports is not reachable.
 - **Look up the whole rule or object behind a name.** `panos-analyst lookup <name>`
   prints a security rule laid out like the firewall's rule editor, or an object with
   its value, members and the groups holding it. `--expand` puts each name's value in
