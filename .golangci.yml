@@ -1,4 +1,4 @@
-# golangci-lint v2 configuration for panos-analyst.
+# golangci-lint v2 configuration for proteus.
 # Run: make lint   (or: golangci-lint run)
 version: "2"
 

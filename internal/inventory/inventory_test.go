@@ -196,14 +196,14 @@ func TestWriteTemplate(t *testing.T) {
 }
 
 func TestDefaultPath(t *testing.T) {
-	if got, _ := DefaultPath(env(map[string]string{"PANOS_CONFIG": "/x/y.yaml"})); got != "/x/y.yaml" {
-		t.Errorf("PANOS_CONFIG ignored: %s", got)
+	if got, _ := DefaultPath(env(map[string]string{"PROTEUS_CONFIG": "/x/y.yaml"})); got != "/x/y.yaml" {
+		t.Errorf("PROTEUS_CONFIG ignored: %s", got)
 	}
-	if got, _ := DefaultPath(env(map[string]string{"XDG_CONFIG_HOME": "/cfg"})); got != "/cfg/panos-analyst/config.yaml" {
+	if got, _ := DefaultPath(env(map[string]string{"XDG_CONFIG_HOME": "/cfg"})); got != "/cfg/proteus/config.yaml" {
 		t.Errorf("XDG_CONFIG_HOME ignored: %s", got)
 	}
 	got, err := DefaultPath(env(nil))
-	if err != nil || !strings.HasSuffix(got, filepath.Join(".config", "panos-analyst", "config.yaml")) {
+	if err != nil || !strings.HasSuffix(got, filepath.Join(".config", "proteus", "config.yaml")) {
 		t.Errorf("home default = %s, %v", got, err)
 	}
 }

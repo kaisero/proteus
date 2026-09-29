@@ -186,6 +186,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **The project and its command are now `proteus`.** Run `proteus` instead of
+  `panos-analyst`; settings variables are `PROTEUS_*` instead of `PANOS_*`, and the
+  inventory, snapshots and run logs now live in `proteus` directories, so move
+  existing ones there.
 - **Zones no longer have to be given to simulate.** Without `--from-zone` and
   `--to-zone`, they are derived from the device's stored forwarding table, or from its
   configuration, and the answer says which and marks them as inferred.
@@ -199,6 +203,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+- **The Go packages can no longer be imported.** proteus is now an application
+  only, so code that imported its packages has to copy what it needs.
 - **`panos-explore` is gone.** Its questions live in `panos-analyst`: `reaches`,
   `lookup`, `search`, `uses`, `whereused` and `group` are `search`; `simulate` is
   `simulate policy`; `info`, `groups` and `target` are `snapshot show`.

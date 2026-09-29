@@ -32,11 +32,11 @@ func (a *app) openLog(c *cobra.Command) error {
 	if inv, err := inventory.Load(path); err == nil {
 		def = inv.Defaults
 	}
-	level, err := runlog.ParseLevel(first(a.logLevelFlag, a.getenv("PANOS_LOG_LEVEL"), def.LogLevel, "info"))
+	level, err := runlog.ParseLevel(first(a.logLevelFlag, a.getenv("PROTEUS_LOG_LEVEL"), def.LogLevel, "info"))
 	if err != nil {
 		return usageErr("%v", err)
 	}
-	dir := first(a.logDirFlag, a.getenv("PANOS_LOG_DIR"), expandHome(def.LogDir))
+	dir := first(a.logDirFlag, a.getenv("PROTEUS_LOG_DIR"), expandHome(def.LogDir))
 	if dir == "" {
 		if dir, err = defaultLogDir(a.getenv); err != nil {
 			return err
@@ -49,29 +49,29 @@ func (a *app) openLog(c *cobra.Command) error {
 	name := strings.TrimPrefix(c.CommandPath(), c.Root().Name()+" ")
 	l, err := runlog.Open(runlog.Options{Dir: dir, Command: name, Keep: def.LogKeep, Level: level, Echo: echo, Now: a.now})
 	if err != nil {
-		fmt.Fprintf(a.stderr, "panos-analyst: warning: no run log: %v\n", err)
+		fmt.Fprintf(a.stderr, "proteus: warning: no run log: %v\n", err)
 		return nil
 	}
 	a.log = l
-	l.Infof(runlog.TagRun, "panos-analyst %s: %s", a.version, strings.Join(a.argv, " "))
+	l.Infof(runlog.TagRun, "proteus %s: %s", a.version, strings.Join(a.argv, " "))
 	return nil
 }
 
-// defaultLogDir is $XDG_STATE_HOME/panos-analyst/log, else
-// ~/.local/state/panos-analyst/log.
+// defaultLogDir is $XDG_STATE_HOME/proteus/log, else
+// ~/.local/state/proteus/log.
 func defaultLogDir(getenv func(string) string) (string, error) {
 	if x := getenv("XDG_STATE_HOME"); x != "" {
-		return filepath.Join(x, "panos-analyst", "log"), nil
+		return filepath.Join(x, "proteus", "log"), nil
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, ".local", "state", "panos-analyst", "log"), nil
+	return filepath.Join(home, ".local", "state", "proteus", "log"), nil
 }
 
 // settings are the four values of spec §15 C14, resolved with the precedence
-// default < file < PANOS_* env < flag.
+// default < file < PROTEUS_* env < flag.
 type settings struct {
 	invPath   string
 	inv       *inventory.Inventory // nil when there is no inventory file and none was needed
@@ -105,8 +105,8 @@ func (a *app) settings(needInventory bool) (settings, error) {
 	switch {
 	case a.storeFlag != "":
 		s.storeRoot = a.storeFlag
-	case a.getenv("PANOS_STORE") != "":
-		s.storeRoot = a.getenv("PANOS_STORE")
+	case a.getenv("PROTEUS_STORE") != "":
+		s.storeRoot = a.getenv("PROTEUS_STORE")
 	case def.Store != "":
 		s.storeRoot = expandHome(def.Store)
 	default:
@@ -115,11 +115,11 @@ func (a *app) settings(needInventory bool) (settings, error) {
 		}
 	}
 
-	age := first(a.maxAgeFlag, a.getenv("PANOS_MAX_SNAPSHOT_AGE"), def.MaxSnapshotAge, "24h")
+	age := first(a.maxAgeFlag, a.getenv("PROTEUS_MAX_SNAPSHOT_AGE"), def.MaxSnapshotAge, "24h")
 	if s.maxAge, err = inventory.ParseAge(age); err != nil {
 		return s, usageErr("%v", err)
 	}
-	s.output = first(a.outputFlag, a.getenv("PANOS_OUTPUT"), def.Output, "text")
+	s.output = first(a.outputFlag, a.getenv("PROTEUS_OUTPUT"), def.Output, "text")
 	if s.output != "text" && s.output != "json" {
 		return s, usageErr("output %q, want text or json", s.output)
 	}
@@ -178,7 +178,7 @@ func (a *app) targets(ctx context.Context, sel selection, s settings, progress i
 		return estate.OpenFile(sel.file, sel.vsys, a.log)
 	}
 	if s.inv == nil {
-		return nil, nil, fmt.Errorf("no inventory at %s; run panos-analyst inventory init, or pass --file", s.invPath)
+		return nil, nil, fmt.Errorf("no inventory at %s; run proteus inventory init, or pass --file", s.invPath)
 	}
 	names, err := s.inv.Select(sel.devices, sel.labels)
 	if err != nil {

@@ -139,21 +139,21 @@ var showNames = map[string]search.Stage{
 	"refs": search.StageReference, "literals": search.StageLiteral,
 }
 
-// userSnapshot reads PANOS_USERS, the user-to-group mapping a configuration does
+// userSnapshot reads PROTEUS_USERS, the user-to-group mapping a configuration does
 // not hold. None set is no mapping.
 func (a *app) userSnapshot() (index.UserDirectory, error) {
-	path := a.getenv("PANOS_USERS")
+	path := a.getenv("PROTEUS_USERS")
 	if path == "" {
 		return nil, nil
 	}
 	f, err := os.Open(path)
 	if err != nil {
-		return nil, fmt.Errorf("PANOS_USERS: %w", err)
+		return nil, fmt.Errorf("PROTEUS_USERS: %w", err)
 	}
 	defer func() { _ = f.Close() }()
 	snap, err := index.LoadUserSnapshot(f)
 	if err != nil {
-		return nil, fmt.Errorf("PANOS_USERS: %w", err)
+		return nil, fmt.Errorf("PROTEUS_USERS: %w", err)
 	}
 	return snap, nil
 }

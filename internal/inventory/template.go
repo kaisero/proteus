@@ -6,17 +6,17 @@ import (
 	"path/filepath"
 )
 
-// Template is the inventory panos-analyst init writes. It is a working file once a
+// Template is the inventory proteus init writes. It is a working file once a
 // host and the password variable are filled in, and it states the TLS choice rather
 // than leaving it to a default nobody reads.
-const Template = `# panos-analyst inventory. Keep this file private: panos-analyst refuses to read
+const Template = `# proteus inventory. Keep this file private: proteus refuses to read
 # it when anyone but its owner can.
 version: 1
 
 defaults:
   # TLS certificate verification is OFF. Lab firewalls present self-signed
   # certificates, which verification would reject. The cost: anyone on the network
-  # path can feed panos-analyst a false configuration, and every answer drawn from
+  # path can feed proteus a false configuration, and every answer drawn from
   # it is then false. Once your devices present certificates this machine trusts,
   # opt in with:
   #   insecure_tls: false
@@ -30,8 +30,8 @@ defaults:
   output: text                   # text or json
   log_level: info                # error, warn, info or debug; debug explains every answer
   log_keep: 20                   # run logs kept
-  # log_dir: ~/.local/state/panos-analyst/log
-  # store: ~/.local/share/panos-analyst   # where snapshots are kept
+  # log_dir: ~/.local/state/proteus/log
+  # store: ~/.local/share/proteus   # where snapshots are kept
 
 devices:
   - name: fw01

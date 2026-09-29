@@ -6,7 +6,7 @@
 # library over-matches, which is the safe direction for a candidate set. This
 # script exists to show where they disagree and why, not to require agreement.
 #
-# Usage: PANOS_HOST=... PANOS_API_KEY=... scripts/device-probe.sh <config.xml> <vsys> [panos-analyst]
+# Usage: PANOS_HOST=... PANOS_API_KEY=... scripts/device-probe.sh <config.xml> <vsys> [proteus]
 #        PANOS_HOST=... PANOS_API_KEY=... scripts/device-probe.sh --routing <device> <router> <destination>...
 #        PANOS_HOST=... PANOS_API_KEY=... scripts/device-probe.sh --nat <device> <router> <src,dst,port[,from-zone]>...
 #
@@ -25,7 +25,7 @@ set -uo pipefail
 routing_probe() {
   local dev=${1:?device} router=${2:?router}
   shift 2
-  local analyst=${PANOS_ANALYST:-bin/panos-analyst} agreed=0 total=0
+  local analyst=${PROTEUS_BIN:-bin/proteus} agreed=0 total=0
   local live
   live=$(curl -sk --max-time 40 -G "https://$PANOS_HOST/api/" \
     --data-urlencode "type=op" --data-urlencode "key=$PANOS_API_KEY" \
@@ -105,7 +105,7 @@ print("%s:%s" % (h["out"]["interface"], ",".join(sorted(n["NextHop"] for n in h[
 nat_probe() {
   local dev=${1:?device} router=${2:?router}
   shift 2
-  local analyst=${PANOS_ANALYST:-bin/panos-analyst} agreed=0 total=0
+  local analyst=${PROTEUS_BIN:-bin/proteus} agreed=0 total=0
   printf '%-44s %-24s %-24s %s\n' FLOW DEVICE LIBRARY AGREE
   for f in "$@"; do
     IFS=, read -r src dst port zone <<<"$f"
@@ -174,7 +174,7 @@ fi
 cfg=${1:?config file}
 vsys=${2:?vsys, e.g. vsys1}
 vsys=${vsys#vsys:}
-analyst=${3:-bin/panos-analyst}
+analyst=${3:-bin/proteus}
 
 : "${PANOS_HOST:?set PANOS_HOST}"
 : "${PANOS_API_KEY:?set PANOS_API_KEY}"

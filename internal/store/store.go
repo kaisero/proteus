@@ -22,7 +22,7 @@ import (
 )
 
 // The document names the store reads itself. They must equal the names fetch gives
-// them; store cannot import fetch (R12), so a test in cmd/panos-analyst checks.
+// them; store cannot import fetch (R12), so a test in cmd/proteus checks.
 const (
 	ConfigDoc     = "config"
 	InterfacesDoc = "interfaces"
@@ -54,20 +54,20 @@ func (s *Store) WithClock(now func() time.Time) *Store {
 	return &c
 }
 
-// DefaultRoot returns where snapshots are kept: PANOS_STORE, else
-// $XDG_DATA_HOME/panos-analyst, else ~/.local/share/panos-analyst.
+// DefaultRoot returns where snapshots are kept: PROTEUS_STORE, else
+// $XDG_DATA_HOME/proteus, else ~/.local/share/proteus.
 func DefaultRoot(getenv func(string) string) (string, error) {
-	if p := getenv("PANOS_STORE"); p != "" {
+	if p := getenv("PROTEUS_STORE"); p != "" {
 		return p, nil
 	}
 	if x := getenv("XDG_DATA_HOME"); x != "" {
-		return filepath.Join(x, "panos-analyst"), nil
+		return filepath.Join(x, "proteus"), nil
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("store: no home directory: %w", err)
 	}
-	return filepath.Join(home, ".local", "share", "panos-analyst"), nil
+	return filepath.Join(home, ".local", "share", "proteus"), nil
 }
 
 // Meta is a snapshot's meta.json.
@@ -223,7 +223,7 @@ func (s *Store) Latest(device string) (Snapshot, error) {
 	}
 	id, err := os.Readlink(filepath.Join(s.root, device, "latest"))
 	if err != nil {
-		return Snapshot{}, fmt.Errorf("store: %s has no snapshot with a configuration; run panos-analyst fetch %s", device, device)
+		return Snapshot{}, fmt.Errorf("store: %s has no snapshot with a configuration; run proteus fetch %s", device, device)
 	}
 	return s.Get(device, id)
 }

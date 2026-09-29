@@ -37,7 +37,7 @@ func TestLoadWrappedConfig(t *testing.T) {
 }
 
 // A Panorama configuration is refused by name, not loaded against the wrong
-// schema. panos-analyst reads each firewall's own configuration.
+// schema. proteus reads each firewall's own configuration.
 func TestLoadRejectsPanorama(t *testing.T) {
 	_, _, err := Load("../../testdata/config/panorama-rejected.xml")
 	if err == nil {

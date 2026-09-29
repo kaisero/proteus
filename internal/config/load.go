@@ -67,7 +67,7 @@ func Load(path string) (*Config, Report, error) {
 	}
 	if isPanorama(root) {
 		return nil, rep, fmt.Errorf("config: %s is a Panorama configuration; "+
-			"panos-analyst reads each firewall's own configuration", path)
+			"proteus reads each firewall's own configuration", path)
 	}
 
 	dv, err := nearestDigest(version, digestVersions(digestFS))

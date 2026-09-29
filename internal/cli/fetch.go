@@ -187,7 +187,7 @@ func (a *app) inventoryInitCmd() *cobra.Command {
 				return err
 			}
 			fmt.Fprintf(a.stdout, "wrote %s (mode 0600)\n"+
-				"set the hosts and credentials, then run: panos-analyst fetch --all\n", path)
+				"set the hosts and credentials, then run: proteus fetch --all\n", path)
 			return nil
 		},
 	}

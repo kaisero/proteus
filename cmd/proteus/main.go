@@ -1,4 +1,4 @@
-// Command panos-analyst fetches PAN-OS firewalls into a snapshot store and answers
+// Command proteus fetches PAN-OS firewalls into a snapshot store and answers
 // questions about them. The commands live in internal/cli.
 package main
 

@@ -108,9 +108,9 @@ context: ## Refresh the generated API blocks in .agents/context/
 context-check: ## Fail if the agent context docs have drifted from the real API
 	@python3 scripts/context-api.py --check
 
-tools-bin: ## Build panos-analyst and panos-demo for local use
+tools-bin: ## Build proteus and panos-demo for local use
 	CGO_ENABLED=0 go build -ldflags '$(LDFLAGS)' -o $(BIN_DIR)/panos-demo ./cmd/panos-demo
-	CGO_ENABLED=0 go build -ldflags '$(LDFLAGS)' -o $(BIN_DIR)/panos-analyst ./cmd/panos-analyst
+	CGO_ENABLED=0 go build -ldflags '$(LDFLAGS)' -o $(BIN_DIR)/proteus ./cmd/proteus
 
 build: ## Cross-compile a static linux/amd64 generator binary
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags '$(LDFLAGS)' -o $(BIN_DIR)/$(BINARY) $(PKG)

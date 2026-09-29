@@ -174,7 +174,7 @@ func TestStoreAndFetchAgreeOnDocumentNames(t *testing.T) {
 	}
 }
 
-// cli runs panos-analyst against a temporary inventory and store.
+// cli runs proteus against a temporary inventory and store.
 type cli struct {
 	t       *testing.T
 	dir     string
@@ -188,8 +188,8 @@ func newCLI(t *testing.T) *cli {
 	return &cli{
 		t: t, dir: dir, cfgPath: filepath.Join(dir, "config.yaml"),
 		env: map[string]string{
-			"LAB_PW": "not-a-real-password", "PANOS_STORE": filepath.Join(dir, "store"),
-			"PANOS_LOG_DIR": filepath.Join(dir, "log"),
+			"LAB_PW": "not-a-real-password", "PROTEUS_STORE": filepath.Join(dir, "store"),
+			"PROTEUS_LOG_DIR": filepath.Join(dir, "log"),
 		},
 		clock: time.Date(2026, 9, 28, 10, 0, 0, 0, time.UTC),
 	}
@@ -330,19 +330,19 @@ func TestSettingsPrecedence(t *testing.T) {
 	if out := c.want(0, "snapshot", "list", "fw01"); !strings.HasPrefix(out, "{") {
 		t.Errorf("the file's output: json must apply:\n%s", out)
 	}
-	c.env["PANOS_OUTPUT"] = "text"
+	c.env["PROTEUS_OUTPUT"] = "text"
 	if out := c.want(0, "snapshot", "list", "fw01"); strings.HasPrefix(out, "{") {
-		t.Errorf("PANOS_OUTPUT must win over the file:\n%s", out)
+		t.Errorf("PROTEUS_OUTPUT must win over the file:\n%s", out)
 	}
 	if out := c.want(0, "snapshot", "list", "fw01", "--output", "json"); !strings.HasPrefix(out, "{") {
-		t.Errorf("--output must win over PANOS_OUTPUT:\n%s", out)
+		t.Errorf("--output must win over PROTEUS_OUTPUT:\n%s", out)
 	}
-	delete(c.env, "PANOS_STORE")
+	delete(c.env, "PROTEUS_STORE")
 	c.want(1, "snapshot", "list", "fw01") // the file's store is empty
 	c.want(0, "snapshot", "list", "fw01", "--store", filepath.Join(c.dir, "store"))
 	c.want(2, "snapshot", "list", "fw01", "--output", "yaml")
 	c.want(2, "snapshot", "list", "fw01", "--max-age", "soon")
-	c.env["PANOS_MAX_SNAPSHOT_AGE"] = "1m"
+	c.env["PROTEUS_MAX_SNAPSHOT_AGE"] = "1m"
 	out := c.want(0, "snapshot", "show", "--store", filepath.Join(c.dir, "store"))
 	if !strings.Contains(out, "past the 1m0s limit") {
 		t.Errorf("an old snapshot must carry a note:\n%s", out)
@@ -447,7 +447,7 @@ func TestSimulateResolvesAnFQDN(t *testing.T) {
 	var out, errOut bytes.Buffer
 	dir := t.TempDir()
 	a := newApp(&out, &errOut, func(k string) string {
-		return map[string]string{"PANOS_LOG_DIR": filepath.Join(dir, "log"), "PANOS_CONFIG": filepath.Join(dir, "none.yaml")}[k]
+		return map[string]string{"PROTEUS_LOG_DIR": filepath.Join(dir, "log"), "PROTEUS_CONFIG": filepath.Join(dir, "none.yaml")}[k]
 	}, time.Now)
 	a.lookup = func(context.Context, string) ([]netip.Addr, error) {
 		return []netip.Addr{netip.MustParseAddr("203.0.113.10")}, nil
@@ -462,7 +462,7 @@ func TestSimulateResolvesAnFQDN(t *testing.T) {
 	}
 	out.Reset()
 	a = newApp(&out, &errOut, func(k string) string {
-		return map[string]string{"PANOS_LOG_DIR": filepath.Join(dir, "log"), "PANOS_CONFIG": filepath.Join(dir, "none.yaml")}[k]
+		return map[string]string{"PROTEUS_LOG_DIR": filepath.Join(dir, "log"), "PROTEUS_CONFIG": filepath.Join(dir, "none.yaml")}[k]
 	}, time.Now)
 	a.lookup = func(context.Context, string) ([]netip.Addr, error) { return nil, errors.New("no such host") }
 	if code := a.execute(context.Background(), []string{
@@ -527,15 +527,15 @@ func TestSearchWithAUserSnapshot(t *testing.T) {
 	c := newCLI(t)
 	file := "../../testdata/config/firewall-users.xml"
 	if out := c.want(0, "search", `ACME\carol`, "--file", file); strings.Contains(out, "engineering-allowed") {
-		t.Errorf("without PANOS_USERS carol reaches nothing:\n%s", out)
+		t.Errorf("without PROTEUS_USERS carol reaches nothing:\n%s", out)
 	}
-	c.env["PANOS_USERS"] = "../../testdata/users-snapshot.json"
+	c.env["PROTEUS_USERS"] = "../../testdata/users-snapshot.json"
 	if out := c.want(0, "search", `ACME\carol`, "--file", file); !strings.Contains(out, "engineering-allowed") {
-		t.Errorf("with PANOS_USERS carol reaches engineering-allowed:\n%s", out)
+		t.Errorf("with PROTEUS_USERS carol reaches engineering-allowed:\n%s", out)
 	}
-	c.env["PANOS_USERS"] = "../../testdata/missing.json"
+	c.env["PROTEUS_USERS"] = "../../testdata/missing.json"
 	c.want(1, "search", "x", "--file", file)
-	c.env["PANOS_USERS"] = "../../testdata/config/firewall-lab.xml"
+	c.env["PROTEUS_USERS"] = "../../testdata/config/firewall-lab.xml"
 	c.want(1, "search", "x", "--file", file)
 }
 
@@ -562,7 +562,7 @@ func TestRunLog(t *testing.T) {
 		t.Fatalf("logs = %v", logs)
 	}
 	fetchLog, searchLog := read(t, logs[0]), read(t, logs[1])
-	for _, want := range []string{"[INFO] [RUN] panos-analyst dev: fetch fw01", "[DEBUG] [API] fw01: keygen -> HTTP 200", "[INFO] [SNAP] fw01: stored", "[INFO] [RUN] exit 0"} {
+	for _, want := range []string{"[INFO] [RUN] proteus dev: fetch fw01", "[DEBUG] [API] fw01: keygen -> HTTP 200", "[INFO] [SNAP] fw01: stored", "[INFO] [RUN] exit 0"} {
 		if !strings.Contains(fetchLog, want) {
 			t.Errorf("fetch log misses %q:\n%s", want, fetchLog)
 		}
@@ -580,14 +580,14 @@ func TestRunLog(t *testing.T) {
 	if !strings.Contains(errOut, "[DEBUG] [FIND] fw01/vsys1: object address dc01") {
 		t.Errorf("--verbose must echo the log:\n%s", errOut)
 	}
-	c.env["PANOS_LOG_DIR"] = filepath.Join(c.cfgPath, "not-a-dir") // under a file, so it cannot be created
+	c.env["PROTEUS_LOG_DIR"] = filepath.Join(c.cfgPath, "not-a-dir") // under a file, so it cannot be created
 	if _, errOut, code := c.run("search", "x", "--device", "fw01"); code != 0 || !strings.Contains(errOut, "no run log") {
 		t.Errorf("an unwritable log dir warns and carries on: exit %d, %q", code, errOut)
 	}
 }
 
-// With no flags and no PANOS_STORE or PANOS_LOG_DIR, the store and the log follow
-// the XDG directories, and the inventory comes from PANOS_CONFIG.
+// With no flags and no PROTEUS_STORE or PROTEUS_LOG_DIR, the store and the log follow
+// the XDG directories, and the inventory comes from PROTEUS_CONFIG.
 func TestDefaultsFromTheEnvironment(t *testing.T) {
 	dir := t.TempDir()
 	cfg := filepath.Join(dir, "inv.yaml")
@@ -595,7 +595,7 @@ func TestDefaultsFromTheEnvironment(t *testing.T) {
 		t.Fatal(err)
 	}
 	env := map[string]string{
-		"LAB_PW": "not-a-real-password", "PANOS_CONFIG": cfg,
+		"LAB_PW": "not-a-real-password", "PROTEUS_CONFIG": cfg,
 		"XDG_DATA_HOME": filepath.Join(dir, "data"), "XDG_STATE_HOME": filepath.Join(dir, "state"),
 	}
 	run := func(args ...string) int {
@@ -605,11 +605,11 @@ func TestDefaultsFromTheEnvironment(t *testing.T) {
 	if code := run("fetch", "fw01"); code != 0 {
 		t.Fatalf("fetch: exit %d", code)
 	}
-	if _, err := os.Stat(filepath.Join(dir, "data", "panos-analyst", "fw01", "latest")); err != nil {
-		t.Errorf("the store must default to $XDG_DATA_HOME/panos-analyst: %v", err)
+	if _, err := os.Stat(filepath.Join(dir, "data", "proteus", "fw01", "latest")); err != nil {
+		t.Errorf("the store must default to $XDG_DATA_HOME/proteus: %v", err)
 	}
-	if logs, _ := filepath.Glob(filepath.Join(dir, "state", "panos-analyst", "log", "fetch-*.log")); len(logs) != 1 {
-		t.Errorf("the log must default to $XDG_STATE_HOME/panos-analyst/log: %v", logs)
+	if logs, _ := filepath.Glob(filepath.Join(dir, "state", "proteus", "log", "fetch-*.log")); len(logs) != 1 {
+		t.Errorf("the log must default to $XDG_STATE_HOME/proteus/log: %v", logs)
 	}
 	if got := expandHome("~/x"); !strings.HasSuffix(got, string(filepath.Separator)+"x") || strings.HasPrefix(got, "~") {
 		t.Errorf("expandHome = %s", got)

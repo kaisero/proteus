@@ -18,11 +18,11 @@ import (
 // TestLiveConfigLoads checks the whole path against a configuration exported from
 // a real device.
 //
-//	PANOS_LIVE_CONFIG=/path/to/export.xml go test -tags live ./resolve/
+//	PROTEUS_LIVE_CONFIG=/path/to/export.xml go test -tags live ./resolve/
 func TestLiveConfigLoads(t *testing.T) {
-	path := os.Getenv("PANOS_LIVE_CONFIG")
+	path := os.Getenv("PROTEUS_LIVE_CONFIG")
 	if path == "" {
-		t.Skip("set PANOS_LIVE_CONFIG to a configuration exported from a device")
+		t.Skip("set PROTEUS_LIVE_CONFIG to a configuration exported from a device")
 	}
 	cfg, rep, err := config.Load(path)
 	if err != nil {

@@ -1,4 +1,4 @@
-// Package runlog writes one log file per run of panos-analyst, so an answer nobody
+// Package runlog writes one log file per run of proteus, so an answer nobody
 // can explain can be traced afterwards: which snapshot was read, which API calls
 // were made, and what each simulation stage kept and dropped.
 //

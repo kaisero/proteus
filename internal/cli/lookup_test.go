@@ -95,7 +95,7 @@ func TestLookupAnObject(t *testing.T) {
 	for _, want := range []string{
 		"address        net-vienna                   vsys:vsys1\n", "tags         branch\n",
 		"description  Vienna office\n", "value        10.20.0.0/16\n", "held by      branch-networks\n",
-		"where it is used: panos-analyst search net-vienna --file " + lookupFile,
+		"where it is used: proteus search net-vienna --file " + lookupFile,
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("missing %q in:\n%s", want, out)
@@ -137,7 +137,7 @@ func TestLookupAcrossTheEstate(t *testing.T) {
 	out := c.want(3, "lookup", "net-vienna")
 	for _, want := range []string{
 		"fw02 / vsys1   snapshot", "address        net-vienna",
-		"where it is used: panos-analyst search net-vienna --device fw02 --vsys vsys1",
+		"where it is used: proteus search net-vienna --device fw02 --vsys vsys1",
 		"hole: fw03:", "1 with it, 2 without, 1 holes",
 	} {
 		if !strings.Contains(out, want) {

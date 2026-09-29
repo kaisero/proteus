@@ -1,16 +1,16 @@
-// Package cli is the panos-analyst command line: it fetches PAN-OS firewalls into a
-// snapshot store and answers questions about them. cmd/panos-analyst only calls Run.
+// Package cli is the proteus command line: it fetches PAN-OS firewalls into a
+// snapshot store and answers questions about them. cmd/proteus only calls Run.
 // Spec: docs/specs/2026-09-27-panos-analyst-scope.md §15.
 //
 // Usage:
 //
-//	panos-analyst fetch <device>... | --label k=v | --all
-//	panos-analyst inventory init
-//	panos-analyst snapshot list <device>
-//	panos-analyst snapshot show [selectors]
-//	panos-analyst snapshot diff [selectors] [--from <time>] [--to <time>]
-//	panos-analyst search <term> [selectors] [--exact|--within|--contains] [filters]
-//	panos-analyst simulate policy <source> <destination> [selectors] [flow flags]
+//	proteus fetch <device>... | --label k=v | --all
+//	proteus inventory init
+//	proteus snapshot list <device>
+//	proteus snapshot show [selectors]
+//	proteus snapshot diff [selectors] [--from <time>] [--to <time>]
+//	proteus search <term> [selectors] [--exact|--within|--contains] [filters]
+//	proteus simulate policy <source> <destination> [selectors] [flow flags]
 //
 // Exit codes: 0 answered completely, 1 error, 2 usage, 3 answered with holes or
 // unresolved entries (spec §15 C11).
@@ -69,11 +69,11 @@ func exitCode(err error, stderr io.Writer) int {
 	var e *exitErr
 	if errors.As(err, &e) {
 		if e.err != nil {
-			fmt.Fprintf(stderr, "panos-analyst: %v\n", e.err)
+			fmt.Fprintf(stderr, "proteus: %v\n", e.err)
 		}
 		return e.code
 	}
-	fmt.Fprintf(stderr, "panos-analyst: %v\n", err)
+	fmt.Fprintf(stderr, "proteus: %v\n", err)
 	return exitError
 }
 
@@ -135,7 +135,7 @@ func newApp(stdout, stderr io.Writer, getenv func(string) string, now func() tim
 
 func (a *app) root() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:           "panos-analyst",
+		Use:           "proteus",
 		Short:         "Fetch PAN-OS firewalls into a snapshot store and ask questions of them",
 		Version:       a.version,
 		SilenceUsage:  true,
@@ -147,12 +147,12 @@ func (a *app) root() *cobra.Command {
 		return &exitErr{code: exitUsage, err: err}
 	})
 	pf := cmd.PersistentFlags()
-	pf.StringVar(&a.configFlag, "config", "", "inventory file (default $PANOS_CONFIG or ~/.config/panos-analyst/config.yaml)")
-	pf.StringVar(&a.storeFlag, "store", "", "snapshot store (default $PANOS_STORE, the inventory's store, or ~/.local/share/panos-analyst)")
-	pf.StringVar(&a.outputFlag, "output", "", "text or json (default $PANOS_OUTPUT, the inventory's output, or text)")
-	pf.StringVar(&a.maxAgeFlag, "max-age", "", "note snapshots older than this, e.g. 24h or 7d (default $PANOS_MAX_SNAPSHOT_AGE, the inventory's, or 24h)")
-	pf.StringVar(&a.logLevelFlag, "log-level", "", "error, warn, info or debug (default $PANOS_LOG_LEVEL, the inventory's, or info)")
-	pf.StringVar(&a.logDirFlag, "log-dir", "", "where run logs go (default $PANOS_LOG_DIR, the inventory's, or ~/.local/state/panos-analyst/log)")
+	pf.StringVar(&a.configFlag, "config", "", "inventory file (default $PROTEUS_CONFIG or ~/.config/proteus/config.yaml)")
+	pf.StringVar(&a.storeFlag, "store", "", "snapshot store (default $PROTEUS_STORE, the inventory's store, or ~/.local/share/proteus)")
+	pf.StringVar(&a.outputFlag, "output", "", "text or json (default $PROTEUS_OUTPUT, the inventory's output, or text)")
+	pf.StringVar(&a.maxAgeFlag, "max-age", "", "note snapshots older than this, e.g. 24h or 7d (default $PROTEUS_MAX_SNAPSHOT_AGE, the inventory's, or 24h)")
+	pf.StringVar(&a.logLevelFlag, "log-level", "", "error, warn, info or debug (default $PROTEUS_LOG_LEVEL, the inventory's, or info)")
+	pf.StringVar(&a.logDirFlag, "log-dir", "", "where run logs go (default $PROTEUS_LOG_DIR, the inventory's, or ~/.local/state/proteus/log)")
 	pf.BoolVar(&a.verbose, "verbose", false, "echo the run log to stderr")
 	cmd.PersistentPreRunE = func(c *cobra.Command, _ []string) error { return a.openLog(c) }
 

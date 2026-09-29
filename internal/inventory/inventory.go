@@ -1,4 +1,4 @@
-// Package inventory reads the firewalls panos-analyst works with: where each one is,
+// Package inventory reads the firewalls proteus works with: where each one is,
 // how to log in to it, and whether to verify its TLS certificate.
 //
 // The file is YAML and holds credentials or the names of the variables that do, so
@@ -47,7 +47,7 @@ type Settings struct {
 	PasswordEnv  string `yaml:"password_env"`
 	Password     string `yaml:"password"`
 
-	// The analysis settings of spec §15 C14. Each can also come from a PANOS_*
+	// The analysis settings of spec §15 C14. Each can also come from a PROTEUS_*
 	// variable or a flag, which win over the file.
 	Store          string `yaml:"store"`            // snapshot store root
 	MaxSnapshotAge string `yaml:"max_snapshot_age"` // e.g. 24h or 7d
@@ -316,18 +316,18 @@ func password(d Device, def Settings, getenv func(string) string) (string, error
 	return "", fmt.Errorf("inventory: device %q has no password; set password_env on it or under defaults", d.Name)
 }
 
-// DefaultPath returns where the inventory is read from: PANOS_CONFIG, else
-// $XDG_CONFIG_HOME/panos-analyst/config.yaml, else ~/.config/panos-analyst/config.yaml.
+// DefaultPath returns where the inventory is read from: PROTEUS_CONFIG, else
+// $XDG_CONFIG_HOME/proteus/config.yaml, else ~/.config/proteus/config.yaml.
 func DefaultPath(getenv func(string) string) (string, error) {
-	if p := getenv("PANOS_CONFIG"); p != "" {
+	if p := getenv("PROTEUS_CONFIG"); p != "" {
 		return p, nil
 	}
 	if x := getenv("XDG_CONFIG_HOME"); x != "" {
-		return filepath.Join(x, "panos-analyst", "config.yaml"), nil
+		return filepath.Join(x, "proteus", "config.yaml"), nil
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("inventory: no home directory: %w", err)
 	}
-	return filepath.Join(home, ".config", "panos-analyst", "config.yaml"), nil
+	return filepath.Join(home, ".config", "proteus", "config.yaml"), nil
 }

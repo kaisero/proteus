@@ -229,14 +229,14 @@ func TestWriteRejectsAnUnsafeDeviceName(t *testing.T) {
 
 func TestDefaultRoot(t *testing.T) {
 	env := func(m map[string]string) func(string) string { return func(k string) string { return m[k] } }
-	if got, _ := DefaultRoot(env(map[string]string{"PANOS_STORE": "/s"})); got != "/s" {
-		t.Errorf("PANOS_STORE ignored: %s", got)
+	if got, _ := DefaultRoot(env(map[string]string{"PROTEUS_STORE": "/s"})); got != "/s" {
+		t.Errorf("PROTEUS_STORE ignored: %s", got)
 	}
-	if got, _ := DefaultRoot(env(map[string]string{"XDG_DATA_HOME": "/d"})); got != "/d/panos-analyst" {
+	if got, _ := DefaultRoot(env(map[string]string{"XDG_DATA_HOME": "/d"})); got != "/d/proteus" {
 		t.Errorf("XDG_DATA_HOME ignored: %s", got)
 	}
 	got, err := DefaultRoot(env(nil))
-	if err != nil || !strings.HasSuffix(got, filepath.Join(".local", "share", "panos-analyst")) {
+	if err != nil || !strings.HasSuffix(got, filepath.Join(".local", "share", "proteus")) {
 		t.Errorf("home default = %s, %v", got, err)
 	}
 }

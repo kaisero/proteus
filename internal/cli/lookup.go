@@ -106,7 +106,7 @@ func (a *app) lookupCmd() *cobra.Command {
 				for _, cd := range byTarget[i] {
 					r.card(cd)
 					if cd.Kind != card.KindRule {
-						fmt.Fprintf(a.stdout, "  where it is used: panos-analyst search %s %s\n", name, selectorOf(t))
+						fmt.Fprintf(a.stdout, "  where it is used: proteus search %s %s\n", name, selectorOf(t))
 					}
 					fmt.Fprintln(a.stdout)
 				}
