@@ -1,0 +1,321 @@
+{
+  "format": 1,
+  "command": "simulate routing",
+  "input": {
+    "at": "",
+    "device": "",
+    "flow": {
+      "source": {
+        "addrs": [
+          "198.18.10.5"
+        ],
+        "resolved": false
+      },
+      "destination": {
+        "addrs": [
+          "8.8.8.8"
+        ],
+        "resolved": false
+      },
+      "protocol": "tcp"
+    },
+    "rib": false,
+    "router": ""
+  },
+  "results": {
+    "source": {
+      "addrs": [
+        "198.18.10.5"
+      ],
+      "resolved": false
+    },
+    "destination": {
+      "addrs": [
+        "8.8.8.8"
+      ],
+      "resolved": false
+    },
+    "placed": "connected",
+    "outcome": "left-estate",
+    "end": "192.168.0.1   leaves the estate (not in the inventory)",
+    "hops": [
+      {
+        "device": "fw01",
+        "vsys": "vsys1",
+        "snapshot": "2026-09-28T10-00-00Z",
+        "taken_at": "2026-09-28T10:00:00Z",
+        "in": {
+          "device": "fw01",
+          "vsys": "1",
+          "router": "default",
+          "interface": "ethernet1/2",
+          "zone": "server",
+          "address": "198.18.10.1/24"
+        },
+        "out": {
+          "device": "fw01",
+          "vsys": "1",
+          "router": "default",
+          "interface": "ethernet1/1",
+          "zone": "transport",
+          "address": "198.19.0.254/24"
+        },
+        "lookups": [
+          {
+            "router": "default",
+            "route": {
+              "destination": "0.0.0.0/0",
+              "next_hops": [
+                {
+                  "Router": "default",
+                  "IPv6": false,
+                  "Destination": "0.0.0.0/0",
+                  "Interface": "ethernet1/1",
+                  "NextHop": "198.19.0.1",
+                  "Flags": "ug",
+                  "NextHopType": "0",
+                  "ECMP": false
+                }
+              ]
+            },
+            "protocol": "static"
+          }
+        ],
+        "flow": {
+          "source": {
+            "addrs": [
+              "198.18.10.5"
+            ],
+            "resolved": false
+          },
+          "destination": {
+            "addrs": [
+              "8.8.8.8"
+            ],
+            "resolved": false
+          },
+          "protocol": "tcp",
+          "from_zone": "server",
+          "to_zone": "transport"
+        },
+        "post_nat": null,
+        "fidelity": {
+          "level": "exact"
+        }
+      },
+      {
+        "device": "fw02",
+        "vsys": "vsys1",
+        "snapshot": "2026-09-28T10-00-00Z",
+        "taken_at": "2026-09-28T10:00:00Z",
+        "in": {
+          "device": "fw02",
+          "vsys": "1",
+          "router": "default",
+          "interface": "vlan.32",
+          "zone": "labor",
+          "address": "198.19.0.1/24"
+        },
+        "out": {
+          "device": "fw02",
+          "vsys": "1",
+          "router": "default",
+          "interface": "ethernet1/1",
+          "zone": "wan",
+          "address": "192.168.0.138/24"
+        },
+        "lookups": [
+          {
+            "router": "default",
+            "route": {
+              "destination": "0.0.0.0/0",
+              "next_hops": [
+                {
+                  "Router": "default",
+                  "IPv6": false,
+                  "Destination": "0.0.0.0/0",
+                  "Interface": "ethernet1/1",
+                  "NextHop": "192.168.0.1",
+                  "Flags": "ug",
+                  "NextHopType": "0",
+                  "ECMP": false
+                }
+              ]
+            },
+            "protocol": "static"
+          }
+        ],
+        "flow": {
+          "source": {
+            "addrs": [
+              "198.18.10.5"
+            ],
+            "resolved": false
+          },
+          "destination": {
+            "addrs": [
+              "8.8.8.8"
+            ],
+            "resolved": false
+          },
+          "protocol": "tcp",
+          "from_zone": "labor",
+          "to_zone": "wan"
+        },
+        "post_nat": null,
+        "fidelity": {
+          "level": "undermatch",
+          "reasons": [
+            "the path leaves the estate at 192.168.0.1"
+          ]
+        }
+      }
+    ],
+    "fidelity": {
+      "level": "undermatch",
+      "reasons": [
+        "the path leaves the estate at 192.168.0.1"
+      ]
+    },
+    "stages": [
+      {
+        "name": "place the start",
+        "slug": "place",
+        "fidelity": {
+          "level": "exact"
+        },
+        "detail": "connected: 198.18.10.5 on fw01 ethernet1/2",
+        "state": {
+          "candidates": 0
+        },
+        "elapsed_ns": 0
+      },
+      {
+        "name": "policy-based forwarding",
+        "slug": "hop1/pbf",
+        "fidelity": {
+          "level": "exact"
+        },
+        "detail": "no PBF rule could match",
+        "state": {
+          "candidates": 0
+        },
+        "elapsed_ns": 0
+      },
+      {
+        "name": "route lookup",
+        "slug": "hop1/lookup",
+        "fidelity": {
+          "level": "exact"
+        },
+        "detail": "8.8.8.8 in router default: 0.0.0.0/0 via 198.19.0.1 on ethernet1/1",
+        "state": {
+          "candidates": 0
+        },
+        "elapsed_ns": 0
+      },
+      {
+        "name": "zones",
+        "slug": "hop1/zones",
+        "fidelity": {
+          "level": "exact"
+        },
+        "detail": "server -\u003e transport",
+        "state": {
+          "candidates": 0
+        },
+        "elapsed_ns": 0
+      },
+      {
+        "name": "NAT",
+        "slug": "hop1/nat",
+        "fidelity": {
+          "level": "exact"
+        },
+        "detail": "no NAT rule matches",
+        "state": {
+          "candidates": 0
+        },
+        "elapsed_ns": 0
+      },
+      {
+        "name": "next hop",
+        "slug": "hop1/next",
+        "fidelity": {
+          "level": "exact"
+        },
+        "detail": "next: fw02 vlan.32",
+        "state": {
+          "candidates": 0
+        },
+        "elapsed_ns": 0
+      },
+      {
+        "name": "policy-based forwarding",
+        "slug": "hop2/pbf",
+        "fidelity": {
+          "level": "exact"
+        },
+        "detail": "no PBF rule could match",
+        "state": {
+          "candidates": 0
+        },
+        "elapsed_ns": 0
+      },
+      {
+        "name": "route lookup",
+        "slug": "hop2/lookup",
+        "fidelity": {
+          "level": "exact"
+        },
+        "detail": "8.8.8.8 in router default: 0.0.0.0/0 via 192.168.0.1 on ethernet1/1",
+        "state": {
+          "candidates": 0
+        },
+        "elapsed_ns": 0
+      },
+      {
+        "name": "zones",
+        "slug": "hop2/zones",
+        "fidelity": {
+          "level": "exact"
+        },
+        "detail": "labor -\u003e wan",
+        "state": {
+          "candidates": 0
+        },
+        "elapsed_ns": 0
+      },
+      {
+        "name": "NAT",
+        "slug": "hop2/nat",
+        "fidelity": {
+          "level": "exact"
+        },
+        "detail": "no NAT rule matches",
+        "state": {
+          "candidates": 0
+        },
+        "elapsed_ns": 0
+      },
+      {
+        "name": "next hop",
+        "slug": "hop2/next",
+        "fidelity": {
+          "level": "undermatch",
+          "reasons": [
+            "the path leaves the estate at 192.168.0.1"
+          ]
+        },
+        "detail": "the path leaves the estate at 192.168.0.1",
+        "state": {
+          "candidates": 0
+        },
+        "elapsed_ns": 0
+      }
+    ]
+  },
+  "holes": [],
+  "unresolved": [],
+  "notes": []
+}

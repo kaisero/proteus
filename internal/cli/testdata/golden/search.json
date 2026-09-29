@@ -1,0 +1,78 @@
+{
+  "format": 1,
+  "command": "search",
+  "input": {
+    "direct": false,
+    "fields": null,
+    "kinds": null,
+    "mode": "covers",
+    "selection": {
+      "file": "../../testdata/config/firewall-multivsys.xml"
+    },
+    "show": null,
+    "term": "10.124.0.1"
+  },
+  "results": [
+    {
+      "device": "file",
+      "vsys": "vsys1",
+      "stage": "object",
+      "kind": "address",
+      "name": "corp-dc-vienna",
+      "via": "10.124.0.1/32",
+      "scope": "vsys:vsys1"
+    },
+    {
+      "device": "file",
+      "vsys": "vsys1",
+      "stage": "object",
+      "kind": "address",
+      "name": "corp-location-vienna",
+      "via": "10.124.0.0/16",
+      "scope": "vsys:vsys1"
+    },
+    {
+      "device": "file",
+      "vsys": "vsys1",
+      "stage": "group",
+      "kind": "address-group",
+      "name": "corp-dc",
+      "via": "holds corp-dc-vienna",
+      "scope": "vsys:vsys1"
+    },
+    {
+      "device": "file",
+      "vsys": "vsys1",
+      "stage": "group",
+      "kind": "address-group",
+      "name": "corp-location",
+      "via": "holds corp-location-vienna",
+      "scope": "vsys:vsys1"
+    },
+    {
+      "device": "file",
+      "vsys": "vsys1",
+      "stage": "reference",
+      "kind": "security rule",
+      "name": "Corp DC Access",
+      "field": "destination",
+      "via": "corp-dc",
+      "path": "/config/devices/localhost.localdomain/vsys/vsys1/rulebase/security/rules/Corp DC Access",
+      "scope": "vsys:vsys1"
+    },
+    {
+      "device": "file",
+      "vsys": "vsys1",
+      "stage": "reference",
+      "kind": "security rule",
+      "name": "Corp DC Access",
+      "field": "source",
+      "via": "corp-location",
+      "path": "/config/devices/localhost.localdomain/vsys/vsys1/rulebase/security/rules/Corp DC Access",
+      "scope": "vsys:vsys1"
+    }
+  ],
+  "holes": [],
+  "unresolved": [],
+  "notes": []
+}

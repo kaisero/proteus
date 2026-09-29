@@ -1,0 +1,26 @@
+{
+  "format": 1,
+  "command": "snapshot list",
+  "input": {
+    "device": "fw01"
+  },
+  "results": [
+    {
+      "id": "2026-09-28T10-01-00Z",
+      "latest": true,
+      "sw_version": "11.2.5",
+      "documents": 6,
+      "failed": 0
+    },
+    {
+      "id": "2026-09-28T10-00-00Z",
+      "latest": false,
+      "sw_version": "11.2.5",
+      "documents": 6,
+      "failed": 0
+    }
+  ],
+  "holes": [],
+  "unresolved": [],
+  "notes": []
+}
