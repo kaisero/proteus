@@ -2,6 +2,7 @@ package schema
 
 import (
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"io"
 	"strconv"
@@ -35,7 +36,7 @@ func Parse(r io.Reader) (*Node, error) {
 
 	for {
 		tok, err := dec.Token()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {

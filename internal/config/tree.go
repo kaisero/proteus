@@ -2,6 +2,7 @@ package config
 
 import (
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -144,7 +145,7 @@ func parseTree(r io.Reader) (*Element, error) {
 
 	for {
 		tok, err := dec.Token()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {

@@ -2,6 +2,7 @@ package resolve
 
 import (
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"io"
 	"net/netip"
@@ -133,7 +134,7 @@ func readOp(b []byte) (*opResult, error) {
 	if err == nil {
 		return res, nil
 	}
-	if err != errBareResult {
+	if !errors.Is(err, errBareResult) {
 		return nil, err
 	}
 	var bare opResult

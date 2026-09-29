@@ -16,6 +16,7 @@ linters:
     - bodyclose
     - unconvert
     - unparam
+    - errorlint
   settings:
     errcheck:
       # Writes to an in-memory buffer or to stdout cannot be usefully handled.
