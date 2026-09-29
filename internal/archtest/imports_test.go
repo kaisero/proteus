@@ -46,6 +46,7 @@ var rules = []rule{
 	{from: "fetch", forbid: mod("simulate", "estate")},
 	{from: "store", forbid: mod("fetch")},
 	{from: "search", forbid: mod("fetch", "store", "estate")},
+	{from: "card", forbid: mod("fetch", "store", "estate", "simulate")},
 	{from: "drift", forbid: mod("fetch", "store", "estate")},
 	{from: "simulate", forbid: mod("estate", "store", "fetch", "search", "drift", "simulate/securitypolicy")},
 	{from: "simulate/securitypolicy", forbid: mod("estate", "store", "fetch")},

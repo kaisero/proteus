@@ -135,7 +135,8 @@ Check: `go test ./index -run TestClosureRepresentation`
 and `internal/digest`. `index` does not import `simulate`. `fetch` imports
 neither `simulate` nor `estate`. `store` does not import `fetch`. `search` and
 `drift` answer from one configuration and import none of `fetch`, `store` or
-`estate`. `simulate` is a leaf: it imports no simulation implementation and none of
+`estate`. `card` builds lookup's cards from one configuration and imports none of
+`fetch`, `store`, `estate` or `simulate`. `simulate` is a leaf: it imports no simulation implementation and none of
 `estate`, `store`, `fetch`, `search` or `drift`. `simulate/securitypolicy` imports
 none of `estate`, `store` or `fetch`.
 
