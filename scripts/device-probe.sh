@@ -8,6 +8,7 @@
 #
 # Usage: PANOS_HOST=... PANOS_API_KEY=... scripts/device-probe.sh <config.xml> <vsys> [panos-analyst]
 #        PANOS_HOST=... PANOS_API_KEY=... scripts/device-probe.sh --routing <device> <router> <destination>...
+#        PANOS_HOST=... PANOS_API_KEY=... scripts/device-probe.sh --nat <device> <router> <src,dst,port[,from-zone]>...
 #
 # <vsys> is vsys1 or vsys:vsys1.
 #
@@ -93,6 +94,74 @@ print("%s:%s" % (h["out"]["interface"], ",".join(sorted(n["NextHop"] for n in h[
   echo
   echo "$agreed of $total agree."
 }
+
+# --nat compares simulate nat's rule with the device's test nat-policy-match. The
+# engine's JSON gives the zones and the egress interface the device is asked with
+# (its from zone, and the pre-NAT lookup's zone and interface), so the probe checks
+# them too. A flow is src,dst,port[,from-zone]. The engine runs with --no-dns: an
+# FQDN resolved here says nothing of what the device resolved. The XML API answers
+# the rule name only (spec §18 F13); an implicit bi-directional rule carries its
+# origin's name on both sides.
+nat_probe() {
+  local dev=${1:?device} router=${2:?router}
+  shift 2
+  local analyst=${PANOS_ANALYST:-bin/panos-analyst} agreed=0 total=0
+  printf '%-44s %-24s %-24s %s\n' FLOW DEVICE LIBRARY AGREE
+  for f in "$@"; do
+    IFS=, read -r src dst port zone <<<"$f"
+    if [ "$src" = "-" ]; then
+      # The device answers no rule for a flow without a source (fw01, 2026-09-29).
+      echo "skipped $f: test nat-policy-match needs a source"
+      continue
+    fi
+    local extra=()
+    [ -n "${zone:-}" ] && extra=(--from-zone "$zone")
+    local json lib from to ifc
+    json=$("$analyst" simulate nat "$src" "$dst" --device "$dev" --router "$router" --port "$port" ${extra[@]+"${extra[@]}"} --no-dns --output json 2>/dev/null)
+    read -r lib from to ifc < <(python3 -c '
+import json, sys
+try:
+    env = json.load(sys.stdin)
+    r = env["results"]
+except Exception:
+    print("error - - -"); raise SystemExit
+rule = (r.get("rule") or {}).get("Name") or "none"
+# A translation to an address nothing resolves is what the device reports as no rule (spec §18 F17, D8).
+if any("resolves to no address" in u.get("reason", "") for u in env.get("unresolved") or []):
+    rule = "none"
+pre = r["pre_nat"]["out"]
+print(rule, r["in"].get("zone") or "-", pre.get("zone") or "-", pre.get("interface") or "-")' <<<"$json")
+    local cmd="<test><nat-policy-match>"
+    [ "$src" != "-" ] && cmd+="<source>$src</source>"
+    cmd+="<destination>$dst</destination><destination-port>$port</destination-port><protocol>6</protocol>"
+    [ "$from" != "-" ] && cmd+="<from>$from</from>"
+    [ "$to" != "-" ] && cmd+="<to>$to</to>"
+    [ "$ifc" != "-" ] && cmd+="<to-interface>$ifc</to-interface>"
+    cmd+="</nat-policy-match></test>"
+    local ref
+    ref=$(curl -sk --max-time 40 -G "https://$PANOS_HOST/api/" \
+      --data-urlencode "type=op" --data-urlencode "key=$PANOS_API_KEY" --data-urlencode "cmd=$cmd" \
+      | python3 -c '
+import sys, xml.etree.ElementTree as ET
+t = ET.fromstring(sys.stdin.read())
+e = t.find(".//rules/entry")
+print((e.text or "").strip() if e is not None else "none")')
+    total=$((total + 1))
+    local agree=NO
+    [ "$ref" = "$lib" ] && agree=yes && agreed=$((agreed + 1))
+    printf '%-44s %-24s %-24s %s\n' "$src -> $dst:$port ($from->$to $ifc)" "$ref" "$lib" "$agree"
+  done
+  echo
+  echo "$agreed of $total agree."
+}
+
+if [ "${1:-}" = "--nat" ]; then
+  : "${PANOS_HOST:?set PANOS_HOST}"
+  : "${PANOS_API_KEY:?set PANOS_API_KEY}"
+  shift
+  nat_probe "$@"
+  exit 0
+fi
 
 if [ "${1:-}" = "--routing" ]; then
   : "${PANOS_HOST:?set PANOS_HOST}"
