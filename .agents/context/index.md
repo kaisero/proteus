@@ -1,4 +1,4 @@
-# panos-analyst
+# proteus
 
 > Read a PAN-OS firewall configuration file and answer questions about it. This
 > is the read-first map for coding agents working in-repo: the system model and
@@ -6,7 +6,7 @@
 
 ## System technical design
 
-The library is read-only. It loads a configuration file, resolves PAN-OS
+proteus is read-only. It loads a configuration file, resolves PAN-OS
 semantics over it, and builds lookup structures that answer two questions fast:
 *does an object with this value exist*, and *which rules can this value reach*.
 It never writes a configuration, and the core never opens a network connection.
@@ -44,20 +44,20 @@ rule-field bitmaps. The rules whose field is `any` join them. The result is a
 
 Repo map:
 
-- `config/` — `load.go` (Load, Panorama refusal, digest cache), `tree.go` (element tree),
+- `internal/config/` — `load.go` (Load, Panorama refusal, digest cache), `tree.go` (element tree),
   `walk.go` (reference walk, `FieldKinds`, `KindContainers`), `embed.go`,
   `schemadigest/` (embedded digests), `v11_2/` (generated model).
-- `resolve/` — `target.go`, `rules.go`, `objects.go`, `groups.go`,
+- `internal/resolve/` — `target.go`, `rules.go`, `objects.go`, `groups.go`,
   `filter.go` (tag filters), `urlpattern.go`, `profiles.go`, `zones.go`.
-- `index/` — `index.go` (build + cache), `candidates.go` (the driver),
+- `internal/index/` — `index.go` (build + cache), `candidates.go` (the driver),
   `resolver*.go` (one file per value space), `closure.go`, `cidr.go`, `rules.go`,
   `refs.go`, `profileuse.go`, `snapshot.go`, `intern.go`.
 - `internal/schema`, `internal/digest`, `internal/codegen` — schema parsing,
   digest format, code generation. `internal/archtest` — the R12 import check.
-- `estate/` — selectors and a time to targets and holes; `search/` — five-stage findings for one term; `card/` — the whole element behind one name, for `lookup`; `drift/` — changes between two configurations.
-- `inventory/` — the YAML device list and credentials; `fetch/` — the read-only XML
-  API client and the `Document` list; `store/` — timestamped snapshots, `latest`.
-- `cmd/` — `panos-analyst` (fetch, snapshots, search, lookup, simulate), `panos-demo` (narrated tour),
+- `internal/estate/` — selectors and a time to targets and holes; `internal/search/` — five-stage findings for one term; `internal/card/` — the whole element behind one name, for `lookup`; `internal/drift/` — changes between two configurations.
+- `internal/inventory/` — the YAML device list and credentials; `internal/fetch/` — the read-only XML
+  API client and the `Document` list; `internal/store/` — timestamped snapshots, `latest`.
+- `cmd/` — `proteus` (fetch, snapshots, search, lookup, simulate), `panos-demo` (narrated tour),
   `panos-schemagen` (digest + generate).
 - `scripts/` — `coverage-gate.sh`, `device-probe.sh`, `context-api.py`.
 
@@ -66,11 +66,11 @@ Hard invariants:
 - **An `Index` is immutable and shared.** It is cached per `(file, scope)` and
   handed to every caller. A query must never write to it — not even to intern a
   name. Use `Interner.Lookup`, never `Interner.ID`, on any query path.
-- **The library performs no I/O beyond reading the configuration file.** Facts a
+- **The read-only core performs no I/O beyond reading the configuration file.** Facts a
   file does not hold arrive through `Providers`, which the caller fills.
 - **An answer that is incomplete says so.** A non-empty `Report.Unresolved` means
   matches are missing, with the reason. Silence is a wrong answer.
-- **Reachability is not a verdict.** The library says which rules a value can
+- **Reachability is not a verdict.** The index says which rules a value can
   reach. Intersecting sides, dropping disabled rules and deciding what a first
   match means belong to the caller.
 
@@ -80,7 +80,7 @@ Hard invariants:
   schema digest, and the schema questions `config` answers.
 - [scope-semantics](scope-semantics.md): targets, rule order, scoped visibility,
   shadowing, group membership.
-- [simulator](simulator.md): `simulate`, `simulate/securitypolicy`, `simulate/routing`, `simulate/nat`, `simulate/topology`, `simulate/rulebase`, `runlog` — the staged simulator, fidelity, the routing path, NAT, and the run log.
+- [simulator](simulator.md): `simulate`, `internal/simulate/securitypolicy`, `internal/simulate/routing`, `internal/simulate/nat`, `internal/simulate/topology`, `internal/simulate/rulebase`, `runlog` — the staged simulator, fidelity, the routing path, NAT, and the run log.
 - [questions](questions.md): `estate`, `search`, `card`, `drift` — how a question becomes targets, findings, cards and changes.
 - [fetch-and-store](fetch-and-store.md): the inventory, the read-only fetcher, and
   the snapshot store.
@@ -92,7 +92,7 @@ Hard invariants:
   the user snapshot format.
 - [schema-codegen](schema-codegen.md): digest, shape deduplication, the generated
   model, and the drift gates.
-- [commands](commands.md): `panos-analyst`, `panos-demo`, `panos-schemagen`.
+- [commands](commands.md): `proteus`, `panos-demo`, `panos-schemagen`.
 - [testing-and-gates](testing-and-gates.md): `make ci`, the coverage ratchet, the
   fixtures, and the device probe.
 

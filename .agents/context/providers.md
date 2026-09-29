@@ -1,11 +1,11 @@
 # providers
 
-Validated against 86fd84f on 2026-09-27 · Purpose: how facts a configuration does not hold reach a lookup, without the library fetching anything.
+Validated against 86fd84f on 2026-09-27 · Purpose: how facts a configuration does not hold reach a lookup, without the read-only core fetching anything.
 
 ## Purpose & responsibilities
 
 Some questions cannot be answered from a file. Which groups a user belongs to comes
-from User-ID, which learns it from a directory. The library defines the shape of
+from User-ID, which learns it from a directory. The core defines the shape of
 that data and reads it. **The caller fetches it.** The core performs no network
 access at all; `store.Snapshot.Zones()` builds a zone snapshot from a fetched one.
 
@@ -100,8 +100,8 @@ comment. `scripts/capture-zones.sh` captures one.
 
 ## Build / run pointers
 
-- `go test ./index/ -run 'User|Snapshot'`
-- `PANOS_USERS=testdata/users-snapshot.json ./bin/panos-analyst search 'ACME\carol' --file testdata/config/firewall-users.xml`
+- `go test ./internal/index/ -run 'User|Snapshot'`
+- `PROTEUS_USERS=testdata/users-snapshot.json ./bin/proteus search 'ACME\carol' --file testdata/config/firewall-users.xml`
 
 ## Public API
 
@@ -174,8 +174,8 @@ func PrefixesOf(value string) []netip.Prefix
 
 ## Gotchas / invariants
 
-- **Never add I/O to the library.** A provider is an interface. Fetching belongs to
-  the caller, which keeps the library offline, deterministic and testable.
+- **Never add I/O to the read-only core.** A provider is an interface. Fetching belongs to
+  the caller, which keeps the core offline, deterministic and testable.
 - **Never bake a provider into a cached index.** That is the whole reason `View`
   exists.
 - **A missing provider is reported, not silently skipped.** Otherwise a user query
@@ -183,6 +183,6 @@ func PrefixesOf(value string) []netip.Prefix
 
 ## See also
 
-- `index/snapshot.go`, `index/resolver_user.go`, `index/resolver.go`
+- `internal/index/snapshot.go`, `internal/index/resolver_user.go`, `internal/index/resolver.go`
 - [reporting](reporting.md) — where the staleness reason surfaces
 - [value-spaces](value-spaces.md) — the user and zone spaces

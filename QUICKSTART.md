@@ -14,9 +14,9 @@ same commands drop `--file` and answer for every device in the inventory.
 make tools-bin
 ```
 
-That builds `bin/panos-analyst` and `bin/panos-demo`.
+That builds `bin/proteus` and `bin/panos-demo`.
 
-`panos-demo` runs every library feature against one file and narrates what it
+`panos-demo` runs every analysis feature against one file and narrates what it
 does. Add `-v` and it also explains why each answer is what it is:
 
 ```bash
@@ -26,11 +26,11 @@ does. Add `-v` and it also explains why each answer is what it is:
 ## 2. Fetch a firewall
 
 ```bash
-./bin/panos-analyst inventory init        # writes ~/.config/panos-analyst/config.yaml, mode 0600
-$EDITOR ~/.config/panos-analyst/config.yaml
+./bin/proteus inventory init        # writes ~/.config/proteus/config.yaml, mode 0600
+$EDITOR ~/.config/proteus/config.yaml
 export PANOS_PASSWORD=...                 # the variable the inventory names
-./bin/panos-analyst fetch --all
-./bin/panos-analyst snapshot show
+./bin/proteus fetch --all
+./bin/proteus snapshot show
 ```
 
 `fetch` logs in with the inventory's username and password, and stores the running
@@ -66,7 +66,7 @@ firewalls present self-signed certificates, and every fetch says so. Set
 ## 3. Look at a configuration
 
 ```
-$ panos-analyst snapshot show --file testdata/config/firewall-multivsys.xml
+$ proteus snapshot show --file testdata/config/firewall-multivsys.xml
 file   testdata/config/firewall-multivsys.xml
   vsys1    PAN-OS 11.2.5, security rules: 1
   vsys2    PAN-OS 11.2.5, security rules: 0
@@ -83,7 +83,7 @@ whose value holds it, the objects with that name, the groups holding either, the
 references naming any of them, and the rules that write it straight into a field.
 
 ```
-$ panos-analyst search 10.124.0.1 --file testdata/config/firewall-multivsys.xml
+$ proteus search 10.124.0.1 --file testdata/config/firewall-multivsys.xml
 search 10.124.0.1 (covers)
 
 file / vsys1   testdata/config/firewall-multivsys.xml
@@ -106,7 +106,7 @@ The same shared group holds different members in each vsys, because only shared 
 the vsys itself contribute:
 
 ```
-$ panos-analyst search 10.125.0.1 --file testdata/config/firewall-multivsys.xml
+$ proteus search 10.125.0.1 --file testdata/config/firewall-multivsys.xml
 search 10.125.0.1 (covers)
 
 file / vsys2   testdata/config/firewall-multivsys.xml
@@ -123,7 +123,7 @@ every answer about a rule using it is wrong rather than incomplete.
 ## 6. Groups, nested and direct
 
 ```
-$ panos-analyst search 10.1.1.1 --file testdata/config/firewall-nested-groups.xml
+$ proteus search 10.1.1.1 --file testdata/config/firewall-nested-groups.xml
 search 10.1.1.1 (covers)
 
 file / vsys1   testdata/config/firewall-nested-groups.xml
@@ -142,7 +142,7 @@ The rule names `g-outer` only; the address sits three groups down. `--direct`
 answers "which group do I edit":
 
 ```
-$ panos-analyst search 10.1.1.1 --direct --show objects,groups --file testdata/config/firewall-nested-groups.xml
+$ proteus search 10.1.1.1 --direct --show objects,groups --file testdata/config/firewall-nested-groups.xml
 search 10.1.1.1 (covers)
 
 file / vsys1   testdata/config/firewall-nested-groups.xml
@@ -154,7 +154,7 @@ file / vsys1   testdata/config/firewall-nested-groups.xml
 ## 7. Addresses written into a rule
 
 ```
-$ panos-analyst search 198.18.1.1 --file testdata/config/firewall-literals.xml
+$ proteus search 198.18.1.1 --file testdata/config/firewall-literals.xml
 search 198.18.1.1 (covers)
 
 file / vsys1   testdata/config/firewall-literals.xml
@@ -177,7 +177,7 @@ else is **exact**. Three flags override it, one at a time.
 `--within` keeps what lies inside the term:
 
 ```
-$ panos-analyst search 10.124.0.0/24 --within --file testdata/config/firewall-multivsys.xml --vsys vsys1
+$ proteus search 10.124.0.0/24 --within --file testdata/config/firewall-multivsys.xml --vsys vsys1
 search 10.124.0.0/24 (within)
 
 file / vsys1   testdata/config/firewall-multivsys.xml
@@ -190,7 +190,7 @@ file / vsys1   testdata/config/firewall-multivsys.xml
 `--exact` keeps only an equal value:
 
 ```
-$ panos-analyst search 10.124.0.0/16 --exact --show objects --file testdata/config/firewall-multivsys.xml --vsys vsys1
+$ proteus search 10.124.0.0/16 --exact --show objects --file testdata/config/firewall-multivsys.xml --vsys vsys1
 search 10.124.0.0/16 (exact)
 
 file / vsys1   testdata/config/firewall-multivsys.xml
@@ -203,7 +203,7 @@ name at 31 characters and a member at 255, so a long URL cannot appear in the na
 of the category holding it:
 
 ```
-$ panos-analyst search azureapps --contains --file testdata/config/firewall-urlcat.xml
+$ proteus search azureapps --contains --file testdata/config/firewall-urlcat.xml
 search azureapps (contains)
 
 file / vsys1   testdata/config/firewall-urlcat.xml
@@ -220,7 +220,7 @@ without it, a URL matches by PAN-OS tokens and never by substring.
 A port finds every service whose range holds it:
 
 ```
-$ panos-analyst search tcp/8006 --file testdata/config/firewall-urlcat.xml
+$ proteus search tcp/8006 --file testdata/config/firewall-urlcat.xml
 search tcp/8006 (covers)
 
 file / vsys1   testdata/config/firewall-urlcat.xml
@@ -238,7 +238,7 @@ A URL category reaches rules through their security profiles, not only through
 their `category` field:
 
 ```
-$ panos-analyst search demo-category --file testdata/config/firewall-urlprofile.xml
+$ proteus search demo-category --file testdata/config/firewall-urlprofile.xml
 search demo-category (matches)
 
 file / vsys1   testdata/config/firewall-urlprofile.xml
@@ -253,10 +253,10 @@ A profile inspects traffic a rule already matched; the rule does not match
 because of it.
 
 Which directory groups a user belongs to is not in a configuration. Point
-`PANOS_USERS` at a user snapshot and search follows them:
+`PROTEUS_USERS` at a user snapshot and search follows them:
 
 ```
-$ PANOS_USERS=testdata/users-snapshot.json panos-analyst search 'ACME\carol' --file testdata/config/firewall-users.xml
+$ PROTEUS_USERS=testdata/users-snapshot.json proteus search 'ACME\carol' --file testdata/config/firewall-users.xml
 search ACME\carol (matches)
 
 file / vsys1   testdata/config/firewall-users.xml
@@ -285,7 +285,7 @@ side. A literal address stays bare. A value the configuration does not define sh
 `(predefined)`. A list stops at five items; `--full` shows all of them.
 
 ```
-$ panos-analyst lookup branch-to-dc --file testdata/config/firewall-lookup.xml --expand
+$ proteus lookup branch-to-dc --file testdata/config/firewall-lookup.xml --expand
 file / vsys1   testdata/config/firewall-lookup.xml
 security rule  branch-to-dc                 position 2 of 2, local, enabled
   uuid         0b3f5e2a-9d41-4c1e-8f7a-2b6c9d1ec21e
@@ -326,7 +326,7 @@ An object card gives its value, its members and the groups holding it. It ends
 with the `search` command that shows where the object is used:
 
 ```
-$ panos-analyst lookup net-vienna --file testdata/config/firewall-lookup.xml
+$ proteus lookup net-vienna --file testdata/config/firewall-lookup.xml
 file / vsys1   testdata/config/firewall-lookup.xml
 address        net-vienna                   vsys:vsys1
   tags         branch
@@ -334,7 +334,7 @@ address        net-vienna                   vsys:vsys1
 
   value        10.20.0.0/16
   held by      branch-networks
-  where it is used: panos-analyst search net-vienna --file testdata/config/firewall-lookup.xml
+  where it is used: proteus search net-vienna --file testdata/config/firewall-lookup.xml
 
 1 with it, 0 without, 0 holes
 ```
@@ -355,7 +355,7 @@ Source and destination are an address or an FQDN. `--port`, `--url` and the zone
 narrow the flow:
 
 ```
-$ panos-analyst simulate policy 10.1.0.5 10.2.0.5 --file testdata/config/firewall-zones.xml --from-zone inside --to-zone dmz --port 443
+$ proteus simulate policy 10.1.0.5 10.2.0.5 --file testdata/config/firewall-zones.xml --from-zone inside --to-zone dmz --port 443
 10.1.0.5 -> 10.2.0.5 tcp/443
 file / vsys1   testdata/config/firewall-zones.xml
   zones      from inside, to dmz (given)
@@ -373,7 +373,7 @@ table against a fetched device, else from the configuration's interfaces and
 routes. `--why` shows every stage and how many candidates it left:
 
 ```
-$ panos-analyst simulate policy 10.1.0.5 10.2.0.5 --file testdata/config/firewall-zones.xml --why
+$ proteus simulate policy 10.1.0.5 10.2.0.5 --file testdata/config/firewall-zones.xml --why
 10.1.0.5 -> 10.2.0.5 tcp
 file / vsys1   testdata/config/firewall-zones.xml
   zones      from inside, to dmz (configuration)
@@ -400,7 +400,7 @@ A URL matches custom URL categories; a rule naming a PAN-DB category cannot be
 judged from a configuration, so it stays:
 
 ```
-$ panos-analyst simulate policy 10.0.0.1 10.6.0.1 --file testdata/config/firewall-simulate.xml --url shop.example.com/cart
+$ proteus simulate policy 10.0.0.1 10.6.0.1 --file testdata/config/firewall-simulate.xml --url shop.example.com/cart
 10.0.0.1 -> 10.6.0.1 tcp shop.example.com/cart
 file / vsys1   testdata/config/firewall-simulate.xml
   zones      not evaluated
@@ -416,7 +416,7 @@ A port matches services; `application-default` and predefined services such as
 `service-https` stay for the same reason:
 
 ```
-$ panos-analyst simulate policy 10.0.0.1 10.5.0.1 --file testdata/config/firewall-simulate.xml --port 8443
+$ proteus simulate policy 10.0.0.1 10.5.0.1 --file testdata/config/firewall-simulate.xml --port 8443
 10.0.0.1 -> 10.5.0.1 tcp/8443
 file / vsys1   testdata/config/firewall-simulate.xml
   zones      not evaluated
@@ -435,7 +435,7 @@ firewall resolves, so the stage is inferred. Without an address, only FQDN objec
 match, and the answer says it may be missing rules:
 
 ```
-$ panos-analyst simulate policy 10.0.0.1 www.example.com --file testdata/config/firewall-simulate.xml --no-dns
+$ proteus simulate policy 10.0.0.1 www.example.com --file testdata/config/firewall-simulate.xml --no-dns
 10.0.0.1 -> www.example.com tcp
 file / vsys1   testdata/config/firewall-simulate.xml
   dns        www.example.com -> []
@@ -455,15 +455,15 @@ never win. A simulation runs on one device and vsys; estate simulation follows.
 
 ## 11a. Read the run log
 
-Every command writes one log file under `~/.local/state/panos-analyst/log` (or
-`log_dir`, `PANOS_LOG_DIR`, `--log-dir`). A run that ends with an error or exit 3
+Every command writes one log file under `~/.local/state/proteus/log` (or
+`log_dir`, `PROTEUS_LOG_DIR`, `--log-dir`). A run that ends with an error or exit 3
 prints its path on stderr. `--log-level debug` records every API call, every
 finding and, for a simulation, the rules each stage kept; `--verbose` echoes the log
 to the terminal. Passwords and API keys never reach it.
 
 ```
-$ panos-analyst simulate policy 10.1.0.5 10.2.0.5 --file testdata/config/firewall-zones.xml --log-level debug
-$ cut -d' ' -f2- ~/.local/state/panos-analyst/log/simulate_policy-*.log | grep -E 'SNAP|derive-zones|first-match|exit'
+$ proteus simulate policy 10.1.0.5 10.2.0.5 --file testdata/config/firewall-zones.xml --log-level debug
+$ cut -d' ' -f2- ~/.local/state/proteus/log/simulate_policy-*.log | grep -E 'SNAP|derive-zones|first-match|exit'
 [INFO] [SNAP] file testdata/config/firewall-zones.xml: PAN-OS 11.2.0 read with the 11.2.0 schema
 [INFO] [STEP] policy/derive-zones: inferred, 1 candidates, 8µs - from inside; to dmz (configuration)
 [DEBUG] [STEP] policy/derive-zones: 10.1.0.5: inside via ethernet1/1 10.1.0.1/24
@@ -485,7 +485,7 @@ where a security rule goes. The lab below is fw01 and fw02, joined by
 198.19.0.0/24, from their stored interface state and forwarding tables:
 
 ```
-$ panos-analyst simulate routing 198.18.10.5 8.8.8.8
+$ proteus simulate routing 198.18.10.5 8.8.8.8
 simulate routing 198.18.10.5 -> 8.8.8.8            fidelity: undermatch
 
   198.18.10.5
@@ -514,7 +514,7 @@ may be incomplete: the path leaves the estate at 192.168.0.1
 192.168.0.1, which no inventory firewall owns. The other direction is complete:
 
 ```
-$ panos-analyst simulate routing 198.18.1.10 198.18.10.100
+$ proteus simulate routing 198.18.1.10 198.18.10.100
 simulate routing 198.18.1.10 -> 198.18.10.100            fidelity: exact
 
   198.18.1.10
@@ -539,7 +539,7 @@ firewalls on the path: fw02 (home -> labor), fw01 (transport -> server)
 ```
 
 - A source connected on two firewalls is a choice only you can make:
-  `panos-analyst: 198.18.100.50 could enter at several firewalls; name one with --device: fw01 ethernet1/5, fw02 vlan.100`
+  `proteus: 198.18.100.50 could enter at several firewalls; name one with --device: fw01 ethernet1/5, fw02 vlan.100`
 - `simulate routing <destination> --device fw01` starts on one firewall;
   `--router` picks its logical router when it has several.
 - `--rib` lists the routing table's other routes to the destination at each
@@ -559,7 +559,7 @@ rules (`testdata/config/firewall-nat.xml`), each checked against fw01's own
 `test nat-policy-match`. A port forward:
 
 ```
-$ panos-analyst simulate nat 198.19.0.1 198.18.250.10 --device fw01 --port 8443
+$ proteus simulate nat 198.19.0.1 198.18.250.10 --device fw01 --port 8443
 simulate nat 198.19.0.1 -> 198.18.250.10 tcp/8443 on fw01            fidelity: exact
 
   ┌─ fw01 ─ vsys1 ─ router default ─ snapshot 1m ────────┐
@@ -583,7 +583,7 @@ translated destination is routed into server, which is the zone the security rul
 needs. A source pool:
 
 ```
-$ panos-analyst simulate nat 198.18.11.5 198.18.250.200 --device fw01 --port 443
+$ proteus simulate nat 198.18.11.5 198.18.250.200 --device fw01 --port 443
 simulate nat 198.18.11.5 -> 198.18.250.200 tcp/443 on fw01            fidelity: exact
 
   ┌─ fw01 ─ vsys1 ─ router default ─ snapshot 2m ───────────────────────────────────┐
@@ -620,7 +620,7 @@ shared, in the schema's terms. With a week-old and a current snapshot of the lab
 firewall:
 
 ```
-$ panos-analyst snapshot diff
+$ proteus snapshot diff
 fw01   2026-09-22T08-00-00Z -> 2026-09-28T08-00-00Z
   shared     no changes
   vsys:vsys1
@@ -640,7 +640,7 @@ A configuration from a release this build has no schema for is read with the
 nearest one, and every answer says it can miss rules:
 
 ```
-$ panos-analyst search 198.18.10.100 --file testdata/config/firewall-version-12.2.xml --vsys vsys1 --show objects
+$ proteus search 198.18.10.100 --file testdata/config/firewall-version-12.2.xml --vsys vsys1 --show objects
 search 198.18.10.100 (covers)
 
 file / vsys1   testdata/config/firewall-version-12.2.xml
@@ -664,7 +664,7 @@ That exits 3. The exit codes are:
 `notes` at the top level so a script cannot miss them:
 
 ```
-$ panos-analyst search 10.124.0.1 --file testdata/config/firewall-multivsys.xml --vsys vsys1 --show objects --output json
+$ proteus search 10.124.0.1 --file testdata/config/firewall-multivsys.xml --vsys vsys1 --show objects --output json
 {
   "format": 1,
   "command": "search",
@@ -729,13 +729,13 @@ for _, f := range found {
 ```bash
 make gate       # tidy, lint, unit tests
 make ci         # adds the race detector, coverage floors, a drift gate, a vulnerability scan
-go test -bench . -benchmem ./index/ ./config/
+go test -bench . -benchmem ./internal/index/ ./internal/config/
 ```
 
 Against a real device, which CI never does:
 
 ```bash
-PANOS_LIVE_CONFIG=/tmp/fw-live.xml go test -tags live -v ./resolve/
+PROTEUS_LIVE_CONFIG=/tmp/fw-live.xml go test -tags live -v ./internal/resolve/
 PANOS_HOST=... PANOS_API_KEY=... scripts/device-probe.sh /tmp/fw-live.xml vsys1
 ```
 

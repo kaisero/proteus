@@ -47,17 +47,15 @@ receiver, so a walk reads as a path rather than as a chain of existence checks.
 `InstancePath` names entries, because two vsys can each hold an object of
 the same name.
 
-### The digest, and why it is embedded twice
+### The digest, and where it lives
 
 The schema is large. `internal/digest` stores a trimmed, gzipped form, and
-`config/embed.go` embeds it with `go:embed schemadigest`.
+`internal/config/embed.go` embeds it with `go:embed schemadigest`.
 
-An embed directive cannot reach outside its own package, so the digests live in two
-committed places: `schemadigest/` holds the originals and `config/schemadigest/`
-holds the copy that is embedded. `make config/schemadigest` refreshes the copy and
-`make digest-check` fails the build if they diverge. When the copy was gitignored,
-a pristine checkout did not compile at all, and neither did a consumer running
-`go get`.
+An embed directive cannot reach outside its own package, so the digests have one
+committed home, `internal/config/schemadigest/`. The generator reads and writes them
+there, so there is no second copy to keep in step. When the directory was
+gitignored, a pristine checkout did not compile at all.
 
 Both the decoded digest and the reference table are cached process-wide per schema.
 Before that caching, `Load` cost 41.8 ms and `Walk` 15.2 ms; after, 0.12 ms and
@@ -99,9 +97,8 @@ that might hit an ambiguous kind uses `KindContainers` and chooses, then reads w
 
 ## Build / run pointers
 
-- `go test ./config/` — loading, the tree, the walk, the schema questions.
-- `./bin/panos-analyst snapshot show --file <cfg>` — version, vsys, rule counts.
-- `make digest-check` — the two digest copies agree.
+- `go test ./internal/config/` — loading, the tree, the walk, the schema questions.
+- `./bin/proteus snapshot show --file <cfg>` — version, vsys, rule counts.
 
 ## Public API
 
@@ -176,7 +173,7 @@ func ParseScope(s string) (Scope, error)
 
 ## See also
 
-- `config/load.go`, `config/tree.go`, `config/walk.go`
+- `internal/config/load.go`, `internal/config/tree.go`, `internal/config/walk.go`
 - `internal/schema/refs.go` — target classification and the census
 - [schema-codegen](schema-codegen.md) — where the digest comes from
 - [scope-semantics](scope-semantics.md) — what `resolve` builds on this

@@ -21,7 +21,7 @@ Check: `go test ./internal/codegen -run TestNoHandWrittenFieldMaps`
 ## R2 — Read only, everywhere
 
 No package may write to a device, mutate a loaded config, or expose a setter on
-a model type. The library answers questions; it never changes anything.
+a model type. proteus answers questions; it never changes anything.
 
 A loaded index is immutable once built. A reload produces a new index and
 replaces the pointer.
@@ -72,7 +72,7 @@ The generated model is committed to the repository. A schema change that alters
 the model must show up as a reviewable diff. CI regenerates and fails if the
 result differs from what is committed.
 
-Check: `make generate && git diff --exit-code config/`
+Check: `make generate && git diff --exit-code internal/config/`
 
 ## R7 — A performance claim has a benchmark
 
@@ -137,13 +137,13 @@ neither `simulate` nor `estate`. `store` does not import `fetch`. `search` and
 `drift` answer from one configuration and import none of `fetch`, `store` or
 `estate`. `card` builds lookup's cards from one configuration and imports none of
 `fetch`, `store`, `estate` or `simulate`. `simulate` is a leaf: it imports no simulation implementation and none of
-`estate`, `store`, `fetch`, `search` or `drift`. `simulate/securitypolicy` imports
-none of `estate`, `store` or `fetch`. `simulate/routing` imports none of `estate`,
+`estate`, `store`, `fetch`, `search` or `drift`. `internal/simulate/securitypolicy` imports
+none of `estate`, `store` or `fetch`. `internal/simulate/routing` imports none of `estate`,
 `store`, `fetch`, `search` or `drift`, and no I/O package: every device's data
 reaches it through `simulate.Network`. What the simulations share lives in the
-leaf packages `simulate/topology` (interfaces, forwarding tables, placement) and
-`simulate/rulebase` (rulebase matching, PBF), which import no simulation and no I/O
-package. `simulate/nat` is also the NAT engine: `routing` and `securitypolicy` may
+leaf packages `internal/simulate/topology` (interfaces, forwarding tables, placement) and
+`internal/simulate/rulebase` (rulebase matching, PBF), which import no simulation and no I/O
+package. `internal/simulate/nat` is also the NAT engine: `routing` and `securitypolicy` may
 import it, and it imports neither of them, nor I/O.
 
 The core's freedom from I/O is an absolute property today. A fetcher in the same

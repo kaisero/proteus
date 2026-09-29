@@ -2,14 +2,15 @@
 
 This file holds the reasoning. AGENTS.md holds the rules.
 
-## What this library is
+## What this project is
 
-A read-only Go interface to a PAN-OS firewall configuration file, with the
-object model generated from PAN-OS's own schema.
+proteus is a read-only command-line tool that answers questions about PAN-OS
+firewalls, with the configuration model generated from PAN-OS's own schema.
 
-It is a library. Other tools consume it — an analysis platform, an MCP server, a
-policy simulator. The read-only core (`config`, `resolve`, `index`) does not talk to
-devices and it does not write. Above it, `fetch` reads devices with show commands
+It is an application, not a library. Every package lives under `internal/`, so
+none of them is an API that must stay stable for outside code; a later MCP server
+belongs in this module and can import them. The read-only core (`config`,
+`resolve`, `index`) does not talk to devices and it does not write. Above it, `fetch` reads devices with show commands
 and a configuration export, `store` keeps what it read as timestamped snapshots,
 and `inventory` says which devices there are. R12 keeps the core free of I/O.
 
@@ -47,14 +48,14 @@ is its input. R1 and R4 exist to keep it that way.
 
 ## Why read-only
 
-The consumers of this library analyse and answer. Writing is a different problem
-with different risks, and pango's API client already solves it. Keeping writes
-out removes a whole category of failure from a library whose value is that its
-answers can be trusted. R2 enforces it.
+proteus analyses and answers. Writing is a different problem with different
+risks, and pango's API client already solves it. Keeping writes out removes a
+whole category of failure from a tool whose value is that its answers can be
+trusted. R2 enforces it.
 
 ## Each firewall is read directly
 
-panos-analyst reads each firewall's own configuration, not Panorama's. A managed
+proteus reads each firewall's own configuration, not Panorama's. A managed
 firewall's running configuration already carries the policy Panorama pushed to
 it, so the device-group hierarchy that computed that policy does not need to be
 modelled here. What remains is the order a firewall evaluates its layers in:
@@ -72,32 +73,44 @@ Resolve globally and sibling vsys bleed into each other. R5 exists for this.
 ## Layout
 
 ```
-cmd/panos-schemagen/   generator CLI: digest -> Go model
-internal/schema/       parse the PAN-OS schema grammar
-internal/digest/       the committed schema digest format
-internal/codegen/      emit Go from the digest
-internal/archtest/      the import-direction check (R12)
-schema/                public: query the schema itself (types, limits, references)
-config/                public: Load, version detection, the Model interface
-config/v11_2/…         public: generated model per PAN-OS minor
-resolve/               public: PAN-OS semantics (targets, rule order, scoped visibility)
-index/                 public: scope-keyed indexes (refs, closure, CIDR, rules)
-inventory/             public: devices, credentials and TLS choice, from YAML
-fetch/                 public: read-only XML API client and the document list
-store/                 public: timestamped on-disk snapshots, latest, retention
-cmd/panos-analyst/     init, fetch, and list stored snapshots
-schemadigest/          committed firewall digests, ~0.2 MB each
-testdata/              trimmed schema fragments and config fixtures
-schemas/               vendor schema files, pulled from an appliance, not committed
+cmd/proteus/                main only: signal context, version, calls internal/cli
+cmd/panos-schemagen/        generator CLI: digest -> Go model
+cmd/panos-demo/             a narrated tour of the analysis packages
+internal/cli/               the commands, their rendering and settings
+internal/config/            Load, version detection, element tree, scopes
+internal/config/schemadigest/  committed firewall digests, ~0.2 MB each, embedded
+internal/config/v11_2/…     generated model per PAN-OS minor
+internal/resolve/           PAN-OS semantics (targets, rule order, scoped visibility)
+internal/index/             scope-keyed indexes (refs, closure, CIDR, rules)
+internal/inventory/         devices, credentials and TLS choice, from YAML
+internal/fetch/             read-only XML API client and the document list
+internal/store/             timestamped on-disk snapshots, latest, retention
+internal/estate/            selectors and a time to targets; the simulation registry
+internal/simulate/…         the staged simulation framework and its kinds
+internal/search/            where a value or name appears
+internal/card/              the whole rule or object behind a name
+internal/drift/             what changed between two configurations
+internal/runlog/            one log file per run
+internal/schema/            parse the PAN-OS schema grammar
+internal/digest/            the committed schema digest format
+internal/codegen/           emit Go from the digest
+internal/archtest/          the import-direction check (R12)
+internal/fakepanos/         a fake PAN-OS XML API for tests
+testdata/                   trimmed schema fragments, config and op-data fixtures
+schemas/                    vendor schema files, pulled from an appliance, not committed
 ```
+
+`cmd/` holds only wiring. A command's logic lives in `internal/cli`, where tests
+reach it and a second front end could share it.
 
 Dependency order is one-way: `config` <- `resolve` <- `index`. Nothing imports a
 versioned package except the caller. R12 checks it with a test rather than a
-sentence.
+sentence, and the test fails when a rule names a package that no longer exists,
+so a move cannot switch a rule off.
 
-`schema/` is public because the schema is useful on its own: it answers "what may
-this field reference", "how long may this name be", and "what does this field
-mean" — without a config file in hand.
+The schema digests have one home, `internal/config/schemadigest/`: `go:embed`
+cannot reach outside its package, so the generator reads and writes them there
+rather than keeping a second copy in step.
 
 ## Decisions
 
@@ -108,17 +121,17 @@ detail and the measurements.
   entry types to 506, because the template subtree embeds a whole firewall
   config. Names come from the shallowest path where a shape occurs. (Measured on
   the Panorama schema; Panorama support was removed in M1.)
-- **API surface.** All generated structs are public.
+- **API surface.** All generated structs are exported, inside `internal/`.
 - **Versions.** One generated model per PAN-OS minor, in its own
   package. Adding 11.3 cannot break an 11.2 consumer.
 - **Schema input.** A compact digest is committed; the vendor XML is not. CI
   regenerates from the digest, so drift is gated without an appliance.
 - **Unknown data.** Preserved verbatim and reported. A newer config still loads.
 - **Indexes live here, verdicts do not.** References, transitive group closure,
-  CIDR containment and rule-position bitmaps, all keyed by scope. Consumers build
-  the policy simulator and where-used calls on top.
+  CIDR containment and rule-position bitmaps, all keyed by scope. The simulator and
+  search build on top.
 
-  The line runs between *reachability* and *decision*. The library answers "which
+  The line runs between *reachability* and *decision*. The index answers "which
   rules could this value reach", because that is index knowledge and there are four
   separate paths to get it wrong: the object covering an address, a group holding
   that object, a literal in the rule field, and a field of `any`. `CandidatesFor`

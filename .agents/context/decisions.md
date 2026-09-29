@@ -29,7 +29,7 @@ not merely incomplete. **R5** and **R10**.
 
 ## D3 — Reachability, not a verdict
 
-The library says which rules a value can reach. Intersecting sides, dropping
+The index says which rules a value can reach. Intersecting sides, dropping
 disabled rules and deciding what a first match means belongs to the caller.
 
 The line is drawn between the part a configuration determines and the part it does
@@ -39,7 +39,7 @@ happens afterwards; none of that is a property of the value.
 ## D4 — The four paths live in one place
 
 They were duplicated across two commands, so the missing `any` path had to be
-fixed twice. `index/candidates.go` composes them once.
+fixed twice. `internal/index/candidates.go` composes them once.
 
 ## D5 — Value spaces, and the trie moves
 
@@ -50,8 +50,8 @@ and zones.
 A resolver owns one value space and answers one question: which object names does
 this value match. Everything after is identical for every space.
 
-**Resolvers are internal and the set is closed.** A new space is implemented in the
-library, so every one can be held to the same reporting obligation.
+**Resolvers are internal and the set is closed.** A new space is implemented in
+`index`, so every one can be held to the same reporting obligation.
 
 ## D6 — Resolver wiring comes from the schema
 
@@ -67,10 +67,10 @@ This also revealed that `source` accepts `region`, `external-list` and
 An index is cached per `(file, scope)` and immutable. User-ID data changes far
 faster. Baking it in would poison the cache or force rebuilds.
 
-## D8 — The library performs no I/O
+## D8 — The read-only core performs no I/O
 
-Providers are interfaces; fetching is the caller's job. This keeps the library
-offline, deterministic and testable, and it matches D3: the library answers from
+Providers are interfaces; fetching is the caller's job. This keeps the core
+offline, deterministic and testable, and it matches D3: the core answers from
 what it was given.
 
 ## D9 — Incompleteness is reported, never hidden
@@ -103,7 +103,7 @@ one asterisk per pattern; carets may repeat.
 Matching could not be verified. `test url` reports PAN-DB categories only, checked
 with the category referenced from a profile used by five rules, from a disabled rule
 and from an enabled rule. The matching rules are documentation-derived and labelled
-as such in `resolve/urlpattern.go`.
+as such in `internal/resolve/urlpattern.go`.
 
 **Would change it:** traffic through a device and the URL filtering log.
 
@@ -119,7 +119,7 @@ kept out of the rule bitmaps for the same reason.
 
 ## D13 — Zones are given for simulation, and inferred only on request
 
-**This was decided wrongly first.** The measured gap between the library and a
+**This was decided wrongly first.** The measured gap between proteus and a
 device was blamed on missing zone resolution, and a whole zone value space was
 planned to close it. The real cause was that `simulate` discarded the zones it was
 already given, and the rule bitmaps had carried `from` and `to` since the index was
@@ -142,10 +142,10 @@ than approximating it.
 
 ## D15 — Commit the embedded digests
 
-`go:embed` cannot reach outside its own package, so `config/schemadigest/` must
+`go:embed` cannot reach outside its own package, so `internal/config/schemadigest/` must
 exist for the package to compile. While it was gitignored, a pristine checkout did
-not build and neither would `go get`. The copy is committed and `digest-check`
-keeps it in step.
+not build. It is committed, and it is the only copy: the generator reads and
+writes the digests there.
 
 ## See also
 

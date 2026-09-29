@@ -38,7 +38,7 @@ complete answer. A value nothing recognises is an incomplete one. See
 
 ### Wiring comes from the schema
 
-`wireResolvers` in `index/resolver.go` maps each `Field` to the resolvers covering
+`wireResolvers` in `internal/index/resolver.go` maps each `Field` to the resolvers covering
 the kinds `config.FieldKinds("rulebase/security/rules")` reports. Nothing here
 lists fields by hand.
 
@@ -48,7 +48,7 @@ as though `source` names nothing.
 
 ### The four paths
 
-`View.Candidates` in `index/candidates.go` is the driver. A rule field reaches a
+`View.Candidates` in `internal/index/candidates.go` is the driver. A rule field reaches a
 value by four paths, and forgetting one gives a wrong answer rather than an
 incomplete one:
 
@@ -84,7 +84,7 @@ already answers it.
   reachability question was address-shaped.
 - **URL matching is by token, never by substring.** The host matches in full and
   the path as a prefix, so `wildcard-example.com` does not cover
-  `wildcard-example.com.evil.net`. Syntax rules in `resolve/urlpattern.go` are
+  `wildcard-example.com.evil.net`. Syntax rules in `internal/resolve/urlpattern.go` are
   verified against a firewall's validator; the matching rules are
   documentation-derived and labelled as such.
 - **A service group spells its membership `members`**, an address group `static`,
@@ -97,17 +97,17 @@ already answers it.
 
 ## Adding a value space
 
-1. Write `index/resolver_<name>.go` implementing the four methods.
+1. Write `internal/index/resolver_<name>.go` implementing the four methods.
 2. Read whatever it needs in `resolve`, not in `index`.
-3. Register it in `build()` in `index/index.go`; the kinds it declares do the wiring.
+3. Register it in `build()` in `internal/index/index.go`; the kinds it declares do the wiring.
 4. If a kind name is ambiguous in the schema, use `resolve.ObjectsAt` with an
    explicit container path rather than `ObjectsInScope`. See [config-loading](config-loading.md).
 5. Report what it cannot evaluate. Never guess membership.
 
 ## Build / run pointers
 
-- `go test ./index/ -run 'Resolver|Candidates'` — the value-space tests.
-- `./bin/panos-analyst search <value> --file <cfg>` — every value space at once.
+- `go test ./internal/index/ -run 'Resolver|Candidates'` — the value-space tests.
+- `./bin/proteus search <value> --file <cfg>` — every value space at once.
 - `scripts/device-probe.sh` — compares the first match against a real firewall.
 
 ## Public API
@@ -194,8 +194,8 @@ func PrefixesOf(value string) []netip.Prefix
 
 ## See also
 
-- `index/candidates.go` — the driver and the four paths
-- `index/resolver.go` — the interface, `Providers`, `View`, `Report`, `SearchValues`
+- `internal/index/candidates.go` — the driver and the four paths
+- `internal/index/resolver.go` — the interface, `Providers`, `View`, `Report`, `SearchValues`
 - [reporting](reporting.md) — what a resolver must report when it cannot answer
 - [providers](providers.md) — value spaces that need data a file does not hold
 - `ARCHITECTURE.md` — the reachability-versus-verdict seam

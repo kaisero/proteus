@@ -69,8 +69,8 @@ returning.
 
 ## Build / run pointers
 
-- `go test ./index/ -run 'Unresolved|Report'`
-- `./bin/panos-analyst search <term> --file <cfg>` — prints unresolved entries and exits 3,
+- `go test ./internal/index/ -run 'Unresolved|Report'`
+- `./bin/proteus search <term> --file <cfg>` — prints unresolved entries and exits 3,
   because the result on its own looks complete.
 
 ## Public API
@@ -153,6 +153,6 @@ func PrefixesOf(value string) []netip.Prefix
 
 ## See also
 
-- `index/unresolved.go`, `index/candidates.go`, `index/resolver.go`
+- `internal/index/unresolved.go`, `internal/index/candidates.go`, `internal/index/resolver.go`
 - [value-spaces](value-spaces.md) — the recognised flag
 - [providers](providers.md) — staleness and the missing-directory report

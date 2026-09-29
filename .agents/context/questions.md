@@ -1,6 +1,6 @@
 # questions
 
-Validated against 2f14f3f on 2026-09-29 · Purpose: how a question becomes targets, findings, cards and changes — the packages under `panos-analyst search`, `lookup` and `snapshot diff`.
+Validated against 2f14f3f on 2026-09-29 · Purpose: how a question becomes targets, findings, cards and changes — the packages under `proteus search`, `lookup` and `snapshot diff`.
 
 ## Purpose & responsibilities
 
@@ -51,7 +51,7 @@ what was added, removed or changed. Position is not compared.
 ## Build / run pointers
 
 - `go test ./estate ./search ./card ./drift`
-- `./bin/panos-analyst search <term> --file <cfg>`, `./bin/panos-analyst lookup <name> --file <cfg> --expand`, `./bin/panos-analyst snapshot diff`
+- `./bin/proteus search <term> --file <cfg>`, `./bin/proteus lookup <name> --file <cfg> --expand`, `./bin/proteus snapshot diff`
 
 ## Public API
 

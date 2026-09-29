@@ -5,11 +5,11 @@ Validated against 54cfdf9 on 2026-09-29 · Purpose: how a simulation runs as sta
 ## Purpose & responsibilities
 
 `simulate` is the framework of spec §11: a run of named stages over one flow, each
-declaring its fidelity. It is a leaf (R12). `simulate/securitypolicy` answers which
-rule one flow hits on one device; `simulate/routing` (spec §17) which firewalls a
-packet crosses; `simulate/nat` (spec §18) the NAT rule and the translated packet on
-one firewall. `simulate/nat` is also the NAT engine routing and securitypolicy
-call; `simulate/topology` and `simulate/rulebase` are leaf packages they share. `estate.Simulations` is the registry; the command makes one
+declaring its fidelity. It is a leaf (R12). `internal/simulate/securitypolicy` answers which
+rule one flow hits on one device; `internal/simulate/routing` (spec §17) which firewalls a
+packet crosses; `internal/simulate/nat` (spec §18) the NAT rule and the translated packet on
+one firewall. `internal/simulate/nat` is also the NAT engine routing and securitypolicy
+call; `internal/simulate/topology` and `internal/simulate/rulebase` are leaf packages they share. `estate.Simulations` is the registry; the command makes one
 `simulate <kind>` subcommand per entry, from `kindCommands` when a kind needs its own
 flags (routing). `runlog` records each stage.
 
@@ -84,10 +84,10 @@ with interfaces without a router).
 
 ## Build / run pointers
 
-- `go test ./simulate/... ./runlog`
-- `./bin/panos-analyst simulate policy <src> <dst> --file <cfg> --why`
-- `./bin/panos-analyst simulate routing <src> <dst> --why` (needs fetched devices)
-- `./bin/panos-analyst simulate nat <src> <dst> --device <fw> --port <p> --why`
+- `go test ./internal/simulate/... ./runlog`
+- `./bin/proteus simulate policy <src> <dst> --file <cfg> --why`
+- `./bin/proteus simulate routing <src> <dst> --why` (needs fetched devices)
+- `./bin/proteus simulate nat <src> <dst> --device <fw> --port <p> --why`
 - `scripts/device-probe.sh --nat <device> <router> <src,dst,port>...` against the device
 - `--log-level debug`, then `grep '\[STEP\]'` in the run log: the rules each stage left.
 

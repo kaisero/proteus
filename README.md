@@ -1,22 +1,22 @@
-# panos-analyst
+# proteus
 
-`panos-analyst` is a read-only Go library. It loads a PAN-OS firewall
-configuration file and answers questions about it. It never writes a
-configuration. `panos-analyst fetch` reads devices with show commands and a
+`proteus` is a read-only command-line tool for PAN-OS firewalls. It loads a
+firewall's configuration and answers questions about it. It never writes a
+configuration. `proteus fetch` reads devices with show commands and a
 configuration export, and the analysis never contacts a device.
 
-The library exists for tools and AI agents. They ask two kinds of question.
+It exists for people and AI agents. They ask two kinds of question.
 *Does an object with this value exist?* And *which rules can this value reach?*
-The library answers both, per scope, and reports what it could not evaluate.
+proteus answers both, per scope, and reports what it could not evaluate.
 
 The object model is generated from the schema PAN-OS itself ships.
 
 ## What it does
 
-- **Fetches what it analyses** — `panos-analyst fetch` logs in to each firewall in
+- **Fetches what it analyses** — `proteus fetch` logs in to each firewall in
   an inventory and stores its configuration and operational state as a timestamped
   snapshot. Every question then runs against the devices' latest snapshots.
-- **Reads what a firewall actually evaluates** — the library keys each policy by
+- **Reads what a firewall actually evaluates** — proteus keys each policy by
   device **and** vsys, and orders the rule layers the way the firewall evaluates
   them: pushed shared pre-rules, the vsys's own rules, pushed shared post-rules.
 - **Answers from a value, not only from a name** — give it an address, a prefix,
@@ -32,15 +32,15 @@ The object model is generated from the schema PAN-OS itself ships.
 - **Reports incompleteness** — every lookup returns a report. A non-empty
   `Unresolved` list means the answer is missing matches, and the report says why.
 - **Takes facts a configuration does not hold** — a user-to-group mapping comes
-  from User-ID, not from a file. The library defines a snapshot format and reads
-  it. The caller fetches the data.
+  from User-ID, not from a file. proteus defines a snapshot format and reads
+  it. You supply the data.
 - **Builds each index once** — an index is immutable and cached per file and
   scope. Concurrent readers need no lock.
 
 ## A first look
 
 ```text
-$ ./bin/panos-analyst search superlong.example.azureapps.microsoft.com \
+$ ./bin/proteus search superlong.example.azureapps.microsoft.com \
       --file testdata/config/firewall-urlcat.xml
 search superlong.example.azureapps.microsoft.com (matches)
 
@@ -55,8 +55,8 @@ matched it, so a reader can check the reasoning. And it follows the object to th
 rule that names it. Without `--file`, the same command answers for every device in
 the inventory, one block per device and vsys.
 
-Which rules a value can reach, including the rules whose field is `any`, is a lookup
-in Go:
+Inside, which rules a value can reach, including the rules whose field is `any`,
+is one lookup in the `index` package:
 
 ```go
 cfg, _, err := config.Load("testdata/config/firewall-urlcat.xml")
@@ -74,7 +74,8 @@ for _, h := range rep.Hits {
 
 ## How it works
 
-Three packages. The dependency order is one-way: `config` <- `resolve` <-
+Three packages under `internal/` form the read-only core. The dependency order is
+one-way: `config` <- `resolve` <-
 `index`.
 
 1. **`config`** loads the file. It parses the XML into an element tree and holds
@@ -103,9 +104,9 @@ whose source is `any`. Matching on objects alone reports rule 8.
 
 ### Reachability, not a verdict
 
-The library says which rules a value **can** reach. It does not say which rule
+The index says which rules a value **can** reach. It does not say which rule
 wins. Intersecting the two sides of a match, dropping disabled rules and deciding
-what the first match means belongs to the caller.
+what the first match means belongs to the simulator above it.
 
 ```go
 src := idx.CandidatesFor(index.Source, srcAddr)
@@ -113,7 +114,7 @@ dst := idx.CandidatesFor(index.Destination, dstAddr)
 
 cand := roaring.And(src, dst)
 cand.AndNot(idx.Disabled())
-first := idx.Rules()[cand.Minimum()]   // the caller's verdict, not the library's
+first := idx.Rules()[cand.Minimum()]   // the simulator's verdict, not the index's
 ```
 
 [ARCHITECTURE.md](ARCHITECTURE.md) explains where this line sits and why.
@@ -170,31 +171,19 @@ help strings.
 ### Build
 
 ```bash
-make tools-bin                 # bin/panos-analyst and bin/panos-demo
+make tools-bin                 # bin/proteus and bin/panos-demo
 make build-local               # the generator, bin/panos-schemagen
 ```
 
 `make build` cross-compiles the generator for linux/amd64. It builds neither
 explorer command. Use `make tools-bin` for those.
 
-The schema digests are committed in two places. `schemadigest/` holds the
-originals, and `config/schemadigest/` holds the copy that `go:embed` reads,
-because an embed directive cannot reach outside its own package. `make
-config/schemadigest` refreshes the copy after you regenerate a digest, and
-`make digest-check` fails the build if the two differ.
-
-### Use the library
-
-The repository has no remote yet. Add it with a `replace` directive:
-
-```
-require github.com/okaiser/panos-analyst v0.0.0
-replace github.com/okaiser/panos-analyst => ../go-panos-schema
-```
+The schema digests are committed once, in `internal/config/schemadigest/`. The
+binary embeds them from there, and the generator reads and writes them there.
 
 ## Commands
 
-One binary, `panos-analyst`. Questions are verbs; housekeeping is grouped by noun.
+One binary, `proteus`. Questions are verbs; housekeeping is grouped by noun.
 
 | Command and arguments | What it does |
 | --- | --- |
@@ -220,28 +209,28 @@ firewall of the inventory.
 2 usage, 3 answered with holes or unresolved entries.
 
 Settings come from, in rising precedence, the defaults, the inventory's
-`defaults:`, `PANOS_*` variables and flags: the inventory (`PANOS_CONFIG`,
-`--config`), the store (`store:`, `PANOS_STORE`, `--store`), the snapshot age limit
-(`max_snapshot_age:`, `PANOS_MAX_SNAPSHOT_AGE`, `--max-age`) and the output
-(`output:`, `PANOS_OUTPUT`, `--output`). `PANOS_USERS` points at a user snapshot.
+`defaults:`, `PROTEUS_*` variables and flags: the inventory (`PROTEUS_CONFIG`,
+`--config`), the store (`store:`, `PROTEUS_STORE`, `--store`), the snapshot age limit
+(`max_snapshot_age:`, `PROTEUS_MAX_SNAPSHOT_AGE`, `--max-age`) and the output
+(`output:`, `PROTEUS_OUTPUT`, `--output`). `PROTEUS_USERS` points at a user snapshot.
 
 Every run writes a log you can read back when an answer needs explaining:
-`log_level:` (`PANOS_LOG_LEVEL`, `--log-level`: error, warn, info, debug),
-`log_dir:` (`PANOS_LOG_DIR`, `--log-dir`, default `~/.local/state/panos-analyst/log`)
+`log_level:` (`PROTEUS_LOG_LEVEL`, `--log-level`: error, warn, info, debug),
+`log_dir:` (`PROTEUS_LOG_DIR`, `--log-dir`, default `~/.local/state/proteus/log`)
 and `log_keep:`. `--verbose` echoes it to the terminal. Passwords and API keys never
 reach it.
 
-`panos-demo <config.xml> [-v]` runs every library feature against one file in
+`panos-demo <config.xml> [-v]` runs every analysis feature against one file in
 twelve sections and narrates what it does.
 
 ## Known limits
 
-The library reports each of these rather than hiding it.
+proteus reports each of these rather than hiding it.
 
 - **Only PAN-OS 11.2 digests ship.** Another version loads with the nearest digest,
   and every answer carries a warning naming both versions.
 - **Panorama configurations are refused.** Read each firewall's own export instead.
-- **NAT translated addresses are not modelled.** The library reads the rulebase.
+- **NAT translated addresses are not modelled in search.** Search reads the rulebase.
 - **Predefined content is unknown.** Regions, predefined applications and PAN-DB
   categories live in the content database a firewall downloads.
 - **External dynamic list contents are fetched at runtime**, so the file does not
@@ -251,7 +240,7 @@ The library reports each of these rather than hiding it.
 - **Zones are an input, not an output, for simulation.** The device's own
   `test security-policy-match` takes zones as arguments. Measured against it on a
   lab firewall, with probes built from each rule's own zones and ports:
-  `simulate` agreed on 3 of 7 without zones, and on 7 of 7 with them. The library
+  `simulate` agreed on 3 of 7 without zones, and on 7 of 7 with them. proteus
   can also infer a zone from an address, and it reports every limit of that
   inference.
 - **`simulate routing` follows the forwarding table, IPv4 only.** It applies NAT on
@@ -272,41 +261,43 @@ The library reports each of these rather than hiding it.
 ## Project structure
 
 ```
-go-panos-schema/
+proteus/
 ├── cmd/
-│   ├── panos-analyst/     # fetch, snapshots, search, lookup, simulate: the CLI
-│   ├── panos-demo/        # a narrated tour of every feature
-│   └── panos-schemagen/   # digest a vendor schema, generate the Go model
-├── config/                # Load, version detection, element tree, scopes
-│   └── v11_2/firewall/    # generated model, per PAN-OS minor
-├── resolve/               # PAN-OS semantics: targets per vsys, rule order,
-│                          #   objects, groups, tag filters, URL patterns, zones
-├── index/                 # lookup structures, value-space resolvers, reports
-├── inventory/             # devices, credentials and TLS choice, from YAML
-├── fetch/                 # read-only XML API client and the document list
-├── store/                 # timestamped on-disk snapshots, latest, retention
-├── estate/                # selectors and a time to targets; the simulation registry
-├── simulate/              # the staged simulation framework and its fidelity
-│   ├── securitypolicy/    # the first simulation: which rule a flow would hit
-│   ├── routing/           # which firewalls a packet crosses, hop by hop
-│   ├── nat/               # the NAT engine and simulation: rule, translation
-│   ├── topology/          # interfaces and forwarding tables, shared by simulations
-│   └── rulebase/          # rulebase address matching and the PBF check
-├── runlog/                # the run log: levels, redaction, rotation
-├── search/                # every place a value or name appears, in one scope
-├── card/                  # the whole rule or object behind a name, for lookup
-├── drift/                 # what changed between two configurations of a scope
-├── schema/                # public: query the schema itself (design not settled)
-├── internal/schema/       # parse the PAN-OS schema grammar
-├── internal/digest/       # the committed digest format
-├── internal/codegen/      # emit Go from a digest
-├── internal/archtest/     # the import-direction check (R12)
-├── internal/fakepanos/    # a fake PAN-OS XML API for tests
-├── schemadigest/          # committed firewall digests, roughly 0.2 MB each
-├── testdata/config/       # configuration fixtures, one per behaviour
-├── ARCHITECTURE.md        # the reasoning, and where the library's line sits
-├── AGENTS.md              # the mandatory rules
-└── Makefile               # build and checks
+│   ├── proteus/              # main only: calls internal/cli
+│   ├── panos-demo/           # a narrated tour of every feature
+│   └── panos-schemagen/      # digest a vendor schema, generate the Go model
+├── internal/
+│   ├── cli/                  # the commands: fetch, snapshot, search, lookup, simulate
+│   ├── config/               # Load, version detection, element tree, scopes
+│   │   ├── schemadigest/     # committed firewall digests, roughly 0.2 MB each
+│   │   └── v11_2/firewall/   # generated model, per PAN-OS minor
+│   ├── resolve/              # PAN-OS semantics: targets per vsys, rule order,
+│   │                         #   objects, groups, tag filters, URL patterns, zones
+│   ├── index/                # lookup structures, value-space resolvers, reports
+│   ├── inventory/            # devices, credentials and TLS choice, from YAML
+│   ├── fetch/                # read-only XML API client and the document list
+│   ├── store/                # timestamped on-disk snapshots, latest, retention
+│   ├── estate/               # selectors and a time to targets; the simulation registry
+│   ├── simulate/             # the staged simulation framework and its fidelity
+│   │   ├── securitypolicy/   # the first simulation: which rule a flow would hit
+│   │   ├── routing/          # which firewalls a packet crosses, hop by hop
+│   │   ├── nat/              # the NAT engine and simulation: rule, translation
+│   │   ├── topology/         # interfaces and forwarding tables, shared by simulations
+│   │   └── rulebase/         # rulebase address matching and the PBF check
+│   ├── runlog/               # the run log: levels, redaction, rotation
+│   ├── search/               # every place a value or name appears, in one scope
+│   ├── card/                 # the whole rule or object behind a name, for lookup
+│   ├── drift/                # what changed between two configurations of a scope
+│   ├── schema/               # parse the PAN-OS schema grammar
+│   ├── digest/               # the committed digest format
+│   ├── codegen/              # emit Go from a digest
+│   ├── archtest/             # the import-direction check (R12)
+│   └── fakepanos/            # a fake PAN-OS XML API for tests
+├── testdata/                 # configuration and operational fixtures
+├── scripts/                  # device probes, coverage gate, context refresh
+├── ARCHITECTURE.md           # the reasoning behind the design
+├── AGENTS.md                 # the mandatory rules
+└── Makefile                  # build and checks
 ```
 
 ## Development
@@ -327,7 +318,7 @@ appliance, then build a digest and regenerate the model:
 
 ```bash
 make schema-pull HOST=labadmin@your-panos-vm   # into schemas/
-make schema-digest PANOS_VERSION=11.2.0        # into schemadigest/
+make schema-digest PANOS_VERSION=11.2.0        # into internal/config/schemadigest/
 make generate
 ```
 

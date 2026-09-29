@@ -10,18 +10,18 @@ both, but only the firewall digest ships (Panorama support was removed in M1). I
 turns one into a
 compact digest, and the digest into Go structs for every configuration object.
 
-Nothing in this library hand-writes a field mapping that the schema already
+Nothing in this project hand-writes a field mapping that the schema already
 describes. That is rule R1.
 
 ## How it works
 
 ### Two subcommands
 
-- **`panos-schemagen digest -in schema.xml -out schemadigest/`** — parse the
+- **`panos-schemagen digest -in schema.xml -out internal/config/schemadigest/`** — parse the
   proprietary grammar and write a trimmed, gzipped JSON digest carrying its PAN-OS
   version and platform.
-- **`panos-schemagen generate -digest schemadigest -out config`** — emit
-  `config/v11_2/firewall/model.go`.
+- **`panos-schemagen generate -digest internal/config/schemadigest -out internal/config`** — emit
+  `internal/config/v11_2/firewall/model.go`.
 
 ### The grammar
 
@@ -69,18 +69,17 @@ them cost 1,455 objects in this schema and every zone target of a security rule.
 
 ### Where the digests live
 
-`schemadigest/` holds the originals. `config/schemadigest/` holds the copy that
-`go:embed` reads, because an embed directive cannot reach outside its own package.
-**Both are committed.** With the copy gitignored, a pristine checkout did not
-compile.
+`internal/config/schemadigest/` is the only copy. `go:embed` reads it there,
+because an embed directive cannot reach outside its own package, and the generator
+reads and writes it there. **It is committed.** With it gitignored, a pristine
+checkout did not compile.
 
 ## Build / run pointers
 
 - `make generate` — regenerate the model from the committed digests.
 - `make generate-check` — fail if the committed model differs from a fresh
-  generation. Scoped to `config/v*/`, so hand-written code in `config/` is not
+  generation. Scoped to `internal/config/v*/`, so hand-written code in `internal/config/` is not
   compared.
-- `make digest-check` — fail if the two digest copies differ.
 - `make context` / `make context-check` — refresh or verify the API blocks in these
   agent docs.
 - `go test ./internal/...` — schema, digest and codegen.
@@ -88,9 +87,7 @@ compile.
 ## Public API
 
 None. Every package here is internal — `internal/schema`, `internal/digest`,
-`internal/codegen` — and the surface is the `panos-schemagen` command. The root
-`schema/` package is a documentation placeholder with no exported symbols; its
-design is not settled, and `ARCHITECTURE.md` says so.
+`internal/codegen` — and the surface is the `panos-schemagen` command.
 
 ## Gotchas / invariants
 
@@ -98,7 +95,7 @@ design is not settled, and `ARCHITECTURE.md` says so.
   because redistribution is unresolved. The digests are committed instead.
 - **A drift gate must diff only generated paths.** An earlier version regenerated
   over the tree before diffing, so it could not detect drift at all; a later one
-  compared all of `config/`, including hand-written files.
+  compared all of `internal/config/`, including hand-written files.
 - **Only 11.2 digests ship.** Adding 12.2 is a `panos-schemagen digest` run against
   that appliance's `schema.xml`, not a code change.
 

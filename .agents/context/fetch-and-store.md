@@ -7,14 +7,14 @@ Validated against 7a7cefe on 2026-09-29 · Purpose: how a device's configuration
 Three packages sit above the read-only core. `inventory` says which firewalls there
 are and how to log in to each. `fetch` logs in and reads documents from a device's
 XML API. `store` keeps each fetch as a timestamped snapshot on disk. The core never
-imports any of them (R12); `cmd/panos-analyst` wires them together, and
-every `panos-analyst` question reads the selected devices' snapshots.
+imports any of them (R12); `internal/cli` wires them together, and
+every `proteus` question reads the selected devices' snapshots.
 
 ## How it works
 
 ### Inventory
 
-YAML at `$PANOS_CONFIG`, else `~/.config/panos-analyst/config.yaml`. `Load` refuses
+YAML at `$PROTEUS_CONFIG`, else `~/.config/proteus/config.yaml`. `Load` refuses
 a file its group or others can read, because it holds credentials or names the
 variables that do. Unknown keys are errors.
 
@@ -24,7 +24,7 @@ is no API key in the file: `fetch` exchanges the credentials for one per run and
 never stores it.
 
 `insecure_tls` defaults to `true` (spec S8, lab devices with self-signed
-certificates). `panos-analyst init` writes it explicitly with a comment on how to
+certificates). `proteus init` writes it explicitly with a comment on how to
 opt in, and every fetch prints whether verification is on.
 
 ### Fetch
@@ -59,7 +59,7 @@ pair by serial; any doubt fetches the device asked and adds `Result.Notes`.
 <root>/<device>/latest -> <timestamp>
 ```
 
-The root is `$PANOS_STORE`, else `~/.local/share/panos-analyst`. `Write` fills a
+The root is `$PROTEUS_STORE`, else `~/.local/share/proteus`. `Write` fills a
 hidden directory and renames it into place, so a reader never sees half a snapshot.
 `latest` moves only when `config` arrived. Retention keeps the newest
 `snapshot_keep` snapshots and never removes the one `latest` names.
@@ -71,9 +71,9 @@ device for `simulate routing`, pairing HA members by serial into one node.
 
 ## Build / run pointers
 
-- `go test ./inventory ./fetch ./store ./cmd/panos-analyst`
-- `./bin/panos-analyst init | fetch <device>… | fetch --all | snapshots <device>`
-- `./bin/panos-analyst search <term> --device fw01` — any question, from the latest snapshot.
+- `go test ./internal/inventory ./internal/fetch ./internal/store ./internal/cli`
+- `./bin/proteus init | fetch <device>… | fetch --all | snapshots <device>`
+- `./bin/proteus search <term> --device fw01` — any question, from the latest snapshot.
 
 ## Public API
 
@@ -127,7 +127,7 @@ func Open(root string) (*Store, error)
 - **Only reads reach a device.** `TestOnlyReadCalls` pins the method set and the
   `<show>` guard. A new `Client` method needs an R2 review.
 - **Document names are a contract.** `store` names `config`, `interfaces` and `fib`
-  itself, because it cannot import `fetch` (R12). A test in `cmd/panos-analyst`
+  itself, because it cannot import `fetch` (R12). A test in `internal/cli`
   asserts they equal `fetch`'s names.
 - **Tests never touch a device.** `internal/fakepanos` serves keygen, show commands
   and an export over TLS on 127.0.0.1, records every request, and can drop
@@ -137,6 +137,6 @@ func Open(root string) (*Store, error)
 
 ## See also
 
-- `inventory/`, `fetch/`, `store/`, `cmd/panos-analyst/`, `internal/fakepanos/`
+- `internal/inventory/`, `internal/fetch/`, `internal/store/`, `internal/cli/`, `internal/fakepanos/`
 - [providers](providers.md) — what the index does with a zone snapshot
-- [commands](commands.md) — the `panos-analyst` surface
+- [commands](commands.md) — the `proteus` surface

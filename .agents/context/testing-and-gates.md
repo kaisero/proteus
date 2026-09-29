@@ -8,7 +8,7 @@ Validated against 133ba4a on 2026-09-27 · Purpose: what must pass before a comm
 pre-commit hook runs it, which is why it has to stay fast enough to tolerate.
 
 ```
-ci: tidy-check lint test-race test-cov generate-check digest-check context-check build vuln
+ci: tidy-check lint test-race test-cov generate-check context-check build vuln
 ```
 
 ## The gates
@@ -20,7 +20,6 @@ ci: tidy-check lint test-race test-cov generate-check digest-check context-check
 | `test-race` | the shared-index data race class |
 | `test-cov` | coverage falling below the recorded floor |
 | `generate-check` | a hand-edited generated model |
-| `digest-check` | the embedded digest copy drifting from the original |
 | `build` | the generator still cross-compiles |
 | `vuln` | govulncheck |
 | `context-check` | these agent docs drifting from the real API |
@@ -39,7 +38,8 @@ tests, not a lower number. This was got wrong once and the commit had to be amen
 Current floors: config 98.1, resolve 95.8, index 95.1, internal/schema 85.9,
 internal/codegen 93.0, internal/digest 71.8, cmd/panos-schemagen 57.6,
 inventory 96.2, fetch 100.0, store 88.1, estate 100.0, search 97.3, drift 91.1,
-runlog 93.0, simulate 100.0, simulate/securitypolicy 97.5, cmd/panos-analyst 92.0.
+runlog 93.0, simulate 100.0, internal/simulate/securitypolicy 97.5, internal/cli 93.4.
+`coverage-floors.txt` is the authority; these figures only orient.
 
 The fetcher's tests run against `internal/fakepanos`, a fake XML API over TLS on
 127.0.0.1. No test touches a device.
@@ -72,7 +72,7 @@ The fetcher's tests run against `internal/fakepanos`, a fake XML API over TLS on
 
 ### The device probe
 
-`scripts/device-probe.sh <cfg> <scope> [binary]` compares the library's first match
+`scripts/device-probe.sh <cfg> <scope> [binary]` compares proteus's first match
 against a firewall's own `test security-policy-match`. It needs `PANOS_HOST` and
 `PANOS_API_KEY`.
 
@@ -81,7 +81,7 @@ command **requires real zone names** and rejects `any`. Probes built without tha
 care measure nothing: an earlier ad-hoc set reported 6 of 7 agreement by accident,
 where a set derived from the rules reported 3 of 7.
 
-It is not a pass/fail gate. The library over-matches by design, which is the safe
+It is not a pass/fail gate. The simulator over-matches by design, which is the safe
 direction for a candidate set. Use it to see **where** the two differ and why.
 
 It is also the refactor gate: run it before and after, and diff the output. The
@@ -92,12 +92,12 @@ value-space refactor was accepted on a byte-identical result.
 - `make ci` — everything.
 - `make test-race`, `make test-cov`, `make lint` — one at a time.
 - `make context` — refresh the API blocks in these docs after an API change.
-- `go test ./index/ -run TestConcurrentUnknownNameLookupsAreSafe -race` — the race
+- `go test ./internal/index/ -run TestConcurrentUnknownNameLookupsAreSafe -race` — the race
   regression.
 
 ## Public API
 
-Not a library surface.
+None.
 
 ## Gotchas / invariants
 

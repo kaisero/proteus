@@ -70,9 +70,9 @@ possibly a zone of its own.
 
 ## Build / run pointers
 
-- `go test ./resolve/` — the whole package.
-- `./bin/panos-analyst snapshot show --file <cfg>` — every vsys and its rule count.
-- `./bin/panos-analyst search <address> --file <cfg>` — the groups holding it, per vsys.
+- `go test ./internal/resolve/` — the whole package.
+- `./bin/proteus snapshot show --file <cfg>` — every vsys and its rule count.
+- `./bin/proteus search <address> --file <cfg>` — the groups holding it, per vsys.
 
 ## Public API
 
@@ -150,8 +150,8 @@ func ZonesInScope(cfg *config.Config, sc config.Scope) ([]Zone, error)
 
 ## See also
 
-- `resolve/target.go`, `resolve/rules.go`
-- `resolve/objects.go`, `resolve/groups.go`, `resolve/filter.go`
-- `resolve/zones.go`, `resolve/profiles.go`
+- `internal/resolve/target.go`, `internal/resolve/rules.go`
+- `internal/resolve/objects.go`, `internal/resolve/groups.go`, `internal/resolve/filter.go`
+- `internal/resolve/zones.go`, `internal/resolve/profiles.go`
 - [config-loading](config-loading.md) — the tree and schema questions this builds on
 - [value-spaces](value-spaces.md) — what `index` does with these objects
