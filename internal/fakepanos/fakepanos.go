@@ -27,6 +27,9 @@ type Device struct {
 	// TruncateFirst promises a longer body than it sends on the first N
 	// requests, then closes the connection, which a client sees while reading.
 	TruncateFirst int
+	// Stall names a request type, such as "export", that the device never answers:
+	// it waits until the client gives up, as a hung device does.
+	Stall string
 
 	mu       sync.Mutex
 	requests []Request
@@ -81,6 +84,11 @@ func (d *Device) serve(w http.ResponseWriter, r *http.Request) {
 		d.TruncateFirst--
 	}
 	d.mu.Unlock()
+
+	if d.Stall != "" && r.Form.Get("type") == d.Stall {
+		<-r.Context().Done()
+		return
+	}
 
 	if truncate {
 		if hj, ok := w.(http.Hijacker); ok {

@@ -678,3 +678,32 @@ func TestSearchModeFlags(t *testing.T) {
 		t.Errorf("--contains:\n%s", out)
 	}
 }
+
+// A fan-out cancelled while one device hangs returns at once with the other
+// device stored, and TestMain's leak check proves no goroutine is left behind.
+func TestACancelledFanOutEndsPromptly(t *testing.T) {
+	hung := lab(t)
+	hung.Stall = "export"
+	inv, err := inventory.Parse(strings.NewReader(inventoryFor(lab(t).Start(t), hung.Start(t))))
+	if err != nil {
+		t.Fatal(err)
+	}
+	st, err := store.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	var out bytes.Buffer
+	start := time.Now()
+	err = (fetcher{inv: inv, st: st, getenv: getenv}).devices(ctx, &out, []string{"fw01", "fw02"})
+	if elapsed := time.Since(start); elapsed > 20*time.Second {
+		t.Fatalf("the fan-out took %s after its context ended", elapsed)
+	}
+	if !errors.Is(err, errIncomplete) {
+		t.Errorf("one device stored and one cancelled is an incomplete fetch, got %v\n%s", err, out.String())
+	}
+	if _, err := st.Latest("fw01"); err != nil {
+		t.Errorf("the device that answered must be stored: %v", err)
+	}
+}

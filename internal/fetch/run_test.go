@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/okaiser/proteus/internal/fakepanos"
 	"github.com/okaiser/proteus/internal/runlog"
@@ -136,5 +137,22 @@ func TestAFailedDocumentIsWarnedAboutOnce(t *testing.T) {
 	}
 	if len(warns) != 1 || !strings.Contains(warns[0], "interfaces failed") {
 		t.Errorf("want one warning for the failed document, got:\n%s", strings.Join(warns, "\n"))
+	}
+}
+
+// A run cancelled while the device hangs returns at once, and TestMain's leak check
+// proves it leaves no goroutine behind.
+func TestACancelledRunEndsPromptly(t *testing.T) {
+	d := fullDevice(t)
+	d.Stall = "export"
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	res, err := Run(ctx, target(d.Start(t)), Documents, nil)
+	if elapsed := time.Since(start); elapsed > 10*time.Second {
+		t.Fatalf("the run took %s after its context ended", elapsed)
+	}
+	if err == nil && res.OK(RunningConfig.Name) {
+		t.Error("the stalled export cannot have succeeded")
 	}
 }
