@@ -31,3 +31,4 @@ github.com/okaiser/proteus/internal/simulate/topology  100.0
 github.com/okaiser/proteus/internal/simulate/rulebase  100.0
 github.com/okaiser/proteus/internal/simulate/nat  100.0
 github.com/okaiser/proteus/internal/tools/schemadigest  61.4
+github.com/okaiser/proteus/cmd/proteus  70.6
