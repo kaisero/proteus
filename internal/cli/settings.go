@@ -1,4 +1,4 @@
-package main
+package cli
 
 import (
 	"context"
@@ -53,7 +53,7 @@ func (a *app) openLog(c *cobra.Command) error {
 		return nil
 	}
 	a.log = l
-	l.Infof(runlog.TagRun, "panos-analyst %s: %s", version, strings.Join(a.argv, " "))
+	l.Infof(runlog.TagRun, "panos-analyst %s: %s", a.version, strings.Join(a.argv, " "))
 	return nil
 }
 

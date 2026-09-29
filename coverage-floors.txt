@@ -20,7 +20,7 @@ github.com/okaiser/proteus/internal/index  95.1
 github.com/okaiser/proteus/internal/inventory  96.2
 github.com/okaiser/proteus/internal/fetch  100.0
 github.com/okaiser/proteus/internal/store  88.1
-github.com/okaiser/proteus/cmd/panos-analyst  93.4
+github.com/okaiser/proteus/internal/cli      93.4
 github.com/okaiser/proteus/internal/estate  100.0
 github.com/okaiser/proteus/internal/search  97.3
 github.com/okaiser/proteus/internal/card  94.4
