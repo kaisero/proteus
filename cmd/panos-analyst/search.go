@@ -8,10 +8,10 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/okaiser/panos-analyst/estate"
-	"github.com/okaiser/panos-analyst/index"
-	"github.com/okaiser/panos-analyst/runlog"
-	"github.com/okaiser/panos-analyst/search"
+	"github.com/okaiser/proteus/internal/estate"
+	"github.com/okaiser/proteus/internal/index"
+	"github.com/okaiser/proteus/internal/runlog"
+	"github.com/okaiser/proteus/internal/search"
 )
 
 func (a *app) searchCmd() *cobra.Command {

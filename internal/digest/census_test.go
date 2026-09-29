@@ -4,7 +4,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/okaiser/panos-analyst/internal/schema"
+	"github.com/okaiser/proteus/internal/schema"
 )
 
 // Pinned from the 11.2.0 firewall schema. A change here means the schema or the

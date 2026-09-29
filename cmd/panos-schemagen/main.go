@@ -3,7 +3,7 @@
 // Usage:
 //
 //	panos-schemagen digest   -schema schemas -out schemadigest -version 11.2.0
-//	panos-schemagen generate -digest schemadigest -out config
+//	panos-schemagen generate -digest schemadigest -out internal/config
 //
 // The schema is not published; copy it off an appliance with `make schema-pull`.
 package main
@@ -37,7 +37,7 @@ func main() {
 	case "generate":
 		fs := flag.NewFlagSet("generate", flag.ExitOnError)
 		digestDir := fs.String("digest", "schemadigest", "directory holding committed digests")
-		outDir := fs.String("out", "config", "directory to write generated packages into")
+		outDir := fs.String("out", "internal/config", "directory to write generated packages into")
 		_ = fs.Parse(os.Args[2:])
 		if err := runGenerate(*digestDir, *outDir); err != nil {
 			fail(err)

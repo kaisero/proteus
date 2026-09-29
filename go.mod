@@ -1,4 +1,4 @@
-module github.com/okaiser/panos-analyst
+module github.com/okaiser/proteus
 
 go 1.26.6
 

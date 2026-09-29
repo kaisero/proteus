@@ -12,13 +12,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/okaiser/panos-analyst/config"
-	"github.com/okaiser/panos-analyst/fetch"
-	"github.com/okaiser/panos-analyst/index"
-	"github.com/okaiser/panos-analyst/internal/fakepanos"
-	"github.com/okaiser/panos-analyst/inventory"
-	"github.com/okaiser/panos-analyst/search"
-	"github.com/okaiser/panos-analyst/store"
+	"github.com/okaiser/proteus/internal/config"
+	"github.com/okaiser/proteus/internal/fakepanos"
+	"github.com/okaiser/proteus/internal/fetch"
+	"github.com/okaiser/proteus/internal/index"
+	"github.com/okaiser/proteus/internal/inventory"
+	"github.com/okaiser/proteus/internal/search"
+	"github.com/okaiser/proteus/internal/store"
 )
 
 func read(t *testing.T, p string) string {

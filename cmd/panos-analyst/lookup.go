@@ -9,10 +9,10 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/okaiser/panos-analyst/card"
-	"github.com/okaiser/panos-analyst/estate"
-	"github.com/okaiser/panos-analyst/index"
-	"github.com/okaiser/panos-analyst/runlog"
+	"github.com/okaiser/proteus/internal/card"
+	"github.com/okaiser/proteus/internal/estate"
+	"github.com/okaiser/proteus/internal/index"
+	"github.com/okaiser/proteus/internal/runlog"
 )
 
 // Limits of a rendered card (spec §16 K3, K5). JSON always carries the whole card.

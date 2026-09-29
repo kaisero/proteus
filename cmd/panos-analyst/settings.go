@@ -14,10 +14,10 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
-	"github.com/okaiser/panos-analyst/estate"
-	"github.com/okaiser/panos-analyst/inventory"
-	"github.com/okaiser/panos-analyst/runlog"
-	"github.com/okaiser/panos-analyst/store"
+	"github.com/okaiser/proteus/internal/estate"
+	"github.com/okaiser/proteus/internal/inventory"
+	"github.com/okaiser/proteus/internal/runlog"
+	"github.com/okaiser/proteus/internal/store"
 )
 
 // openLog opens the run log for a command: its level, directory and retention come

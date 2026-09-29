@@ -27,7 +27,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/okaiser/panos-analyst/runlog"
+	"github.com/okaiser/proteus/internal/runlog"
 )
 
 // version is set at build time via -ldflags.

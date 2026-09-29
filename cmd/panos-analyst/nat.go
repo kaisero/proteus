@@ -6,12 +6,12 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/okaiser/panos-analyst/estate"
-	"github.com/okaiser/panos-analyst/index"
-	"github.com/okaiser/panos-analyst/runlog"
-	"github.com/okaiser/panos-analyst/simulate"
-	"github.com/okaiser/panos-analyst/simulate/nat"
-	"github.com/okaiser/panos-analyst/store"
+	"github.com/okaiser/proteus/internal/estate"
+	"github.com/okaiser/proteus/internal/index"
+	"github.com/okaiser/proteus/internal/runlog"
+	"github.com/okaiser/proteus/internal/simulate"
+	"github.com/okaiser/proteus/internal/simulate/nat"
+	"github.com/okaiser/proteus/internal/store"
 )
 
 // natCmd is simulate nat (spec §18 N8): one firewall, a flow, and optionally the

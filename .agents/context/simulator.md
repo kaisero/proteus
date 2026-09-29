@@ -93,7 +93,7 @@ with interfaces without a router).
 
 ## Public API
 
-<!-- GENERATED:api ./simulate -->
+<!-- GENERATED:api ./internal/simulate -->
 ```go
 type ChoiceError struct{ ... }
 type DeviceData struct{ ... }
@@ -134,7 +134,7 @@ func Weakest(fs ...Fidelity) Fidelity
 ```
 <!-- /GENERATED:api -->
 
-<!-- GENERATED:api ./simulate/securitypolicy -->
+<!-- GENERATED:api ./internal/simulate/securitypolicy -->
 ```go
 type Relevance struct{ ... }
 type Simulation struct{}
@@ -148,7 +148,7 @@ func (Simulation) Stages() []string
 ```
 <!-- /GENERATED:api -->
 
-<!-- GENERATED:api ./simulate/routing -->
+<!-- GENERATED:api ./internal/simulate/routing -->
 ```go
 type Hop struct{ ... }
 type Lookup struct{ ... }
@@ -164,7 +164,7 @@ func (Simulation) Stages() []string
 ```
 <!-- /GENERATED:api -->
 
-<!-- GENERATED:api ./simulate/nat -->
+<!-- GENERATED:api ./internal/simulate/nat -->
 ```go
 type Doubt struct{ ... }
 type Excluded struct{ ... }
@@ -186,7 +186,7 @@ func Translate(in Input, m MatchResult) Result
 ```
 <!-- /GENERATED:api -->
 
-<!-- GENERATED:api ./simulate/topology -->
+<!-- GENERATED:api ./internal/simulate/topology -->
 ```go
 type Placed string
 type Placement struct{ ... }
@@ -206,7 +206,7 @@ func NewTopology(devs []simulate.DeviceData) *Topology
 ```
 <!-- /GENERATED:api -->
 
-<!-- GENERATED:api ./simulate/rulebase -->
+<!-- GENERATED:api ./internal/simulate/rulebase -->
 ```go
 type Vsys struct{ ... }
 
@@ -218,7 +218,7 @@ func Load(load func(device, vsys string) (simulate.Target, error), device, vsys 
 ```
 <!-- /GENERATED:api -->
 
-<!-- GENERATED:api ./runlog -->
+<!-- GENERATED:api ./internal/runlog -->
 ```go
 type Level int
 type Logger struct{ ... }

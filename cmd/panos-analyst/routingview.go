@@ -7,10 +7,10 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/okaiser/panos-analyst/resolve"
-	"github.com/okaiser/panos-analyst/simulate"
-	"github.com/okaiser/panos-analyst/simulate/routing"
-	"github.com/okaiser/panos-analyst/simulate/topology"
+	"github.com/okaiser/proteus/internal/resolve"
+	"github.com/okaiser/proteus/internal/simulate"
+	"github.com/okaiser/proteus/internal/simulate/routing"
+	"github.com/okaiser/proteus/internal/simulate/topology"
 )
 
 // minBox is the narrowest box; a longer row widens it, never wraps.

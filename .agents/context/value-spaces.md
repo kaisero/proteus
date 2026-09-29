@@ -112,7 +112,7 @@ already answers it.
 
 ## Public API
 
-<!-- GENERATED:api ./index -->
+<!-- GENERATED:api ./internal/index -->
 ```go
 type Field int
 type Hit struct{ ... }

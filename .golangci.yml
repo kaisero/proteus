@@ -39,7 +39,7 @@ linters:
           - unparam
       # Generated model code is machine output; it is checked by the generator's
       # own tests, not by style linters.
-      - path: ^config/
+      - path: ^internal/config/
         linters:
           - revive
           - gocritic
@@ -53,4 +53,4 @@ formatters:
   settings:
     goimports:
       local-prefixes:
-        - github.com/okaiser/panos-analyst
+        - github.com/okaiser/proteus

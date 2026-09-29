@@ -77,7 +77,7 @@ device for `simulate routing`, pairing HA members by serial into one node.
 
 ## Public API
 
-<!-- GENERATED:api ./fetch -->
+<!-- GENERATED:api ./internal/fetch -->
 ```go
 type APIError struct{ ... }
 type ActiveOptions struct{ ... }
@@ -100,7 +100,7 @@ func RunActive(ctx context.Context, t inventory.Target, docs []Document, opts Ac
 ```
 <!-- /GENERATED:api -->
 
-<!-- GENERATED:api ./store -->
+<!-- GENERATED:api ./internal/store -->
 ```go
 type DocumentMeta struct{ ... }
 type Meta struct{ ... }

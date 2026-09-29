@@ -10,7 +10,7 @@ import (
 	"testing"
 )
 
-const module = "github.com/okaiser/panos-analyst"
+const module = "github.com/okaiser/proteus"
 
 // ioPackages are what the read-only core must never reach. The core reads a file
 // the caller names; it opens no connection and runs no command.
@@ -18,7 +18,7 @@ var ioPackages = []string{"net", "net/http", "net/url", "os/exec"}
 
 // core is the read-only core, plus the schema substrate config decodes. It is the
 // only part of this module the core may import.
-var core = []string{"config", "resolve", "index", "internal/schema", "internal/digest"}
+var core = []string{"internal/config", "internal/resolve", "internal/index", "internal/schema", "internal/digest"}
 
 // rule forbids one package from reaching a set of packages, directly or through
 // any package of this module it imports.
@@ -36,24 +36,24 @@ func mod(rel ...string) []string {
 	return out
 }
 
-// rules is R12. A rule for a package that does not exist yet passes, and binds
-// the moment the package lands.
+// rules is R12. TestImportDirection fails when a rule names a package that does
+// not exist, so a moved or renamed package cannot switch its rule off.
 var rules = []rule{
-	{from: "config", forbid: ioPackages, allowIn: core},
-	{from: "resolve", forbid: ioPackages, allowIn: core},
-	{from: "index", forbid: ioPackages, allowIn: core},
-	{from: "index", forbid: mod("simulate")},
-	{from: "fetch", forbid: mod("simulate", "estate")},
-	{from: "store", forbid: mod("fetch")},
-	{from: "search", forbid: mod("fetch", "store", "estate")},
-	{from: "card", forbid: mod("fetch", "store", "estate", "simulate")},
-	{from: "drift", forbid: mod("fetch", "store", "estate")},
-	{from: "simulate", forbid: mod("estate", "store", "fetch", "search", "drift", "simulate/securitypolicy", "simulate/routing", "simulate/nat", "simulate/topology", "simulate/rulebase")},
-	{from: "simulate/topology", forbid: append(mod("estate", "store", "fetch", "search", "drift", "simulate/routing", "simulate/nat", "simulate/securitypolicy"), ioPackages...)},
-	{from: "simulate/rulebase", forbid: append(mod("estate", "store", "fetch", "search", "drift", "simulate/routing", "simulate/nat", "simulate/securitypolicy"), ioPackages...)},
-	{from: "simulate/securitypolicy", forbid: mod("estate", "store", "fetch")},
-	{from: "simulate/routing", forbid: append(mod("estate", "store", "fetch", "search", "drift", "simulate/securitypolicy"), ioPackages...)},
-	{from: "simulate/nat", forbid: append(mod("estate", "store", "fetch", "search", "drift", "simulate/routing", "simulate/securitypolicy"), ioPackages...)},
+	{from: "internal/config", forbid: ioPackages, allowIn: core},
+	{from: "internal/resolve", forbid: ioPackages, allowIn: core},
+	{from: "internal/index", forbid: ioPackages, allowIn: core},
+	{from: "internal/index", forbid: mod("internal/simulate")},
+	{from: "internal/fetch", forbid: mod("internal/simulate", "internal/estate")},
+	{from: "internal/store", forbid: mod("internal/fetch")},
+	{from: "internal/search", forbid: mod("internal/fetch", "internal/store", "internal/estate")},
+	{from: "internal/card", forbid: mod("internal/fetch", "internal/store", "internal/estate", "internal/simulate")},
+	{from: "internal/drift", forbid: mod("internal/fetch", "internal/store", "internal/estate")},
+	{from: "internal/simulate", forbid: mod("internal/estate", "internal/store", "internal/fetch", "internal/search", "internal/drift", "internal/simulate/securitypolicy", "internal/simulate/routing", "internal/simulate/nat", "internal/simulate/topology", "internal/simulate/rulebase")},
+	{from: "internal/simulate/topology", forbid: append(mod("internal/estate", "internal/store", "internal/fetch", "internal/search", "internal/drift", "internal/simulate/routing", "internal/simulate/nat", "internal/simulate/securitypolicy"), ioPackages...)},
+	{from: "internal/simulate/rulebase", forbid: append(mod("internal/estate", "internal/store", "internal/fetch", "internal/search", "internal/drift", "internal/simulate/routing", "internal/simulate/nat", "internal/simulate/securitypolicy"), ioPackages...)},
+	{from: "internal/simulate/securitypolicy", forbid: mod("internal/estate", "internal/store", "internal/fetch")},
+	{from: "internal/simulate/routing", forbid: append(mod("internal/estate", "internal/store", "internal/fetch", "internal/search", "internal/drift", "internal/simulate/securitypolicy"), ioPackages...)},
+	{from: "internal/simulate/nat", forbid: append(mod("internal/estate", "internal/store", "internal/fetch", "internal/search", "internal/drift", "internal/simulate/routing", "internal/simulate/securitypolicy"), ioPackages...)},
 }
 
 // violations reports every rule a graph breaks. graph maps a package of this
@@ -113,10 +113,10 @@ func reach(graph map[string][]string, from string) []string {
 // The checker must be able to fail, or a green run proves nothing.
 func TestViolationsCatchesABreach(t *testing.T) {
 	graph := map[string][]string{
-		module + "/config":   {"fmt", module + "/helper"},
-		module + "/helper":   {"net/http"},
-		module + "/index":    {module + "/simulate"},
-		module + "/simulate": {"fmt"},
+		module + "/internal/config":   {"fmt", module + "/internal/helper"},
+		module + "/internal/helper":   {"net/http"},
+		module + "/internal/index":    {module + "/internal/simulate"},
+		module + "/internal/simulate": {"fmt"},
 	}
 	got := violations(graph, rules)
 	// config reaches helper, which is outside the core, and through it net/http.
@@ -124,10 +124,10 @@ func TestViolationsCatchesABreach(t *testing.T) {
 	// forbid, so it is reported twice. resolve, fetch and store are absent, so
 	// their rules pass.
 	want := []string{
-		"config reaches " + module + "/helper, outside the read-only core",
-		"config reaches net/http",
-		"index reaches " + module + "/simulate, outside the read-only core",
-		"index reaches " + module + "/simulate",
+		"internal/config reaches " + module + "/internal/helper, outside the read-only core",
+		"internal/config reaches net/http",
+		"internal/index reaches " + module + "/internal/simulate, outside the read-only core",
+		"internal/index reaches " + module + "/internal/simulate",
 	}
 	sort.Strings(got)
 	sort.Strings(want)
@@ -181,9 +181,9 @@ func loadGraph(t *testing.T, root string) map[string][]string {
 // itself, and the packages above it point one way.
 func TestImportDirection(t *testing.T) {
 	graph := loadGraph(t, "../..")
-	for _, p := range []string{"config", "resolve", "index"} {
-		if _, ok := graph[module+"/"+p]; !ok {
-			t.Fatalf("the walk did not find %s, so every rule would pass vacuously", p)
+	for _, r := range rules {
+		if _, ok := graph[module+"/"+r.from]; !ok {
+			t.Fatalf("the walk did not find %s, so its rule would pass vacuously", r.from)
 		}
 	}
 	for _, v := range violations(graph, rules) {

@@ -5,7 +5,7 @@ import (
 	"io"
 	"time"
 
-	"github.com/okaiser/panos-analyst/estate"
+	"github.com/okaiser/proteus/internal/estate"
 )
 
 // formatVersion is the JSON envelope's format. A change that breaks a consumer

@@ -105,7 +105,7 @@ that might hit an ambiguous kind uses `KindContainers` and chooses, then reads w
 
 ## Public API
 
-<!-- GENERATED:api ./config -->
+<!-- GENERATED:api ./internal/config -->
 ```go
 type Config struct{ ... }
 type Element struct{ ... }

@@ -11,14 +11,14 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/okaiser/panos-analyst/estate"
-	"github.com/okaiser/panos-analyst/index"
-	"github.com/okaiser/panos-analyst/resolve"
-	"github.com/okaiser/panos-analyst/runlog"
-	"github.com/okaiser/panos-analyst/simulate"
-	"github.com/okaiser/panos-analyst/simulate/nat"
-	"github.com/okaiser/panos-analyst/simulate/routing"
-	"github.com/okaiser/panos-analyst/simulate/securitypolicy"
+	"github.com/okaiser/proteus/internal/estate"
+	"github.com/okaiser/proteus/internal/index"
+	"github.com/okaiser/proteus/internal/resolve"
+	"github.com/okaiser/proteus/internal/runlog"
+	"github.com/okaiser/proteus/internal/simulate"
+	"github.com/okaiser/proteus/internal/simulate/nat"
+	"github.com/okaiser/proteus/internal/simulate/routing"
+	"github.com/okaiser/proteus/internal/simulate/securitypolicy"
 )
 
 // flowFlags are the flow of spec §11.3 as flags (spec §15 C12).

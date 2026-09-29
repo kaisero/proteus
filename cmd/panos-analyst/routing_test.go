@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/okaiser/panos-analyst/internal/fakepanos"
+	"github.com/okaiser/proteus/internal/fakepanos"
 )
 
 // labFW02 is fw02 as captured: a PA-440 on PAN-OS 12.2 joined to fw01 by

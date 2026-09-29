@@ -10,10 +10,10 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/okaiser/panos-analyst/fetch"
-	"github.com/okaiser/panos-analyst/inventory"
-	"github.com/okaiser/panos-analyst/runlog"
-	"github.com/okaiser/panos-analyst/store"
+	"github.com/okaiser/proteus/internal/fetch"
+	"github.com/okaiser/proteus/internal/inventory"
+	"github.com/okaiser/proteus/internal/runlog"
+	"github.com/okaiser/proteus/internal/store"
 )
 
 // fetchConcurrency bounds how many devices are fetched at once. It is a constant

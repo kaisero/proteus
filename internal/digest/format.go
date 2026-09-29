@@ -8,7 +8,7 @@ package digest
 import (
 	"fmt"
 
-	"github.com/okaiser/panos-analyst/internal/schema"
+	"github.com/okaiser/proteus/internal/schema"
 )
 
 // The platform a digest was built from.

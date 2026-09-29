@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/okaiser/panos-analyst/simulate"
-	"github.com/okaiser/panos-analyst/simulate/nat"
+	"github.com/okaiser/proteus/internal/simulate"
+	"github.com/okaiser/proteus/internal/simulate/nat"
 )
 
 // renderNAT draws a NAT answer (spec §18 N9): one box as in routing, the packet

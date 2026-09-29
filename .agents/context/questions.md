@@ -55,7 +55,7 @@ what was added, removed or changed. Position is not compared.
 
 ## Public API
 
-<!-- GENERATED:api ./estate -->
+<!-- GENERATED:api ./internal/estate -->
 ```go
 type Hole struct{ ... }
 type Network struct{ ... }
@@ -72,7 +72,7 @@ func ParseAt(s string) (time.Time, error)
 ```
 <!-- /GENERATED:api -->
 
-<!-- GENERATED:api ./search -->
+<!-- GENERATED:api ./internal/search -->
 ```go
 type Finding struct{ ... }
 type Mode int
@@ -83,7 +83,7 @@ func Run(cfg *config.Config, idx *index.Index, q Query) ([]Finding, error)
 ```
 <!-- /GENERATED:api -->
 
-<!-- GENERATED:api ./card -->
+<!-- GENERATED:api ./internal/card -->
 ```go
 type Card struct{ ... }
 type Item struct{ ... }
@@ -97,7 +97,7 @@ func Rule(cfg *config.Config, idx *index.Index, r resolve.Rule, rules int) Card
 ```
 <!-- /GENERATED:api -->
 
-<!-- GENERATED:api ./drift -->
+<!-- GENERATED:api ./internal/drift -->
 ```go
 type Change struct{ ... }
 type Op string

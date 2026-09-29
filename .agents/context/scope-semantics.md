@@ -76,7 +76,7 @@ possibly a zone of its own.
 
 ## Public API
 
-<!-- GENERATED:api ./resolve -->
+<!-- GENERATED:api ./internal/resolve -->
 ```go
 type DestinationTranslation struct{ ... }
 type FIBRoute struct{ ... }

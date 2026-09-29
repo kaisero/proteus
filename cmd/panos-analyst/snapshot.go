@@ -6,11 +6,11 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/okaiser/panos-analyst/config"
-	"github.com/okaiser/panos-analyst/drift"
-	"github.com/okaiser/panos-analyst/estate"
-	"github.com/okaiser/panos-analyst/resolve"
-	"github.com/okaiser/panos-analyst/store"
+	"github.com/okaiser/proteus/internal/config"
+	"github.com/okaiser/proteus/internal/drift"
+	"github.com/okaiser/proteus/internal/estate"
+	"github.com/okaiser/proteus/internal/resolve"
+	"github.com/okaiser/proteus/internal/store"
 )
 
 func (a *app) snapshotListCmd() *cobra.Command {

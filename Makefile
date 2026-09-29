@@ -85,16 +85,16 @@ schema-digest: build-local ## Build committed digests from $(SCHEMA_DIR) (PANOS_
 
 # go:embed cannot reach outside a package directory, so the digests are copied in.
 # The originals in $(DIGEST_DIR) are the committed ones.
-config/schemadigest: $(DIGEST_DIR)
-	@mkdir -p config/schemadigest
-	cp $(DIGEST_DIR)/*.json.gz config/schemadigest/
+internal/config/schemadigest: $(DIGEST_DIR)
+	@mkdir -p internal/config/schemadigest
+	cp $(DIGEST_DIR)/*.json.gz internal/config/schemadigest/
 
-generate: build-local config/schemadigest ## Regenerate the config model from the committed digests
-	$(BIN_DIR)/$(BINARY) generate -digest $(DIGEST_DIR) -out config
+generate: build-local internal/config/schemadigest ## Regenerate the config model from the committed digests
+	$(BIN_DIR)/$(BINARY) generate -digest $(DIGEST_DIR) -out internal/config
 
-# Only the generated model is checked. config/ also holds hand-written code, and
+# Only the generated model is checked. internal/config/ also holds hand-written code, and
 # diffing the whole directory would report ordinary edits as generator drift.
-GENERATED := config/v*/
+GENERATED := internal/config/v*/
 generate-check: generate ## Fail if the committed model differs from a fresh run
 	@git diff --exit-code -- $(GENERATED) || { \
 		echo "The generated model is stale. Run 'make generate' and commit the result."; \
@@ -116,8 +116,8 @@ context-check: ## Fail if the agent context docs have drifted from the real API
 
 digest-check: ## Fail if the embedded digests differ from the committed originals
 	@for f in $(DIGEST_DIR)/*.json.gz; do \
-		cmp -s "$$f" "config/schemadigest/$$(basename $$f)" || { \
-			echo "config/schemadigest/$$(basename $$f) differs from $$f; run make config/schemadigest"; \
+		cmp -s "$$f" "internal/config/schemadigest/$$(basename $$f)" || { \
+			echo "internal/config/schemadigest/$$(basename $$f) differs from $$f; run make internal/config/schemadigest"; \
 			exit 1; }; \
 	done
 	@echo "embedded digests match the originals"

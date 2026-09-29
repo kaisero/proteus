@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/okaiser/panos-analyst/card"
+	"github.com/okaiser/proteus/internal/card"
 )
 
 const lookupFile = "../../testdata/config/firewall-lookup.xml"

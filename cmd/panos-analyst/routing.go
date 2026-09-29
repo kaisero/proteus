@@ -5,10 +5,10 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/okaiser/panos-analyst/estate"
-	"github.com/okaiser/panos-analyst/runlog"
-	"github.com/okaiser/panos-analyst/simulate"
-	"github.com/okaiser/panos-analyst/simulate/routing"
+	"github.com/okaiser/proteus/internal/estate"
+	"github.com/okaiser/proteus/internal/runlog"
+	"github.com/okaiser/proteus/internal/simulate"
+	"github.com/okaiser/proteus/internal/simulate/routing"
 )
 
 // routingCmd is simulate routing (spec §17). A path crosses devices, so it takes

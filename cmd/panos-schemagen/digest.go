@@ -5,8 +5,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/okaiser/panos-analyst/internal/digest"
-	"github.com/okaiser/panos-analyst/internal/schema"
+	"github.com/okaiser/proteus/internal/digest"
+	"github.com/okaiser/proteus/internal/schema"
 )
 
 // schemaFiles maps a vendor filename to the platform it describes.
