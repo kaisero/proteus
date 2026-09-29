@@ -1,0 +1,60 @@
+<config version="11.2.0" urldb="paloaltonetworks" detail-version="11.2.5">
+  <!-- NAT match cases the lab does not carry. Synthetic. Every rule is from any to
+       untrust, so the service, type and binding decide. -->
+  <devices>
+    <entry name="localhost.localdomain">
+      <vsys>
+        <entry name="vsys1">
+          <service>
+            <entry name="web-range"><protocol><tcp><port>8000-8010,9443</port></tcp></protocol></entry>
+            <entry name="dns-udp"><protocol><udp><port>53</port></udp></protocol></entry>
+          </service>
+          <service-group>
+            <entry name="web-group"><members><member>dns-udp</member><member>web-range</member></members></entry>
+            <entry name="loop-group"><members><member>loop-group</member></members></entry>
+          </service-group>
+          <rulebase>
+            <nat>
+              <rules>
+                <entry name="v6-prefix">
+                  <from><member>any</member></from><to><member>untrust</member></to>
+                  <source><member>any</member></source><destination><member>any</member></destination>
+                  <nat-type>nptv6</nat-type>
+                </entry>
+                <entry name="by-group">
+                  <from><member>any</member></from><to><member>untrust</member></to>
+                  <source><member>any</member></source><destination><member>203.0.113.1</member></destination>
+                  <service>web-group</service>
+                  <destination-translation><translated-address>10.1.1.1</translated-address></destination-translation>
+                </entry>
+                <entry name="predefined">
+                  <from><member>any</member></from><to><member>untrust</member></to>
+                  <source><member>any</member></source><destination><member>203.0.113.2</member></destination>
+                  <service>service-https</service>
+                  <destination-translation><translated-address>10.1.1.2</translated-address></destination-translation>
+                </entry>
+                <entry name="looping">
+                  <from><member>any</member></from><to><member>untrust</member></to>
+                  <source><member>any</member></source><destination><member>203.0.113.3</member></destination>
+                  <service>loop-group</service>
+                  <destination-translation><translated-address>10.1.1.3</translated-address></destination-translation>
+                </entry>
+                <entry name="six-four">
+                  <from><member>any</member></from><to><member>untrust</member></to>
+                  <source><member>any</member></source><destination><member>203.0.113.4</member></destination>
+                  <nat-type>nat64</nat-type>
+                </entry>
+                <entry name="bound">
+                  <from><member>any</member></from><to><member>untrust</member></to>
+                  <source><member>any</member></source><destination><member>any</member></destination>
+                  <source-translation><dynamic-ip-and-port><interface-address><interface>ethernet1/1</interface></interface-address></dynamic-ip-and-port></source-translation>
+                  <active-active-device-binding>0</active-active-device-binding>
+                </entry>
+              </rules>
+            </nat>
+          </rulebase>
+        </entry>
+      </vsys>
+    </entry>
+  </devices>
+</config>
