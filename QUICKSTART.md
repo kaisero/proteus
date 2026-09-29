@@ -345,7 +345,7 @@ A name found nowhere exits 1. `--output json` carries the whole card, never cut.
 
 ## 11. Simulate a flow
 
-`simulate secpolicy` answers "which rule would this traffic hit". It runs named
+`simulate policy` answers "which rule would this traffic hit". It runs named
 stages that narrow the candidate rules, and each stage says how certain it is:
 **exact**, **overmatch** (may hold more than the device would match), **inferred**
 (from data the device may not be using) or **undermatch** (may be missing matches).
@@ -355,7 +355,7 @@ Source and destination are an address or an FQDN. `--port`, `--url` and the zone
 narrow the flow:
 
 ```
-$ panos-analyst simulate secpolicy 10.1.0.5 10.2.0.5 --file testdata/config/firewall-zones.xml --from-zone inside --to-zone dmz --port 443
+$ panos-analyst simulate policy 10.1.0.5 10.2.0.5 --file testdata/config/firewall-zones.xml --from-zone inside --to-zone dmz --port 443
 10.1.0.5 -> 10.2.0.5 tcp/443
 file / vsys1   testdata/config/firewall-zones.xml
   zones      from inside, to dmz (given)
@@ -373,7 +373,7 @@ table against a fetched device, else from the configuration's interfaces and
 routes. `--why` shows every stage and how many candidates it left:
 
 ```
-$ panos-analyst simulate secpolicy 10.1.0.5 10.2.0.5 --file testdata/config/firewall-zones.xml --why
+$ panos-analyst simulate policy 10.1.0.5 10.2.0.5 --file testdata/config/firewall-zones.xml --why
 10.1.0.5 -> 10.2.0.5 tcp
 file / vsys1   testdata/config/firewall-zones.xml
   zones      from inside, to dmz (configuration)
@@ -400,7 +400,7 @@ A URL matches custom URL categories; a rule naming a PAN-DB category cannot be
 judged from a configuration, so it stays:
 
 ```
-$ panos-analyst simulate secpolicy 10.0.0.1 10.6.0.1 --file testdata/config/firewall-simulate.xml --url shop.example.com/cart
+$ panos-analyst simulate policy 10.0.0.1 10.6.0.1 --file testdata/config/firewall-simulate.xml --url shop.example.com/cart
 10.0.0.1 -> 10.6.0.1 tcp shop.example.com/cart
 file / vsys1   testdata/config/firewall-simulate.xml
   zones      not evaluated
@@ -416,7 +416,7 @@ A port matches services; `application-default` and predefined services such as
 `service-https` stay for the same reason:
 
 ```
-$ panos-analyst simulate secpolicy 10.0.0.1 10.5.0.1 --file testdata/config/firewall-simulate.xml --port 8443
+$ panos-analyst simulate policy 10.0.0.1 10.5.0.1 --file testdata/config/firewall-simulate.xml --port 8443
 10.0.0.1 -> 10.5.0.1 tcp/8443
 file / vsys1   testdata/config/firewall-simulate.xml
   zones      not evaluated
@@ -435,7 +435,7 @@ firewall resolves, so the stage is inferred. Without an address, only FQDN objec
 match, and the answer says it may be missing rules:
 
 ```
-$ panos-analyst simulate secpolicy 10.0.0.1 www.example.com --file testdata/config/firewall-simulate.xml --no-dns
+$ panos-analyst simulate policy 10.0.0.1 www.example.com --file testdata/config/firewall-simulate.xml --no-dns
 10.0.0.1 -> www.example.com tcp
 file / vsys1   testdata/config/firewall-simulate.xml
   dns        www.example.com -> []
@@ -462,14 +462,14 @@ finding and, for a simulation, the rules each stage kept; `--verbose` echoes the
 to the terminal. Passwords and API keys never reach it.
 
 ```
-$ panos-analyst simulate secpolicy 10.1.0.5 10.2.0.5 --file testdata/config/firewall-zones.xml --log-level debug
-$ cut -d' ' -f2- ~/.local/state/panos-analyst/log/simulate_secpolicy-*.log | grep -E 'SNAP|derive-zones|first-match|exit'
+$ panos-analyst simulate policy 10.1.0.5 10.2.0.5 --file testdata/config/firewall-zones.xml --log-level debug
+$ cut -d' ' -f2- ~/.local/state/panos-analyst/log/simulate_policy-*.log | grep -E 'SNAP|derive-zones|first-match|exit'
 [INFO] [SNAP] file testdata/config/firewall-zones.xml: PAN-OS 11.2.0 read with the 11.2.0 schema
-[INFO] [STEP] secpolicy/derive-zones: inferred, 1 candidates, 8µs - from inside; to dmz (configuration)
-[DEBUG] [STEP] secpolicy/derive-zones: 10.1.0.5: inside via ethernet1/1 10.1.0.1/24
-[DEBUG] [STEP] secpolicy/derive-zones: 10.2.0.5: dmz via ethernet1/2.20 10.2.0.1/24
-[DEBUG] [STEP] secpolicy/derive-zones: left: from-inside
-[INFO] [STEP] secpolicy/first-match: overmatch; not evaluated: application, 1 candidates, 0s - from-inside (allow), position 1
+[INFO] [STEP] policy/derive-zones: inferred, 1 candidates, 8µs - from inside; to dmz (configuration)
+[DEBUG] [STEP] policy/derive-zones: 10.1.0.5: inside via ethernet1/1 10.1.0.1/24
+[DEBUG] [STEP] policy/derive-zones: 10.2.0.5: dmz via ethernet1/2.20 10.2.0.1/24
+[DEBUG] [STEP] policy/derive-zones: left: from-inside
+[INFO] [STEP] policy/first-match: overmatch; not evaluated: application, 1 candidates, 0s - from-inside (allow), position 1
 [INFO] [RUN] exit 0 after 41ms
 ```
 
@@ -548,7 +548,7 @@ firewalls on the path: fw02 (home -> labor), fw01 (transport -> server)
   and the path still follows the forwarding table. ECMP follows the lowest next
   hop and names the others (`ecmp`).
 - `--output json` gives each hop's `flow`: device, vsys, zones, source and
-  destination, the input `simulate secpolicy` takes.
+  destination, the input `simulate policy` takes.
 
 ## 11c. Simulate NAT
 
@@ -607,7 +607,7 @@ security policy matches: 198.18.11.5 -> 198.18.250.200, port 443, zones client -
   rule naming a service when no `--port` is given.
 - The ingress is where the source is connected, else where its return route leaves
   (inferred); `--from-zone` or `--from-interface` sets it.
-- `simulate secpolicy` uses the post-NAT zone: for the port forward above it finds
+- `simulate policy` uses the post-NAT zone: for the port forward above it finds
   `zones  from transport, to server (forwarding table, after NAT rule t-dnat-port)`
   and `first match: t-allow-8443`, the rule fw01 applied to real traffic.
 - `simulate routing` applies NAT on every firewall of a path, and later firewalls

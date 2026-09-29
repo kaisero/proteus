@@ -9,7 +9,7 @@
 //	panos-analyst snapshot show [selectors]
 //	panos-analyst snapshot diff [selectors] [--from <time>] [--to <time>]
 //	panos-analyst search <term> [selectors] [--exact|--within|--contains] [filters]
-//	panos-analyst simulate secpolicy <source> <destination> [selectors] [flow flags]
+//	panos-analyst simulate policy <source> <destination> [selectors] [flow flags]
 //
 // Exit codes: 0 answered completely, 1 error, 2 usage, 3 answered with holes or
 // unresolved entries (spec §15 C11).

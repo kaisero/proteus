@@ -33,12 +33,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   its value, members and the groups holding it. `--expand` puts each name's value in
   parentheses and opens groups as a tree, and `--full` shows lists longer than five
   items. A name that several kinds share needs `--kind`.
-- **Security policy simulation uses the zone after NAT.** When `simulate secpolicy`
+- **Security policy simulation uses the zone after NAT.** When `simulate policy`
   derives the zones and a destination NAT applies, the destination zone is the one
   the translated address is routed to, as the firewall matches it. A zone you give
   still wins, with a note when NAT would give another.
 - **A simulation says how certain its answer is.** `panos-analyst simulate
-  secpolicy` runs named stages that narrow the candidate rules by source and
+  policy` runs named stages that narrow the candidate rules by source and
   destination (an address, or an FQDN resolved through DNS), zone, port and URL
   category. Each stage declares whether its output is exact, may over-match, is
   inferred or may be missing matches, and the answer carries the weakest. `--why`
@@ -201,7 +201,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **`panos-explore` is gone.** Its questions live in `panos-analyst`: `reaches`,
   `lookup`, `search`, `uses`, `whereused` and `group` are `search`; `simulate` is
-  `simulate secpolicy`; `info`, `groups` and `target` are `snapshot show`.
+  `simulate policy`; `info`, `groups` and `target` are `snapshot show`.
 
 - **Panorama configurations are no longer read.** panos-analyst works from each
   firewall's own configuration, so device groups, templates and the device-group

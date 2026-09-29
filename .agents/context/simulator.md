@@ -75,7 +75,7 @@ fw01). `nat.Translate` gives the source candidates (port "assigned at runtime" f
 DIPP), the destination with its port, first-to-first for static ranges, and the
 post-NAT lookup. The `nat` kind's stages: `place`, `pbf`, `lookup`, `match`,
 `translate`, `post-lookup`. Routing's `nat` stage calls the engine and replaces the
-hop's egress after a destination NAT; secpolicy's `derive-zones` runs it per source
+hop's egress after a destination NAT; the policy simulation's `derive-zones` runs it per source
 zone for the post-NAT destination zone.
 
 `Run.Output` is `routing.Path`: `Hops` (one per device and vsys; a vsys crossing
@@ -85,7 +85,7 @@ with interfaces without a router).
 ## Build / run pointers
 
 - `go test ./simulate/... ./runlog`
-- `./bin/panos-analyst simulate secpolicy <src> <dst> --file <cfg> --why`
+- `./bin/panos-analyst simulate policy <src> <dst> --file <cfg> --why`
 - `./bin/panos-analyst simulate routing <src> <dst> --why` (needs fetched devices)
 - `./bin/panos-analyst simulate nat <src> <dst> --device <fw> --port <p> --why`
 - `scripts/device-probe.sh --nat <device> <router> <src,dst,port>...` against the device

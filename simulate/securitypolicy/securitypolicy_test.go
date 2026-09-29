@@ -236,7 +236,7 @@ func TestNoMatch(t *testing.T) {
 
 func TestDescribeAndStages(t *testing.T) {
 	s := Simulation{}
-	if s.Kind() != "secpolicy" || s.Describe() == "" {
+	if s.Kind() != "policy" || s.Describe() == "" {
 		t.Error("kind and description")
 	}
 	if got := strings.Join(s.Stages(), ","); got != "resolve-source,resolve-destination,derive-zones,match-service,match-url,drop-disabled,order,first-match" {

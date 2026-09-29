@@ -73,7 +73,7 @@ func TestSecretsAreRedacted(t *testing.T) {
 }
 
 func TestFileIsPrivate(t *testing.T) {
-	l := open(t, Options{Command: "simulate secpolicy"})
+	l := open(t, Options{Command: "simulate policy"})
 	fi, err := os.Stat(l.Path())
 	if err != nil {
 		t.Fatal(err)
@@ -81,7 +81,7 @@ func TestFileIsPrivate(t *testing.T) {
 	if fi.Mode().Perm() != 0o600 {
 		t.Errorf("mode = %v", fi.Mode().Perm())
 	}
-	if !strings.HasPrefix(filepath.Base(l.Path()), "simulate_secpolicy-") {
+	if !strings.HasPrefix(filepath.Base(l.Path()), "simulate_policy-") {
 		t.Errorf("name = %s", l.Path())
 	}
 }

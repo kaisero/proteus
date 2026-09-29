@@ -23,7 +23,7 @@ snapshot show                               per device and vsys: snapshot, age, 
 snapshot diff [--from] [--to]               objects and rules added, removed, changed
 search <term>                               every place a value or name appears
 lookup <name>                               the whole rule or object behind a name
-simulate secpolicy <src> <dst>              the rules one flow could hit, and the first match
+simulate policy <src> <dst>              the rules one flow could hit, and the first match
 simulate routing <src> <dst>                the firewalls a packet crosses, hop by hop
 simulate nat <src> <dst> --device <fw>      the NAT rule and the translated packet
 ```
@@ -43,7 +43,7 @@ simulate nat <src> <dst> --device <fw>      the NAT rule and the translated pack
   shows values in parentheses and groups as trees (three levels); lists stop at five
   items unless `--full`. See [questions](questions.md).
 - **`simulate <kind>`** has one subcommand per kind registered in
-  `estate.Simulations`; `secpolicy` is the first. It runs on one device and vsys
+  `estate.Simulations`; `policy` is the first. It runs on one device and vsys
   (M5 fans out), takes an address or FQDN per side, `--port`, `--url`, zones given
   or derived, and prints each stage with `--why`. Its text ends with
   `first match: <rule> (<action>)`, which `scripts/device-probe.sh` reads. See

@@ -205,7 +205,7 @@ One binary, `panos-analyst`. Questions are verbs; housekeeping is grouped by nou
 | `snapshot diff [--from] [--to]` | Objects and rules added, removed or changed between two snapshots |
 | `search <term>` | Every place a value or name appears: objects by value and by name, groups, references, literals |
 | `lookup <name>` | The whole rule or object behind a name: a rule as the rule editor shows it, an object with its value, members and groups; `--expand` adds values and group trees, `--full` shows every list item |
-| `simulate secpolicy <src> <dst>` | The rule one flow would hit on one device: source and destination by address or FQDN, `--port`, `--url`, zones given or derived; every stage says how certain it is, and `--why` shows them |
+| `simulate policy <src> <dst>` | The rule one flow would hit on one device: source and destination by address or FQDN, `--port`, `--url`, zones given or derived; every stage says how certain it is, and `--why` shows them |
 | `simulate nat <src> <dst> --device <name>` | The NAT rule a packet hits on one firewall, the packet before and after translation, and what security policy then matches (pre-NAT addresses and port, post-NAT zones); `--why` lists the rules above the match and what excluded each |
 | `simulate routing <src> <dst>` | The firewalls a packet crosses, one box per firewall with its zones, interfaces and route; `<dst> --device <name>` starts on one device, `--rib` adds the routing table's other routes, and the answer names ECMP, PBF, NAT and a path leaving the inventory |
 

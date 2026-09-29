@@ -221,7 +221,7 @@ printf '%-15s %-15s %-9s %-23s %-23s %s\n' SOURCE DESTINATION FROM-ZONE DEVICE L
 for p in "${probes[@]}"; do
   read -r src dst fz tz app port target <<<"$p"
   dev=$(device_match "$src" "$dst" "$fz" "$tz" "$app" "$port")
-  lib=$("$analyst" simulate secpolicy "$src" "$dst" --file "$cfg" --vsys "$vsys" \
+  lib=$("$analyst" simulate policy "$src" "$dst" --file "$cfg" --vsys "$vsys" \
         --from-zone "$fz" --to-zone "$tz" --port "$port" --application "$app" 2>/dev/null \
         | sed -n 's/^first match: \([^ ]*\).*/\1/p')
   lib=${lib:-no-match}

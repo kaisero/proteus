@@ -21,7 +21,7 @@ import (
 )
 
 // Kind is the registry key and the command name.
-const Kind = "secpolicy"
+const Kind = "policy"
 
 // Simulation is the security-policy simulation.
 type Simulation struct{}

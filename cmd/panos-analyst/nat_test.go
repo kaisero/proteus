@@ -144,16 +144,16 @@ func TestSimulateNATJSON(t *testing.T) {
 // The live traffic test, simulated: from fw02's side to 198.18.250.10:8443, fw01
 // translated the destination to 198.18.10.100:443 in zone server, and t-allow-8443
 // allowed it (spec §18.5 traffic test 1).
-func TestSecpolicyUsesThePostNATZone(t *testing.T) {
+func TestPolicyUsesThePostNATZone(t *testing.T) {
 	c := natLab(t)
-	out := c.want(0, "simulate", "secpolicy", "198.19.0.1", "198.18.250.10", "--device", "fw01", "--port", "8443", "--why")
+	out := c.want(0, "simulate", "policy", "198.19.0.1", "198.18.250.10", "--device", "fw01", "--port", "8443", "--why")
 	for _, w := range []string{"to server (after NAT rule t-dnat-port)", "first match: t-allow-8443 (allow)"} {
 		if !strings.Contains(out, w) {
 			t.Errorf("missing %q in:\n%s", w, out)
 		}
 	}
 	// A given zone wins, with a note when NAT gives another.
-	out = c.want(0, "simulate", "secpolicy", "198.19.0.1", "198.18.250.10", "--device", "fw01", "--port", "8443",
+	out = c.want(0, "simulate", "policy", "198.19.0.1", "198.18.250.10", "--device", "fw01", "--port", "8443",
 		"--from-zone", "transport", "--to-zone", "transport", "--why")
 	if !strings.Contains(out, "note: NAT would give to server (after NAT rule t-dnat-port)") {
 		t.Errorf("given zones:\n%s", out)

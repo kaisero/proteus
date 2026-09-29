@@ -221,7 +221,7 @@ func rotate(dir string, keep int) error {
 	return nil
 }
 
-// fileSafe turns a command such as "simulate secpolicy" into "simulate_secpolicy".
+// fileSafe turns a command such as "simulate policy" into "simulate_policy".
 func fileSafe(s string) string {
 	return strings.Map(func(r rune) rune {
 		switch {
