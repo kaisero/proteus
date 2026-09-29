@@ -165,7 +165,7 @@ func (a *app) root() *cobra.Command {
 	sim := &cobra.Command{Use: "simulate", Short: "Simulate what a device would do"}
 	sim.AddCommand(a.simulateCmds()...)
 
-	cmd.AddCommand(a.fetchCmd(), inv, snap, a.searchCmd(), sim)
+	cmd.AddCommand(a.fetchCmd(), inv, snap, a.searchCmd(), a.lookupCmd(), sim)
 	return cmd
 }
 

@@ -20,7 +20,7 @@ github.com/okaiser/panos-analyst/index  95.1
 github.com/okaiser/panos-analyst/inventory  96.2
 github.com/okaiser/panos-analyst/fetch  100.0
 github.com/okaiser/panos-analyst/store  88.1
-github.com/okaiser/panos-analyst/cmd/panos-analyst  92.0
+github.com/okaiser/panos-analyst/cmd/panos-analyst  92.7
 github.com/okaiser/panos-analyst/estate  100.0
 github.com/okaiser/panos-analyst/search  97.3
 github.com/okaiser/panos-analyst/card  94.4
