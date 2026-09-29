@@ -1,0 +1,53 @@
+<config version="11.2.0" urldb="paloaltonetworks" detail-version="11.2.5">
+  <!-- Zones named as in testdata/opdata/fw01-interface-all.xml, so zones derive
+       from that forwarding table. The configuration holds no interfaces: the
+       zones must come from the stored snapshot. -->
+  <shared/>
+  <devices>
+    <entry name="localhost.localdomain">
+      <vsys>
+        <entry name="vsys1">
+          <zone>
+            <entry name="client"><network><layer3/></network></entry>
+            <entry name="server"><network><layer3/></network></entry>
+            <entry name="transport"><network><layer3/></network></entry>
+          </zone>
+          <rulebase>
+            <security>
+              <rules>
+                <entry name="client-any">
+                  <from><member>client</member></from>
+                  <to><member>any</member></to>
+                  <source><member>any</member></source>
+                  <destination><member>any</member></destination>
+                  <application><member>any</member></application>
+                  <service><member>any</member></service>
+                  <action>allow</action>
+                  <disabled>yes</disabled>
+                </entry>
+                <entry name="client-to-server">
+                  <from><member>client</member></from>
+                  <to><member>server</member></to>
+                  <source><member>any</member></source>
+                  <destination><member>any</member></destination>
+                  <application><member>any</member></application>
+                  <service><member>any</member></service>
+                  <action>allow</action>
+                </entry>
+                <entry name="any-to-transport">
+                  <from><member>any</member></from>
+                  <to><member>transport</member></to>
+                  <source><member>any</member></source>
+                  <destination><member>any</member></destination>
+                  <application><member>any</member></application>
+                  <service><member>any</member></service>
+                  <action>allow</action>
+                </entry>
+              </rules>
+            </security>
+          </rulebase>
+        </entry>
+      </vsys>
+    </entry>
+  </devices>
+</config>

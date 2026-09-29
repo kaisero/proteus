@@ -41,10 +41,15 @@ type Rule struct {
 	Name     string
 	Action   string
 	Disabled bool
-	Scope    config.Scope
-	Layer    Layer
-	Position int // 1-based position in the effective order
-	Fields   map[string][]string
+	// NegateSource and NegateDestination invert a side: the rule matches every
+	// address except those listed. Source: PAN-OS documentation, "Security Policy
+	// Rule", Source and Destination tabs, "Negate".
+	NegateSource      bool
+	NegateDestination bool
+	Scope             config.Scope
+	Layer             Layer
+	Position          int // 1-based position in the effective order
+	Fields            map[string][]string
 
 	// ProfileGroups are the security profile groups the rule applies, and Profiles
 	// the individual profiles it names instead, by kind.
@@ -98,8 +103,11 @@ func readRules(root *config.Element, sc config.Scope, rulebase string, rb Ruleba
 				Name:     e.Attr("name"),
 				Action:   e.Child("action").TextOr(""),
 				Disabled: e.Child("disabled").TextOr("") == "yes",
-				Scope:    sc,
-				Fields:   ruleFields(e),
+
+				NegateSource:      e.Child("negate-source").TextOr("") == "yes",
+				NegateDestination: e.Child("negate-destination").TextOr("") == "yes",
+				Scope:             sc,
+				Fields:            ruleFields(e),
 
 				ProfileGroups: e.Child("profile-setting").Child("group").Members(),
 				Profiles:      memberLists(e.Child("profile-setting").Child("profiles")),

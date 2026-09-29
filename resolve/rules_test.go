@@ -85,3 +85,14 @@ func TestLayersAreSharedPreLocalSharedPost(t *testing.T) {
 		t.Error("layers must order shared-pre, local, shared-post")
 	}
 }
+
+func TestRulesReadNegation(t *testing.T) {
+	tg, err := TargetFor(loadT(t, "../testdata/config/firewall-simulate.xml"), "localhost.localdomain", "vsys1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rules, _ := tg.Rules(Security)
+	if !rules[0].NegateSource || rules[0].NegateDestination || rules[1].NegateSource {
+		t.Errorf("negation = %v %v %v", rules[0].NegateSource, rules[0].NegateDestination, rules[1].NegateSource)
+	}
+}
