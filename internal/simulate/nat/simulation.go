@@ -7,6 +7,7 @@ import (
 	"net/netip"
 	"strings"
 
+	"github.com/okaiser/proteus/internal/resolve"
 	"github.com/okaiser/proteus/internal/simulate"
 	"github.com/okaiser/proteus/internal/simulate/rulebase"
 	"github.com/okaiser/proteus/internal/simulate/topology"
@@ -147,12 +148,18 @@ func pbfStage(_ context.Context, s *state) (simulate.Outcome, error) {
 		}, nil
 	}
 	s.nat.Target = simulate.Target{Config: v.Config}
-	_, note, ok := v.PBF(sourceAddr(s.in.Flow.Source.Addrs), s.in.Flow.Destination.Addrs[0], s.nat.In)
-	if !ok || note == "" {
-		return simulate.Outcome{Fidelity: simulate.Exact, Detail: "no PBF rule could take the packet"}, nil
+	m := v.PBF(sourceAddr(s.in.Flow.Source.Addrs), s.in.Flow.Destination.Addrs[0], s.nat.In)
+	out := simulate.Outcome{
+		Fidelity:   rulebase.Certainty(resolve.PBF, m.Unresolved),
+		Detail:     "no PBF rule could take the packet",
+		Unresolved: m.Unresolved,
 	}
-	s.notes = append(s.notes, note+"; the NAT zones below assume it does not")
-	return simulate.Outcome{Fidelity: simulate.Inferred, Detail: note}, nil
+	if !m.Found || m.Note == "" {
+		return out, nil
+	}
+	s.notes = append(s.notes, m.Note+"; the NAT zones below assume it does not")
+	out.Fidelity, out.Detail = simulate.Weakest(out.Fidelity, simulate.Inferred), m.Note
+	return out, nil
 }
 
 // lookupStage is the pre-NAT route lookup that gives the NAT rule's destination
@@ -193,7 +200,7 @@ func translateStage(ctx context.Context, s *state) (simulate.Outcome, error) {
 		return simulate.Outcome{Fidelity: simulate.Exact, Detail: "nothing to translate"}, nil
 	}
 	resolved := map[string][]netip.Addr{}
-	for _, name := range FQDNs(s.nat, m.Rule) {
+	for _, name := range FQDNs(s.nat, m) {
 		if s.env.Resolve != nil {
 			addrs, _ := s.env.Resolve(ctx, name)
 			resolved[name] = addrs

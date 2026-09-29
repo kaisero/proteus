@@ -3,10 +3,12 @@ package nat
 import (
 	"net/netip"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
 
+	"github.com/okaiser/proteus/internal/config"
 	"github.com/okaiser/proteus/internal/resolve"
 	"github.com/okaiser/proteus/internal/simulate"
 )
@@ -182,5 +184,34 @@ func TestTranslationCases(t *testing.T) {
 	}
 	if _, err := tr.mapStatic("pool-grp", "198.51.100.16/28", netip.MustParseAddr("198.51.100.1")); !strings.Contains(err, "not simulated") {
 		t.Errorf("a group as the original: %q", err)
+	}
+}
+
+// A translated port that is not a port number is reported, and the packet keeps
+// its original port rather than getting port 0.
+func TestABadTranslatedPortIsUnresolved(t *testing.T) {
+	src, err := os.ReadFile("../../../testdata/config/firewall-nat.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc := strings.Replace(string(src), "<translated-port>443</translated-port>", "<translated-port>70000</translated-port>", 1)
+	path := filepath.Join(t.TempDir(), "nat.xml")
+	if err := os.WriteFile(path, []byte(doc), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, _, err := config.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	in := input(cfg, probe{src: "198.18.1.10", dst: "198.18.250.10", port: 8443, from: "transport", to: "transport", iface: "ethernet1/1"})
+	r := Translate(in, Match(in))
+	if r.Rule == nil || r.Rule.Name != "t-dnat-port" {
+		t.Fatalf("rule = %v", r.Rule)
+	}
+	if len(r.Unresolved) == 0 || !strings.Contains(r.Unresolved[0].Reason, `"70000"`) {
+		t.Errorf("unresolved = %v", r.Unresolved)
+	}
+	if r.Flow.DestPort != 8443 {
+		t.Errorf("port = %d, want the original 8443", r.Flow.DestPort)
 	}
 }

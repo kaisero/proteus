@@ -17,6 +17,7 @@ import (
 	"github.com/okaiser/proteus/internal/index"
 	"github.com/okaiser/proteus/internal/resolve"
 	"github.com/okaiser/proteus/internal/simulate"
+	"github.com/okaiser/proteus/internal/simulate/rulebase"
 )
 
 // Rule is a NAT rule as the dataplane evaluates it: an explicit rule, or the
@@ -73,4 +74,8 @@ type MatchResult struct {
 	Notes      []string           `json:"notes,omitempty"`
 	Unresolved []index.Unresolved `json:"unresolved,omitempty"`
 	Fidelity   simulate.Fidelity  `json:"fidelity"`
+
+	// vsys is the configuration Match read the rule from. Translate and FQDNs use
+	// it, so the vsys is loaded once and a rule never meets an empty configuration.
+	vsys rulebase.Vsys
 }

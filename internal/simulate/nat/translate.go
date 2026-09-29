@@ -5,6 +5,7 @@ import (
 	"math/big"
 	"net/netip"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/okaiser/proteus/internal/index"
@@ -47,8 +48,7 @@ func Translate(in Input, m MatchResult) Result {
 	if m.Rule == nil {
 		return out
 	}
-	v, _ := rulebase.Load(func(string, string) (simulate.Target, error) { return in.Target, nil }, in.In.Device, in.Vsys)
-	tr := translator{in: in, v: v, res: &out}
+	tr := translator{in: in, v: m.vsys, res: &out}
 	if s := m.Rule.Source; s != nil {
 		out.Source = tr.source(s, m.Rule)
 		if out.Source != nil && out.Source.Address.IsValid() {
@@ -59,10 +59,8 @@ func Translate(in Input, m MatchResult) Result {
 		out.Destination = tr.destination(d, m.Rule)
 		if out.Destination != nil && out.Destination.Address.IsValid() {
 			out.Flow.Destination = simulate.Addr(out.Destination.Address)
-			if p := out.Destination.Port; p != PortUnchanged {
-				var n int
-				_, _ = fmt.Sscanf(p, "%d", &n)
-				out.Flow.DestPort = uint16(n) //nolint:gosec // a translated port is 1-65535 in the schema
+			if n, err := strconv.ParseUint(out.Destination.Port, 10, 16); err == nil {
+				out.Flow.DestPort = uint16(n)
 			}
 			if in.Lookup != nil {
 				f := in.Lookup(out.Destination.Address)
@@ -188,6 +186,9 @@ func (t translator) destination(d *resolve.DestinationTranslation, r *Rule) *Tra
 	if d.Port > 0 {
 		out.Port = fmt.Sprint(d.Port)
 	}
+	if d.PortText != "" {
+		t.unresolved(r.Name, fmt.Sprintf("rule %s translates to port %q, which is not a port number", r.Name, d.PortText))
+	}
 	if d.DNSRewrite != "" {
 		t.res.Notes = append(t.res.Notes, fmt.Sprintf("rule %s also rewrites DNS answers (%s), which is not simulated", r.Name, d.DNSRewrite))
 	}
@@ -299,16 +300,16 @@ func firstAddr(cands []string) netip.Addr {
 	return netip.Addr{}
 }
 
-// FQDNs lists the names a rule's dynamic destination needs resolved, so a caller
-// can fill Input.Resolved before Translate.
-func FQDNs(in Input, r *Rule) []string {
+// FQDNs lists the names the matched rule's dynamic destination needs resolved, so
+// a caller can fill Input.Resolved before Translate.
+func FQDNs(in Input, m MatchResult) []string {
+	r := m.Rule
 	if r == nil || r.Destination == nil || r.Destination.Kind != resolve.DynamicDestination {
 		return nil
 	}
-	v, _ := rulebase.Load(func(string, string) (simulate.Target, error) { return in.Target, nil }, in.In.Device, in.Vsys)
 	res := &Result{}
 	var out []string
-	for _, val := range (translator{in: in, v: v, res: res}).values(r.Destination.Address, r, false) {
+	for _, val := range (translator{in: in, v: m.vsys, res: res}).values(r.Destination.Address, r, false) {
 		if len(index.PrefixesOf(val)) == 0 {
 			out = append(out, val)
 		}

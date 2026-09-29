@@ -112,9 +112,12 @@ const (
 
 // DestinationTranslation is what a NAT rule makes of the destination.
 type DestinationTranslation struct {
-	Kind         string
-	Address      string // an address, range, netmask, or an object's name
-	Port         int    // 0 when the port is unchanged
+	Kind    string
+	Address string // an address, range, netmask, or an object's name
+	Port    int    // 0 when the port is unchanged
+	// PortText is the translated port as written when it is not a port number
+	// from 1 to 65535; Port is then 0. A file no device validated can hold one.
+	PortText     string
 	Distribution string // dynamic only: round-robin, source-ip-hash, …
 	DNSRewrite   string // static only: the dns-rewrite direction, when set
 }
@@ -191,7 +194,13 @@ func readDestinationTranslation(e *config.Element) *DestinationTranslation {
 			Distribution: d.Child("distribution").TextOr(""),
 			DNSRewrite:   d.Child("dns-rewrite").Child("direction").TextOr(""),
 		}
-		out.Port, _ = strconv.Atoi(d.Child("translated-port").TextOr("0"))
+		if raw := d.Child("translated-port").TextOr(""); raw != "" {
+			if n, err := strconv.ParseUint(raw, 10, 16); err == nil && n > 0 {
+				out.Port = int(n)
+			} else {
+				out.PortText = raw
+			}
+		}
 		if kind == DynamicDestination && out.Distribution == "" {
 			out.Distribution = "round-robin" // the schema's default
 		}

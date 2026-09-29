@@ -1,6 +1,9 @@
 package resolve
 
 import (
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/okaiser/proteus/internal/config"
@@ -87,5 +90,35 @@ func TestNATTranslationShapes(t *testing.T) {
 	}
 	if s := rs["object-ip"].Source; s.InterfaceIP != "fw-public" {
 		t.Errorf("object-ip = %+v", s)
+	}
+}
+
+// A translated port that is not a port number keeps its text, so the NAT
+// simulation can say so instead of reading it as "unchanged".
+func TestATranslatedPortThatIsNoNumberIsKept(t *testing.T) {
+	src, err := os.ReadFile("../../testdata/config/firewall-nat.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, bad := range []string{"70000", "https"} {
+		doc := strings.Replace(string(src), "<translated-port>443</translated-port>",
+			"<translated-port>"+bad+"</translated-port>", 1)
+		path := filepath.Join(t.TempDir(), "nat.xml")
+		if err := os.WriteFile(path, []byte(doc), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		cfg, _, err := config.Load(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var d *DestinationTranslation
+		for _, r := range Targets(cfg)[0].NATRules() {
+			if r.Name == "t-dnat-port" {
+				d = r.Destination
+			}
+		}
+		if d == nil || d.Port != 0 || d.PortText != bad {
+			t.Errorf("%s: destination translation = %+v", bad, d)
+		}
 	}
 }

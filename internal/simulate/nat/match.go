@@ -88,8 +88,12 @@ func Match(in Input) MatchResult {
 		out.Notes = append(out.Notes, fmt.Sprintf("schema: NAT checked with the %s digest", v.Config.DigestVersion()))
 		out.Fidelity = simulate.Inferred
 	}
+	out.vsys = v
 	rules := Rules(v.Target)
-	src, dst := v.Sides(resolve.NAT, sourceAddr(in.Flow.Source.Addrs), in.Flow.Destination.Addrs[0], func(int) (bool, bool) { return false, false })
+	noNegation := func(int) (bool, bool) { return false, false }
+	src, dst, un := v.Sides(resolve.NAT, sourceAddr(in.Flow.Source.Addrs), in.Flow.Destination.Addrs[0], noNegation)
+	out.Unresolved = append(out.Unresolved, un...)
+	out.Fidelity = simulate.Weakest(out.Fidelity, rulebase.Certainty(resolve.NAT, un))
 	svc := services(v)
 	for i := range rules {
 		r := &rules[i]

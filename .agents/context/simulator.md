@@ -179,7 +179,7 @@ func (Simulation) Describe() string
 func (Simulation) Kind() string
 func (Simulation) Run(ctx context.Context, env *simulate.Env, in simulate.Input) (simulate.Run, error)
 func (Simulation) Stages() []string
-func FQDNs(in Input, r *Rule) []string
+func FQDNs(in Input, m MatchResult) []string
 func Match(in Input) MatchResult
 func Rules(t *resolve.Target) []Rule
 func Translate(in Input, m MatchResult) Result
@@ -208,11 +208,13 @@ func NewTopology(devs []simulate.DeviceData) *Topology
 
 <!-- GENERATED:api ./internal/simulate/rulebase -->
 ```go
+type PBFMatch struct{ ... }
 type Vsys struct{ ... }
 
 func (v Vsys) Holds(value string, a netip.Addr) bool
-func (v Vsys) PBF(src, dst netip.Addr, in simulate.Port) (rule resolve.PBFRule, note string, ok bool)
-func (v Vsys) Sides(rb resolve.Rulebase, src, dst netip.Addr, negated func(int) (bool, bool)) (*roaring.Bitmap, *roaring.Bitmap)
+func (v Vsys) PBF(src, dst netip.Addr, in simulate.Port) PBFMatch
+func (v Vsys) Sides(rb resolve.Rulebase, src, dst netip.Addr, negated func(int) (bool, bool)) (
+func Certainty(rb resolve.Rulebase, unresolved []index.Unresolved) simulate.Fidelity
 func FromFits(r resolve.PBFRule, in simulate.Port) bool
 func Load(load func(device, vsys string) (simulate.Target, error), device, vsys string) (Vsys, bool)
 ```

@@ -30,6 +30,9 @@ type Network struct {
 	pick  map[string]string   // node -> the member whose snapshot answers
 	data  map[string]simulate.DeviceData
 	errs  map[string]error
+	// haNotes holds, per device, why its HA state could not be read. Such a device
+	// is not paired, so the note travels with its answers.
+	haNotes map[string]string
 }
 
 // NewNetwork groups the devices into nodes. It reads each device's snapshot
@@ -37,7 +40,7 @@ type Network struct {
 func NewNetwork(st *store.Store, devices []string, w When) *Network {
 	n := &Network{
 		st: st, w: w, node: map[string]string{}, pair: map[string][]string{}, pick: map[string]string{},
-		data: map[string]simulate.DeviceData{}, errs: map[string]error{},
+		data: map[string]simulate.DeviceData{}, errs: map[string]error{}, haNotes: map[string]string{},
 	}
 	groups := map[string][]string{}
 	var order []string
@@ -45,7 +48,11 @@ func NewNetwork(st *store.Store, devices []string, w When) *Network {
 	for _, d := range devices {
 		key := "device:" + d
 		if sn, err := pick(st, d, w.At); err == nil {
-			ha := readHA(sn)
+			ha, err := readHA(sn)
+			if err != nil {
+				n.haNotes[d] = fmt.Sprintf("%s: HA state unreadable, so it is not paired with its peer: %v", d, err)
+				w.Log.Warnf(runlog.TagSnap, "%s", n.haNotes[d])
+			}
 			switch {
 			case ha.Enabled && ha.LocalSerial != "" && ha.PeerSerial != "":
 				key = "serial:" + min(ha.LocalSerial, ha.PeerSerial) + "+" + max(ha.LocalSerial, ha.PeerSerial)
@@ -140,7 +147,14 @@ func (n *Network) read(node string) (simulate.DeviceData, error) {
 		return d, fmt.Errorf("%s@%s: %w", member, sn.ID, err)
 	}
 	if b, err := os.ReadFile(sn.Path(store.RIBDoc)); err == nil {
-		d.RIB, _ = resolve.ReadRIBRoutes(b)
+		if d.RIB, err = resolve.ReadRIBRoutes(b); err != nil {
+			d.Notes = append(d.Notes, fmt.Sprintf("%s@%s: routing table unreadable, so route protocols and alternates are missing: %v", member, sn.ID, err))
+		}
+	}
+	for _, m := range n.pairOrSelf(node) {
+		if note, ok := n.haNotes[m]; ok {
+			d.Notes = append(d.Notes, note)
+		}
 	}
 	if members := n.pair[node]; len(members) > 1 {
 		d.Notes = append(d.Notes, fmt.Sprintf("%v are one HA pair; %s answers for it", sorted(members), member))
@@ -155,14 +169,22 @@ func (n *Network) read(node string) (simulate.DeviceData, error) {
 	return d, nil
 }
 
-// readHA reads a snapshot's HA state; the zero state when it has none.
-func readHA(sn store.Snapshot) resolve.HAState {
+// readHA reads a snapshot's HA state: the zero state when the snapshot has none,
+// and an error when it has one that cannot be read.
+func readHA(sn store.Snapshot) (resolve.HAState, error) {
 	b, err := os.ReadFile(sn.Path(store.HADoc))
 	if err != nil {
-		return resolve.HAState{}
+		return resolve.HAState{}, nil
 	}
-	st, _ := resolve.ReadHAState(b)
-	return st
+	return resolve.ReadHAState(b)
+}
+
+// pairOrSelf returns the members of a node: its HA pair, or the node alone.
+func (n *Network) pairOrSelf(node string) []string {
+	if members := n.pair[node]; len(members) > 0 {
+		return members
+	}
+	return []string{node}
 }
 
 func sorted(in []string) []string {

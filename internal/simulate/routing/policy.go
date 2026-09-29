@@ -6,6 +6,7 @@ import (
 	"net/netip"
 	"strings"
 
+	"github.com/okaiser/proteus/internal/resolve"
 	"github.com/okaiser/proteus/internal/simulate"
 	natsim "github.com/okaiser/proteus/internal/simulate/nat"
 	"github.com/okaiser/proteus/internal/simulate/rulebase"
@@ -37,12 +38,15 @@ func pbf(_ context.Context, s *state) (simulate.Outcome, error) {
 		h.Notes = append(h.Notes, fmt.Sprintf("schema: PBF checked with the %s digest", v.Config.DigestVersion()))
 		out.Fidelity = simulate.Inferred
 	}
-	if r, note, ok := v.PBF(s.src, s.dst, h.In); ok {
-		if note != "" {
-			h.Notes = append(h.Notes, note)
-			out.Fidelity, out.Detail = simulate.Inferred, note
+	m := v.PBF(s.src, s.dst, h.In)
+	out.Unresolved = m.Unresolved
+	out.Fidelity = simulate.Weakest(out.Fidelity, rulebase.Certainty(resolve.PBF, m.Unresolved))
+	if m.Found {
+		if m.Note != "" {
+			h.Notes = append(h.Notes, m.Note)
+			out.Fidelity, out.Detail = simulate.Weakest(out.Fidelity, simulate.Inferred), m.Note
 		} else {
-			out.Detail = "pbf rule " + r.Name + " leaves the packet to routing"
+			out.Detail = "pbf rule " + m.Rule.Name + " leaves the packet to routing"
 		}
 	}
 	return out, nil
@@ -82,7 +86,7 @@ func nat(ctx context.Context, s *state) (simulate.Outcome, error) {
 		Lookup:     func(a netip.Addr) simulate.Forward { return s.topo.Forward(h.Device, router, a) },
 	}
 	m := natsim.Match(in)
-	if names := natsim.FQDNs(in, m.Rule); len(names) > 0 && s.env.Resolve != nil {
+	if names := natsim.FQDNs(in, m); len(names) > 0 && s.env.Resolve != nil {
 		in.Resolved = map[string][]netip.Addr{}
 		for _, n := range names {
 			in.Resolved[n], _ = s.env.Resolve(ctx, n)

@@ -149,3 +149,26 @@ func TestNetworkJoinsAMemberWithoutHAState(t *testing.T) {
 		t.Errorf("notes = %v", d.Notes)
 	}
 }
+
+// A routing table or HA state that is present but unreadable must not look like
+// one that is absent: the device's answers carry a note that says why.
+func TestNetworkNotesUnreadableOptionalDocuments(t *testing.T) {
+	garbage := []byte("<response status=\"success\"><result>")
+	st := networkStore(t,
+		snap{dev: "fw01", serial: "S1", at: t0, docs: routingDocs(t, "fw01", map[string][]byte{
+			store.RIBDoc: garbage,
+			store.HADoc:  garbage,
+		})},
+	)
+	d, err := NewNetwork(st, []string{"fw01"}, When{Now: t0}).Device("fw01")
+	if err != nil {
+		t.Fatal(err)
+	}
+	notes := strings.Join(d.Notes, "\n")
+	if !strings.Contains(notes, "routing table unreadable") || !strings.Contains(notes, "HA state unreadable") {
+		t.Errorf("notes = %v", d.Notes)
+	}
+	if d.RIB != nil {
+		t.Errorf("an unreadable routing table holds no routes, got %d", len(d.RIB))
+	}
+}
