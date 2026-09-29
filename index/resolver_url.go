@@ -23,6 +23,7 @@ type urlResolver struct {
 type patternHit struct {
 	pattern resolve.URLPattern
 	hit     Hit
+	plain   bool // a member with no wildcard, also held in exact for search
 }
 
 const (
@@ -60,11 +61,14 @@ func newURLResolver(cats []resolve.Object) *urlResolver {
 				})
 				continue
 			}
-			if isPlainURL(m) {
+			// A plain member still matches as a pattern: its path matches as a prefix,
+			// so "example.com" covers "example.com/cart". Holding it only for exact
+			// lookup matched nothing below the host.
+			plain := isPlainURL(m)
+			if plain {
 				r.exact[strings.ToLower(p.Raw())] = append(r.exact[strings.ToLower(p.Raw())], hit)
-				continue
 			}
-			r.patterns = append(r.patterns, patternHit{pattern: p, hit: hit})
+			r.patterns = append(r.patterns, patternHit{pattern: p, hit: hit, plain: plain})
 		}
 	}
 	return r
@@ -80,9 +84,8 @@ func (r *urlResolver) resolve(value string, _ Providers) ([]Hit, []Unresolved, b
 		return nil, nil, false
 	}
 	var hits []Hit
-	hits = append(hits, r.exact[strings.ToLower(strings.TrimSpace(value))]...)
 	for _, p := range r.patterns {
-		if p.pattern.Match(value) {
+		if p.pattern.Match(strings.TrimSpace(value)) {
 			hits = append(hits, p.hit)
 		}
 	}
@@ -105,7 +108,7 @@ func (r *urlResolver) search(substr string) []Hit {
 		}
 	}
 	for _, p := range r.patterns {
-		if strings.Contains(strings.ToLower(p.pattern.Raw()), want) {
+		if !p.plain && strings.Contains(strings.ToLower(p.pattern.Raw()), want) {
 			out = append(out, p.hit)
 		}
 	}

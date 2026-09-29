@@ -1,0 +1,99 @@
+<config version="11.2.0" urldb="paloaltonetworks" detail-version="11.2.5">
+  <!-- Rules for the security-policy simulator's dimensions: a negated source, an
+       FQDN object next to a literal covering its address, services by port with
+       application-default and a predefined service, and URL categories custom and
+       predefined. -->
+  <shared/>
+  <devices>
+    <entry name="localhost.localdomain">
+      <vsys>
+        <entry name="vsys1">
+          <address>
+            <entry name="trusted"><ip-netmask>10.0.0.1</ip-netmask></entry>
+            <entry name="web-fqdn"><fqdn>www.example.com</fqdn></entry>
+          </address>
+          <service>
+            <entry name="svc-8443"><protocol><tcp><port>8443</port></tcp></protocol></entry>
+          </service>
+          <profiles>
+            <custom-url-category>
+              <entry name="my-cat"><list><member>shop.example.com</member></list><type>URL List</type></entry>
+            </custom-url-category>
+          </profiles>
+          <rulebase>
+            <security>
+              <rules>
+                <entry name="deny-untrusted">
+                  <source><member>trusted</member></source>
+                  <negate-source>yes</negate-source>
+                  <destination><member>10.9.9.9</member></destination>
+                  <application><member>any</member></application>
+                  <service><member>any</member></service>
+                  <action>deny</action>
+                </entry>
+                <entry name="to-web-by-name">
+                  <source><member>any</member></source>
+                  <destination><member>web-fqdn</member></destination>
+                  <application><member>any</member></application>
+                  <service><member>any</member></service>
+                  <action>allow</action>
+                </entry>
+                <entry name="to-web-by-address">
+                  <source><member>any</member></source>
+                  <destination><member>203.0.113.0/24</member></destination>
+                  <application><member>any</member></application>
+                  <service><member>any</member></service>
+                  <action>allow</action>
+                </entry>
+                <entry name="custom-port">
+                  <source><member>any</member></source>
+                  <destination><member>10.5.0.0/16</member></destination>
+                  <application><member>any</member></application>
+                  <service><member>svc-8443</member></service>
+                  <action>allow</action>
+                </entry>
+                <entry name="app-default">
+                  <source><member>any</member></source>
+                  <destination><member>10.5.0.0/16</member></destination>
+                  <application><member>ssl</member></application>
+                  <service><member>application-default</member></service>
+                  <action>allow</action>
+                </entry>
+                <entry name="predefined-https">
+                  <source><member>any</member></source>
+                  <destination><member>10.5.0.0/16</member></destination>
+                  <application><member>any</member></application>
+                  <service><member>service-https</member></service>
+                  <action>allow</action>
+                </entry>
+                <entry name="shop">
+                  <source><member>any</member></source>
+                  <destination><member>10.6.0.0/16</member></destination>
+                  <application><member>any</member></application>
+                  <service><member>any</member></service>
+                  <category><member>my-cat</member></category>
+                  <action>allow</action>
+                </entry>
+                <entry name="social">
+                  <source><member>any</member></source>
+                  <destination><member>10.6.0.0/16</member></destination>
+                  <application><member>any</member></application>
+                  <service><member>any</member></service>
+                  <category><member>social-networking</member></category>
+                  <action>deny</action>
+                </entry>
+                <entry name="anything">
+                  <source><member>any</member></source>
+                  <destination><member>any</member></destination>
+                  <application><member>any</member></application>
+                  <service><member>any</member></service>
+                  <action>allow</action>
+                </entry>
+              </rules>
+            </security>
+          </rulebase>
+        </entry>
+      </vsys>
+    </entry>
+  </devices>
+</config>

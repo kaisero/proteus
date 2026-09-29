@@ -171,6 +171,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A custom URL category entry now covers the paths below its host.** An entry
+  such as `shop.example.com` matched only that exact URL, so `shop.example.com/cart`
+  reached no category and the rules using it were missed.
 - **A reference is listed in a column wide enough to hold it.** A field is a path
   wherever the reference is nested, and `profile-setting/profiles/file-blocking` is
   six times the width of `source`, so the fixed column truncated the long ones. Both

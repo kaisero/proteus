@@ -61,3 +61,18 @@ func TestURLResolverIgnoresAValueWithNoDotOrSlash(t *testing.T) {
 		t.Errorf("a category name produced value hits: %+v", rep.Hits)
 	}
 }
+
+// A member with no wildcard covers the paths below its host: the path matches as a
+// prefix. The resolver once held such a member for exact lookup only.
+func TestAPlainMemberCoversPathsBelowIt(t *testing.T) {
+	idx := indexOf(t, "../testdata/config/firewall-simulate.xml", "vsys1")
+	for _, url := range []string{"shop.example.com", "shop.example.com/cart", "http://shop.example.com/a/b"} {
+		_, rep := idx.Candidates(Category, url)
+		if len(rep.Hits) != 1 || rep.Hits[0].Name != "my-cat" {
+			t.Errorf("%s: hits = %+v", url, rep.Hits)
+		}
+	}
+	if _, rep := idx.Candidates(Category, "www.shop.example.com"); len(rep.Hits) != 0 {
+		t.Errorf("a subdomain is not covered: %+v", rep.Hits)
+	}
+}
