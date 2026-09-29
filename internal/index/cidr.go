@@ -127,7 +127,7 @@ func trailingZeros(n *big.Int, bits int) int {
 	if n.Sign() == 0 {
 		return bits
 	}
-	for i := 0; i < bits; i++ {
+	for i := range bits {
 		if n.Bit(i) == 1 {
 			return i
 		}

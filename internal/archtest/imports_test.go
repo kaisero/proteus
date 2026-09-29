@@ -5,7 +5,7 @@ import (
 	"go/build"
 	"io/fs"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -106,7 +106,7 @@ func reach(graph map[string][]string, from string) []string {
 	for p := range seen {
 		out = append(out, p)
 	}
-	sort.Strings(out)
+	slices.Sort(out)
 	return out
 }
 
@@ -129,8 +129,8 @@ func TestViolationsCatchesABreach(t *testing.T) {
 		"internal/index reaches " + module + "/internal/simulate, outside the read-only core",
 		"internal/index reaches " + module + "/internal/simulate",
 	}
-	sort.Strings(got)
-	sort.Strings(want)
+	slices.Sort(got)
+	slices.Sort(want)
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Errorf("violations:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
@@ -153,8 +153,7 @@ func loadGraph(t *testing.T, root string) map[string][]string {
 			return filepath.SkipDir
 		}
 		pkg, err := build.ImportDir(path, 0)
-		var noGo *build.NoGoError
-		if errors.As(err, &noGo) {
+		if _, ok := errors.AsType[*build.NoGoError](err); ok {
 			return nil
 		}
 		if err != nil {

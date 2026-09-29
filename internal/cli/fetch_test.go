@@ -49,12 +49,13 @@ func lab(t *testing.T) *fakepanos.Device {
 }
 
 func inventoryFor(hosts ...string) string {
-	s := "version: 1\ndefaults:\n  insecure_tls: true\n  username: reader\n  password_env: LAB_PW\ndevices:\n"
+	var s strings.Builder
+	s.WriteString("version: 1\ndefaults:\n  insecure_tls: true\n  username: reader\n  password_env: LAB_PW\ndevices:\n")
 	for i, h := range hosts {
 		n := string(rune('1' + i))
-		s += "  - name: fw0" + n + "\n    host: " + h + "\n    labels: {site: s" + n + "}\n"
+		s.WriteString("  - name: fw0" + n + "\n    host: " + h + "\n    labels: {site: s" + n + "}\n")
 	}
-	return s
+	return s.String()
 }
 
 func setup(t *testing.T, host string) (*inventory.Inventory, *store.Store) {
@@ -646,5 +647,16 @@ func TestFetchFollowsThePassivePeer(t *testing.T) {
 	passive.Ops[haCmd] = state("passive", "A", "suspended", "B")
 	if out := c.want(0, "fetch", "fw01"); !strings.Contains(out, `note: passive, but the peer is "suspended"`) {
 		t.Errorf("fetch with a suspended peer:\n%s", out)
+	}
+}
+
+// Run is what main calls. It must report the version main passes in.
+func TestRunReportsTheBuildVersion(t *testing.T) {
+	var out, errOut bytes.Buffer
+	dir := t.TempDir()
+	env := map[string]string{"HOME": dir, "PROTEUS_LOG_DIR": dir, "PROTEUS_CONFIG": filepath.Join(dir, "none.yaml")}
+	code := Run(context.Background(), "1.2.3", []string{"--version"}, &out, &errOut, func(k string) string { return env[k] })
+	if code != exitOK || !strings.Contains(out.String(), "1.2.3") {
+		t.Errorf("exit %d, stdout %q, stderr %q", code, out.String(), errOut.String())
 	}
 }

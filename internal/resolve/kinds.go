@@ -1,7 +1,7 @@
 package resolve
 
 import (
-	"sort"
+	"slices"
 
 	"github.com/okaiser/proteus/internal/config"
 )
@@ -26,6 +26,6 @@ func ObjectKinds(cfg *config.Config) []string {
 			}
 		}
 	}
-	sort.Strings(out)
+	slices.Sort(out)
 	return out
 }

@@ -119,7 +119,7 @@ func (r *urlResolver) search(substr string) []Hit {
 // space, so the separator is unambiguous here.
 func splitMembers(value string) []string {
 	var out []string
-	for _, m := range strings.Split(value, ", ") {
+	for m := range strings.SplitSeq(value, ", ") {
 		if m = strings.TrimSpace(m); m != "" {
 			out = append(out, m)
 		}

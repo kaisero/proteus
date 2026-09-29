@@ -180,12 +180,12 @@ func TestServicesAndTypes(t *testing.T) {
 			if m.Rule == nil || m.Rule.Name != tc.rule {
 				t.Fatalf("rule = %v, excluded %v", m.Rule, m.Excluded)
 			}
-			doubts := ""
+			var doubts strings.Builder
 			for _, d := range m.Doubts {
-				doubts += d.Reason
+				doubts.WriteString(d.Reason)
 			}
-			if tc.doubt == "" && doubts != "" || tc.doubt != "" && !strings.Contains(doubts, tc.doubt) {
-				t.Errorf("doubts = %q", doubts)
+			if tc.doubt == "" && doubts.String() != "" || tc.doubt != "" && !strings.Contains(doubts.String(), tc.doubt) {
+				t.Errorf("doubts = %q", doubts.String())
 			}
 		})
 	}

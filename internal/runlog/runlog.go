@@ -12,11 +12,12 @@
 package runlog
 
 import (
+	"cmp"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -140,7 +141,7 @@ func (l *Logger) AddSecret(s string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.secrets = append(l.secrets, s)
-	sort.Slice(l.secrets, func(i, j int) bool { return len(l.secrets[i]) > len(l.secrets[j]) })
+	slices.SortFunc(l.secrets, func(a, b string) int { return cmp.Compare(len(b), len(a)) })
 }
 
 // Errorf logs at ERROR.
@@ -212,7 +213,7 @@ func rotate(dir string, keep int) error {
 	if len(logs) <= keep {
 		return nil
 	}
-	sort.Slice(logs, func(i, j int) bool { return logs[i].stamp < logs[j].stamp })
+	slices.SortFunc(logs, func(a, b file) int { return cmp.Compare(a.stamp, b.stamp) })
 	for _, f := range logs[:len(logs)-keep] {
 		if err := os.Remove(filepath.Join(dir, f.name)); err != nil {
 			return err

@@ -168,7 +168,7 @@ func splitURL(s string) (host, path string) {
 
 func splitNonEmpty(s, sep string) []string {
 	var out []string
-	for _, part := range strings.Split(s, sep) {
+	for part := range strings.SplitSeq(s, sep) {
 		if part != "" {
 			out = append(out, part)
 		}

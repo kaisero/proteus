@@ -3,7 +3,7 @@ package estate
 import (
 	"fmt"
 	"os"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -167,6 +167,6 @@ func readHA(sn store.Snapshot) resolve.HAState {
 
 func sorted(in []string) []string {
 	out := append([]string(nil), in...)
-	sort.Strings(out)
+	slices.Sort(out)
 	return out
 }

@@ -242,3 +242,17 @@ func TestAUserSnapshotResolvesDirectoryGroups(t *testing.T) {
 		t.Errorf("with a snapshot carol reaches engineering-allowed:\n%s", dump(with))
 	}
 }
+
+// groupKind prefers a group kind, falls back to the first kind a name has, and
+// to "group" for a name nothing defines.
+func TestGroupKindPrefersAGroupKind(t *testing.T) {
+	s := &searcher{byName: map[string][]string{
+		"both": {"tag", "address-group"},
+		"tag":  {"tag"},
+	}}
+	for name, want := range map[string]string{"both": "address-group", "tag": "tag", "nothing": "group"} {
+		if got := s.groupKind(name); got != want {
+			t.Errorf("groupKind(%q) = %q, want %q", name, got, want)
+		}
+	}
+}

@@ -1,12 +1,12 @@
 package routing
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"net/netip"
 	"slices"
-	"sort"
 	"strings"
 
 	"github.com/okaiser/proteus/internal/config"
@@ -233,13 +233,19 @@ func (s *state) alternates(node string) ([]resolve.RIBRoute, *index.Unresolved) 
 			out = append(out, r)
 		}
 	}
-	sort.SliceStable(out, func(i, k int) bool {
-		if bi, bk := out[i].Destination.Bits(), out[k].Destination.Bits(); bi != bk {
-			return bi > bk
-		}
-		return out[i].Selected && !out[k].Selected
+	// Longest prefix first; within a prefix, the selected route first.
+	slices.SortStableFunc(out, func(a, b resolve.RIBRoute) int {
+		return cmp.Or(cmp.Compare(b.Destination.Bits(), a.Destination.Bits()), cmp.Compare(selectedRank(b), selectedRank(a)))
 	})
 	return out, nil
+}
+
+// selectedRank puts the selected route before its alternates.
+func selectedRank(r resolve.RIBRoute) int {
+	if r.Selected {
+		return 1
+	}
+	return 0
 }
 
 // zones reads the hop's ingress and egress zone off interface state.

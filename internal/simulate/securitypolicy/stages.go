@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/netip"
 	"slices"
-	"sort"
 	"strings"
 
 	"github.com/RoaringBitmap/roaring/v2"
@@ -221,7 +220,7 @@ func (s *state) zonesOf(f index.Field, ep simulate.Endpoint, skipDefault bool) (
 	if len(zones) == 0 {
 		return nil, nil, via
 	}
-	sort.Strings(zones)
+	slices.Sort(zones)
 	b := roaring.New()
 	for _, z := range zones {
 		zb, _ := s.view.Candidates(f, z)

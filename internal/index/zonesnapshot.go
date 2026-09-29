@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/netip"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -41,7 +41,7 @@ type ZoneSnapshot struct {
 	// TakenAt is provenance and is not enforced. Unlike a user-to-group mapping, a
 	// forwarding table is expected to be supplied fresh by whatever captured it, so
 	// the library does not second-guess its age.
-	TakenAt time.Time `json:"taken_at,omitempty"`
+	TakenAt time.Time `json:"taken_at"`
 	Source  string    `json:"source,omitempty"`
 	Serial  string    `json:"serial,omitempty"`
 
@@ -143,7 +143,7 @@ func (s *ZoneSnapshot) index() error {
 			s.routers = append(s.routers, r.Router)
 		}
 	}
-	sort.Strings(s.routers)
+	slices.Sort(s.routers)
 	if len(s.tables) == 0 {
 		return fmt.Errorf(
 			"zone snapshot: no forwarding entry leaves by an interface that is in a zone; " +
@@ -178,7 +178,7 @@ func (s *ZoneSnapshot) UnroutedInterfaces() []string {
 	for n := range s.unrouted {
 		out = append(out, n)
 	}
-	sort.Strings(out)
+	slices.Sort(out)
 	return out
 }
 

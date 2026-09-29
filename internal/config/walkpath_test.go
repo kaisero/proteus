@@ -2,7 +2,7 @@ package config
 
 import (
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"testing"
 
@@ -151,7 +151,7 @@ func TestSecurityRuleDeclaresThirtyReferenceLeaves(t *testing.T) {
 		}
 	}
 	rec(trie)
-	sort.Strings(got)
+	slices.Sort(got)
 
 	if len(got) != 30 {
 		t.Errorf("security rule reference leaves = %d, want 30:\n%s",
@@ -216,12 +216,7 @@ func TestFieldNameDropsOnlyATrailingMember(t *testing.T) {
 }
 
 func slicesContains(s []string, v string) bool {
-	for _, x := range s {
-		if x == v {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(s, v)
 }
 
 // The callback stops the walk, and it must stop at once: the descent is

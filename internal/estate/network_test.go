@@ -1,6 +1,7 @@
 package estate
 
 import (
+	"maps"
 	"os"
 	"strings"
 	"testing"
@@ -41,9 +42,7 @@ func networkStore(t *testing.T, snaps ...snap) *store.Store {
 	st = st.WithClock(func() time.Time { i++; return snaps[i-1].at })
 	for _, s := range snaps {
 		docs := map[string][]byte{store.ConfigDoc: fixture(t, "firewall-lab.xml")}
-		for k, v := range s.docs {
-			docs[k] = v
-		}
+		maps.Copy(docs, s.docs)
 		if _, err := st.Write(store.Meta{Device: s.dev, Serial: s.serial, FetchedFrom: s.from}, docs, 20); err != nil {
 			t.Fatal(err)
 		}
@@ -56,9 +55,7 @@ func routingDocs(t *testing.T, dev string, extra map[string][]byte) map[string][
 		store.InterfacesDoc: opdata(t, dev+"-interface-all.xml"),
 		store.FIBDoc:        opdata(t, dev+"-advanced-routing-fib.xml"),
 	}
-	for k, v := range extra {
-		out[k] = v
-	}
+	maps.Copy(out, extra)
 	return out
 }
 

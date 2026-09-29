@@ -1,7 +1,8 @@
 package config
 
 import (
-	"sort"
+	"cmp"
+	"slices"
 	"strings"
 
 	"github.com/okaiser/proteus/internal/schema"
@@ -177,7 +178,7 @@ func (c *Config) FieldKinds(suffix string) map[string][]string {
 		}
 	}
 	for _, ks := range out {
-		sort.Strings(ks)
+		slices.Sort(ks)
 	}
 	return out
 }
@@ -242,11 +243,8 @@ func (c *Config) KindContainers(kind string) [][]string {
 			out = append(out, strings.Split(rest, "/"))
 		}
 	}
-	sort.Slice(out, func(a, b int) bool {
-		if len(out[a]) != len(out[b]) {
-			return len(out[a]) < len(out[b])
-		}
-		return strings.Join(out[a], "/") < strings.Join(out[b], "/")
+	slices.SortFunc(out, func(a, b []string) int {
+		return cmp.Or(cmp.Compare(len(a), len(b)), strings.Compare(strings.Join(a, "/"), strings.Join(b, "/")))
 	})
 	return out
 }

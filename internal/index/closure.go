@@ -1,7 +1,7 @@
 package index
 
 import (
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 
@@ -70,7 +70,7 @@ func newClosureIndex(in *Interner, groups, addrs []resolve.Object, others ...[]r
 			}
 			continue
 		}
-		for _, m := range strings.Split(g.Value, ", ") {
+		for m := range strings.SplitSeq(g.Value, ", ") {
 			m = strings.TrimSpace(m)
 			if m == "" {
 				continue
@@ -81,7 +81,7 @@ func newClosureIndex(in *Interner, groups, addrs []resolve.Object, others ...[]r
 	for _, set := range others {
 		for _, g := range set {
 			gid := in.ID(g.Name)
-			for _, m := range strings.Split(g.Value, ", ") {
+			for m := range strings.SplitSeq(g.Value, ", ") {
 				if m = strings.TrimSpace(m); m != "" {
 					c.direct[gid] = append(c.direct[gid], in.ID(m))
 				}
@@ -164,14 +164,11 @@ func (i *Index) DirectGroupsOf(name string) []string {
 	}
 	var out []string
 	for g, members := range i.closure.direct {
-		for _, m := range members {
-			if m == id {
-				out = append(out, i.in.Name(g))
-				break
-			}
+		if slices.Contains(members, id) {
+			out = append(out, i.in.Name(g))
 		}
 	}
-	sort.Strings(out)
+	slices.Sort(out)
 	return out
 }
 

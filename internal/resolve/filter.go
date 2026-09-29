@@ -2,7 +2,7 @@ package resolve
 
 import (
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 )
 
@@ -43,7 +43,7 @@ func (f *TagFilter) Tags() []string {
 	for t := range seen {
 		out = append(out, t)
 	}
-	sort.Strings(out)
+	slices.Sort(out)
 	return out
 }
 

@@ -131,7 +131,7 @@ func validPort(n int) bool { return n >= 0 && n <= 65535 }
 // low-high range.
 func parsePortRanges(s string) []portRange {
 	var out []portRange
-	for _, part := range strings.Split(s, ",") {
+	for part := range strings.SplitSeq(s, ",") {
 		part = strings.TrimSpace(part)
 		if part == "" {
 			continue

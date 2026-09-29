@@ -204,9 +204,9 @@ func TestOnlyReadCalls(t *testing.T) {
 		t.Errorf("a refused command reached the device: %d requests", n)
 	}
 	var methods []string
-	ty := reflect.TypeOf(c)
-	for i := range ty.NumMethod() {
-		methods = append(methods, ty.Method(i).Name)
+	ty := reflect.TypeFor[*Client]()
+	for method := range ty.Methods() {
+		methods = append(methods, method.Name)
 	}
 	if got := strings.Join(methods, ","); got != "ExportConfig,Keygen,Op" {
 		t.Errorf("Client methods = %s; a new one needs R2 review", got)

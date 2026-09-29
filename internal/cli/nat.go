@@ -74,8 +74,7 @@ func (a *app) natCmd(sim simulate.Simulation) *cobra.Command {
 			params := map[string]string{"device": device, "router": router, "from-zone": fromZone, "from-interface": fromIf}
 			a.log.Infof(runlog.TagStep, "nat %s -> %s on %s", flow.Source, flow.Destination, device)
 			run, err := sim.Run(c.Context(), env, simulate.Input{Flow: flow, Params: params})
-			var choice *simulate.ChoiceError
-			if errors.As(err, &choice) {
+			if choice, ok := errors.AsType[*simulate.ChoiceError](err); ok {
 				return usageErr("%v", choice)
 			}
 			if err != nil {

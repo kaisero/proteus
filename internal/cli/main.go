@@ -66,8 +66,7 @@ func exitCode(err error, stderr io.Writer) int {
 	if err == nil {
 		return exitOK
 	}
-	var e *exitErr
-	if errors.As(err, &e) {
+	if e, ok := errors.AsType[*exitErr](err); ok {
 		if e.err != nil {
 			fmt.Fprintf(stderr, "proteus: %v\n", e.err)
 		}

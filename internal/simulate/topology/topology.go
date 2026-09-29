@@ -10,7 +10,7 @@ import (
 	"fmt"
 	"net/netip"
 	"slices"
-	"sort"
+	"strings"
 
 	"github.com/gaissmai/bart"
 
@@ -101,7 +101,7 @@ func (t *Topology) Routers(node string) []string {
 	for r := range t.tables[node] {
 		out = append(out, r)
 	}
-	sort.Strings(out)
+	slices.Sort(out)
 	return out
 }
 
@@ -177,17 +177,18 @@ func (t *Topology) Lookup(node, router string, a netip.Addr) (simulate.Match, bo
 		return simulate.Match{}, false
 	}
 	hops := append([]resolve.FIBRoute(nil), rs...)
-	sort.SliceStable(hops, func(i, k int) bool { return lessAddr(hops[i].NextHop, hops[k].NextHop) })
+	slices.SortStableFunc(hops, func(a, b resolve.FIBRoute) int { return compareAddr(a.NextHop, b.NextHop) })
 	return simulate.Match{Destination: hops[0].Destination, NextHops: hops}, true
 }
 
-func lessAddr(a, b string) bool {
+// compareAddr orders next hops as addresses, and as text when one is not an address.
+func compareAddr(a, b string) int {
 	x, errA := netip.ParseAddr(a)
 	y, errB := netip.ParseAddr(b)
 	if errA != nil || errB != nil {
-		return a < b
+		return strings.Compare(a, b)
 	}
-	return x.Less(y)
+	return x.Compare(y)
 }
 
 // Place finds where a packet from src enters the estate (spec §17 R2).

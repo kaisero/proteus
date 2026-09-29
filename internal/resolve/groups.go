@@ -2,7 +2,7 @@ package resolve
 
 import (
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/okaiser/proteus/internal/config"
@@ -48,7 +48,7 @@ func resolveGroup(cfg *config.Config, chain []config.Scope, name string) (Member
 		for _, g := range groups {
 			known = append(known, g.Name)
 		}
-		sort.Strings(known)
+		slices.Sort(known)
 		return Members{}, fmt.Errorf("resolve: no address group %q in this scope; it has %v",
 			name, known)
 	}
@@ -74,6 +74,6 @@ func resolveGroup(cfg *config.Config, chain []config.Scope, name string) (Member
 			out.ByTag = append(out.ByTag, a.Name)
 		}
 	}
-	sort.Strings(out.ByTag)
+	slices.Sort(out.ByTag)
 	return out, nil
 }

@@ -10,7 +10,7 @@ package card
 
 import (
 	"net/netip"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/okaiser/proteus/internal/config"
@@ -230,6 +230,6 @@ func sorted(m map[string][]string) []string {
 	for k := range m {
 		out = append(out, k)
 	}
-	sort.Strings(out)
+	slices.Sort(out)
 	return out
 }

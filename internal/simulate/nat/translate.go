@@ -168,7 +168,7 @@ func (t translator) values(name string, r *Rule, hostOnly bool) []string {
 				return []string{o.Value} // an FQDN
 			}
 			var out []string
-			for _, m := range strings.Split(o.Value, ", ") {
+			for m := range strings.SplitSeq(o.Value, ", ") {
 				if strings.Contains(m, "'") { // a dynamic group's filter
 					t.unresolved(r.Name, fmt.Sprintf("rule %s uses dynamic group %s, whose members are known at runtime", r.Name, name))
 					return nil

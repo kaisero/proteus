@@ -1,8 +1,9 @@
 package index
 
 import (
+	"cmp"
 	"net/netip"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/RoaringBitmap/roaring/v2"
@@ -171,11 +172,8 @@ func (i *Index) SearchValues(substr string) []Hit {
 			out = append(out, h)
 		}
 	}
-	sort.Slice(out, func(a, b int) bool {
-		if out[a].Name != out[b].Name {
-			return out[a].Name < out[b].Name
-		}
-		return out[a].Via < out[b].Via
+	slices.SortFunc(out, func(a, b Hit) int {
+		return cmp.Or(cmp.Compare(a.Name, b.Name), cmp.Compare(a.Via, b.Via))
 	})
 	return out
 }

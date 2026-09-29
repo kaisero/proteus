@@ -135,3 +135,13 @@ func TestPrefixesOfIsExported(t *testing.T) {
 		t.Errorf("PrefixesOf = %v", got)
 	}
 }
+
+// A name the index never saw, and a name that is not a group, have no members.
+func TestMembersOfANonGroupIsEmpty(t *testing.T) {
+	idx := indexOf(t, "../../testdata/config/firewall-nested-groups.xml", "vsys1")
+	for _, name := range []string{"no-such-group", "h-1"} {
+		if got := idx.MembersOf(name); got != nil {
+			t.Errorf("MembersOf(%q) = %v, want nil", name, got)
+		}
+	}
+}

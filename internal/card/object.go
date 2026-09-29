@@ -1,9 +1,9 @@
 package card
 
 import (
+	"cmp"
 	"fmt"
 	"slices"
-	"sort"
 
 	"github.com/okaiser/proteus/internal/config"
 	"github.com/okaiser/proteus/internal/index"
@@ -90,6 +90,6 @@ func Find(cfg *config.Config, idx *index.Index, name, kind string) ([]Card, erro
 			out = append(out, Object(cfg, idx, o))
 		}
 	}
-	sort.SliceStable(out, func(i, j int) bool { return out[i].Kind < out[j].Kind })
+	slices.SortStableFunc(out, func(a, b Card) int { return cmp.Compare(a.Kind, b.Kind) })
 	return out, nil
 }

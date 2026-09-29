@@ -9,11 +9,11 @@
 package search
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"net/netip"
 	"slices"
-	"sort"
 	"strings"
 
 	"github.com/okaiser/proteus/internal/config"
@@ -207,7 +207,7 @@ func (s *searcher) groups() {
 	for n := range s.names {
 		members = append(members, n)
 	}
-	sort.Strings(members)
+	slices.Sort(members)
 	for _, m := range members {
 		var gs []string
 		if s.q.Direct {
@@ -253,7 +253,7 @@ func (s *searcher) references() {
 	for n := range s.names {
 		names = append(names, n)
 	}
-	sort.Strings(names)
+	slices.Sort(names)
 	for _, n := range names {
 		kind := s.names[n]
 		for _, r := range s.idx.Refs(n) {
@@ -348,18 +348,13 @@ func (s *searcher) result() []Finding {
 		seen[key] = true
 		out = append(out, f)
 	}
-	sort.SliceStable(out, func(i, j int) bool {
-		a, b := out[i], out[j]
-		if rank[a.Stage] != rank[b.Stage] {
-			return rank[a.Stage] < rank[b.Stage]
-		}
-		if a.Kind != b.Kind {
-			return a.Kind < b.Kind
-		}
-		if a.Name != b.Name {
-			return a.Name < b.Name
-		}
-		return a.Field < b.Field
+	slices.SortStableFunc(out, func(a, b Finding) int {
+		return cmp.Or(
+			cmp.Compare(rank[a.Stage], rank[b.Stage]),
+			cmp.Compare(a.Kind, b.Kind),
+			cmp.Compare(a.Name, b.Name),
+			cmp.Compare(a.Field, b.Field),
+		)
 	})
 	return out
 }

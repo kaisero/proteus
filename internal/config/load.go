@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -126,10 +126,10 @@ func digestVersions(fsys fs.FS) []string {
 			out = append(out, v)
 		}
 	}
-	sort.Slice(out, func(i, j int) bool {
-		a, _ := parseVersion(out[i])
-		b, _ := parseVersion(out[j])
-		return lessVersion(a, b)
+	slices.SortFunc(out, func(x, y string) int {
+		a, _ := parseVersion(x)
+		b, _ := parseVersion(y)
+		return slices.Compare(a[:], b[:])
 	})
 	return out
 }
@@ -179,14 +179,7 @@ func parseVersion(s string) ([3]int, error) {
 	return v, nil
 }
 
-func lessVersion(a, b [3]int) bool {
-	for i := range a {
-		if a[i] != b[i] {
-			return a[i] < b[i]
-		}
-	}
-	return false
-}
+func lessVersion(a, b [3]int) bool { return slices.Compare(a[:], b[:]) < 0 }
 
 // isPanorama reports whether a configuration came from Panorama.
 //

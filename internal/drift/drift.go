@@ -4,8 +4,9 @@
 package drift
 
 import (
+	"cmp"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/okaiser/proteus/internal/config"
@@ -55,11 +56,8 @@ func Compare(before, after *config.Config, sc config.Scope) []Change {
 			out = append(out, Change{Op: Added, Kind: k.kind, Name: k.name, New: nu})
 		}
 	}
-	sort.Slice(out, func(i, j int) bool {
-		if out[i].Kind != out[j].Kind {
-			return out[i].Kind < out[j].Kind
-		}
-		return out[i].Name < out[j].Name
+	slices.SortFunc(out, func(a, b Change) int {
+		return cmp.Or(cmp.Compare(a.Kind, b.Kind), cmp.Compare(a.Name, b.Name))
 	})
 	return out
 }
@@ -107,7 +105,7 @@ func renderRule(r resolve.Rule) string {
 	for f, v := range r.Fields {
 		fields = append(fields, fmt.Sprintf("%s=%s", f, strings.Join(v, ",")))
 	}
-	sort.Strings(fields)
+	slices.Sort(fields)
 	s := r.Action
 	if r.Disabled {
 		s += " disabled"

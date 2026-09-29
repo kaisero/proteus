@@ -3,6 +3,7 @@ package nat
 import (
 	"context"
 	"errors"
+	"maps"
 	"net/netip"
 	"os"
 	"strings"
@@ -53,9 +54,7 @@ func run(t *testing.T, env *simulate.Env, src, dst string, port uint16, params m
 		f.Source = simulate.Addr(netip.MustParseAddr(src))
 	}
 	p := map[string]string{"device": "fw01"}
-	for k, v := range params {
-		p[k] = v
-	}
+	maps.Copy(p, params)
 	r, err := Simulation{}.Run(context.Background(), env, simulate.Input{Flow: f, Params: p})
 	res, _ := r.Output.(Result)
 	return r, res, err

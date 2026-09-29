@@ -2,7 +2,7 @@ package cli
 
 import (
 	"fmt"
-	"sort"
+	"slices"
 
 	"github.com/spf13/cobra"
 
@@ -293,7 +293,7 @@ func diffScopes(before, after *config.Config, want []string) []config.Scope {
 			names = append(names, v)
 		}
 	}
-	sort.Strings(names)
+	slices.Sort(names)
 	out := []config.Scope{{Sort: config.ScopeShared}}
 	for _, v := range names {
 		out = append(out, config.Scope{Sort: config.ScopeVsys, Name: v})
@@ -302,12 +302,7 @@ func diffScopes(before, after *config.Config, want []string) []config.Scope {
 }
 
 func contains(xs []string, x string) bool {
-	for _, v := range xs {
-		if v == x {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(xs, x)
 }
 
 // firstDevice is the device entry a firewall configuration's vsys sit under.

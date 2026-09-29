@@ -1,10 +1,11 @@
 package resolve
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"net/netip"
-	"sort"
+	"slices"
 	"strings"
 )
 
@@ -86,11 +87,8 @@ func ReadRIBRoutes(b []byte) ([]RIBRoute, error) {
 			}
 		}
 	}
-	sort.SliceStable(out, func(i, k int) bool {
-		if out[i].Router != out[k].Router {
-			return out[i].Router < out[k].Router
-		}
-		return out[i].Destination.String() < out[k].Destination.String()
+	slices.SortStableFunc(out, func(a, b RIBRoute) int {
+		return cmp.Or(cmp.Compare(a.Router, b.Router), strings.Compare(a.Destination.String(), b.Destination.String()))
 	})
 	return out, nil
 }

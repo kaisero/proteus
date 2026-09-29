@@ -162,7 +162,7 @@ func ParseTarget(raw string) (Reference, error) {
 	s = strings.TrimSuffix(s, "/@name")
 	s = strings.TrimSuffix(s, "/entry")
 	segs := []string{}
-	for _, seg := range strings.Split(s, "/") {
+	for seg := range strings.SplitSeq(s, "/") {
 		if seg != "" && seg != "entry" {
 			segs = append(segs, seg)
 		}

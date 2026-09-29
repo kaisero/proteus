@@ -74,8 +74,7 @@ func (a *app) routingCmd(sim simulate.Simulation) *cobra.Command {
 			}
 			a.log.Infof(runlog.TagStep, "routing %s -> %s, start %q", flow.Source, flow.Destination, device)
 			run, err := sim.Run(c.Context(), env, simulate.Input{Flow: flow, Params: params})
-			var choice *simulate.ChoiceError
-			if errors.As(err, &choice) {
+			if choice, ok := errors.AsType[*simulate.ChoiceError](err); ok {
 				return usageErr("%v", choice)
 			}
 			if err != nil {

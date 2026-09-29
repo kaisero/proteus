@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net/netip"
 	"slices"
-	"sort"
 	"strings"
 
 	"github.com/okaiser/proteus/internal/simulate"
@@ -84,7 +83,7 @@ func (s *state) postNATZones(fromZones []string) natZone {
 	if !translated {
 		out.zones = nil
 	}
-	sort.Strings(out.zones)
+	slices.Sort(out.zones)
 	return out
 }
 

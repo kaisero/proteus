@@ -3,7 +3,7 @@ package index
 import (
 	"fmt"
 	"net/netip"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/RoaringBitmap/roaring/v2"
@@ -273,7 +273,7 @@ func distinctRouters(ps []ZonePlacement) []string {
 		seen[p.Router] = true
 		out = append(out, p.Router)
 	}
-	sort.Strings(out)
+	slices.Sort(out)
 	return out
 }
 

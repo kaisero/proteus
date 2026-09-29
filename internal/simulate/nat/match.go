@@ -228,7 +228,7 @@ func serviceHolds(name, proto string, port int, svc map[string]string, depth int
 		return false, false
 	}
 	if members, ok := svc["service-group:"+name]; ok {
-		for _, m := range strings.Split(members, ", ") {
+		for m := range strings.SplitSeq(members, ", ") {
 			if mm, mk := serviceHolds(m, proto, port, svc, depth+1); mm || !mk {
 				return mm, mk
 			}
@@ -243,7 +243,7 @@ func serviceHolds(name, proto string, port int, svc map[string]string, depth int
 	if proto != "" && p != proto {
 		return false, true
 	}
-	for _, r := range strings.Split(ports, ",") {
+	for r := range strings.SplitSeq(ports, ",") {
 		lo, hi, isRange := strings.Cut(strings.TrimSpace(r), "-")
 		a, err1 := strconv.Atoi(lo)
 		b := a

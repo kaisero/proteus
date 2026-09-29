@@ -262,8 +262,8 @@ func nextHopsText(r resolve.RIBRoute) string {
 // noteRow gives a hop note its row label: pbf, nat, schema, or note.
 func noteRow(n string) [2]string {
 	for _, p := range []string{"pbf ", "nat "} {
-		if strings.HasPrefix(n, p) {
-			return [2]string{strings.TrimSpace(p), strings.TrimPrefix(n, p)}
+		if after, ok := strings.CutPrefix(n, p); ok {
+			return [2]string{strings.TrimSpace(p), after}
 		}
 	}
 	if rest, ok := strings.CutPrefix(n, "schema: "); ok {

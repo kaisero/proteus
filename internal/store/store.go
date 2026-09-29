@@ -14,7 +14,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -122,7 +122,7 @@ func (s *Store) Write(meta Meta, docs map[string][]byte, keep int) (Snapshot, er
 	for n := range docs {
 		names = append(names, n)
 	}
-	sort.Strings(names)
+	slices.Sort(names)
 	for _, n := range names {
 		file := n + ".xml"
 		if err := os.WriteFile(filepath.Join(tmp, file), docs[n], 0o600); err != nil {
@@ -212,7 +212,8 @@ func (s *Store) List(device string) ([]string, error) {
 			ids = append(ids, e.Name())
 		}
 	}
-	sort.Sort(sort.Reverse(sort.StringSlice(ids)))
+	slices.Sort(ids)
+	slices.Reverse(ids)
 	return ids, nil
 }
 

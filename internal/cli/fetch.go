@@ -98,16 +98,14 @@ func fetchEach(ctx context.Context, out io.Writer, inv *inventory.Inventory, st 
 	sem := make(chan struct{}, fetchConcurrency)
 	var wg sync.WaitGroup
 	for i, name := range names {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			sem <- struct{}{}
 			defer func() { <-sem }()
 			stored[i], errs[i] = fetchOne(ctx, &reports[i], inv, st, name, getenv, log)
 			if errs[i] != nil {
 				fmt.Fprintf(&reports[i], "%s: %v\n", name, errs[i])
 			}
-		}()
+		})
 	}
 	wg.Wait()
 	for i := range reports {

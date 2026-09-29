@@ -5,7 +5,7 @@ package resolve
 
 import (
 	"fmt"
-	"sort"
+	"slices"
 
 	"github.com/okaiser/proteus/internal/config"
 )
@@ -45,7 +45,7 @@ func Vsyses(cfg *config.Config) []string {
 			out = append(out, n)
 		}
 	}
-	sort.Strings(out)
+	slices.Sort(out)
 	return out
 }
 
@@ -102,6 +102,6 @@ func dedup(in []string) []string {
 			out = append(out, s)
 		}
 	}
-	sort.Strings(out)
+	slices.Sort(out)
 	return out
 }

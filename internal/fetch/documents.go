@@ -33,8 +33,7 @@ func OpDocument(name string, cmds ...string) Document {
 				}
 				return b, nil
 			}
-			var api *APIError
-			if !errors.As(err, &api) {
+			if _, ok := errors.AsType[*APIError](err); !ok {
 				return nil, err
 			}
 			errs = append(errs, fmt.Errorf("%s: %w", cmd, err))

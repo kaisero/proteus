@@ -6,7 +6,7 @@ package estate
 
 import (
 	"fmt"
-	"sort"
+	"slices"
 	"time"
 
 	"github.com/okaiser/proteus/internal/config"
@@ -131,7 +131,7 @@ func scopes(device string, sn *store.Snapshot, cfg *config.Config, rep config.Re
 	for v := range missing {
 		names = append(names, v)
 	}
-	sort.Strings(names)
+	slices.Sort(names)
 	for _, v := range names {
 		holes = append(holes, Hole{Device: device, Vsys: v, Reason: fmt.Sprintf("no vsys %s; it has %v", v, have)})
 	}

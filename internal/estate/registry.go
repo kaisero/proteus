@@ -1,7 +1,7 @@
 package estate
 
 import (
-	"sort"
+	"slices"
 
 	"github.com/okaiser/proteus/internal/simulate"
 	"github.com/okaiser/proteus/internal/simulate/nat"
@@ -24,6 +24,6 @@ func Kinds() []string {
 	for k := range Simulations {
 		out = append(out, k)
 	}
-	sort.Strings(out)
+	slices.Sort(out)
 	return out
 }

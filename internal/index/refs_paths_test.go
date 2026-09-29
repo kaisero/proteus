@@ -2,7 +2,7 @@ package index
 
 import (
 	"path"
-	"sort"
+	"slices"
 	"strings"
 	"testing"
 
@@ -44,7 +44,7 @@ func TestRefsReachesProfileAndScalarEdges(t *testing.T) {
 				got = append(got, path.Base(r.From))
 			}
 		}
-		sort.Strings(got)
+		slices.Sort(got)
 		if strings.Join(got, ",") != strings.Join(tc.want, ",") {
 			t.Errorf("Refs(%q) at %s = %v, want %v", tc.name, tc.field, got, tc.want)
 		}
