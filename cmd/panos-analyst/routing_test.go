@@ -56,7 +56,9 @@ func TestRoutingAcrossTwoFirewalls(t *testing.T) {
 		t.Errorf("reverse:\n%s", out)
 	}
 	// fw02 routes 10.10.0.0/16 into an unnumbered tunnel.
-	if out := c.want(0, "simulate", "routing", "198.18.1.10", "10.10.5.5"); !strings.Contains(out, "leaves by tunnel.100 (zone prisma)") {
+	// Its routing table says static, so the route reads via the tunnel, not connected.
+	if out := c.want(0, "simulate", "routing", "198.18.1.10", "10.10.5.5"); !strings.Contains(out, "leaves by tunnel.100 (zone prisma)") ||
+		!strings.Contains(out, "│  route   10.10.0.0/16 via tunnel.100   static") {
 		t.Errorf("tunnel:\n%s", out)
 	}
 }
@@ -88,7 +90,7 @@ func TestRoutingRIBAndWhy(t *testing.T) {
 	out := c.want(0, "simulate", "routing", "198.18.1.10", "8.8.8.8", "--rib", "--why")
 	for _, want := range []string{
 		"│  route   0.0.0.0/0 via 192.168.0.1   static",
-		"│  alt     0.0.0.0/0 via 192.168.0.1   static, distance 10 (selected)",
+		"│  alt     0.0.0.0/0 via 192.168.0.1   static, distance 10 (active)",
 		"  hop1/lookup ",
 	} {
 		if !strings.Contains(out, want) {

@@ -238,7 +238,7 @@ func (s *state) reaches(node string, nh resolve.FIBRoute) string {
 }
 
 // alternates are the routing table's routes in this router that cover the
-// destination, the selected one first, then the most specific.
+// destination, the most specific first, the selected one first among equals.
 func (s *state) alternates(node string) ([]resolve.RIBRoute, *index.Unresolved) {
 	d := s.data[node]
 	if d.RIB == nil {
@@ -251,10 +251,10 @@ func (s *state) alternates(node string) ([]resolve.RIBRoute, *index.Unresolved) 
 		}
 	}
 	sort.SliceStable(out, func(i, k int) bool {
-		if out[i].Selected != out[k].Selected {
-			return out[i].Selected
+		if bi, bk := out[i].Destination.Bits(), out[k].Destination.Bits(); bi != bk {
+			return bi > bk
 		}
-		return out[i].Destination.Bits() > out[k].Destination.Bits()
+		return out[i].Selected && !out[k].Selected
 	})
 	return out, nil
 }

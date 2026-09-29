@@ -116,9 +116,9 @@ may be incomplete: not evaluated: policy-based forwarding, NAT
 func TestRenderRIBAndWhy(t *testing.T) {
 	got := render(t, "198.18.10.5", "8.8.8.8", map[string]string{"rib": "true"}, true)
 	for _, want := range []string{
-		"│  route   0.0.0.0/0 via 198.19.0.1   static                         │\n",
-		"│  alt     0.0.0.0/0 via 198.19.0.1   static, distance 10 (selected) │\n",
-		"┌─ fw02 ─ vsys1 ─ router default ─ snapshot 2h ──────────────────────┐\n",
+		"│  route   0.0.0.0/0 via 198.19.0.1   static                       │\n",
+		"│  alt     0.0.0.0/0 via 198.19.0.1   static, distance 10 (active) │\n",
+		"┌─ fw02 ─ vsys1 ─ router default ─ snapshot 2h ────────────────────┐\n",
 		"  192.168.0.1   leaves the estate (not in the inventory)\n",
 		"may be incomplete: fw02's snapshot has no routing table; fetch it again; the path leaves the estate at 192.168.0.1",
 		"  hop2/next      undermatch the path leaves the estate at 192.168.0.1\n",

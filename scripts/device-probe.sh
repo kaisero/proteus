@@ -7,9 +7,88 @@
 # script exists to show where they disagree and why, not to require agreement.
 #
 # Usage: PANOS_HOST=... PANOS_API_KEY=... scripts/device-probe.sh <config.xml> <vsys> [panos-analyst]
+#        PANOS_HOST=... PANOS_API_KEY=... scripts/device-probe.sh --routing <device> <router> <destination>...
 #
 # <vsys> is vsys1 or vsys:vsys1.
+#
+# --routing compares simulate routing's first lookup on <device> (a device of the
+# inventory, fetched) with the device's own: its fib-lookup when the XML API offers
+# it, else the longest prefix match of its live forwarding table, computed here.
+# PAN-OS 12.2 refuses fib-lookup through the XML API (fw02, 2026-09-29). The two
+# agree when the egress interface is the same and the library's next hop is one of
+# the device's (ECMP picks by hash).
 set -uo pipefail
+
+routing_probe() {
+  local dev=${1:?device} router=${2:?router}
+  shift 2
+  local analyst=${PANOS_ANALYST:-bin/panos-analyst} agreed=0 total=0
+  local live
+  live=$(curl -sk --max-time 40 -G "https://$PANOS_HOST/api/" \
+    --data-urlencode "type=op" --data-urlencode "key=$PANOS_API_KEY" \
+    --data-urlencode "cmd=<show><advanced-routing><fib><afi>ipv4</afi></fib></advanced-routing></show>")
+  printf '%-16s %-40s %-40s %s\n' DESTINATION DEVICE LIBRARY AGREE
+  for dst in "$@"; do
+    local ref lib
+    ref=$(curl -sk --max-time 40 -G "https://$PANOS_HOST/api/" \
+      --data-urlencode "type=op" --data-urlencode "key=$PANOS_API_KEY" \
+      --data-urlencode "cmd=<test><advanced-routing><fib-lookup><ip>$dst</ip><logical-router>$router</logical-router></fib-lookup></advanced-routing></test>" \
+      | LIVE="$live" python3 -c '
+import ipaddress, os, sys, xml.etree.ElementTree as ET
+dst, router = ipaddress.ip_address(sys.argv[1]), sys.argv[2]
+t = ET.fromstring(sys.stdin.read())
+if t.get("status") == "success" and t.find(".//interface") is not None:
+    print("fib-lookup:%s:%s" % (t.findtext(".//interface"), t.findtext(".//nexthop") or "0.0.0.0"))
+    raise SystemExit
+best = None
+for fib in ET.fromstring(os.environ["LIVE"]).iter("fibs"):
+    for vr in fib.findall("entry"):
+        if (vr.findtext("vr") or "") != router:
+            continue
+        for e in vr.find("entries").findall("entry"):
+            net = ipaddress.ip_network(e.findtext("dst"), strict=False)
+            if dst in net and (best is None or net.prefixlen > best[0].prefixlen):
+                best = (net, [])
+            if best and net == best[0]:
+                best[1].append((e.findtext("interface"), e.findtext("nexthop")))
+if best is None:
+    print("lpm:no-route")
+else:
+    print("lpm:%s:%s" % (best[1][0][0], ",".join(sorted(nh for _, nh in best[1]))))' "$dst" "$router")
+    lib=$("$analyst" simulate routing "$dst" --device "$dev" --router "$router" --output json 2>/dev/null \
+      | python3 -c '
+import json, sys
+try:
+    r = json.load(sys.stdin)["results"]
+except Exception:
+    print("error"); raise SystemExit
+h = r["hops"][0] if r.get("hops") else None
+if not h or not h.get("lookups"):
+    print("no-route"); raise SystemExit
+print("%s:%s" % (h["out"]["interface"], ",".join(sorted(n["NextHop"] for n in h["lookups"][0]["route"]["next_hops"]))))')
+    total=$((total + 1))
+    local want=${ref#*:}
+    local agree="NO"
+    if [ "${want%%:*}" = "${lib%%:*}" ]; then
+      for nh in $(tr , ' ' <<<"${lib#*:}"); do
+        case ",${want#*:}," in *",$nh,"*) agree=yes ;; esac
+      done
+      [ "$want" = "no-route" ] && [ "$lib" = "no-route" ] && agree=yes
+    fi
+    [ "$agree" = yes ] && agreed=$((agreed + 1))
+    printf '%-16s %-40s %-40s %s\n' "$dst" "$ref" "$lib" "$agree"
+  done
+  echo
+  echo "$agreed of $total agree."
+}
+
+if [ "${1:-}" = "--routing" ]; then
+  : "${PANOS_HOST:?set PANOS_HOST}"
+  : "${PANOS_API_KEY:?set PANOS_API_KEY}"
+  shift
+  routing_probe "$@"
+  exit 0
+fi
 
 cfg=${1:?config file}
 vsys=${2:?vsys, e.g. vsys1}

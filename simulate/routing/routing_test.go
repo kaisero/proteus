@@ -316,7 +316,7 @@ func TestRIBAlternates(t *testing.T) {
 	if p.Hops[0].Lookups[0].Protocol != "static" || p.Hops[1].Lookups[0].Protocol != "" {
 		t.Errorf("protocols = %+v %+v", p.Hops[0].Lookups, p.Hops[1].Lookups)
 	}
-	if len(alts) != 3 || !alts[0].Selected || alts[1].Protocol != "bgp" || alts[2].Distance != 200 {
+	if len(alts) != 3 || alts[0].Protocol != "bgp" || !alts[1].Selected || alts[2].Distance != 200 {
 		t.Errorf("alternates = %+v", alts)
 	}
 	// fw02 has no routing table stored: a hole, only because --rib asked.

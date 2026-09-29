@@ -147,7 +147,7 @@ func newHopBox(h routing.Hop, now time.Time) hopBox {
 		rows = append(rows, [2]string{"out", portText(h.Out)})
 	}
 	for _, l := range h.Lookups {
-		rows = append(rows, [2]string{"route", routeText(l)})
+		rows = append(rows, [2]string{"route", routeText(l, h.Out)})
 	}
 	if len(h.ECMP) > 0 {
 		var hops []string
@@ -165,8 +165,8 @@ func newHopBox(h routing.Hop, now time.Time) hopBox {
 	}
 	for _, a := range h.Alternates {
 		s := fmt.Sprintf("%s via %s   %s, distance %d", a.Destination, nextHopsText(a), a.Protocol, a.Distance)
-		if a.Selected {
-			s += " (selected)"
+		if a.Selected && a.Destination == h.Lookups[0].Match.Destination {
+			s += " (active)"
 		}
 		rows = append(rows, [2]string{"alt", s})
 	}
@@ -201,16 +201,26 @@ func portText(p routing.Port) string {
 	return fmt.Sprintf("%-13s %s", p.Interface, p.Addr)
 }
 
-func routeText(l routing.Lookup) string {
+// routeText is a route: via its next hop, or via its interface when it has none.
+// Only a route the routing table calls connected, or failing a routing table one
+// that stays inside the interface's own net, reads "connected": a static route
+// into a tunnel has no next hop either.
+func routeText(l routing.Lookup, out routing.Port) string {
 	first := l.Match.First()
-	if a, ok := addrOrNone(first.NextHop); ok {
-		s := fmt.Sprintf("%s via %s", l.Match.Destination, a)
-		if l.Protocol != "" {
-			s += "   " + l.Protocol
-		}
-		return s
+	via, ok := addrOrNone(first.NextHop)
+	connected := !ok && (l.Protocol == "connected" ||
+		l.Protocol == "" && out.Addr.IsValid() && out.Link().Overlaps(l.Match.Destination) && out.Addr.Bits() <= l.Match.Destination.Bits())
+	if connected {
+		return fmt.Sprintf("%s  connected", l.Match.Destination)
 	}
-	return fmt.Sprintf("%s  connected", l.Match.Destination)
+	if !ok {
+		via = first.Interface
+	}
+	s := fmt.Sprintf("%s via %s", l.Match.Destination, via)
+	if l.Protocol != "" {
+		s += "   " + l.Protocol
+	}
+	return s
 }
 
 func addrOrNone(s string) (string, bool) {
