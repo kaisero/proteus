@@ -204,12 +204,13 @@ One binary, `panos-analyst`. Questions are verbs; housekeeping is grouped by nou
 | `snapshot show` | Per device and vsys: snapshot, age, version, rule count, fetched documents |
 | `snapshot diff [--from] [--to]` | Objects and rules added, removed or changed between two snapshots |
 | `search <term>` | Every place a value or name appears: objects by value and by name, groups, references, literals |
+| `lookup <name>` | The whole rule or object behind a name: a rule as the rule editor shows it, an object with its value, members and groups; `--expand` adds values and group trees, `--full` shows every list item |
 | `simulate secpolicy <src> <dst>` | The rule one flow would hit on one device: source and destination by address or FQDN, `--port`, `--url`, zones given or derived; every stage says how certain it is, and `--why` shows them |
 
 Every question takes the same selectors: `--device`, `--label k=v`, `--vsys`,
 `--at <time>` for older snapshots, `--fresh` to fetch first, or `--file <config.xml>`
 to read one file with no inventory. `search` takes `--exact`, `--within` or
-`--contains`, and `--kind`, `--field`, `--show` and `--direct` to narrow it.
+`--contains`, and `--kind`, `--field`, `--show` and `--direct` to narrow it. `lookup` takes `--kind` when one name has several kinds.
 
 `--output json` prints one versioned envelope. Exit codes: 0 complete, 1 error,
 2 usage, 3 answered with holes or unresolved entries.
@@ -260,7 +261,7 @@ The library reports each of these rather than hiding it.
 ```
 go-panos-schema/
 ├── cmd/
-│   ├── panos-analyst/     # fetch, snapshots, search, simulate: the CLI
+│   ├── panos-analyst/     # fetch, snapshots, search, lookup, simulate: the CLI
 │   ├── panos-demo/        # a narrated tour of every feature
 │   └── panos-schemagen/   # digest a vendor schema, generate the Go model
 ├── config/                # Load, version detection, element tree, scopes
@@ -276,6 +277,7 @@ go-panos-schema/
 │   └── securitypolicy/    # the first simulation: which rule a flow would hit
 ├── runlog/                # the run log: levels, redaction, rotation
 ├── search/                # every place a value or name appears, in one scope
+├── card/                  # the whole rule or object behind a name, for lookup
 ├── drift/                 # what changed between two configurations of a scope
 ├── schema/                # public: query the schema itself (design not settled)
 ├── internal/schema/       # parse the PAN-OS schema grammar

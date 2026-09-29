@@ -1,6 +1,6 @@
 # commands
 
-Validated against c173b67 on 2026-09-29 · Purpose: the three binaries, what each is for, and which one to reach for.
+Validated against 2f14f3f on 2026-09-29 · Purpose: the three binaries, what each is for, and which one to reach for.
 
 ## Purpose & responsibilities
 
@@ -22,6 +22,7 @@ snapshot list <device>                      snapshots, newest first; * marks lat
 snapshot show                               per device and vsys: snapshot, age, version, rules
 snapshot diff [--from] [--to]               objects and rules added, removed, changed
 search <term>                               every place a value or name appears
+lookup <name>                               the whole rule or object behind a name
 simulate secpolicy <src> <dst>              the rules one flow could hit, and the first match
 ```
 
@@ -34,6 +35,11 @@ simulate secpolicy <src> <dst>              the rules one flow could hit, and th
   port covers, URL by tokens, else exact); `--exact`, `--within`, `--contains`
   override. Filters: `--kind`, `--field`, `--show objects,groups,refs,literals`,
   `--direct`.
+- **`lookup <name>`** prints a rule as the rule editor lays it out, or an object
+  with its value, members and holding groups. The kind is inferred; a name several
+  kinds share exits 2 until `--kind` picks one; found nowhere exits 1. `--expand`
+  shows values in parentheses and groups as trees (three levels); lists stop at five
+  items unless `--full`. See [questions](questions.md).
 - **`simulate <kind>`** has one subcommand per kind registered in
   `estate.Simulations`; `secpolicy` is the first. It runs on one device and vsys
   (M5 fans out), takes an address or FQDN per side, `--port`, `--url`, zones given

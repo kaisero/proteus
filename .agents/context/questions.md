@@ -1,14 +1,15 @@
 # questions
 
-Validated against c173b67 on 2026-09-29 · Purpose: how a question becomes targets, findings and changes — the packages under `panos-analyst search` and `snapshot diff`.
+Validated against 2f14f3f on 2026-09-29 · Purpose: how a question becomes targets, findings, cards and changes — the packages under `panos-analyst search`, `lookup` and `snapshot diff`.
 
 ## Purpose & responsibilities
 
-Three packages sit between the read-only core and the command. `estate` turns a
+Four packages sit between the read-only core and the command. `estate` turns a
 selection and a time into targets: one (device, vsys, configuration) each, plus a
 hole for anything that could not be read. `search` answers one term against one
-scope's index as findings. `drift` compares two configurations of one scope. Spec
-`docs/specs/2026-09-27-panos-analyst-scope.md` §15, C4 to C9.
+scope's index as findings. `card` builds the whole element behind one name.
+`drift` compares two configurations of one scope. Spec
+`docs/specs/2026-09-27-panos-analyst-scope.md` §15, C4 to C9, and §16, K1 to K12.
 
 ## How it works
 
@@ -30,6 +31,17 @@ lists), groups (`GroupsOf`, or `DirectGroupsOf` with `Direct`), references
 (`Refs` and `ProfileUses`), literals (`RulesWithAddr`/`RulesWithPrefix`). Modes
 `Exact`, `Within`, `Contains` change stage one; `Kinds`, `Fields`, `Show` filter.
 
+### card
+
+`Find(cfg, idx, name, kind)` returns one `Card` per element of that name visible in
+the scope: a security rule (`idx.Rules()`) or an object of any kind
+`resolve.ObjectKinds` lists. `Rule` lays a rule out in the rule editor's sections;
+`Object` gives a value, members, profiles and the groups holding it
+(`DirectGroupsOf`). Every `Item` carries its value and children to full depth; a
+name no object defines is `Literal` (an address or prefix) or `Predefined` (in
+source, destination, service, category). The command cuts trees at three levels
+and lists at five items; JSON carries the whole card.
+
 ### drift
 
 `Compare(before, after, scope)` renders every object of `ObjectKinds` defined in
@@ -38,8 +50,8 @@ what was added, removed or changed. Position is not compared.
 
 ## Build / run pointers
 
-- `go test ./estate ./search ./drift`
-- `./bin/panos-analyst search <term> --file <cfg>`, `./bin/panos-analyst snapshot diff`
+- `go test ./estate ./search ./card ./drift`
+- `./bin/panos-analyst search <term> --file <cfg>`, `./bin/panos-analyst lookup <name> --file <cfg> --expand`, `./bin/panos-analyst snapshot diff`
 
 ## Public API
 
@@ -67,6 +79,20 @@ func Run(cfg *config.Config, idx *index.Index, q Query) ([]Finding, error)
 ```
 <!-- /GENERATED:api -->
 
+<!-- GENERATED:api ./card -->
+```go
+type Card struct{ ... }
+type Item struct{ ... }
+type Row struct{ ... }
+type Section struct{ ... }
+
+func Find(cfg *config.Config, idx *index.Index, name, kind string) ([]Card, error)
+func Kinds(cfg *config.Config) []string
+func Object(cfg *config.Config, idx *index.Index, o resolve.Object) Card
+func Rule(cfg *config.Config, idx *index.Index, r resolve.Rule, rules int) Card
+```
+<!-- /GENERATED:api -->
+
 <!-- GENERATED:api ./drift -->
 ```go
 type Change struct{ ... }
@@ -84,7 +110,13 @@ func Compare(before, after *config.Config, sc config.Scope) ([]Change, error)
 - **Any-rules are never findings.** They answer a simulation question.
 - **Kinds come from the schema** (R1): `resolve.ObjectKinds` reads `FieldKinds` and
   `KindContainer`, never a list in the code.
-- **R12:** `search` and `drift` import none of `fetch`, `store`, `estate`.
+- **A card never loops.** A group cycle is cut and its item's value is `cycle`
+  (`card.TestACycleIsCut`).
+- **One name can have several kinds.** `Find` returns a card per kind; the command
+  exits 2 and asks for `--kind` (`card.TestFindInfersTheKind`).
+- **"Predefined" means only "not in the configuration".** No table of PAN-OS
+  predefined values exists (spec §14 open item 6).
+- **R12:** `search`, `card` and `drift` import none of `fetch`, `store`, `estate`.
 
 ## See also
 

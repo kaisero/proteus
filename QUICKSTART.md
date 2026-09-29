@@ -276,6 +276,73 @@ Against the store, a stored forwarding table also answers zone questions.
 - `--direct` keeps groups one level up.
 - `--device`, `--label k=v`, `--vsys` narrow the targets.
 
+## 10a. Look up a rule or an object
+
+`search` says where a name appears. `lookup` shows the whole element behind it. A
+rule prints the way the rule editor lays it out. `--expand` puts each name's value
+in parentheses and opens groups as a tree, three levels deep. `NOT` marks a negated
+side. A literal address stays bare. A value the configuration does not define shows
+`(predefined)`. A list stops at five items; `--full` shows all of them.
+
+```
+$ panos-analyst lookup branch-to-dc --file testdata/config/firewall-lookup.xml --expand
+file / vsys1   testdata/config/firewall-lookup.xml
+security rule  branch-to-dc                 position 2 of 2, local, enabled
+  uuid         0b3f5e2a-9d41-4c1e-8f7a-2b6c9d1ec21e
+  tags         branch
+  description  Branch offices to the shared data-center services
+
+  source       zones      branch-vpn, sdwan
+               addresses  branch-networks (group, 4 members)
+                            net-vienna (10.20.0.0/16)
+                            net-graz (10.21.0.0/16)
+                            net-linz (10.22.0.0/16)
+                            west-branches (group, 1 member)
+                              net-salzburg (10.23.0.0/16)
+                          tagged-laptops (dynamic, filter 'laptop' and 'managed')
+                          10.99.0.0/24
+               users      acme\branch-staff
+  destination  zones      datacenter
+               addresses  NOT dc-mgmt (group, 2 members)
+                                dc-mgmt-net (10.1.250.0/24)
+                                oob-net (10.1.251.0/24)
+  application  ssl, web-browsing, ms-rdp, ssh, dns, … (+2 more)
+  service      svc-web (group, 2 members)
+                 service-https (predefined)
+                 svc-rdp (tcp/3389)
+  url category corp-allowed (custom, 2 entries), business-and-economy (predefined)
+  profile      group      strict-inspect
+                            as-strict (spyware)
+                            url-strict (url-filtering)
+                            av-strict (virus)
+  action       allow
+  log          at session start and end, forwarded to log-to-panorama
+  schedule     business-hours
+
+1 with it, 0 without, 0 holes
+```
+
+An object card gives its value, its members and the groups holding it. It ends
+with the `search` command that shows where the object is used:
+
+```
+$ panos-analyst lookup net-vienna --file testdata/config/firewall-lookup.xml
+file / vsys1   testdata/config/firewall-lookup.xml
+address        net-vienna                   vsys:vsys1
+  tags         branch
+  description  Vienna office
+
+  value        10.20.0.0/16
+  held by      branch-networks
+  where it is used: panos-analyst search net-vienna --file testdata/config/firewall-lookup.xml
+
+1 with it, 0 without, 0 holes
+```
+
+The kind comes from the name. `dc-mgmt` is a tag and an address group in this
+file, so `lookup dc-mgmt` exits 2 and names both; `--kind address-group` picks one.
+A name found nowhere exits 1. `--output json` carries the whole card, never cut.
+
 ## 11. Simulate a flow
 
 `simulate secpolicy` answers "which rule would this traffic hit". It runs named

@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Look up the whole rule or object behind a name.** `panos-analyst lookup <name>`
+  prints a security rule laid out like the firewall's rule editor, or an object with
+  its value, members and the groups holding it. `--expand` puts each name's value in
+  parentheses and opens groups as a tree, and `--full` shows lists longer than five
+  items. A name that several kinds share needs `--kind`.
 - **A simulation says how certain its answer is.** `panos-analyst simulate
   secpolicy` runs named stages that narrow the candidate rules by source and
   destination (an address, or an FQDN resolved through DNS), zone, port and URL

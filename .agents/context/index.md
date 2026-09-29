@@ -54,10 +54,10 @@ Repo map:
   `refs.go`, `profileuse.go`, `snapshot.go`, `intern.go`.
 - `internal/schema`, `internal/digest`, `internal/codegen` — schema parsing,
   digest format, code generation. `internal/archtest` — the R12 import check.
-- `estate/` — selectors and a time to targets and holes; `search/` — five-stage findings for one term; `drift/` — changes between two configurations.
+- `estate/` — selectors and a time to targets and holes; `search/` — five-stage findings for one term; `card/` — the whole element behind one name, for `lookup`; `drift/` — changes between two configurations.
 - `inventory/` — the YAML device list and credentials; `fetch/` — the read-only XML
   API client and the `Document` list; `store/` — timestamped snapshots, `latest`.
-- `cmd/` — `panos-analyst` (fetch, snapshots, search, simulate), `panos-demo` (narrated tour),
+- `cmd/` — `panos-analyst` (fetch, snapshots, search, lookup, simulate), `panos-demo` (narrated tour),
   `panos-schemagen` (digest + generate).
 - `scripts/` — `coverage-gate.sh`, `device-probe.sh`, `context-api.py`.
 
@@ -81,7 +81,7 @@ Hard invariants:
 - [scope-semantics](scope-semantics.md): targets, rule order, scoped visibility,
   shadowing, group membership.
 - [simulator](simulator.md): `simulate`, `simulate/securitypolicy`, `runlog` — the staged simulator, fidelity, and the run log.
-- [questions](questions.md): `estate`, `search`, `drift` — how a question becomes targets, findings and changes.
+- [questions](questions.md): `estate`, `search`, `card`, `drift` — how a question becomes targets, findings, cards and changes.
 - [fetch-and-store](fetch-and-store.md): the inventory, the read-only fetcher, and
   the snapshot store.
 - [value-spaces](value-spaces.md): the resolver seam, the four paths that reach a
