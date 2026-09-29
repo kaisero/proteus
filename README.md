@@ -1,329 +1,115 @@
 # proteus
 
-`proteus` is a read-only command-line tool for PAN-OS firewalls. It loads a
-firewall's configuration and answers questions about it. It never writes a
-configuration. `proteus fetch` reads devices with show commands and a
-configuration export, and the analysis never contacts a device.
+**Ask your PAN-OS firewalls questions, from a copy of their configuration.**
 
-It exists for people and AI agents. They ask two kinds of question.
-*Does an object with this value exist?* And *which rules can this value reach?*
-proteus answers both, per scope, and reports what it could not evaluate.
+proteus reads each firewall's configuration and operational state, keeps a
+timestamped copy on disk, and answers from that copy. It tells you where an
+address is used, which rule a flow would hit, what NAT does to a packet, and which
+firewalls a packet crosses. It never changes a firewall.
 
-What it knows about each configuration field comes from the schema PAN-OS itself
-ships.
-
-## What it does
-
-- **Fetches what it analyses** — `proteus fetch` logs in to each firewall in
-  an inventory and stores its configuration and operational state as a timestamped
-  snapshot. Every question then runs against the devices' latest snapshots.
-- **Reads what a firewall actually evaluates** — proteus keys each policy by
-  device **and** vsys, and orders the rule layers the way the firewall evaluates
-  them: pushed shared pre-rules, the vsys's own rules, pushed shared post-rules.
-- **Answers from a value, not only from a name** — give it an address, a prefix,
-  a URL, a port, a user, a zone or an application name. It returns the rules that
-  value can reach, in evaluation order.
-- **Matches each rule field by the value spaces the schema allows there** — a
-  security rule's `source` accepts an address, an address group, a region, an
-  external list and an IP block list. That is five value spaces, not one. The
-  wiring comes from the schema, not from hand-written code.
-- **Resolves per scope** — a scope is `shared` or a vsys, and a vsys inherits
-  shared. One shared dynamic address group resolves to different members in each
-  vsys. A global answer is wrong, not merely incomplete.
-- **Reports incompleteness** — every lookup returns a report. A non-empty
-  `Unresolved` list means the answer is missing matches, and the report says why.
-- **Takes facts a configuration does not hold** — a user-to-group mapping comes
-  from User-ID, not from a file. proteus defines a snapshot format and reads
-  it. You supply the data.
-- **Builds each index once** — an index is immutable and cached per file and
-  scope. Concurrent readers need no lock.
-
-## A first look
-
-```text
-$ ./bin/proteus search superlong.example.azureapps.microsoft.com \
-      --file testdata/config/firewall-urlcat.xml
-search superlong.example.azureapps.microsoft.com (matches)
-
-file / vsys1   testdata/config/firewall-urlcat.xml
-  object     custom-url-category  custom-azuresite-group   superlong.example.azureapps.microsoft.com
-  reference  security rule        URL-Example              category -> custom-azuresite-group
-1 with results, 0 without, 0 holes
+```
+$ proteus simulate policy 10.1.0.5 10.2.0.5 --port 443 --file testdata/config/firewall-zones.xml
+10.1.0.5 -> 10.2.0.5 tcp/443
+file / vsys1   testdata/config/firewall-zones.xml
+  zones      from inside, to dmz (configuration)
+  relevance  unknown: no stored forwarding table
+  fidelity   inferred: kept rules whose service is application-default, predefined or absent: from-inside; not evaluated: application
+    1. from-inside                allow  [local       vsys:vsys1]
+first match: from-inside (allow)
 ```
 
-See two things here. The answer names the object that matched and the value that
-matched it, so a reader can check the reasoning. And it follows the object to the
-rule that names it. Without `--file`, the same command answers for every device in
-the inventory, one block per device and vsys.
+The answer names the rule, and it says how certain it is and why.
 
-Inside, which rules a value can reach, including the rules whose field is `any`,
-is one lookup in the `index` package:
+## Features
 
-```go
-cfg, _, err := config.Load("testdata/config/firewall-urlcat.xml")
-sc, err := config.ParseScope("vsys:vsys1")
-idx, err := index.For(cfg, sc)
+- **Search** every firewall for an address, prefix, port, URL, user or name. Find
+  the objects, the groups (at any depth), the rules and the profiles that use it.
+- **Look up** a rule or object in full, laid out like the firewall's rule editor.
+- **Simulate** security policy, NAT and routing: which rule a flow hits, what the
+  packet looks like after NAT, and the path across your firewalls.
+- **Compare** snapshots: which objects and rules changed since last week.
+- **Honest answers.** Every answer says how certain it is (`exact`, `overmatch`,
+  `inferred`, `undermatch`) and names what it could not evaluate.
+- **Read-only by design.** The API client refuses every command that is not a
+  `<show>` command or a configuration export.
+- **Schema first.** Field knowledge comes from the PAN-OS schema, not from
+  hand-written code.
+- **Scripting.** `--output json`, and exit codes that separate a complete answer
+  from an incomplete one.
 
-rules, rep := idx.Candidates(index.Category, "superlong.example.azureapps.microsoft.com")
-fmt.Println(rules.GetCardinality(), "rules")
-for _, h := range rep.Hits {
-    fmt.Printf("%s (%s) via %s\n", h.Name, h.Kind, h.Via)
-}
-```
+## Install
 
-[QUICKSTART.md](QUICKSTART.md) takes one question at a time.
-
-## How it works
-
-Three packages under `internal/` form the read-only core. The dependency order is
-one-way: `config` <- `resolve` <-
-`index`.
-
-1. **`config`** loads the file. It parses the XML into an element tree and holds
-   the schema digest for the version the file declares. `config.Load(path)`
-   returns the configuration and a report of anything it could not type.
-2. **`resolve`** holds PAN-OS semantics: one policy target per vsys, scoped
-   object visibility with shadowing, rule order, group membership and tag filters, URL pattern parsing, and zones,
-   interfaces and routes.
-3. **`index`** holds the lookup structures. `index.For(cfg, scope)` returns an
-   immutable, cached `*Index`.
-
-### Four paths reach a value
-
-A rule field reaches a value by four paths. A caller that forgets one gets a
-wrong answer, not an incomplete one.
-
-1. The field names an object whose value matches.
-2. The field names a group holding such an object, at any depth. Static
-   membership and a tag filter both count.
-3. The field holds a matching value directly, with no object involved.
-4. The field is `any`, which matches everything.
-
-`Candidates` unions all four. The fourth path is the one that bites. Checked
-against a live firewall: for 198.18.0.5 to 198.18.1.5 the device reports rule 3,
-whose source is `any`. Matching on objects alone reports rule 8.
-
-### Reachability, not a verdict
-
-The index says which rules a value **can** reach. It does not say which rule
-wins. Intersecting the two sides of a match, dropping disabled rules and deciding
-what the first match means belongs to the simulator above it.
-
-```go
-src := idx.CandidatesFor(index.Source, srcAddr)
-dst := idx.CandidatesFor(index.Destination, dstAddr)
-
-cand := roaring.And(src, dst)
-cand.AndNot(idx.Disabled())
-first := idx.Rules()[cand.Minimum()]   // the simulator's verdict, not the index's
-```
-
-[ARCHITECTURE.md](ARCHITECTURE.md) explains where this line sits and why.
-
-### Search is not matching
-
-`SearchValues` performs a case-insensitive substring search over object values.
-Matching is token-based and never a substring test. The pattern
-`wildcard-example.com` does **not** cover the URL
-`wildcard-example.com.evil.net`, because a host is read from the right.
-
-Search exists because a value can be longer than the name holding it. PAN-OS caps
-a custom URL category name at 31 characters and one of its members at 255. So
-searching `azureapps` finds a category holding a 41-character URL that appears in
-no name. Other kinds are wider: an address or service name may be 63 characters
-and a tag 127.
-
-### Profile paths are not matches
-
-`ProfileUses` follows the path from a rule to a URL category: profile setting,
-profile group or named profile, url-filtering profile, then the action list
-holding the category. It reports which list — `block`, `alert`, `allow`,
-`continue` or `override`. It gives no allow-or-block verdict, because that
-depends on the response and the session.
-
-This matters because PAN-OS deployments normally apply URL policy this way. On a
-lab firewall every rule has `category any`, and all URL policy runs through
-profiles. QUICKSTART.md section 6 shows the output.
-
-## Why the schema, not hand-written field knowledge
-
-Every PAN-OS appliance ships its own configuration schema. proteus reads a
-compact digest of it instead of a hand-maintained specification. A model once
-generated from the PAN-OS 11.2 Panorama schema had **2,289** object types;
-pango's hand-written specs cover **117**. Reading the schema also removes a class
-of defect that a hand-maintained specification cannot avoid.
-
-A concrete example. pango types a device group's `vsys` assignment as a member
-list, but Panorama writes an entry list. pango returns an empty value and
-preserves nothing, so a round trip deletes the assignment. The schema states the
-shape without ambiguity, so a reader that takes the shape from it cannot get it
-wrong.
-
-The schema also carries the reference graph. The firewall schema declares 5,898
-`memberof` targets, and 5,144 of them are real object references saying which
-objects a field may point at. `internal/digest.TestRealSchemaFormCensus` pins the
-census. The schema also carries name length limits, defaults, enum values and
-help strings.
-
-## Getting Started
-
-### Prerequisites
-
-- Go, at the version in [`go.mod`](go.mod). The code is pure Go.
-- A PAN-OS 11.2 configuration file, or one of the fixtures in `testdata/config/`.
-
-### Build
+proteus is a single Go binary with no runtime dependency. You need Go at the
+version in [`go.mod`](go.mod).
 
 ```bash
-make build-local               # bin/proteus for this machine
-make build                     # bin/proteus, static linux/amd64
+git clone <repository> proteus && cd proteus
+make build-local                 # writes bin/proteus
 ```
 
-The schema digests are committed once, in `internal/config/schemadigest/`. The
-binary embeds them from there, and `make schema-digest` writes new ones there.
+Or install it into `$(go env GOPATH)/bin`:
 
-## Commands
+```bash
+go install ./cmd/proteus
+```
 
-One binary, `proteus`. Questions are verbs; housekeeping is grouped by noun.
+## Quick start
 
-| Command and arguments | What it does |
+Try it on a test configuration. No firewall is needed:
+
+```bash
+proteus search 10.124.0.1 --file testdata/config/firewall-multivsys.xml
+```
+
+Connect your firewalls:
+
+```bash
+proteus inventory init                 # writes ~/.config/proteus/config.yaml
+$EDITOR ~/.config/proteus/config.yaml  # add your firewalls
+export PANOS_PASSWORD='...'
+proteus fetch --all                    # store a snapshot of each firewall
+proteus search 10.20.0.0/16            # ask every firewall
+```
+
+[QUICKSTART.md](QUICKSTART.md) walks through these steps with real output.
+
+> **Security note:** the inventory template turns TLS certificate verification
+> off, because lab firewalls present self-signed certificates. Set
+> `insecure_tls: false` for every firewall whose certificate this machine trusts.
+> See [Configuration](docs/configuration.md#tls).
+
+## Documentation
+
+| Topic | Page |
 | --- | --- |
-| `fetch <device>… \| --label k=v \| --all` | Log in, fetch config, system info, interfaces, FIB, RIB and HA state, store a snapshot; up to eight devices at once; a passive HA member is read from its active peer |
-| `inventory init` | Write an inventory template, mode 0600, with TLS verification off and how to turn it on |
-| `snapshot list <device>` | A device's snapshots, newest first; `*` marks latest |
-| `snapshot show` | Per device and vsys: snapshot, age, version, rule count, fetched documents |
-| `snapshot diff [--from] [--to]` | Objects and rules added, removed or changed between two snapshots |
-| `search <term>` | Every place a value or name appears: objects by value and by name, groups, references, literals |
-| `lookup <name>` | The whole rule or object behind a name: a rule as the rule editor shows it, an object with its value, members and groups; `--expand` adds values and group trees, `--full` shows every list item |
-| `simulate policy <src> <dst>` | The rule one flow would hit on one device: source and destination by address or FQDN, `--port`, `--url`, zones given or derived; every stage says how certain it is, and `--why` shows them |
-| `simulate nat <src> <dst> --device <name>` | The NAT rule a packet hits on one firewall, the packet before and after translation, and what security policy then matches (pre-NAT addresses and port, post-NAT zones); `--why` lists the rules above the match and what excluded each |
-| `simulate routing <src> <dst>` | The firewalls a packet crosses, one box per firewall with its zones, interfaces and route; `<dst> --device <name>` starts on one device, `--rib` adds the routing table's other routes, and the answer names ECMP, PBF, NAT and a path leaving the inventory |
+| First steps | [Getting started](docs/getting-started.md) |
+| The model behind the answers | [Concepts](docs/concepts.md) |
+| Search and lookup | [Search](docs/guides/search.md), [Lookup](docs/guides/lookup.md) |
+| Simulations | [Policy](docs/guides/simulate-policy.md), [NAT](docs/guides/simulate-nat.md), [Routing](docs/guides/simulate-routing.md) |
+| Snapshots and change history | [Snapshots](docs/guides/snapshots.md) |
+| JSON output and exit codes | [Scripting](docs/guides/scripting.md) |
+| Inventory, settings and paths | [Configuration](docs/configuration.md) |
+| Every command and flag | [CLI reference](docs/cli-reference.md) |
+| How it is built | [Architecture](docs/architecture.md) |
+| What it does not do yet | [Limits](docs/limits.md) |
+| Build, test and extend | [Development](docs/development.md) |
 
-Every question takes the same selectors: `--device`, `--label k=v`, `--vsys`,
-`--at <time>` for older snapshots, `--fresh` to fetch first, or `--file <config.xml>`
-to read one file with no inventory. `search` takes `--exact`, `--within` or
-`--contains`, and `--kind`, `--field`, `--show` and `--direct` to narrow it. `lookup` takes `--kind` when one name has several kinds.
-`simulate routing` takes only `--device`, `--router` and `--at`: a path may cross any
-firewall of the inventory.
+The pages also build as a site: `mkdocs serve` (see
+[Development](docs/development.md#build-these-docs)).
 
-`--output json` prints one versioned envelope. Exit codes: 0 complete, 1 error,
-2 usage, 3 answered with holes or unresolved entries.
+## Status
 
-Settings come from, in rising precedence, the defaults, the inventory's
-`defaults:`, `PROTEUS_*` variables and flags: the inventory (`PROTEUS_CONFIG`,
-`--config`), the store (`store:`, `PROTEUS_STORE`, `--store`), the snapshot age limit
-(`max_snapshot_age:`, `PROTEUS_MAX_SNAPSHOT_AGE`, `--max-age`) and the output
-(`output:`, `PROTEUS_OUTPUT`, `--output`). `PROTEUS_USERS` points at a user snapshot.
+proteus works against PAN-OS firewalls and ships a schema digest for PAN-OS 11.2.
+A configuration from another version loads with the nearest digest and a warning.
+`simulate policy` does not evaluate application or user yet. See
+[Limits](docs/limits.md).
 
-Every run writes a log you can read back when an answer needs explaining:
-`log_level:` (`PROTEUS_LOG_LEVEL`, `--log-level`: error, warn, info, debug),
-`log_dir:` (`PROTEUS_LOG_DIR`, `--log-dir`, default `~/.local/state/proteus/log`)
-and `log_keep:`. `--verbose` echoes it to the terminal. Passwords and API keys never
-reach it.
+## Contributing
 
-## Known limits
+Read [AGENTS.md](AGENTS.md) for the rules every change follows, and
+[Development](docs/development.md) for the workflow. Run `make ci` before you
+push.
 
-proteus reports each of these rather than hiding it.
-
-- **Only PAN-OS 11.2 digests ship.** Another version loads with the nearest digest,
-  and every answer carries a warning naming both versions.
-- **Panorama configurations are refused.** Read each firewall's own export instead.
-- **NAT translated addresses are not modelled in search.** Search reads the rulebase.
-- **Predefined content is unknown.** Regions, predefined applications and PAN-DB
-  categories live in the content database a firewall downloads.
-- **External dynamic list contents are fetched at runtime**, so the file does not
-  hold them.
-- **`simulate` does not evaluate application or service.** It evaluates zones when
-  you give them.
-- **Zones are an input, not an output, for simulation.** The device's own
-  `test security-policy-match` takes zones as arguments. Measured against it on a
-  lab firewall, with probes built from each rule's own zones and ports:
-  `simulate` agreed on 3 of 7 without zones, and on 7 of 7 with them. proteus
-  can also infer a zone from an address, and it reports every limit of that
-  inference.
-- **`simulate routing` follows the forwarding table, IPv4 only.** It applies NAT on
-  every firewall, and names, but does not follow, policy-based forwarding; with ECMP
-  it follows the lowest next hop and names the others.
-- **`simulate nat` knows what a configuration fixes, not what the device picks at
-  runtime.** A DIPP port, a dynamic-IP pool address and a dynamic destination's
-  distribution are shown as candidates; NAT64 and NPTv6 are not simulated; a
-  rule's active/active binding is ignored with a note. A path ends where it leaves the inventory,
-  including into a tunnel. Firewalls in virtual wire or Layer 2 are not seen on a
-  path; the answer names them.
-- **URL matching rules are documentation-derived.** A firewall's validator
-  verifies the syntax rules. It cannot verify the matching rules, because
-  `test url` reports PAN-DB categories only and never names a custom category.
-- **A large configuration costs memory.** The parsed element tree peaks near ten
-  times the file size.
-
-## Project structure
-
-```
-proteus/
-├── cmd/
-│   └── proteus/              # main only: calls internal/cli
-├── internal/
-│   ├── cli/                  # the commands: fetch, snapshot, search, lookup, simulate
-│   ├── config/               # Load, version detection, element tree, scopes
-│   │   └── schemadigest/     # committed firewall digests, roughly 0.2 MB each
-│   ├── resolve/              # PAN-OS semantics: targets per vsys, rule order,
-│   │                         #   objects, groups, tag filters, URL patterns, zones
-│   ├── index/                # lookup structures, value-space resolvers, reports
-│   ├── inventory/            # devices, credentials and TLS choice, from YAML
-│   ├── fetch/                # read-only XML API client and the document list
-│   ├── store/                # timestamped on-disk snapshots, latest, retention
-│   ├── estate/               # selectors and a time to targets; the simulation registry
-│   ├── simulate/             # the staged simulation framework and its fidelity
-│   │   ├── securitypolicy/   # the first simulation: which rule a flow would hit
-│   │   ├── routing/          # which firewalls a packet crosses, hop by hop
-│   │   ├── nat/              # the NAT engine and simulation: rule, translation
-│   │   ├── topology/         # interfaces and forwarding tables, shared by simulations
-│   │   └── rulebase/         # rulebase address matching and the PBF check
-│   ├── runlog/               # the run log: levels, redaction, rotation
-│   ├── search/               # every place a value or name appears, in one scope
-│   ├── card/                 # the whole rule or object behind a name, for lookup
-│   ├── drift/                # what changed between two configurations of a scope
-│   ├── schema/               # parse the PAN-OS schema grammar
-│   ├── digest/               # the committed digest format
-│   ├── archtest/             # the import-direction check (R12)
-│   ├── fakepanos/            # a fake PAN-OS XML API for tests
-│   └── tools/schemadigest/   # dev tool: a vendor schema into a digest
-├── testdata/                 # configuration and operational fixtures
-├── scripts/                  # device probes, coverage gate, context refresh
-├── ARCHITECTURE.md           # the reasoning behind the design
-├── AGENTS.md                 # the mandatory rules
-└── Makefile                  # build and checks
-```
-
-## Development
-
-```bash
-make tools     # install pinned dev tools
-make hooks     # enable the pre-commit gate
-make gate      # tidy + lint + tests (what the hook runs)
-make ci        # everything CI runs
-make help      # list every target
-```
-
-### Getting the schema
-
-The schema is not published and the device API does not serve it. Copy it off an
-appliance, then build a digest for its version:
-
-```bash
-make schema-pull HOST=labadmin@your-panos-vm   # into schemas/
-make schema-digest PANOS_VERSION=11.2.0        # into internal/config/schemadigest/
-```
-
-`schema-pull` fetches `schema.xml` and `opschema.xml` from
-`/opt/pancfg/mgmt/factory/`. These are vendor files and are not committed. Read
-ARCHITECTURE.md first.
-
-## Rules
-
-[AGENTS.md](AGENTS.md) holds the rules that govern this repository. They are
-mandatory, and each one names the check that enforces it.
-
-## Licence
+## License
 
 MIT. See [LICENSE](LICENSE).

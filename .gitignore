@@ -17,3 +17,6 @@ config.yaml
 *.swp
 .swp
 /fw-live.xml
+
+# MkDocs build output.
+/site/
