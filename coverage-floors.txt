@@ -26,4 +26,4 @@ github.com/okaiser/panos-analyst/search  97.3
 github.com/okaiser/panos-analyst/drift  91.1
 github.com/okaiser/panos-analyst/runlog  93.0
 github.com/okaiser/panos-analyst/simulate  100.0
-github.com/okaiser/panos-analyst/simulate/securitypolicy  97.4
+github.com/okaiser/panos-analyst/simulate/securitypolicy  97.5

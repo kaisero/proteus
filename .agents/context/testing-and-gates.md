@@ -39,7 +39,7 @@ tests, not a lower number. This was got wrong once and the commit had to be amen
 Current floors: config 98.1, resolve 95.8, index 95.1, internal/schema 85.9,
 internal/codegen 93.0, internal/digest 71.8, cmd/panos-schemagen 57.6,
 inventory 96.2, fetch 100.0, store 88.1, estate 100.0, search 97.3, drift 91.1,
-runlog 93.0, simulate 100.0, simulate/securitypolicy 97.4, cmd/panos-analyst 92.0.
+runlog 93.0, simulate 100.0, simulate/securitypolicy 97.5, cmd/panos-analyst 92.0.
 
 The fetcher's tests run against `internal/fakepanos`, a fake XML API over TLS on
 127.0.0.1. No test touches a device.
