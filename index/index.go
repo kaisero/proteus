@@ -40,6 +40,7 @@ func (i *Index) Interner() *Interner { return i.in }
 type cacheKey struct {
 	path  string
 	scope string
+	rb    resolve.Rulebase
 }
 
 type cacheEntry struct {
@@ -59,7 +60,16 @@ var (
 // Rule bitmaps key on the vsys: each vsys has its own rulebase, so the cache is
 // bounded by the number of vsys.
 func For(cfg *config.Config, sc config.Scope) (*Index, error) {
-	key := cacheKey{path: cfg.Path(), scope: sc.String()}
+	return ForRulebase(cfg, sc, resolve.Security)
+}
+
+// ForRulebase returns the index of a scope's NAT or PBF rules, answering which of
+// them a value can reach with the same matching the security index uses: groups,
+// negation left to the caller, FQDNs, lists and version gaps alike. Only the
+// address fields are meaningful for these rulebases; zones and interfaces are the
+// caller's to compare.
+func ForRulebase(cfg *config.Config, sc config.Scope, rb resolve.Rulebase) (*Index, error) {
+	key := cacheKey{path: cfg.Path(), scope: sc.String(), rb: rb}
 
 	cacheMu.Lock()
 	e, ok := cache[key]
@@ -69,7 +79,7 @@ func For(cfg *config.Config, sc config.Scope) (*Index, error) {
 	}
 	cacheMu.Unlock()
 
-	e.once.Do(func() { e.idx, e.err = build(cfg, sc) })
+	e.once.Do(func() { e.idx, e.err = build(cfg, sc, rb) })
 	if e.err != nil {
 		// A failed build is not cached, so a later call can retry.
 		cacheMu.Lock()
@@ -80,7 +90,7 @@ func For(cfg *config.Config, sc config.Scope) (*Index, error) {
 	return e.idx, nil
 }
 
-func build(cfg *config.Config, sc config.Scope) (*Index, error) {
+func build(cfg *config.Config, sc config.Scope, rb resolve.Rulebase) (*Index, error) {
 	in := NewInterner()
 
 	addrs, err := resolve.ObjectsInScope(cfg, sc, "address")
@@ -109,7 +119,7 @@ func build(cfg *config.Config, sc config.Scope) (*Index, error) {
 		return nil, err
 	}
 
-	rules, err := rulesForScope(cfg, sc)
+	rules, err := rulesForScope(cfg, sc, rb)
 	if err != nil {
 		return nil, err
 	}
@@ -200,7 +210,7 @@ func build(cfg *config.Config, sc config.Scope) (*Index, error) {
 		closure:   newClosureIndex(in, groups, addrs, svcGroups, appGroups),
 		refs:      refs,
 		rules:     ri,
-		resolvers: wireResolvers(cfg.FieldKinds("rulebase/security/rules"), byKind),
+		resolvers: wireResolvers(cfg.FieldKinds("rulebase/"+rb.String()+"/rules"), byKind),
 		profiles:  newProfileIndex(rules, profs, pgroups),
 		addrRes:   addrRes,
 		gap:       cfg.VersionGap(),
@@ -211,7 +221,7 @@ func build(cfg *config.Config, sc config.Scope) (*Index, error) {
 // wrapped in whatever shared pre and post rules were pushed to it. Shared has
 // none of its own, because shared rules are a layer of a vsys's policy rather than
 // a policy in their own right.
-func rulesForScope(cfg *config.Config, sc config.Scope) ([]resolve.Rule, error) {
+func rulesForScope(cfg *config.Config, sc config.Scope, rb resolve.Rulebase) ([]resolve.Rule, error) {
 	if sc.Sort != config.ScopeVsys {
 		return nil, nil
 	}
@@ -221,7 +231,7 @@ func rulesForScope(cfg *config.Config, sc config.Scope) ([]resolve.Rule, error) 
 	}
 	for _, tg := range tgs {
 		if tg.Scope() == sc {
-			return tg.Rules(resolve.Security)
+			return tg.Rules(rb)
 		}
 	}
 	return nil, fmt.Errorf("index: no vsys named %q", sc.Name)

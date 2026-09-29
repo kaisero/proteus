@@ -11,11 +11,15 @@ type Rulebase int
 const (
 	Security Rulebase = iota
 	NAT
+	PBF
 )
 
 func (r Rulebase) String() string {
-	if r == NAT {
+	switch r {
+	case NAT:
 		return "nat"
+	case PBF:
+		return "pbf"
 	}
 	return "security"
 }
@@ -78,9 +82,26 @@ type Rule struct {
 // firewall schema declares no pre-rulebase at all, and /config/panorama as an
 // empty node. See docs/specs/2026-09-27-panos-analyst-scope.md §5.3.
 func (t *Target) Rules(rb Rulebase) ([]Rule, error) {
+	es := t.ruleEntries(rb)
+	out := make([]Rule, len(es))
+	for i, e := range es {
+		out[i] = e.Rule
+	}
+	return out, nil
+}
+
+// ruleEntry is a rule and the element it was read from, for the readers of the
+// rulebases whose fields go beyond member lists.
+type ruleEntry struct {
+	Rule
+	e *config.Element
+}
+
+// ruleEntries reads a rulebase in evaluation order, keeping each rule's element.
+func (t *Target) ruleEntries(rb Rulebase) []ruleEntry {
 	shared := config.Scope{Sort: config.ScopeShared}
-	var out []Rule
-	add := func(rs []Rule, layer Layer) {
+	var out []ruleEntry
+	add := func(rs []ruleEntry, layer Layer) {
 		for _, r := range rs {
 			r.Layer = layer
 			out = append(out, r)
@@ -92,22 +113,22 @@ func (t *Target) Rules(rb Rulebase) ([]Rule, error) {
 	for i := range out {
 		out[i].Position = i + 1
 	}
-	return out, nil
+	return out
 }
 
 // readRules reads one scope's rulebase.
-func readRules(root *config.Element, sc config.Scope, rulebase string, rb Rulebase) []Rule {
+func readRules(root *config.Element, sc config.Scope, rulebase string, rb Rulebase) []ruleEntry {
 	path, ok := scopeContainer(sc)
 	if !ok {
 		return nil
 	}
-	var out []Rule
+	var out []ruleEntry
 	for _, container := range root.Find(path...) {
 		if sc.Name != "" && container.Attr("name") != sc.Name {
 			continue
 		}
 		for _, e := range container.Find(rulebase, rb.String(), "rules", "entry") {
-			out = append(out, Rule{
+			out = append(out, ruleEntry{e: e, Rule: Rule{
 				Name:     e.Attr("name"),
 				Action:   e.Child("action").TextOr(""),
 				Disabled: e.Child("disabled").TextOr("") == "yes",
@@ -126,7 +147,7 @@ func readRules(root *config.Element, sc config.Scope, rulebase string, rb Ruleba
 				LogEnd:      e.Child("log-end").TextOr(""),
 				LogSetting:  e.Child("log-setting").TextOr(""),
 				Schedule:    e.Child("schedule").TextOr(""),
-			})
+			}})
 		}
 	}
 	return out

@@ -8,6 +8,7 @@ import (
 	"github.com/RoaringBitmap/roaring/v2"
 
 	"github.com/okaiser/panos-analyst/config"
+	"github.com/okaiser/panos-analyst/resolve"
 )
 
 func labIndex(t *testing.T) *Index {
@@ -206,5 +207,34 @@ func TestIndexRejectsAnUnknownVsys(t *testing.T) {
 	cfg, _, _ := config.Load("../testdata/config/firewall-lab.xml")
 	if _, err := For(cfg, config.Scope{Sort: config.ScopeVsys, Name: "vsys9"}); err == nil {
 		t.Error("an unknown vsys must be an error")
+	}
+}
+
+// A NAT or PBF index answers with the same matching as the security index: a
+// member of a nested group reaches the rule naming the outer group.
+func TestAnIndexPerRulebase(t *testing.T) {
+	cfg, _, err := config.Load("../testdata/config/firewall-routing.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sc := config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}
+	nat, err := ForRulebase(cfg, sc, resolve.NAT)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ := nat.Candidates(Source, "10.23.1.1") // net-salzburg, in west-branches, in branch-networks
+	if !b.Contains(0) || b.Contains(2) {
+		t.Errorf("NAT source candidates = %v", b.ToArray())
+	}
+	pbf, err := ForRulebase(cfg, sc, resolve.PBF)
+	if err != nil || pbf == nat {
+		t.Fatalf("pbf index: %v", err)
+	}
+	if b, _ := pbf.Candidates(Destination, "10.1.10.100"); !b.Contains(1) {
+		t.Errorf("PBF destination candidates = %v", b.ToArray())
+	}
+	sec, _ := For(cfg, sc)
+	if len(sec.Rules()) != 2 || len(nat.Rules()) != 4 {
+		t.Errorf("rules: security %d, nat %d", len(sec.Rules()), len(nat.Rules()))
 	}
 }
