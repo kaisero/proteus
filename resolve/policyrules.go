@@ -66,6 +66,9 @@ type NATRule struct {
 	// SourceTranslation is dynamic-ip-and-port, dynamic-ip, static-ip, or empty.
 	SourceTranslation string
 	BiDirectional     bool // a static-ip source translation that also translates back
+	// StaticAddress is a static-ip translation's translated address: an address
+	// or an address object's name.
+	StaticAddress string
 	// DestinationTranslation is destination-translation, dynamic-destination-translation, or empty.
 	DestinationTranslation string
 }
@@ -86,6 +89,7 @@ func (t *Target) NATRules() []NATRule {
 			if c := st.Child(kind); c != nil {
 				r.SourceTranslation = kind
 				r.BiDirectional = c.Child("bi-directional").TextOr("") == "yes"
+				r.StaticAddress = c.Child("translated-address").TextOr("")
 			}
 		}
 		for _, kind := range []string{"destination-translation", "dynamic-destination-translation"} {

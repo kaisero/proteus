@@ -123,6 +123,12 @@
                   <action><forward-to-vsys>vsys2</forward-to-vsys></action>
                   <disabled>yes</disabled>
                 </entry>
+                <entry name="sdwan-to-vsys2">
+                  <from><zone><member>sdwan</member></zone></from>
+                  <source><member>any</member></source>
+                  <destination><member>any</member></destination>
+                  <action><forward-to-vsys>vsys2</forward-to-vsys></action>
+                </entry>
               </rules>
             </pbf>
             <nat>

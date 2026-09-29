@@ -21,7 +21,7 @@ func routingTarget(t *testing.T) *Target {
 
 func TestPBFRules(t *testing.T) {
 	rs := routingTarget(t).PBFRules()
-	if len(rs) != 4 {
+	if len(rs) != 5 {
 		t.Fatalf("got %d PBF rules", len(rs))
 	}
 	fw := rs[0]
@@ -40,7 +40,7 @@ func TestPBFRules(t *testing.T) {
 	if rs[3].ActionKind != PBFForwardToVsys || rs[3].ForwardVsys != "vsys2" || !rs[3].Disabled {
 		t.Errorf("to vsys = %+v", rs[3])
 	}
-	if rules, _ := routingTarget(t).Rules(PBF); len(rules) != 4 || PBF.String() != "pbf" {
+	if rules, _ := routingTarget(t).Rules(PBF); len(rules) != 5 || PBF.String() != "pbf" {
 		t.Error("Rules(PBF)")
 	}
 }
@@ -58,7 +58,7 @@ func TestNATRules(t *testing.T) {
 	if dnat.DestinationTranslation != "destination-translation" || dnat.ToInterface != "ethernet1/2" || dnat.Service != "svc-rdp" {
 		t.Errorf("dnat = %+v", dnat)
 	}
-	if static.SourceTranslation != "static-ip" || !static.BiDirectional {
+	if static.SourceTranslation != "static-ip" || !static.BiDirectional || static.StaticAddress != "198.51.100.20" {
 		t.Errorf("static = %+v", static)
 	}
 	if n64.NATType != "nat64" {

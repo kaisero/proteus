@@ -29,6 +29,9 @@ type state struct {
 	router string // the current hop's router
 	seen   map[string]bool
 	done   bool
+	// translated names the device where NAT may have changed the addresses;
+	// every later hop is Inferred.
+	translated string
 }
 
 func newState(env *simulate.Env, in simulate.Input) *state {
