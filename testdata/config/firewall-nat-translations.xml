@@ -1,0 +1,95 @@
+<config version="11.2.0" urldb="paloaltonetworks" detail-version="11.2.5">
+  <!-- NAT translation cases the lab does not carry. Synthetic. Each rule is
+       selected by its destination 203.0.113.x. -->
+  <devices>
+    <entry name="localhost.localdomain">
+      <vsys>
+        <entry name="vsys1">
+          <address>
+            <entry name="p1"><ip-netmask>198.51.100.1</ip-netmask></entry>
+            <entry name="p2"><ip-netmask>198.51.100.2</ip-netmask></entry>
+            <entry name="fqdn-obj"><fqdn>host.example</fqdn></entry>
+            <entry name="s1"><ip-netmask>10.2.2.2</ip-netmask></entry>
+            <entry name="s2"><ip-netmask>10.2.2.1</ip-netmask></entry>
+          </address>
+          <address-group>
+            <entry name="pool-grp"><static><member>p1</member><member>p2</member></static></entry>
+            <entry name="srv-grp"><static><member>s1</member><member>s2</member></static></entry>
+            <entry name="dyn-grp"><dynamic><filter>'pool'</filter></dynamic></entry>
+          </address-group>
+          <rulebase>
+            <nat>
+              <rules>
+                <entry name="dip-nofb">
+                  <from><member>any</member></from><to><member>untrust</member></to>
+                  <source><member>any</member></source><destination><member>203.0.113.10</member></destination>
+                  <source-translation><dynamic-ip><translated-address><member>pool-grp</member></translated-address></dynamic-ip></source-translation>
+                </entry>
+                <entry name="dyn-grp-pool">
+                  <from><member>any</member></from><to><member>untrust</member></to>
+                  <source><member>any</member></source><destination><member>203.0.113.11</member></destination>
+                  <source-translation><dynamic-ip-and-port><translated-address><member>dyn-grp</member></translated-address></dynamic-ip-and-port></source-translation>
+                </entry>
+                <entry name="unknown-obj">
+                  <from><member>any</member></from><to><member>untrust</member></to>
+                  <source><member>any</member></source><destination><member>203.0.113.12</member></destination>
+                  <source-translation><dynamic-ip-and-port><translated-address><member>nope</member></translated-address></dynamic-ip-and-port></source-translation>
+                </entry>
+                <entry name="v6">
+                  <from><member>any</member></from><to><member>untrust</member></to>
+                  <source><member>any</member></source><destination><member>203.0.113.13</member></destination>
+                  <source-translation><dynamic-ip><interface-address><interface>ethernet1/9</interface></interface-address></dynamic-ip></source-translation>
+                </entry>
+                <entry name="magic">
+                  <from><member>any</member></from><to><member>untrust</member></to>
+                  <source><member>any</member></source><destination><member>203.0.113.14</member></destination>
+                  <source-translation><magic-ip/></source-translation>
+                </entry>
+                <entry name="static-any">
+                  <from><member>any</member></from><to><member>untrust</member></to>
+                  <source><member>any</member></source><destination><member>203.0.113.15</member></destination>
+                  <source-translation><static-ip><translated-address>198.51.100.0/28</translated-address></static-ip></source-translation>
+                </entry>
+                <entry name="static-size">
+                  <from><member>any</member></from><to><member>untrust</member></to>
+                  <source><member>10.0.0.0/29</member></source><destination><member>203.0.113.16</member></destination>
+                  <source-translation><static-ip><translated-address>198.51.100.0/28</translated-address></static-ip></source-translation>
+                </entry>
+                <entry name="static-multi">
+                  <from><member>any</member></from><to><member>untrust</member></to>
+                  <source><member>10.0.0.1</member></source><destination><member>203.0.113.17</member></destination>
+                  <source-translation><static-ip><translated-address>pool-grp</translated-address></static-ip></source-translation>
+                </entry>
+                <entry name="static-fqdn">
+                  <from><member>any</member></from><to><member>untrust</member></to>
+                  <source><member>10.0.0.1</member></source><destination><member>203.0.113.18</member></destination>
+                  <source-translation><static-ip><translated-address>fqdn-obj</translated-address></static-ip></source-translation>
+                </entry>
+                <entry name="static-nosrc">
+                  <from><member>any</member></from><to><member>untrust</member></to>
+                  <source><member>10.0.0.0/28</member></source><destination><member>203.0.113.22</member></destination>
+                  <source-translation><static-ip><translated-address>198.51.100.16/28</translated-address></static-ip></source-translation>
+                </entry>
+                <entry name="dnat-rewrite">
+                  <from><member>any</member></from><to><member>untrust</member></to>
+                  <source><member>any</member></source><destination><member>203.0.113.19</member></destination>
+                  <destination-translation><translated-address>10.1.1.1</translated-address><dns-rewrite><direction>reverse</direction></dns-rewrite></destination-translation>
+                </entry>
+                <entry name="dnat-size">
+                  <from><member>any</member></from><to><member>untrust</member></to>
+                  <source><member>any</member></source><destination><member>203.0.113.20</member></destination>
+                  <destination-translation><translated-address>10.1.1.0/28</translated-address></destination-translation>
+                </entry>
+                <entry name="dyn-obj">
+                  <from><member>any</member></from><to><member>untrust</member></to>
+                  <source><member>any</member></source><destination><member>203.0.113.21</member></destination>
+                  <dynamic-destination-translation><translated-address>srv-grp</translated-address></dynamic-destination-translation>
+                </entry>
+              </rules>
+            </nat>
+          </rulebase>
+        </entry>
+      </vsys>
+    </entry>
+  </devices>
+</config>

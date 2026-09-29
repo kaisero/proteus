@@ -10,6 +10,7 @@ import (
 
 	"github.com/okaiser/panos-analyst/config"
 	"github.com/okaiser/panos-analyst/simulate"
+	"github.com/okaiser/panos-analyst/simulate/policy"
 )
 
 func natConfig(t *testing.T, file string) *config.Config {
@@ -217,4 +218,14 @@ func TestAVersionGapIsNoted(t *testing.T) {
 	if first(nil) != "" || sourceAddr(nil).IsValid() {
 		t.Error("helpers")
 	}
+}
+
+func policyOf(t *testing.T, file string) policy.Vsys {
+	t.Helper()
+	cfg := natConfig(t, file)
+	v, ok := policy.Load(func(string, string) (simulate.Target, error) { return simulate.Target{Config: cfg}, nil }, "fw", "vsys1")
+	if !ok {
+		t.Fatal("vsys1")
+	}
+	return v
 }
