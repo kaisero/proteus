@@ -184,6 +184,7 @@ func (a *app) root() *cobra.Command {
 	sim.AddCommand(a.simulateCmds()...)
 
 	cmd.AddCommand(a.fetchCmd(), inv, snap, a.searchCmd(), a.lookupCmd(), sim)
+	a.registerCompletions(cmd)
 	return cmd
 }
 

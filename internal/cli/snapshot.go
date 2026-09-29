@@ -19,7 +19,9 @@ func (a *app) snapshotListCmd() *cobra.Command {
 		Use:   "list <device>",
 		Short: "List a device's stored snapshots, newest first; * marks latest",
 		Args:  args(cobra.ExactArgs(1)),
-		RunE:  func(_ *cobra.Command, argv []string) error { return a.runSnapshotList(argv[0]) },
+
+		ValidArgsFunction: a.completeOneDevice,
+		RunE:              func(_ *cobra.Command, argv []string) error { return a.runSnapshotList(argv[0]) },
 	}
 }
 

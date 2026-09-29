@@ -29,6 +29,7 @@ func (a *app) fetchCmd() *cobra.Command {
 		Short: "Fetch devices into the store",
 		Long: "Fetch logs in to each device, reads its configuration and operational state, and\n" +
 			"stores them as a snapshot. Name devices, select them with --label, or pass --all.",
+		ValidArgsFunction: a.completeDevices,
 		RunE: func(c *cobra.Command, names []string) error {
 			kinds := 0
 			for _, given := range []bool{len(names) > 0, len(labels) > 0, all} {
