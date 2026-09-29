@@ -75,6 +75,6 @@ for p in "${probes[@]}"; do
   printf '%-15s %-15s %-9s %-23s %-23s %s\n' "$src" "$dst" "$fz" "$dev" "$lib" "$agree"
 done
 echo
-echo "$agreed of $total agree. The library is given the same zones as the device and"
-echo "evaluates them; a remaining disagreement means the device declined on application"
-echo "or service, which the library does not evaluate."
+echo "$agreed of $total agree. The library is given the same zones and ports as the"
+echo "device and evaluates them; a remaining disagreement means the device declined on"
+echo "application, which the library does not evaluate."

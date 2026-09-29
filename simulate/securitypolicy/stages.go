@@ -3,6 +3,7 @@ package securitypolicy
 import (
 	"context"
 	"fmt"
+	"net/netip"
 	"slices"
 	"sort"
 	"strings"
@@ -127,8 +128,8 @@ func deriveZones(_ context.Context, s *state) (simulate.Outcome, error) {
 	if s.target.Providers.Zones != nil {
 		z.Source = "forwarding table"
 	}
-	fromB, from, fromVia := s.zonesOf(index.FromZone, f.Source)
-	toB, to, toVia := s.zonesOf(index.ToZone, f.Destination)
+	fromB, from, fromVia := s.zonesOf(index.FromZone, f.Source, true)
+	toB, to, toVia := s.zonesOf(index.ToZone, f.Destination, false)
 	z.From, z.To = from, to
 	var details []string
 	out := simulate.Outcome{Fidelity: simulate.Inferred}
@@ -147,9 +148,12 @@ func deriveZones(_ context.Context, s *state) (simulate.Outcome, error) {
 		out.Fidelity = simulate.NotEvaluated("zones")
 		z.Source = "not evaluated"
 		details = append(details, "no zone found for either side")
-	case fromB == nil || toB == nil:
-		out.Fidelity = simulate.Weakest(out.Fidelity, simulate.NotEvaluated("zones"))
-		details = append(details, "a side with no zone was not narrowed")
+	case fromB == nil:
+		out.Fidelity = simulate.Weakest(out.Fidelity, simulate.NotEvaluated("source zone"))
+		details = append(details, "no source zone: the source is placed by no route but a default")
+	case toB == nil:
+		out.Fidelity = simulate.Weakest(out.Fidelity, simulate.NotEvaluated("destination zone"))
+		details = append(details, "no destination zone found")
 	}
 	if len(from) > 1 || len(to) > 1 {
 		details = append(details, "several candidate zones, all used")
@@ -164,33 +168,53 @@ func deriveZones(_ context.Context, s *state) (simulate.Outcome, error) {
 // zonesOf returns the rules whose zone field could match the endpoint's addresses,
 // the zones, and where each came from. A nil bitmap means no zone was found, and
 // the side must not narrow.
-func (s *state) zonesOf(f index.Field, ep simulate.Endpoint) (*roaring.Bitmap, []string, []string) {
-	b := roaring.New()
+//
+// For the source, a placement through a default route is ignored. A default route
+// is where a reply would leave, and says nothing about the interface a packet
+// arrives on; narrowing on it picked the wrong source zone for five of seven flows
+// on a lab firewall, as confidently as a right one. Not narrowing over-matches,
+// which is the safe direction (spec S12).
+func (s *state) zonesOf(f index.Field, ep simulate.Endpoint, skipDefault bool) (*roaring.Bitmap, []string, []string) {
 	seen := map[string]bool{}
 	var zones, via []string
 	for _, a := range ep.Addrs {
-		ab, rep := s.view.Candidates(f, a.String())
-		found := false
+		_, rep := s.view.Candidates(f, a.String())
 		for _, h := range rep.Hits {
 			if h.Kind != "zone" {
 				continue
 			}
-			found = true
+			if skipDefault && viaDefault(h.Via) {
+				via = append(via, fmt.Sprintf("%s: %s via %s ignored: a default route does not say where a packet arrives", a, h.Name, h.Via))
+				continue
+			}
 			via = append(via, fmt.Sprintf("%s: %s via %s", a, h.Name, h.Via))
 			if !seen[h.Name] {
 				seen[h.Name] = true
 				zones = append(zones, h.Name)
 			}
 		}
-		if found {
-			b.Or(ab)
-		}
 	}
 	if len(zones) == 0 {
 		return nil, nil, via
 	}
 	sort.Strings(zones)
+	b := roaring.New()
+	for _, z := range zones {
+		zb, _ := s.view.Candidates(f, z)
+		b.Or(zb)
+	}
 	return b, zones, via
+}
+
+// viaDefault reports whether a zone placement came through a default route: the
+// placement's last field is the route or prefix that decided it.
+func viaDefault(via string) bool {
+	fs := strings.Fields(via)
+	if len(fs) == 0 {
+		return false
+	}
+	p, err := netip.ParsePrefix(fs[len(fs)-1])
+	return err == nil && p.Bits() == 0
 }
 
 // matchService narrows by port. Rules naming application-default, or a service the

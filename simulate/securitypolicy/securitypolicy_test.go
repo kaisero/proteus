@@ -273,3 +273,22 @@ func TestAbsentFields(t *testing.T) {
 		t.Errorf("a rule without a service stays: %s; %s", ruleNames(v), stage(r, "match-service").Fidelity)
 	}
 }
+
+// A source placed only by a default route leaves the source zone open: a default
+// route does not say where a packet arrives.
+func TestADefaultRouteDoesNotPlaceTheSource(t *testing.T) {
+	r, v := run(t, env(t, "firewall-fw01-zones.xml", true), simulate.Flow{Source: ep("8.8.8.8"), Destination: ep("198.18.10.5")})
+	if len(v.Zones.From) != 0 || strings.Join(v.Zones.To, ",") != "server" {
+		t.Errorf("zones = %+v", v.Zones)
+	}
+	f := stage(r, "derive-zones").Fidelity
+	if !strings.Contains(f.String(), "not evaluated: source zone") {
+		t.Errorf("derive-zones = %s", f)
+	}
+	if first(v) != "client-to-server" {
+		t.Errorf("with the source zone open, client-to-server stays a candidate: %s", ruleNames(v))
+	}
+	if !viaDefault("ethernet1/1 via default 0.0.0.0/0") || viaDefault("ethernet1/3 via default 198.18.11.0/24") || viaDefault("") {
+		t.Error("viaDefault")
+	}
+}

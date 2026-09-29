@@ -125,6 +125,12 @@ func ParseLevel(s string) (Level, error)
 - **A derived zone is inferred, even from the forwarding table.** The source zone is
   the arrival interface's zone, which a table only predicts (PAN-OS "Packet Flow
   Sequence").
+- **A default route does not place a source.** A source placed only by a default
+  route leaves the source zone open (not evaluated). Measured on fw01 on 2026-09-29:
+  derived zones agreed with the device for 3 of 7 probe flows (given zones: 7 of 7).
+  The misses came from overlay routing the forwarding table does not show: traffic
+  arriving on a tunnel zone whose source a specific route places elsewhere, and a
+  destination the device sends by policy-based forwarding.
 - **Keep what cannot be judged.** Dropping a rule the configuration cannot evaluate
   silently under-matches; keeping it over-matches and says so.
 - **The core never logs.** `config`, `resolve`, `index` stay free of I/O (R12);
