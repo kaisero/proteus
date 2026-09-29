@@ -79,12 +79,17 @@ possibly a zone of its own.
 <!-- GENERATED:api ./resolve -->
 ```go
 type FIBRoute struct{ ... }
+type HAState struct{ ... }
 type InterfaceAddress struct{ ... }
 type InterfaceState struct{ ... }
 type Layer int
 type Members struct{ ... }
+type NATRule struct{ ... }
 type Object struct{ ... }
+type PBFRule struct{ ... }
 type ProfileGroup struct{ ... }
+type RIBNextHop struct{ ... }
+type RIBRoute struct{ ... }
 type Rule struct{ ... }
 type Rulebase int
 type StaticRoute struct{ ... }
@@ -102,7 +107,9 @@ func (p URLPattern) Match(url string) bool
 func (p URLPattern) Raw() string
 func (r Rulebase) String() string
 func (t *Target) Chain() []config.Scope
+func (t *Target) NATRules() []NATRule
 func (t *Target) Objects(kind string) ([]Object, error)
+func (t *Target) PBFRules() []PBFRule
 func (t *Target) ResolveGroup(name string) (Members, error)
 func (t *Target) Rules(rb Rulebase) ([]Rule, error)
 func (t *Target) Scope() config.Scope
@@ -118,7 +125,9 @@ func ParseTagFilter(raw string) (*TagFilter, error)
 func ParseURLPattern(member string) (URLPattern, error)
 func ProfileGroupsInScope(cfg *config.Config, sc config.Scope) ([]ProfileGroup, error)
 func ReadFIBRoutes(b []byte) ([]FIBRoute, error)
+func ReadHAState(b []byte) (HAState, error)
 func ReadInterfaceStates(b []byte) ([]InterfaceState, error)
+func ReadRIBRoutes(b []byte) ([]RIBRoute, error)
 func StaticRoutes(cfg *config.Config) ([]StaticRoute, error)
 func TargetFor(cfg *config.Config, device, vsys string) (*Target, error)
 func Targets(cfg *config.Config) ([]*Target, error)

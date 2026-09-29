@@ -476,6 +476,80 @@ $ cut -d' ' -f2- ~/.local/state/panos-analyst/log/simulate_secpolicy-*.log | gre
 Each line is `<time> [<LEVEL>] [<TAG>] <message>` (the `cut` drops the time); `grep '\[STEP\]'` finds the
 stages, `grep '\[API\]'` the device calls.
 
+## 11b. Trace a path across firewalls
+
+`simulate routing` follows a packet through the fetched firewalls: the firewall the
+source is connected to, then each firewall owning the next hop, until the packet is
+delivered or leaves the inventory. Each box leads with the zone pair, which is
+where a security rule goes. The lab below is fw01 and fw02, joined by
+198.19.0.0/24, from their stored interface state and forwarding tables:
+
+```
+$ panos-analyst simulate routing 198.18.10.5 8.8.8.8
+simulate routing 198.18.10.5 -> 8.8.8.8            fidelity: undermatch
+
+  198.18.10.5
+     │ 198.18.10.0/24
+  ┌─ fw01 ─ vsys1 ─ router default ─ snapshot 1m ────────┐
+  │  zones   server -> transport                         │
+  │  in      ethernet1/2   198.18.10.1/24                │
+  │  out     ethernet1/1   198.19.0.254/24               │
+  │  route   0.0.0.0/0 via 198.19.0.1   static           │
+  └──┬───────────────────────────────────────────────────┘
+     │ 198.19.0.0/24   198.19.0.254 -> 198.19.0.1
+  ┌─ fw02 ─ vsys1 ─ router default ─ snapshot 1m ────────┐
+  │  zones   labor -> wan                                │
+  │  in      vlan.32       198.19.0.1/24                 │
+  │  out     ethernet1/1   192.168.0.138/24              │
+  │  route   0.0.0.0/0 via 192.168.0.1   static          │
+  └──┬───────────────────────────────────────────────────┘
+     │ 192.168.0.0/24
+  192.168.0.1   leaves the estate (not in the inventory)
+
+firewalls on the path: fw01 (server -> transport), fw02 (labor -> wan)
+may be incomplete: the path leaves the estate at 192.168.0.1
+```
+
+`may be incomplete` names what the answer cannot see: here, the network behind
+192.168.0.1, which no inventory firewall owns. The other direction is complete:
+
+```
+$ panos-analyst simulate routing 198.18.1.10 198.18.10.100
+simulate routing 198.18.1.10 -> 198.18.10.100            fidelity: exact
+
+  198.18.1.10
+     │ 198.18.1.0/24
+  ┌─ fw02 ─ vsys1 ─ router default ─ snapshot 2m ────────┐
+  │  zones   home -> labor                               │
+  │  in      vlan.1        198.18.1.1/24                 │
+  │  out     vlan.32       198.19.0.1/24                 │
+  │  route   198.18.0.0/15 via 198.19.0.254   static     │
+  └──┬───────────────────────────────────────────────────┘
+     │ 198.19.0.0/24   198.19.0.1 -> 198.19.0.254
+  ┌─ fw01 ─ vsys1 ─ router default ─ snapshot 2m ────────┐
+  │  zones   transport -> server                         │
+  │  in      ethernet1/1   198.19.0.254/24               │
+  │  out     ethernet1/2   198.18.10.1/24                │
+  │  route   198.18.10.0/24  connected                   │
+  └──┬───────────────────────────────────────────────────┘
+     │ 198.18.10.0/24
+  198.18.10.100   delivered
+
+firewalls on the path: fw02 (home -> labor), fw01 (transport -> server)
+```
+
+- A source connected on two firewalls is a choice only you can make:
+  `panos-analyst: 198.18.100.50 could enter at several firewalls; name one with --device: fw01 ethernet1/5, fw02 vlan.100`
+- `simulate routing <destination> --device fw01` starts on one firewall;
+  `--router` picks its logical router when it has several.
+- `--rib` lists the routing table's other routes to the destination at each
+  firewall, and marks the one in use `(active)`.
+- A PBF or NAT rule that could take the packet is named in its box (`pbf`, `nat`),
+  and the path still follows the forwarding table. ECMP follows the lowest next
+  hop and names the others (`ecmp`).
+- `--output json` gives each hop's `flow`: device, vsys, zones, source and
+  destination, the input `simulate secpolicy` takes.
+
 ## 12. What changed
 
 `snapshot diff` compares two snapshots of each selected device, per vsys and

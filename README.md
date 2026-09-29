@@ -198,7 +198,7 @@ One binary, `panos-analyst`. Questions are verbs; housekeeping is grouped by nou
 
 | Command and arguments | What it does |
 | --- | --- |
-| `fetch <device>… \| --label k=v \| --all` | Log in, fetch config, system info, interfaces and FIB, store a snapshot; up to eight devices at once |
+| `fetch <device>… \| --label k=v \| --all` | Log in, fetch config, system info, interfaces, FIB, RIB and HA state, store a snapshot; up to eight devices at once; a passive HA member is read from its active peer |
 | `inventory init` | Write an inventory template, mode 0600, with TLS verification off and how to turn it on |
 | `snapshot list <device>` | A device's snapshots, newest first; `*` marks latest |
 | `snapshot show` | Per device and vsys: snapshot, age, version, rule count, fetched documents |
@@ -206,11 +206,14 @@ One binary, `panos-analyst`. Questions are verbs; housekeeping is grouped by nou
 | `search <term>` | Every place a value or name appears: objects by value and by name, groups, references, literals |
 | `lookup <name>` | The whole rule or object behind a name: a rule as the rule editor shows it, an object with its value, members and groups; `--expand` adds values and group trees, `--full` shows every list item |
 | `simulate secpolicy <src> <dst>` | The rule one flow would hit on one device: source and destination by address or FQDN, `--port`, `--url`, zones given or derived; every stage says how certain it is, and `--why` shows them |
+| `simulate routing <src> <dst>` | The firewalls a packet crosses, one box per firewall with its zones, interfaces and route; `<dst> --device <name>` starts on one device, `--rib` adds the routing table's other routes, and the answer names ECMP, PBF, NAT and a path leaving the inventory |
 
 Every question takes the same selectors: `--device`, `--label k=v`, `--vsys`,
 `--at <time>` for older snapshots, `--fresh` to fetch first, or `--file <config.xml>`
 to read one file with no inventory. `search` takes `--exact`, `--within` or
 `--contains`, and `--kind`, `--field`, `--show` and `--direct` to narrow it. `lookup` takes `--kind` when one name has several kinds.
+`simulate routing` takes only `--device`, `--router` and `--at`: a path may cross any
+firewall of the inventory.
 
 `--output json` prints one versioned envelope. Exit codes: 0 complete, 1 error,
 2 usage, 3 answered with holes or unresolved entries.
@@ -250,6 +253,11 @@ The library reports each of these rather than hiding it.
   `simulate` agreed on 3 of 7 without zones, and on 7 of 7 with them. The library
   can also infer a zone from an address, and it reports every limit of that
   inference.
+- **`simulate routing` follows the forwarding table, IPv4 only.** It names, but
+  does not follow, policy-based forwarding and NAT; with ECMP it follows the lowest
+  next hop and names the others. A path ends where it leaves the inventory,
+  including into a tunnel. Firewalls in virtual wire or Layer 2 are not seen on a
+  path; the answer names them.
 - **URL matching rules are documentation-derived.** A firewall's validator
   verifies the syntax rules. It cannot verify the matching rules, because
   `test url` reports PAN-DB categories only and never names a custom category.
@@ -274,7 +282,8 @@ go-panos-schema/
 ├── store/                 # timestamped on-disk snapshots, latest, retention
 ├── estate/                # selectors and a time to targets; the simulation registry
 ├── simulate/              # the staged simulation framework and its fidelity
-│   └── securitypolicy/    # the first simulation: which rule a flow would hit
+│   ├── securitypolicy/    # the first simulation: which rule a flow would hit
+│   └── routing/           # which firewalls a packet crosses, hop by hop
 ├── runlog/                # the run log: levels, redaction, rotation
 ├── search/                # every place a value or name appears, in one scope
 ├── card/                  # the whole rule or object behind a name, for lookup

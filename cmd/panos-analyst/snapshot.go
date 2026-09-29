@@ -178,11 +178,18 @@ func (a *app) snapshotDiffCmd() *cobra.Command {
 			}
 			var results []result
 			var holes []estate.Hole
+			var notes []note
 			for _, d := range names {
 				older, newer, err := pair(st, d, from, to)
 				if err != nil {
 					holes = append(holes, estate.Hole{Device: d, Reason: err.Error()})
 					continue
+				}
+				// After an HA failover the entry's snapshots come from the other
+				// member, whose configuration is synced but not identical.
+				if a, b := older.Meta.Serial, newer.Meta.Serial; a != "" && b != "" && a != b {
+					notes = append(notes, note{Device: d, Note: fmt.Sprintf(
+						"the snapshots come from different firewalls (serial %s, then %s), as after an HA failover; settings an HA pair does not sync show as changes", a, b)})
 				}
 				before, _, err1 := config.Load(older.Path(store.ConfigDoc))
 				after, _, err2 := config.Load(newer.Path(store.ConfigDoc))
@@ -204,7 +211,7 @@ func (a *app) snapshotDiffCmd() *cobra.Command {
 			}
 			if s.output == "json" {
 				in := map[string]any{"selection": sel.input(), "from": from, "to": to}
-				if err := writeJSON(a.stdout, envelope{Command: "snapshot diff", Input: in, Results: results, Holes: holes}); err != nil {
+				if err := writeJSON(a.stdout, envelope{Command: "snapshot diff", Input: in, Results: results, Holes: holes, Notes: notes}); err != nil {
 					return err
 				}
 				return finish(holes, nil)
@@ -214,6 +221,11 @@ func (a *app) snapshotDiffCmd() *cobra.Command {
 				if r.Device != last {
 					last = r.Device
 					fmt.Fprintf(a.stdout, "%s   %s -> %s\n", r.Device, r.From, r.To)
+					for _, n := range notes {
+						if n.Device == r.Device {
+							fmt.Fprintf(a.stdout, "  note: %s\n", n.Note)
+						}
+					}
 				}
 				if len(r.Changes) == 0 {
 					fmt.Fprintf(a.stdout, "  %-10s no changes\n", r.Scope)

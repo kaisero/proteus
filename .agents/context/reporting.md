@@ -133,6 +133,7 @@ func (s *ZoneSnapshot) ZonesOf(addr netip.Addr) []ZonePlacement
 func (u Unresolved) String() string
 func (v *View) Candidates(f Field, value string) (*roaring.Bitmap, Report)
 func For(cfg *config.Config, sc config.Scope) (*Index, error)
+func ForRulebase(cfg *config.Config, sc config.Scope, rb resolve.Rulebase) (*Index, error)
 func LoadUserSnapshot(r io.Reader) (*UserSnapshot, error)
 func LoadZoneSnapshot(r io.Reader) (*ZoneSnapshot, error)
 func NewInterner() *Interner

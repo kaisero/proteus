@@ -58,10 +58,14 @@ what was added, removed or changed. Position is not compared.
 <!-- GENERATED:api ./estate -->
 ```go
 type Hole struct{ ... }
+type Network struct{ ... }
 type Target struct{ ... }
 type When struct{ ... }
 
+func (n *Network) Device(name string) (simulate.DeviceData, error)
+func (n *Network) Devices() []string
 func Kinds() []string
+func NewNetwork(st *store.Store, devices []string, w When) *Network
 func Open(st *store.Store, devices, vsys []string, w When) ([]Target, []Hole)
 func OpenFile(path string, vsys []string, log *runlog.Logger) ([]Target, []Hole, error)
 func ParseAt(s string) (time.Time, error)

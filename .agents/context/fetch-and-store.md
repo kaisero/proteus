@@ -1,6 +1,6 @@
 # fetch-and-store
 
-Validated against 9a13231 on 2026-09-28 · Purpose: how a device's configuration and operational state get from the firewall into a snapshot the core can read.
+Validated against 7a7cefe on 2026-09-29 · Purpose: how a device's configuration and operational state get from the firewall into a snapshot the core can read.
 
 ## Purpose & responsibilities
 
@@ -36,14 +36,20 @@ a URL. A transport error is retried once; a refusal (HTTP 4xx, or
 `status="error"` with HTTP 200) is not.
 
 A `Document` is a name and a fetch function. `Documents` lists them:
-`config` (export), `system-info`, `interfaces`, `fib`. **Adding a fetcher is adding
-one `Document` value and listing it.** `OpDocument(name, cmds...)` tries each show
-command in order until the device accepts one; `fib` uses this to fall back from
-`show advanced-routing fib` to `show routing fib`.
+`config` (export), `system-info`, `interfaces`, `fib`, `rib`, `ha`. **Adding a
+fetcher is adding one `Document` value and listing it.** `OpDocument(name, cmds...)`
+tries each show command in order until the device accepts one; `fib` and `rib` use
+this to fall back from the Advanced Routing command to the legacy one. On an
+Advanced Routing device the legacy route command answers success with a deprecation
+text, so the Advanced Routing command must come first (verified on fw02).
 
 `Run` logs in, then fetches every document. A failed document is recorded in
 `Result.Outcomes` and the rest continue (spec S10). Only a failed login fails the
-whole run.
+whole run. `RunActive` (spec §17 R18) reads the HA state first: a passive member of
+an active-passive pair is fetched from its active peer (`ha_peer` or the reported
+management address, through `ActiveOptions.PeerHost`) once the peer confirms the
+pair by serial; any doubt fetches the device asked and adds `Result.Notes`.
+`Result.FetchedFrom` and `Meta.FetchedFrom` name the peer that answered.
 
 ### Store
 
@@ -60,7 +66,8 @@ hidden directory and renames it into place, so a reader never sees half a snapsh
 
 `Resolve("fw01")` is the latest snapshot, `Resolve("fw01@<id>")` one in particular.
 `Snapshot.Zones()` builds the index's `ZoneSnapshot` from the stored `interfaces`
-and `fib`.
+and `fib`. `estate.NewNetwork` reads `interfaces`, `fib`, `rib` and `ha` of every
+device for `simulate routing`, pairing HA members by serial into one node.
 
 ## Build / run pointers
 
@@ -73,6 +80,7 @@ and `fib`.
 <!-- GENERATED:api ./fetch -->
 ```go
 type APIError struct{ ... }
+type ActiveOptions struct{ ... }
 type Client struct{ ... }
 type Document struct{ ... }
 type Outcome struct{ ... }
@@ -88,6 +96,7 @@ func NewClient(t inventory.Target, log *runlog.Logger) *Client
 func OpDocument(name string, cmds ...string) Document
 func ParseSystemInfo(b []byte) (System, error)
 func Run(ctx context.Context, t inventory.Target, docs []Document, log *runlog.Logger) (Result, error)
+func RunActive(ctx context.Context, t inventory.Target, docs []Document, opts ActiveOptions, log *runlog.Logger) (Result, error)
 ```
 <!-- /GENERATED:api -->
 

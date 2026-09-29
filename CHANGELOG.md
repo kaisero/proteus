@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **See which firewalls a packet crosses.** `panos-analyst simulate routing <source>
+  <destination>` follows the fetched firewalls' forwarding tables from the firewall
+  the source enters to the one that delivers it, and draws a box per firewall with
+  the zones in and out, the interfaces and the route. It says where the path may be
+  incomplete: ECMP, policy-based forwarding, NAT, or a path that leaves the
+  inventory.
 - **Fetch stores the routing table and reads the active firewall of an HA pair.**
   Every `fetch` now also stores the routing table and the HA state. When an
   inventory entry names the passive member of an active-passive pair, `fetch` reads

@@ -371,6 +371,15 @@ func TestSnapshotDiff(t *testing.T) {
 	if out := c.want(0, "snapshot", "diff", "--output", "json", "--vsys", "vsys1"); !strings.Contains(out, `"op": "removed"`) {
 		t.Errorf("json diff:\n%s", out)
 	}
+	if strings.Contains(out, "different firewalls") {
+		t.Errorf("one firewall, no failover note:\n%s", out)
+	}
+	// After a failover the entry is answered by the other member of the pair.
+	d.Ops["<show><system><info/></system></show>"] = fakepanos.Success("<system><hostname>fw01-b</hostname><serial>000000000009</serial></system>")
+	c.want(0, "fetch", "fw01")
+	if out := c.want(0, "snapshot", "diff"); !strings.Contains(out, "note: the snapshots come from different firewalls (serial 007900000000001, then 000000000009)") {
+		t.Errorf("failover:\n%s", out)
+	}
 	c.want(2, "snapshot", "diff", "--file", "x.xml")
 	c.want(0, "snapshot", "diff", "--from", "2026-09-28T10:00:30Z", "--to", "2026-09-28T23:00:00Z")
 	c.want(3, "snapshot", "diff", "--from", "2026-01-01")

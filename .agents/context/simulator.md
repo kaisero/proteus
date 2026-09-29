@@ -1,13 +1,15 @@
 # simulator
 
-Validated against 755542d on 2026-09-29 · Purpose: how a simulation runs as stages, how certain its answer is, and how to trace one after the fact.
+Validated against ceb05c1 on 2026-09-29 · Purpose: how a simulation runs as stages, how certain its answer is, and how to trace one after the fact.
 
 ## Purpose & responsibilities
 
-`simulate` is the framework of spec §11: a run of named stages over one flow and one
-device, each declaring its fidelity. It is a leaf (R12). `simulate/securitypolicy` is
-the first simulation. `estate.Simulations` is the registry; the command makes one
-`simulate <kind>` subcommand per entry. `runlog` records each stage.
+`simulate` is the framework of spec §11: a run of named stages over one flow, each
+declaring its fidelity. It is a leaf (R12). `simulate/securitypolicy` answers which
+rule one flow hits on one device; `simulate/routing` (spec §17) which firewalls a
+packet crosses. `estate.Simulations` is the registry; the command makes one
+`simulate <kind>` subcommand per entry, from `kindCommands` when a kind needs its own
+flags (routing). `runlog` records each stage.
 
 ## How it works
 
@@ -44,21 +46,46 @@ Negated rules are inverted in the resolve stages. A rule without a category matc
 any URL. Relevance (S14) comes from the zone locator: a route more specific than a
 default covering either endpoint.
 
+### routing
+
+Reads every device's interface state, FIB and RIB through `simulate.Network`
+(`estate.NewNetwork` over the store; an HA pair is one node, paired by serial) and a
+path device's configuration through `Env.Load`. `routing.Topology` is built once:
+address owners, connected nets, a `bart` table per router, and `Place` (connected,
+else the most specific non-default route, walking on while that route leads to
+another node; ties and default-only are `ChoiceError`, exit 2).
+
+| Slug | Fidelity |
+|---|---|
+| `place` | exact (connected, `--device`); inferred (routed); undermatch when a device cannot be read |
+| `hop<N>/pbf` | exact; inferred when a PBF rule could take the packet or on a version gap; not evaluated without configuration |
+| `hop<N>/lookup` | exact; undermatch on ECMP (lowest next hop followed) or an unknown `nh_type` |
+| `hop<N>/zones` | exact |
+| `hop<N>/nat` | exact; inferred when a NAT rule could translate, or after an earlier hop could |
+| `hop<N>/next` | exact; undermatch when the path leaves the estate or by an interface; unresolved for two owners, over 16 hops |
+
+`Run.Output` is `routing.Path`: `Hops` (one per device and vsys; a vsys crossing
+splits through the external zones), `Outcome`, `End`, `Hidden` (off-path devices
+with interfaces without a router).
+
 ## Build / run pointers
 
 - `go test ./simulate/... ./runlog`
 - `./bin/panos-analyst simulate secpolicy <src> <dst> --file <cfg> --why`
+- `./bin/panos-analyst simulate routing <src> <dst> --why` (needs fetched devices)
 - `--log-level debug`, then `grep '\[STEP\]'` in the run log: the rules each stage left.
 
 ## Public API
 
 <!-- GENERATED:api ./simulate -->
 ```go
+type DeviceData struct{ ... }
 type Endpoint struct{ ... }
 type Env struct{ ... }
 type Fidelity struct{ ... }
 type Flow struct{ ... }
 type Input struct{ ... }
+type Network interface{ ... }
 type Outcome struct{ ... }
 type Run struct{ ... }
 type Simulation interface{ ... }
@@ -95,6 +122,40 @@ func (Simulation) Describe() string
 func (Simulation) Kind() string
 func (Simulation) Run(ctx context.Context, env *simulate.Env, in simulate.Input) (simulate.Run, error)
 func (Simulation) Stages() []string
+```
+<!-- /GENERATED:api -->
+
+<!-- GENERATED:api ./simulate/routing -->
+```go
+type ChoiceError struct{ ... }
+type Hop struct{ ... }
+type Lookup struct{ ... }
+type Match struct{ ... }
+type NotFollowed struct{ ... }
+type Outcome string
+type Path struct{ ... }
+type Placed string
+type Placement struct{ ... }
+type Port struct{ ... }
+type Simulation struct{}
+type Topology struct{ ... }
+
+func (Simulation) Describe() string
+func (Simulation) Kind() string
+func (Simulation) Run(ctx context.Context, env *simulate.Env, in simulate.Input) (simulate.Run, error)
+func (Simulation) Stages() []string
+func (e *ChoiceError) Error() string
+func (m Match) First() resolve.FIBRoute
+func (p Port) Link() netip.Prefix
+func (t *Topology) Connected(a netip.Addr) []Port
+func (t *Topology) Interface(node, name string) (Port, bool)
+func (t *Topology) Lookup(node, router string, a netip.Addr) (Match, bool)
+func (t *Topology) Nodes() []string
+func (t *Topology) Owners(a netip.Addr) []Port
+func (t *Topology) Peers(out Port, nh netip.Addr) []Port
+func (t *Topology) Place(src netip.Addr) (Placement, error)
+func (t *Topology) Routers(node string) []string
+func NewTopology(devs []simulate.DeviceData) *Topology
 ```
 <!-- /GENERATED:api -->
 
@@ -136,9 +197,16 @@ func ParseLevel(s string) (Level, error)
 - **The core never logs.** `config`, `resolve`, `index` stay free of I/O (R12);
   `simulate` receives the log through `Env`.
 - **`Run.Output` is `any`.** Each kind documents its type; securitypolicy's is
-  `Verdict`.
+  `Verdict`, routing's `routing.Path`.
+- **Routing detects PBF and NAT, it does not follow them.** The stages run in
+  packet-flow order (pbf, lookup, zones, nat) so a later simulation replaces them in
+  place (`routing.TestPBFForwardAndSourceNAT`).
+- **Unverified shapes fail conservative.** The lab has no HA pair, multi-vsys,
+  discard or next-lr route: an unknown `nh_type` is unresolved, an HA state short of
+  a confirmed pair is not followed (spec §17.2).
 
 ## See also
 
 - [commands](commands.md), [questions](questions.md), [providers](providers.md)
-- spec §11, plan `docs/plans/2026-09-29-panos-analyst-m4-simulator.md`
+- spec §11 and §17, plans `docs/plans/2026-09-29-panos-analyst-m4-simulator.md`,
+  `docs/plans/2026-09-29-panos-analyst-routing.md`

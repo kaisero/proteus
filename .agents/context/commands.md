@@ -1,6 +1,6 @@
 # commands
 
-Validated against 2f14f3f on 2026-09-29 · Purpose: the three binaries, what each is for, and which one to reach for.
+Validated against 7a7cefe on 2026-09-29 · Purpose: the three binaries, what each is for, and which one to reach for.
 
 ## Purpose & responsibilities
 
@@ -16,7 +16,7 @@ generator.
 ## panos-analyst
 
 ```
-fetch <device>... | --label k=v | --all     log in, fetch four documents, store a snapshot
+fetch <device>... | --label k=v | --all     log in, fetch six documents, store a snapshot
 inventory init                              write an inventory template, mode 0600
 snapshot list <device>                      snapshots, newest first; * marks latest
 snapshot show                               per device and vsys: snapshot, age, version, rules
@@ -24,6 +24,7 @@ snapshot diff [--from] [--to]               objects and rules added, removed, ch
 search <term>                               every place a value or name appears
 lookup <name>                               the whole rule or object behind a name
 simulate secpolicy <src> <dst>              the rules one flow could hit, and the first match
+simulate routing <src> <dst>                the firewalls a packet crosses, hop by hop
 ```
 
 - **Two question verbs.** `search` answers "where does this appear" in five stages:
@@ -46,6 +47,12 @@ simulate secpolicy <src> <dst>              the rules one flow could hit, and th
   or derived, and prints each stage with `--why`. Its text ends with
   `first match: <rule> (<action>)`, which `scripts/device-probe.sh` reads. See
   [simulator](simulator.md).
+- **`simulate routing <src> <dst>`** (or `<dst> --device <name> [--router]`) has
+  its own command (`kindCommands`): no selectors but `--device`, `--at`, `--rib`,
+  `--why`. It reads every inventory device's stored interfaces and tables, draws a
+  box per firewall and vsys, and exits 2 for a start it cannot choose (ties,
+  default-only, several routers, IPv6). `scripts/device-probe.sh --routing <device>
+  <router> <dst>...` checks its first lookup against the device.
 - **Output and exit codes:** `--output text|json`; JSON is one envelope with
   `format`, `command`, `input`, `results`, `holes`, `unresolved`, `notes`. Exit 0
   complete, 1 error, 2 usage, 3 holes or unresolved.

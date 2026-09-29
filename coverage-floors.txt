@@ -8,9 +8,9 @@
 # implementation yet, only the skeleton and the standards. Add one line per
 # package as each package gains its first test, in the form:
 #
-#   github.com/okaiser/panos-analyst/internal/schema  85.9
+#   github.com/okaiser/panos-analyst/internal/schema  86.9
 
-github.com/okaiser/panos-analyst/internal/schema  85.9
+github.com/okaiser/panos-analyst/internal/schema  86.9
 github.com/okaiser/panos-analyst/internal/digest  71.8
 github.com/okaiser/panos-analyst/internal/codegen  93.0
 github.com/okaiser/panos-analyst/cmd/panos-schemagen  57.6
