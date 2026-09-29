@@ -3,6 +3,8 @@ package resolve
 import (
 	"strings"
 	"testing"
+
+	"github.com/okaiser/panos-analyst/config"
 )
 
 // A sibling vsys's rules must never appear.
@@ -94,5 +96,27 @@ func TestRulesReadNegation(t *testing.T) {
 	rules, _ := tg.Rules(Security)
 	if !rules[0].NegateSource || rules[0].NegateDestination || rules[1].NegateSource {
 		t.Errorf("negation = %v %v %v", rules[0].NegateSource, rules[0].NegateDestination, rules[1].NegateSource)
+	}
+}
+
+func TestRulesReadWhatTheEditorShows(t *testing.T) {
+	tg, err := TargetFor(loadT(t, "../testdata/config/firewall-lookup.xml"), "localhost.localdomain", "vsys1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rules, _ := tg.Rules(Security)
+	big := rules[1]
+	if big.UUID != "0b3f5e2a-9d41-4c1e-8f7a-2b6c9d1ec21e" || big.Description == "" || big.LogStart != "yes" ||
+		big.LogEnd != "yes" || big.LogSetting != "log-to-panorama" || big.Schedule != "business-hours" {
+		t.Errorf("rule = %+v", big)
+	}
+	if small := rules[0]; small.Description != "" || small.LogSetting != "" || small.LogStart != "no" {
+		t.Errorf("absent elements read empty: %+v", small)
+	}
+	objs, _ := ObjectsInScope(loadT(t, "../testdata/config/firewall-lookup.xml"), config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}, "address")
+	for _, o := range objs {
+		if o.Name == "net-vienna" && o.Description != "Vienna office" {
+			t.Errorf("description = %q", o.Description)
+		}
 	}
 }

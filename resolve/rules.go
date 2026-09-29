@@ -60,6 +60,14 @@ type Rule struct {
 	// mentions an object, without being told that the rule therefore matches it.
 	ProfileGroups []string
 	Profiles      map[string][]string
+
+	// What the rule editor shows beyond matching: read for a lookup card.
+	UUID        string
+	Description string
+	LogStart    string // the element's yes or no; empty when absent
+	LogEnd      string
+	LogSetting  string // the log forwarding profile
+	Schedule    string
 }
 
 // Rules returns the target's policy in evaluation order: shared pre-rules, then
@@ -111,6 +119,13 @@ func readRules(root *config.Element, sc config.Scope, rulebase string, rb Ruleba
 
 				ProfileGroups: e.Child("profile-setting").Child("group").Members(),
 				Profiles:      memberLists(e.Child("profile-setting").Child("profiles")),
+
+				UUID:        e.Attr("uuid"),
+				Description: e.Child("description").TextOr(""),
+				LogStart:    e.Child("log-start").TextOr(""),
+				LogEnd:      e.Child("log-end").TextOr(""),
+				LogSetting:  e.Child("log-setting").TextOr(""),
+				Schedule:    e.Child("schedule").TextOr(""),
 			})
 		}
 	}

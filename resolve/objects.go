@@ -17,6 +17,7 @@ type Object struct {
 	// container but mean different things, so the type decides how to read them.
 	Subtype      string
 	Tags         []string
+	Description  string
 	ShadowedFrom *config.Scope // the scope whose definition this one replaced
 }
 
@@ -121,6 +122,8 @@ func readObjects(root *config.Element, sc config.Scope, kind string, within []st
 				Value:   objectValue(e),
 				Subtype: objectSubtype(e),
 				Tags:    e.Child("tag").Members(),
+
+				Description: e.Child("description").TextOr(""),
 			})
 		}
 	}
