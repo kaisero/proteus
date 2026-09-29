@@ -212,23 +212,37 @@ func (c *Config) KindContainer(kind string) []string {
 }
 
 // KindContainers returns every path under a scope at which a kind's entry array
-// appears, shallowest first and then alphabetically.
+// appears, shallowest first and then alphabetically. kind is one name, such as
+// "address" or "custom-url-category".
 //
 // More than one means the name is ambiguous and the caller has to choose. Returning
 // only the first would be a silent wrong answer, which is exactly what it was before
 // this existed: asking for "user" gave a vsys-level user array rather than the local
 // user database, and the difference is not visible in the result.
 func (c *Config) KindContainers(kind string) [][]string {
-	if kind == "" {
+	paths := c.schema.kinds[kind]
+	if len(paths) == 0 {
 		return nil
 	}
-	var out [][]string
+	out := make([][]string, len(paths))
+	for i, p := range paths {
+		out[i] = slices.Clone(p) // the table is shared by every Config of this schema
+	}
+	return out
+}
+
+// kindTable maps a kind to the paths under a scope at which its entry array
+// appears, shallowest first and then alphabetically. It depends only on the
+// schema, so it is built once with it. Building the paths on every call made each
+// search rebuild the path of every entry array in the schema.
+type kindTable map[string][][]string
+
+func buildKindTable(root *schema.Node) kindTable {
+	out := kindTable{}
 	seen := map[string]bool{}
-	for _, arr := range schema.EntryTypes(c.schema.root) {
+	for _, arr := range schema.EntryTypes(root) {
 		path := arr.Path()
-		if !strings.HasSuffix(path, "/"+kind) {
-			continue
-		}
+		kind := path[strings.LastIndex(path, "/")+1:]
 		for _, anchor := range scopeAnchors {
 			rest, ok := cutPrefix(path, anchor)
 			if !ok || strings.Contains(rest, "/entry/") {
@@ -236,16 +250,18 @@ func (c *Config) KindContainers(kind string) [][]string {
 				// object, not a kind the scope holds directly.
 				continue
 			}
-			if seen[rest] {
+			if seen[kind+" "+rest] {
 				continue
 			}
-			seen[rest] = true
-			out = append(out, strings.Split(rest, "/"))
+			seen[kind+" "+rest] = true
+			out[kind] = append(out[kind], strings.Split(rest, "/"))
 		}
 	}
-	slices.SortFunc(out, func(a, b []string) int {
-		return cmp.Or(cmp.Compare(len(a), len(b)), strings.Compare(strings.Join(a, "/"), strings.Join(b, "/")))
-	})
+	for _, paths := range out {
+		slices.SortFunc(paths, func(a, b []string) int {
+			return cmp.Or(cmp.Compare(len(a), len(b)), strings.Compare(strings.Join(a, "/"), strings.Join(b, "/")))
+		})
+	}
 	return out
 }
 

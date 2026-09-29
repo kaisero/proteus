@@ -206,6 +206,7 @@ type loadedSchema struct {
 	root  *schema.Node
 	refs  refTable
 	paths pathTable
+	kinds kindTable
 }
 
 var (
@@ -231,7 +232,9 @@ func loadDigest(version string) (*loadedSchema, error) {
 	if err != nil {
 		return nil, fmt.Errorf("config: read digest %s: %w", name, err)
 	}
-	ls := &loadedSchema{root: d.Root, refs: buildRefTable(d.Root), paths: buildPathTable(d.Root)}
+	ls := &loadedSchema{
+		root: d.Root, refs: buildRefTable(d.Root), paths: buildPathTable(d.Root), kinds: buildKindTable(d.Root),
+	}
 	schemaCache[name] = ls
 	return ls, nil
 }
