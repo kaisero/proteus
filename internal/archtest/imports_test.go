@@ -52,7 +52,7 @@ var rules = []rule{
 	{from: "simulate/topology", forbid: append(mod("estate", "store", "fetch", "search", "drift", "simulate/routing", "simulate/nat", "simulate/securitypolicy"), ioPackages...)},
 	{from: "simulate/policy", forbid: append(mod("estate", "store", "fetch", "search", "drift", "simulate/routing", "simulate/nat", "simulate/securitypolicy"), ioPackages...)},
 	{from: "simulate/securitypolicy", forbid: mod("estate", "store", "fetch")},
-	{from: "simulate/routing", forbid: append(mod("estate", "store", "fetch", "search", "drift", "simulate/nat", "simulate/securitypolicy"), ioPackages...)},
+	{from: "simulate/routing", forbid: append(mod("estate", "store", "fetch", "search", "drift", "simulate/securitypolicy"), ioPackages...)},
 	{from: "simulate/nat", forbid: append(mod("estate", "store", "fetch", "search", "drift", "simulate/routing", "simulate/securitypolicy"), ioPackages...)},
 }
 

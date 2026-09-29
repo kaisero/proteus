@@ -77,15 +77,6 @@ type NATRule struct {
 	Destination *DestinationTranslation
 	// HABinding is the active/active device binding; empty when none.
 	HABinding string
-
-	// SourceTranslation is Source's kind, or empty. BiDirectional and
-	// StaticAddress are a static-ip Source's fields. DestinationTranslation is
-	// destination-translation, dynamic-destination-translation, or empty. They are
-	// views of Source and Destination kept for the routing path's NAT detection.
-	SourceTranslation      string
-	BiDirectional          bool
-	StaticAddress          string
-	DestinationTranslation string
 }
 
 // Source translation kinds, as the schema names them. An element the schema adds
@@ -141,17 +132,6 @@ func (t *Target) NATRules() []NATRule {
 			Source:      readSourceTranslation(e.Child("source-translation")),
 			Destination: readDestinationTranslation(e),
 			HABinding:   e.Child("active-active-device-binding").TextOr(""),
-		}
-		if r.Source != nil {
-			r.SourceTranslation, r.BiDirectional = r.Source.Kind, r.Source.BiDirectional
-			if r.Source.Kind == StaticIP && len(r.Source.Addresses) > 0 {
-				r.StaticAddress = r.Source.Addresses[0]
-			}
-		}
-		if r.Destination != nil {
-			r.DestinationTranslation = map[string]string{
-				StaticDestination: "destination-translation", DynamicDestination: "dynamic-destination-translation",
-			}[r.Destination.Kind]
 		}
 		out = append(out, r)
 	}

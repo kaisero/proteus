@@ -33,14 +33,11 @@ func TestNATTranslationsOfFw01(t *testing.T) {
 	if d := rs["t-dnat-port"].Destination; d == nil || d.Kind != StaticDestination || d.Address != "198.18.10.100" || d.Port != 443 {
 		t.Errorf("t-dnat-port = %+v", d)
 	}
-	if r := rs["t-dnat-port"]; r.Service != "t-8443" || r.DestinationTranslation != "destination-translation" {
+	if r := rs["t-dnat-port"]; r.Service != "t-8443" {
 		t.Errorf("t-dnat-port = %+v", r)
 	}
 	if s := rs["t-bidir"].Source; s == nil || s.Kind != StaticIP || !s.BiDirectional || s.Addresses[0] != "198.18.250.20" {
 		t.Errorf("t-bidir = %+v", s)
-	}
-	if r := rs["t-bidir"]; r.StaticAddress != "198.18.250.20" || !r.BiDirectional {
-		t.Errorf("t-bidir views = %+v", r)
 	}
 	if s := rs["t-static-block"].Source; s.Kind != StaticIP || s.Addresses[0] != "198.18.250.32/28" {
 		t.Errorf("t-static-block = %+v", s)

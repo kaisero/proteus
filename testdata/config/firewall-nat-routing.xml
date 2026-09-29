@@ -1,0 +1,189 @@
+<config version="11.2.0" urldb="paloaltonetworks" detail-version="11.2.5">
+  <!-- Rules and objects for lookup cards: nested and dynamic groups, a literal, a
+       negated side, a predefined service, a PAN-DB category, a profile group, and
+       a name shared by a tag and an address group. -->
+  <shared>
+    <address>
+      <entry name="shared-dns"><ip-netmask>9.9.9.9/32</ip-netmask></entry>
+    </address>
+  </shared>
+  <devices>
+    <entry name="localhost.localdomain">
+      <vsys>
+        <entry name="vsys1">
+          <tag>
+            <entry name="branch"><color>color1</color></entry>
+            <entry name="laptop"><color>color2</color></entry>
+            <entry name="managed"><color>color3</color></entry>
+            <entry name="dc-mgmt"><color>color4</color></entry>
+          </tag>
+          <address>
+            <entry name="net-vienna"><ip-netmask>10.20.0.0/16</ip-netmask><description>Vienna office</description><tag><member>branch</member></tag></entry>
+            <entry name="net-graz"><ip-netmask>10.21.0.0/16</ip-netmask></entry>
+            <entry name="net-linz"><ip-netmask>10.22.0.0/16</ip-netmask></entry>
+            <entry name="net-salzburg"><ip-netmask>10.23.0.0/16</ip-netmask></entry>
+            <entry name="lap-1"><ip-netmask>10.30.0.1</ip-netmask><tag><member>laptop</member><member>managed</member></tag></entry>
+            <entry name="dc-mgmt-net"><ip-netmask>10.1.250.0/24</ip-netmask></entry>
+            <entry name="oob-net"><ip-netmask>10.1.251.0/24</ip-netmask></entry>
+            <entry name="dc01"><ip-netmask>10.1.10.100</ip-netmask></entry>
+            <entry name="pve01"><ip-netmask>10.1.100.250</ip-netmask></entry>
+            <entry name="portal"><fqdn>portal.example.com</fqdn></entry>
+          </address>
+          <address-group>
+            <entry name="west-branches"><static><member>net-salzburg</member></static></entry>
+            <entry name="branch-networks"><static><member>net-vienna</member><member>net-graz</member><member>net-linz</member><member>west-branches</member></static></entry>
+            <entry name="tagged-laptops"><dynamic><filter>'laptop' and 'managed'</filter></dynamic></entry>
+            <entry name="dc-mgmt"><static><member>dc-mgmt-net</member><member>oob-net</member></static></entry>
+          </address-group>
+          <service>
+            <entry name="svc-rdp"><protocol><tcp><port>3389</port></tcp></protocol></entry>
+            <entry name="pve-mgmt"><protocol><tcp><port>8006</port></tcp></protocol></entry>
+          </service>
+          <service-group>
+            <entry name="svc-web"><members><member>service-https</member><member>svc-rdp</member></members></entry>
+          </service-group>
+          <profiles>
+            <custom-url-category>
+              <entry name="corp-allowed"><list><member>intranet.example.com</member><member>*.corp.example.com</member></list><type>URL List</type></entry>
+            </custom-url-category>
+            <virus><entry name="av-strict"/></virus>
+            <spyware><entry name="as-strict"/></spyware>
+            <url-filtering><entry name="url-strict"/></url-filtering>
+          </profiles>
+          <profile-group>
+            <entry name="strict-inspect">
+              <virus><member>av-strict</member></virus>
+              <spyware><member>as-strict</member></spyware>
+              <url-filtering><member>url-strict</member></url-filtering>
+            </entry>
+          </profile-group>
+          <rulebase>
+            <security>
+              <rules>
+                <entry name="dc-to-pve" uuid="46ad9c77-e15c-4bab-8246-8cfb2b8b70bc">
+                  <from><member>any</member></from>
+                  <to><member>any</member></to>
+                  <source><member>dc01</member></source>
+                  <destination><member>pve01</member></destination>
+                  <source-user><member>any</member></source-user>
+                  <application><member>ssl</member><member>web-browsing</member></application>
+                  <service><member>pve-mgmt</member></service>
+                  <category><member>any</member></category>
+                  <action>allow</action>
+                  <log-start>no</log-start>
+                  <log-end>yes</log-end>
+                </entry>
+                <entry name="branch-to-dc" uuid="0b3f5e2a-9d41-4c1e-8f7a-2b6c9d1ec21e">
+                  <description>Branch offices to the shared data-center services</description>
+                  <tag><member>branch</member></tag>
+                  <from><member>branch-vpn</member><member>sdwan</member></from>
+                  <to><member>datacenter</member></to>
+                  <source><member>branch-networks</member><member>tagged-laptops</member><member>10.99.0.0/24</member></source>
+                  <destination><member>dc-mgmt</member></destination>
+                  <negate-destination>yes</negate-destination>
+                  <source-user><member>acme\branch-staff</member></source-user>
+                  <application><member>ssl</member><member>web-browsing</member><member>ms-rdp</member><member>ssh</member><member>dns</member><member>ldap</member><member>kerberos</member></application>
+                  <service><member>svc-web</member></service>
+                  <category><member>corp-allowed</member><member>business-and-economy</member></category>
+                  <profile-setting><group><member>strict-inspect</member></group></profile-setting>
+                  <action>allow</action>
+                  <log-start>yes</log-start>
+                  <log-end>yes</log-end>
+                  <log-setting>log-to-panorama</log-setting>
+                  <schedule>business-hours</schedule>
+                </entry>
+              </rules>
+            </security>
+            <pbf>
+              <rules>
+                <entry name="branch-to-zscaler">
+                  <from><zone><member>branch-vpn</member></zone></from>
+                  <source><member>branch-networks</member></source>
+                  <destination><member>any</member></destination>
+                  <service><member>any</member></service>
+                  <action><forward><egress-interface>tunnel.1</egress-interface><nexthop><ip-address>198.19.255.254</ip-address></nexthop></forward></action>
+                </entry>
+                <entry name="lab-by-interface">
+                  <from><interface><member>ethernet1/3</member></interface></from>
+                  <source><member>any</member></source>
+                  <destination><member>dc01</member></destination>
+                  <negate-destination>yes</negate-destination>
+                  <action><discard/></action>
+                </entry>
+                <entry name="keep-routing">
+                  <from><zone><member>datacenter</member></zone></from>
+                  <source><member>any</member></source>
+                  <destination><member>any</member></destination>
+                  <action><no-pbf/></action>
+                </entry>
+                <entry name="to-other-vsys">
+                  <from><zone><member>sdwan</member></zone></from>
+                  <source><member>any</member></source>
+                  <destination><member>any</member></destination>
+                  <action><forward-to-vsys>vsys2</forward-to-vsys></action>
+                  <disabled>yes</disabled>
+                </entry>
+                <entry name="sdwan-to-vsys2">
+                  <from><zone><member>sdwan</member></zone></from>
+                  <source><member>any</member></source>
+                  <destination><member>any</member></destination>
+                  <action><forward-to-vsys>vsys2</forward-to-vsys></action>
+                </entry>
+              </rules>
+            </pbf>
+            <nat>
+              <rules>
+                <entry name="snat-out">
+                  <from><member>branch-vpn</member></from>
+                  <to><member>datacenter</member></to>
+                  <source><member>branch-networks</member></source>
+                  <destination><member>any</member></destination>
+                  <service>any</service>
+                  <source-translation><dynamic-ip-and-port><interface-address><interface>ethernet1/1</interface></interface-address></dynamic-ip-and-port></source-translation>
+                </entry>
+                <entry name="dnat-port-routed">
+                  <from><member>any</member></from>
+                  <to><member>sdwan</member></to>
+                  <source><member>any</member></source>
+                  <destination><member>198.51.100.40</member></destination>
+                  <service>svc-rdp</service>
+                  <destination-translation><translated-address>10.1.10.100</translated-address><translated-port>3390</translated-port></destination-translation>
+                </entry>
+                <entry name="dnat-fqdn-routed">
+                  <from><member>any</member></from>
+                  <to><member>sdwan</member></to>
+                  <source><member>any</member></source>
+                  <destination><member>198.51.100.41</member></destination>
+                  <dynamic-destination-translation><translated-address>portal</translated-address></dynamic-destination-translation>
+                </entry>
+                <entry name="dnat-portal">
+                  <from><member>any</member></from>
+                  <to><member>datacenter</member></to>
+                  <to-interface>ethernet1/2</to-interface>
+                  <source><member>any</member></source>
+                  <destination><member>198.51.100.10</member></destination>
+                  <service>svc-rdp</service>
+                  <destination-translation><translated-address>dc01</translated-address></destination-translation>
+                </entry>
+                <entry name="static-pve">
+                  <from><member>datacenter</member></from>
+                  <to><member>sdwan</member></to>
+                  <source><member>pve01</member></source>
+                  <destination><member>any</member></destination>
+                  <source-translation><dynamic-ip-and-port><translated-address><member>198.51.100.64/29</member></translated-address></dynamic-ip-and-port></source-translation>
+                </entry>
+                <entry name="six-to-four">
+                  <from><member>any</member></from>
+                  <to><member>any</member></to>
+                  <source><member>any</member></source>
+                  <destination><member>any</member></destination>
+                  <nat-type>nat64</nat-type>
+                </entry>
+              </rules>
+            </nat>
+          </rulebase>
+        </entry>
+      </vsys>
+    </entry>
+  </devices>
+</config>

@@ -3,11 +3,11 @@ package routing
 import (
 	"context"
 	"fmt"
-	"slices"
+	"net/netip"
 	"strings"
 
-	"github.com/okaiser/panos-analyst/resolve"
 	"github.com/okaiser/panos-analyst/simulate"
+	natsim "github.com/okaiser/panos-analyst/simulate/nat"
 	"github.com/okaiser/panos-analyst/simulate/policy"
 )
 
@@ -34,7 +34,7 @@ func pbf(_ context.Context, s *state) (simulate.Outcome, error) {
 	}
 	out := simulate.Outcome{Fidelity: simulate.Exact, Detail: "no PBF rule could match"}
 	if gap := v.Config.VersionGap(); gap != "" {
-		h.Notes = append(h.Notes, fmt.Sprintf("schema: PBF and NAT checked with the %s digest", v.Config.DigestVersion()))
+		h.Notes = append(h.Notes, fmt.Sprintf("schema: PBF checked with the %s digest", v.Config.DigestVersion()))
 		out.Fidelity = simulate.Inferred
 	}
 	if r, note, ok := v.PBF(s.src, s.dst, h.In); ok {
@@ -48,69 +48,91 @@ func pbf(_ context.Context, s *state) (simulate.Outcome, error) {
 	return out, nil
 }
 
-// nat names the first NAT rule of the hop's vsys that could translate this packet,
-// and marks the hop Inferred after an earlier hop could have.
-func nat(_ context.Context, s *state) (simulate.Outcome, error) {
+// nat runs the NAT engine on the hop (spec §18 N1, N5): the rule the packet hits
+// and the packet after it. A destination NAT replaces the hop's egress with the
+// lookup of the translated destination; every later hop routes on, and matches its
+// rules against, the translated packet (spec §18 F4).
+func nat(ctx context.Context, s *state) (simulate.Outcome, error) {
 	if s.done {
 		return ended, nil
 	}
 	h := s.hop()
-	out := simulate.Outcome{Fidelity: simulate.Exact, Detail: "no NAT rule could match"}
-	if s.translated != "" {
-		h.Notes = append(h.Notes, "nat on "+s.translated+" may change the addresses this hop sees")
+	out := simulate.Outcome{Fidelity: simulate.Exact, Detail: "no NAT rule matches"}
+	if s.pool != "" {
+		h.Notes = append(h.Notes, s.pool)
 		out.Fidelity = simulate.Inferred
 	}
-	v, ok := s.policy(h)
-	if !ok {
+	if s.env.Load == nil || h.Vsys == "" {
 		out.Fidelity = simulate.Weakest(out.Fidelity, simulate.NotEvaluated("NAT"))
 		out.Detail = "no configuration for " + h.Device + " " + orUnknown(h.Vsys)
 		return out, nil
 	}
-	if v.Config.VersionGap() != "" {
-		out.Fidelity = simulate.Weakest(out.Fidelity, simulate.Inferred)
+	t, err := s.env.Load(h.Device, h.Vsys)
+	if err != nil || t.Config == nil {
+		out.Fidelity = simulate.Weakest(out.Fidelity, simulate.NotEvaluated("NAT"))
+		out.Detail = "no configuration for " + h.Device + " " + h.Vsys
+		return out, nil
 	}
-	rules := v.Target.NATRules()
-	src, dst := v.Sides(resolve.NAT, s.src, s.dst, func(int) (bool, bool) { return false, false })
-	for i, r := range rules {
-		if r.Disabled || r.NATType != "ipv4" || !src.Contains(uint32(i)) || !dst.Contains(uint32(i)) || !natZones(r, h) {
-			continue
-		}
-		var what []string
-		if r.SourceTranslation != "" {
-			what = append(what, "the source")
-		}
-		if r.DestinationTranslation != "" {
-			what = append(what, "the destination")
-		}
-		if len(what) > 0 {
-			note := fmt.Sprintf("nat rule %s may change %s", r.Name, joinAnd(what))
-			h.Notes = append(h.Notes, note)
-			out.Fidelity, out.Detail = simulate.Inferred, note
-			s.translated = h.Device
-		}
-		break // the first match wins
+	last := &h.Lookups[len(h.Lookups)-1]
+	pre := simulate.Forward{Out: h.Out, Routes: []simulate.Match{last.Match}, Fidelity: simulate.Exact}
+	router := s.router
+	in := natsim.Input{
+		Target: t, Vsys: h.Vsys, Flow: s.cur, In: h.In, PreNAT: &pre,
+		Interfaces: s.data[h.Device].Interfaces,
+		Lookup:     func(a netip.Addr) simulate.Forward { return s.topo.Forward(h.Device, router, a) },
 	}
-	// A bi-directional static rule also translates traffic sent to its translated
-	// address back to the original ("NAT Policy Rule", Translated Packet tab).
-	for _, r := range rules {
-		if !r.Disabled && r.BiDirectional && v.Holds(r.StaticAddress, s.dst) {
-			note := fmt.Sprintf("nat rule %s may change the destination (bi-directional)", r.Name)
-			h.Notes = append(h.Notes, note)
-			out.Fidelity, out.Detail = simulate.Inferred, note
-			s.translated = h.Device
+	m := natsim.Match(in)
+	if names := natsim.FQDNs(in, m.Rule); len(names) > 0 && s.env.Resolve != nil {
+		in.Resolved = map[string][]netip.Addr{}
+		for _, n := range names {
+			in.Resolved[n], _ = s.env.Resolve(ctx, n)
 		}
 	}
+	r := natsim.Translate(in, m)
+	h.Notes = append(h.Notes, r.Notes...)
+	for _, d := range r.Doubts {
+		h.Notes = append(h.Notes, "nat rule "+d.Rule+" may match instead: "+d.Reason)
+	}
+	out.Unresolved = r.Unresolved
+	out.Fidelity = simulate.Weakest(out.Fidelity, r.Fidelity)
+	if r.Rule == nil {
+		return out, nil
+	}
+	note := fmt.Sprintf("nat rule %s (%s -> %s):", r.Rule.Name, orUnknown(h.In.Zone), orUnknown(pre.Out.Zone))
+	if r.Rule.Origin != "" {
+		note = fmt.Sprintf("nat rule %s, implicit (%s -> %s):", r.Rule.Name, orUnknown(h.In.Zone), orUnknown(pre.Out.Zone))
+	}
+	if tr := r.Source; tr != nil {
+		note += fmt.Sprintf(" source %s -> %s", s.cur.Source, strings.Join(tr.Candidates, ", "))
+		if len(tr.Candidates) > 1 || strings.Contains(strings.Join(tr.Candidates, ""), "/") || strings.Contains(strings.Join(tr.Candidates, ""), "-") {
+			s.pool = fmt.Sprintf("nat on %s translates the source to one of %s", h.Device, strings.Join(tr.Candidates, ", "))
+		}
+	}
+	if tr := r.Destination; tr != nil && tr.Address.IsValid() {
+		note += fmt.Sprintf(" destination %s -> %s", s.cur.Destination, tr.Address)
+		if tr.Port != natsim.PortUnchanged {
+			note += ":" + tr.Port
+		}
+	}
+	h.Notes = append(h.Notes, note)
+	out.Detail = note
+	if r.PostNAT != nil {
+		last.Stage = "pre-NAT"
+		if len(r.PostNAT.Routes) > 0 {
+			h.Lookups = append(h.Lookups, Lookup{Router: router, Match: r.PostNAT.Routes[0], Stage: "post-NAT"})
+		}
+		h.Out = r.PostNAT.Out
+		h.Flow.ToZone = h.Out.Zone
+		if r.PostNAT.End == simulate.EndNoRoute {
+			s.end(Dropped, fmt.Sprintf("dropped on %s: no route to the translated %s", h.Device, r.Flow.Destination))
+		}
+	}
+	post := r.Flow
+	h.PostNAT = &post
+	s.cur = r.Flow
+	if len(r.Flow.Source.Addrs) > 0 {
+		s.src = r.Flow.Source.Addrs[0]
+	}
+	s.dst = r.Flow.Destination.Addrs[0]
 	return out, nil
 }
-
-// natZones reports whether a NAT rule's zones and egress interface fit the hop.
-// Its to zone is the egress zone of the route lookup for the pre-NAT destination.
-func natZones(r resolve.NATRule, h *Hop) bool {
-	fits := func(members []string, v string) bool {
-		return v == "" || slices.Contains(members, "any") || slices.Contains(members, v)
-	}
-	return fits(r.Fields["from"], h.In.Zone) && fits(r.Fields["to"], h.Out.Zone) &&
-		(r.ToInterface == "any" || h.Out.Interface == "" || r.ToInterface == h.Out.Interface)
-}
-
-func joinAnd(parts []string) string { return strings.Join(parts, " and ") }

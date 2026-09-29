@@ -152,7 +152,7 @@
                 </entry>
                 <entry name="static-pve">
                   <from><member>datacenter</member></from>
-                  <to><member>any</member></to>
+                  <to><member>sdwan</member></to>
                   <source><member>pve01</member></source>
                   <destination><member>any</member></destination>
                   <source-translation><static-ip><translated-address>198.51.100.20</translated-address><bi-directional>yes</bi-directional></static-ip></source-translation>

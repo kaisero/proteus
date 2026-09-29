@@ -14,7 +14,7 @@ import (
 // routingCmd is simulate routing (spec §17). A path crosses devices, so it takes
 // no selectors but --device, which names the start (R13).
 func (a *app) routingCmd(sim simulate.Simulation) *cobra.Command {
-	var device, router, at string
+	var device, router, at, port string
 	var rib, why, noDNS bool
 	cmd := &cobra.Command{
 		Use:   "routing <source> <destination> | <destination> --device <name>",
@@ -37,7 +37,10 @@ func (a *app) routingCmd(sim simulate.Simulation) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			var flow simulate.Flow
+			flow, err := parseFlow(flowFlags{protocol: "tcp", port: port})
+			if err != nil {
+				return err
+			}
 			if len(argv) == 2 {
 				if flow.Source, err = a.endpoint(c.Context(), argv[0], noDNS); err != nil {
 					return err
@@ -109,6 +112,7 @@ func (a *app) routingCmd(sim simulate.Simulation) *cobra.Command {
 	f.StringVar(&device, "device", "", "start on this device")
 	f.StringVar(&router, "router", "", "start in this logical router of --device")
 	f.StringVar(&at, "at", "", "read each device's newest snapshot at or before this time (id, RFC 3339 or date)")
+	f.StringVar(&port, "port", "", "destination port, 443 or tcp/443: decides NAT and PBF rules that name a service")
 	f.BoolVar(&rib, "rib", false, "list the routing table's other routes to the destination at each firewall")
 	f.BoolVar(&why, "why", false, "show every stage: its fidelity and what it found")
 	f.BoolVar(&noDNS, "no-dns", false, "do not resolve an FQDN endpoint")

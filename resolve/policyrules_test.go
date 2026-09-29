@@ -51,14 +51,14 @@ func TestNATRules(t *testing.T) {
 		t.Fatalf("got %d NAT rules", len(rs))
 	}
 	snat, dnat, static, n64 := rs[0], rs[1], rs[2], rs[3]
-	if snat.SourceTranslation != "dynamic-ip-and-port" || snat.DestinationTranslation != "" || snat.ToInterface != "any" ||
+	if snat.Source.Kind != DIPP || snat.Destination != nil || snat.ToInterface != "any" ||
 		snat.NATType != "ipv4" || snat.Fields["from"][0] != "branch-vpn" || snat.Fields["to"][0] != "datacenter" {
 		t.Errorf("snat = %+v", snat)
 	}
-	if dnat.DestinationTranslation != "destination-translation" || dnat.ToInterface != "ethernet1/2" || dnat.Service != "svc-rdp" {
+	if dnat.Destination.Kind != StaticDestination || dnat.ToInterface != "ethernet1/2" || dnat.Service != "svc-rdp" {
 		t.Errorf("dnat = %+v", dnat)
 	}
-	if static.SourceTranslation != "static-ip" || !static.BiDirectional || static.StaticAddress != "198.51.100.20" {
+	if static.Source.Kind != StaticIP || !static.Source.BiDirectional || static.Source.Addresses[0] != "198.51.100.20" {
 		t.Errorf("static = %+v", static)
 	}
 	if n64.NATType != "nat64" {

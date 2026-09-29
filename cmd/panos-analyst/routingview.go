@@ -213,6 +213,9 @@ func portText(p simulate.Port) string {
 // that stays inside the interface's own net, reads "connected": a static route
 // into a tunnel has no next hop either.
 func routeText(l routing.Lookup, out simulate.Port) string {
+	if l.Stage != "" {
+		return matchText(l.Match, l.Protocol, out) + "   (" + l.Stage + ")"
+	}
 	return matchText(l.Match, l.Protocol, out)
 }
 

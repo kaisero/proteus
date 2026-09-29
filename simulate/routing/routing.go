@@ -58,6 +58,7 @@ type Lookup struct {
 	Router   string         `json:"router"`
 	Match    simulate.Match `json:"route"`
 	Protocol string         `json:"protocol,omitempty"` // from the routing table; empty without one
+	Stage    string         `json:"stage,omitempty"`    // pre-NAT or post-NAT around a destination NAT
 }
 
 // NotFollowed is an ECMP next hop the path did not take, and the node it reaches.

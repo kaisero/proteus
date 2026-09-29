@@ -30,9 +30,11 @@ type state struct {
 	router string        // the current hop's router
 	seen   map[string]bool
 	done   bool
-	// translated names the device where NAT may have changed the addresses;
-	// every later hop is Inferred.
-	translated string
+	// cur is the packet as it now is: the flow, translated by every NAT so far.
+	cur simulate.Flow
+	// pool names a source translation to one of several addresses; later hops
+	// match their rules against its first address and say so.
+	pool string
 }
 
 func newState(env *simulate.Env, in simulate.Input) *state {
@@ -44,6 +46,7 @@ func newState(env *simulate.Env, in simulate.Input) *state {
 	if len(in.Flow.Source.Addrs) > 0 {
 		s.src = in.Flow.Source.Addrs[0]
 	}
+	s.cur = in.Flow
 	var devs []simulate.DeviceData
 	for _, name := range env.Network.Devices() {
 		d, err := env.Network.Device(name)
@@ -79,7 +82,7 @@ func (s *state) newHop() {
 }
 
 func (s *state) flow() simulate.Flow {
-	f := s.in.Flow
+	f := s.cur
 	f.FromZone, f.ToZone = s.port.Zone, ""
 	return f
 }
