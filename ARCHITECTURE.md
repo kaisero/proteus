@@ -5,16 +5,17 @@ This file holds the reasoning. AGENTS.md holds the rules.
 ## What this project is
 
 proteus is a read-only command-line tool that answers questions about PAN-OS
-firewalls, with the configuration model generated from PAN-OS's own schema.
+firewalls, with its knowledge of every configuration field taken from PAN-OS's own
+schema.
 
 It is an application, not a library. Every package lives under `internal/`, so
 none of them is an API that must stay stable for outside code; a later MCP server
 belongs in this module and can import them. The read-only core (`config`,
-`resolve`, `index`) does not talk to devices and it does not write. Above it, `fetch` reads devices with show commands
-and a configuration export, `store` keeps what it read as timestamped snapshots,
+`resolve`, `index`) does not talk to devices and it does not write. Above it,
+`fetch` reads devices with show commands and a configuration export, `store` keeps what it read as timestamped snapshots,
 and `inventory` says which devices there are. R12 keeps the core free of I/O.
 
-## Why generate from the schema
+## Why read the schema
 
 PAN-OS ships an authoritative configuration schema on every appliance:
 
@@ -35,7 +36,7 @@ The alternative is a hand-maintained SDK. Measured against PAN-OS 11.2:
 
 | Approach | Object types |
 | --- | --- |
-| Generated from `cms-schema.xml` | 2,289 |
+| Generated from `cms-schema.xml` (since removed) | 2,289 |
 | pango (hand-maintained specs) | 117 |
 
 Coverage is the smaller argument. Correctness is the larger one. pango types a
@@ -43,8 +44,13 @@ device group's `vsys` assignment as a member list; Panorama writes an entry
 list. pango returns an empty value and does not preserve the original, so the
 data is lost. The schema states the shape unambiguously, and the grammar makes
 the two forms structurally distinct — 2,291 entry lists against 1,911 member
-lists. A generator reading that grammar cannot choose wrong, because the choice
-is its input. R1 and R4 exist to keep it that way.
+lists. A reader taking the shape from that grammar cannot choose wrong, because
+the choice is its input. R1 and R4 exist to keep it that way.
+
+A Go model was once generated from the schema. Nothing read it: the core walks the
+element tree through the digest (see "No version seam" below), so the model, its
+generator and its drift gate were removed. What remains is the digest and
+`internal/tools/schemadigest`, which makes one for a new PAN-OS version.
 
 ## Why read-only
 
@@ -74,12 +80,9 @@ Resolve globally and sibling vsys bleed into each other. R5 exists for this.
 
 ```
 cmd/proteus/                main only: signal context, version, calls internal/cli
-cmd/panos-schemagen/        generator CLI: digest -> Go model
-cmd/panos-demo/             a narrated tour of the analysis packages
 internal/cli/               the commands, their rendering and settings
 internal/config/            Load, version detection, element tree, scopes
 internal/config/schemadigest/  committed firewall digests, ~0.2 MB each, embedded
-internal/config/v11_2/…     generated model per PAN-OS minor
 internal/resolve/           PAN-OS semantics (targets, rule order, scoped visibility)
 internal/index/             scope-keyed indexes (refs, closure, CIDR, rules)
 internal/inventory/         devices, credentials and TLS choice, from YAML
@@ -93,9 +96,9 @@ internal/drift/             what changed between two configurations
 internal/runlog/            one log file per run
 internal/schema/            parse the PAN-OS schema grammar
 internal/digest/            the committed schema digest format
-internal/codegen/           emit Go from the digest
 internal/archtest/          the import-direction check (R12)
 internal/fakepanos/         a fake PAN-OS XML API for tests
+internal/tools/schemadigest/  dev tool: a vendor schema into a digest
 testdata/                   trimmed schema fragments, config and op-data fixtures
 schemas/                    vendor schema files, pulled from an appliance, not committed
 ```
@@ -109,7 +112,7 @@ sentence, and the test fails when a rule names a package that no longer exists,
 so a move cannot switch a rule off.
 
 The schema digests have one home, `internal/config/schemadigest/`: `go:embed`
-cannot reach outside its package, so the generator reads and writes them there
+cannot reach outside its package, so the schemadigest tool writes them there
 rather than keeping a second copy in step.
 
 ## Decisions
@@ -117,15 +120,10 @@ rather than keeping a second copy in step.
 Settled in `docs/specs/2026-09-26-go-panos-schema-design.md`, which holds the
 detail and the measurements.
 
-- **Naming.** One Go type per distinct structural shape. That collapses 2,291
-  entry types to 506, because the template subtree embeds a whole firewall
-  config. Names come from the shallowest path where a shape occurs. (Measured on
-  the Panorama schema; Panorama support was removed in M1.)
-- **API surface.** All generated structs are exported, inside `internal/`.
-- **Versions.** One generated model per PAN-OS minor, in its own
-  package. Adding 11.3 cannot break an 11.2 consumer.
-- **Schema input.** A compact digest is committed; the vendor XML is not. CI
-  regenerates from the digest, so drift is gated without an appliance.
+- **Versions.** One digest per PAN-OS minor, embedded in the binary. A
+  configuration from a release without one loads with the nearest digest and a
+  warning.
+- **Schema input.** A compact digest is committed; the vendor XML is not.
 - **Unknown data.** Preserved verbatim and reported. A newer config still loads.
 - **Indexes live here, verdicts do not.** References, transitive group closure,
   CIDR containment and rule-position bitmaps, all keyed by scope. The simulator and
@@ -145,13 +143,10 @@ detail and the measurements.
   `any`, while matching on objects alone reported rule 8. One wrong winner, fixed
   in two places. Now there is one place.
 - **No version seam.** `resolve` and `index` read the configuration as a parsed
-  element tree, guided by the schema digest, rather than through the generated
+  element tree, guided by the schema digest, rather than through generated
   structs. The digest records its own PAN-OS version, so no version-agnostic
   interface and no generated adapter are needed. A prototype established this; an
   earlier draft had both.
-- **Shapes are deduplicated on both sides.** Entry arrays and inline sequences
-  alike, which took the Panorama package from 4,438 type declarations to 2,891.
-  (Panorama support was removed in M1.)
 - **Everything immutable is computed once.** The schema digest is decoded once per
   process and the reference tables built alongside it; a configuration is parsed
   once by `Load`; an index is built once per scope. Recomputing these per query

@@ -11,7 +11,7 @@ import (
 
 type edge struct{ entry, field, value string }
 
-func edgesFrom(t testing.TB, c *Config, walk func(func(Event) bool) error) map[edge]bool {
+func edgesFrom(t testing.TB, _ *Config, walk func(func(Event) bool) error) map[edge]bool {
 	t.Helper()
 	out := map[edge]bool{}
 	if err := walk(func(e Event) bool {

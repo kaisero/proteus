@@ -37,14 +37,6 @@ linters:
           - gosec
           - errcheck
           - unparam
-      # Generated model code is machine output; it is checked by the generator's
-      # own tests, not by style linters.
-      - path: ^internal/config/
-        linters:
-          - revive
-          - gocritic
-          - misspell
-          - unparam
 
 formatters:
   enable:

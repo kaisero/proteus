@@ -46,19 +46,19 @@ Repo map:
 
 - `internal/config/` — `load.go` (Load, Panorama refusal, digest cache), `tree.go` (element tree),
   `walk.go` (reference walk, `FieldKinds`, `KindContainers`), `embed.go`,
-  `schemadigest/` (embedded digests), `v11_2/` (generated model).
+  `schemadigest/` (embedded digests).
 - `internal/resolve/` — `target.go`, `rules.go`, `objects.go`, `groups.go`,
   `filter.go` (tag filters), `urlpattern.go`, `profiles.go`, `zones.go`.
 - `internal/index/` — `index.go` (build + cache), `candidates.go` (the driver),
   `resolver*.go` (one file per value space), `closure.go`, `cidr.go`, `rules.go`,
   `refs.go`, `profileuse.go`, `snapshot.go`, `intern.go`.
-- `internal/schema`, `internal/digest`, `internal/codegen` — schema parsing,
-  digest format, code generation. `internal/archtest` — the R12 import check.
+- `internal/schema`, `internal/digest` — schema parsing and the digest format;
+  `internal/tools/schemadigest` — the dev tool that writes a digest. `internal/archtest` — the R12 import check.
 - `internal/estate/` — selectors and a time to targets and holes; `internal/search/` — five-stage findings for one term; `internal/card/` — the whole element behind one name, for `lookup`; `internal/drift/` — changes between two configurations.
 - `internal/inventory/` — the YAML device list and credentials; `internal/fetch/` — the read-only XML
   API client and the `Document` list; `internal/store/` — timestamped snapshots, `latest`.
-- `cmd/` — `proteus` (fetch, snapshots, search, lookup, simulate), `panos-demo` (narrated tour),
-  `panos-schemagen` (digest + generate).
+- `cmd/proteus` — `main` only; the commands (fetch, snapshots, search, lookup,
+  simulate) live in `internal/cli`.
 - `scripts/` — `coverage-gate.sh`, `device-probe.sh`, `context-api.py`.
 
 Hard invariants:
@@ -90,9 +90,9 @@ Hard invariants:
   between recognised-and-unmatched and not-recognised.
 - [providers](providers.md): facts a configuration does not hold, the `View`, and
   the user snapshot format.
-- [schema-codegen](schema-codegen.md): digest, shape deduplication, the generated
-  model, and the drift gates.
-- [commands](commands.md): `proteus`, `panos-demo`, `panos-schemagen`.
+- [schema-digest](schema-digest.md): the digest, where it comes from, and the
+  reference census.
+- [commands](commands.md): `proteus` and its subcommands.
 - [testing-and-gates](testing-and-gates.md): `make ci`, the coverage ratchet, the
   fixtures, and the device probe.
 

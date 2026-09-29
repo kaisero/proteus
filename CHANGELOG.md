@@ -203,6 +203,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+- **`panos-demo` and `panos-schemagen` are gone.** `proteus` is now the only
+  binary; a schema digest for a new PAN-OS version is made with `make
+  schema-digest`.
 - **The Go packages can no longer be imported.** proteus is now an application
   only, so code that imported its packages has to copy what it needs.
 - **`panos-explore` is gone.** Its questions live in `panos-analyst`: `reaches`,

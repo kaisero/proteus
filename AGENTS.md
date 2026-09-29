@@ -16,7 +16,7 @@ hand-write a field mapping that the schema already describes.
 
 Where the schema genuinely does not describe a node, R8 applies.
 
-Check: `go test ./internal/codegen -run TestNoHandWrittenFieldMaps`
+Check: review.
 
 ## R2 — Read only, everywhere
 
@@ -48,12 +48,12 @@ Check: `go test ./internal/config -run TestRoundTripLosesNothing`
 
 ## R4 — List shape is read from the grammar, never guessed
 
-`<array><sequence name="entry">` is an entry-keyed list and generates a named
-type with a `Name`. `<array><element name="member">` is a member list and
-generates `[]string`. The generator reads which one the schema says. No
-heuristic, no name-based special case.
+`<array><sequence name="entry">` is an entry-keyed list, and
+`<array><element name="member">` is a member list. The schema parser records
+which one the schema says, the digest carries it, and every reader of a
+configuration takes it from there. No heuristic, no name-based special case.
 
-Check: `go test ./internal/codegen -run TestListShape`
+Check: `go test ./internal/schema -run TestParseListShape`
 
 ## R5 — Resolution is scope-correct
 
@@ -66,13 +66,12 @@ wrong rather than incomplete.
 
 Check: `go test ./internal/config -run TestScopedResolution`
 
-## R6 — Generated code is committed, and drift is gated
+## R6 — Retired
 
-The generated model is committed to the repository. A schema change that alters
-the model must show up as a reviewable diff. CI regenerates and fails if the
-result differs from what is committed.
-
-Check: `make generate && git diff --exit-code internal/config/`
+R6 gated drift in a Go model generated from the schema. Nothing read that model:
+`resolve` and `index` read the configuration as an element tree guided by the
+digest. The model and its generator were removed on 2026-09-29. The number stays
+unused so the other rules keep theirs.
 
 ## R7 — A performance claim has a benchmark
 
@@ -84,7 +83,7 @@ Check: `go test -bench . ./...`
 
 ## R8 — Hand-modelled nodes are declared and justified
 
-A node modelled by hand rather than generated is registered in
+A node modelled by hand rather than read from the schema is registered in
 `internal/schema.HandModelled`, with the reason and the schema path.
 
 There is none today. The one there was, `/config/readonly/.../parent-dg`, held

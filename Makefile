@@ -1,5 +1,5 @@
-BINARY  := panos-schemagen
-PKG     := ./cmd/panos-schemagen
+BINARY  := proteus
+PKG     := ./cmd/proteus
 BIN_DIR := bin
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 LDFLAGS := -s -w -X main.version=$(VERSION)
@@ -24,7 +24,7 @@ GOFUMPT     := $(GOBIN)/gofumpt
 GOVULNCHECK := $(GOBIN)/govulncheck
 
 .PHONY: help tools fmt fmt-check vet lint test test-race cover test-cov \
-        vuln tidy-check gate ci build build-local generate generate-check schema-digest \
+        vuln tidy-check gate ci build build-local schema-digest context context-check \
         schema-pull hooks clean
 
 help: ## Show this help
@@ -75,25 +75,13 @@ tidy-check: ## Fail if go.mod/go.sum are not tidy
 
 gate: tidy-check lint test ## Fast pre-commit gate (tidy + lint + unit tests)
 
-ci: tidy-check lint test-race test-cov generate-check context-check build vuln ## Everything CI runs
+ci: tidy-check lint test-race test-cov context-check build vuln ## Everything CI runs
 
-## --- generate / build ---
+## --- schema / build ---
 
-schema-digest: build-local ## Build committed digests from $(SCHEMA_DIR) (PANOS_VERSION=x.y.z)
+schema-digest: ## Build a committed digest from $(SCHEMA_DIR) (PANOS_VERSION=x.y.z)
 	@test -n "$(PANOS_VERSION)" || { echo "usage: make schema-digest PANOS_VERSION=11.2.0"; exit 1; }
-	$(BIN_DIR)/$(BINARY) digest -schema $(SCHEMA_DIR) -out $(DIGEST_DIR) -version $(PANOS_VERSION)
-
-generate: build-local ## Regenerate the config model from the committed digests
-	$(BIN_DIR)/$(BINARY) generate -digest $(DIGEST_DIR) -out internal/config
-
-# Only the generated model is checked. internal/config/ also holds hand-written code, and
-# diffing the whole directory would report ordinary edits as generator drift.
-GENERATED := internal/config/v*/
-generate-check: generate ## Fail if the committed model differs from a fresh run
-	@git diff --exit-code -- $(GENERATED) || { \
-		echo "The generated model is stale. Run 'make generate' and commit the result."; \
-		exit 1; \
-	}
+	go run ./internal/tools/schemadigest -schema $(SCHEMA_DIR) -out $(DIGEST_DIR) -version $(PANOS_VERSION)
 
 schema-pull: ## Copy schema.xml/opschema.xml off a PAN-OS firewall (HOST=user@host)
 	@test -n "$(HOST)" || { echo "usage: make schema-pull HOST=user@host"; exit 1; }
@@ -108,14 +96,10 @@ context: ## Refresh the generated API blocks in .agents/context/
 context-check: ## Fail if the agent context docs have drifted from the real API
 	@python3 scripts/context-api.py --check
 
-tools-bin: ## Build proteus and panos-demo for local use
-	CGO_ENABLED=0 go build -ldflags '$(LDFLAGS)' -o $(BIN_DIR)/panos-demo ./cmd/panos-demo
-	CGO_ENABLED=0 go build -ldflags '$(LDFLAGS)' -o $(BIN_DIR)/proteus ./cmd/proteus
-
-build: ## Cross-compile a static linux/amd64 generator binary
+build: ## Cross-compile a static linux/amd64 proteus binary
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags '$(LDFLAGS)' -o $(BIN_DIR)/$(BINARY) $(PKG)
 
-build-local: ## Native build for local use
+build-local: ## Build bin/proteus for this machine
 	CGO_ENABLED=0 go build -ldflags '$(LDFLAGS)' -o $(BIN_DIR)/$(BINARY) $(PKG)
 
 ## --- misc ---

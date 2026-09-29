@@ -9,7 +9,8 @@ It exists for people and AI agents. They ask two kinds of question.
 *Does an object with this value exist?* And *which rules can this value reach?*
 proteus answers both, per scope, and reports what it could not evaluate.
 
-The object model is generated from the schema PAN-OS itself ships.
+What it knows about each configuration field comes from the schema PAN-OS itself
+ships.
 
 ## What it does
 
@@ -144,16 +145,19 @@ This matters because PAN-OS deployments normally apply URL policy this way. On a
 lab firewall every rule has `category any`, and all URL policy runs through
 profiles. QUICKSTART.md section 6 shows the output.
 
-## Why generated, not hand-written
+## Why the schema, not hand-written field knowledge
 
-Every PAN-OS appliance ships its own configuration schema. Generating the model
-from it gives **2,289** object types against pango's **117**. It also removes a
-class of defect that a hand-maintained specification cannot avoid.
+Every PAN-OS appliance ships its own configuration schema. proteus reads a
+compact digest of it instead of a hand-maintained specification. A model once
+generated from the PAN-OS 11.2 Panorama schema had **2,289** object types;
+pango's hand-written specs cover **117**. Reading the schema also removes a class
+of defect that a hand-maintained specification cannot avoid.
 
 A concrete example. pango types a device group's `vsys` assignment as a member
 list, but Panorama writes an entry list. pango returns an empty value and
 preserves nothing, so a round trip deletes the assignment. The schema states the
-shape without ambiguity, so a generator cannot get it wrong.
+shape without ambiguity, so a reader that takes the shape from it cannot get it
+wrong.
 
 The schema also carries the reference graph. The firewall schema declares 5,898
 `memberof` targets, and 5,144 of them are real object references saying which
@@ -171,15 +175,12 @@ help strings.
 ### Build
 
 ```bash
-make tools-bin                 # bin/proteus and bin/panos-demo
-make build-local               # the generator, bin/panos-schemagen
+make build-local               # bin/proteus for this machine
+make build                     # bin/proteus, static linux/amd64
 ```
 
-`make build` cross-compiles the generator for linux/amd64. It builds neither
-explorer command. Use `make tools-bin` for those.
-
 The schema digests are committed once, in `internal/config/schemadigest/`. The
-binary embeds them from there, and the generator reads and writes them there.
+binary embeds them from there, and `make schema-digest` writes new ones there.
 
 ## Commands
 
@@ -219,9 +220,6 @@ Every run writes a log you can read back when an answer needs explaining:
 `log_dir:` (`PROTEUS_LOG_DIR`, `--log-dir`, default `~/.local/state/proteus/log`)
 and `log_keep:`. `--verbose` echoes it to the terminal. Passwords and API keys never
 reach it.
-
-`panos-demo <config.xml> [-v]` runs every analysis feature against one file in
-twelve sections and narrates what it does.
 
 ## Known limits
 
@@ -263,14 +261,11 @@ proteus reports each of these rather than hiding it.
 ```
 proteus/
 ├── cmd/
-│   ├── proteus/              # main only: calls internal/cli
-│   ├── panos-demo/           # a narrated tour of every feature
-│   └── panos-schemagen/      # digest a vendor schema, generate the Go model
+│   └── proteus/              # main only: calls internal/cli
 ├── internal/
 │   ├── cli/                  # the commands: fetch, snapshot, search, lookup, simulate
 │   ├── config/               # Load, version detection, element tree, scopes
-│   │   ├── schemadigest/     # committed firewall digests, roughly 0.2 MB each
-│   │   └── v11_2/firewall/   # generated model, per PAN-OS minor
+│   │   └── schemadigest/     # committed firewall digests, roughly 0.2 MB each
 │   ├── resolve/              # PAN-OS semantics: targets per vsys, rule order,
 │   │                         #   objects, groups, tag filters, URL patterns, zones
 │   ├── index/                # lookup structures, value-space resolvers, reports
@@ -290,9 +285,9 @@ proteus/
 │   ├── drift/                # what changed between two configurations of a scope
 │   ├── schema/               # parse the PAN-OS schema grammar
 │   ├── digest/               # the committed digest format
-│   ├── codegen/              # emit Go from a digest
 │   ├── archtest/             # the import-direction check (R12)
-│   └── fakepanos/            # a fake PAN-OS XML API for tests
+│   ├── fakepanos/            # a fake PAN-OS XML API for tests
+│   └── tools/schemadigest/   # dev tool: a vendor schema into a digest
 ├── testdata/                 # configuration and operational fixtures
 ├── scripts/                  # device probes, coverage gate, context refresh
 ├── ARCHITECTURE.md           # the reasoning behind the design
@@ -307,19 +302,17 @@ make tools     # install pinned dev tools
 make hooks     # enable the pre-commit gate
 make gate      # tidy + lint + tests (what the hook runs)
 make ci        # everything CI runs
-make generate  # regenerate the model from the committed digests
 make help      # list every target
 ```
 
 ### Getting the schema
 
 The schema is not published and the device API does not serve it. Copy it off an
-appliance, then build a digest and regenerate the model:
+appliance, then build a digest for its version:
 
 ```bash
 make schema-pull HOST=labadmin@your-panos-vm   # into schemas/
 make schema-digest PANOS_VERSION=11.2.0        # into internal/config/schemadigest/
-make generate
 ```
 
 `schema-pull` fetches `schema.xml`, `cms-schema.xml` and `opschema.xml` from

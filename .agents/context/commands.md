@@ -1,16 +1,17 @@
 # commands
 
-Validated against 54cfdf9 on 2026-09-29 · Purpose: the three binaries, what each is for, and which one to reach for.
+Validated against 54cfdf9 on 2026-09-29 · Purpose: the proteus command, what each subcommand is for, and which one to reach for.
 
 ## Purpose & responsibilities
 
 `proteus` is the product and the one command surface: it fetches devices
-into the store and answers questions of them. `panos-demo` is a narrated tour used
-to check behaviour against a real configuration. `panos-schemagen` is the
-build-time generator. Spec: `docs/specs/2026-09-27-panos-analyst-scope.md` §15.
+into the store and answers questions of them. It is the only binary; the one
+developer tool, `internal/tools/schemadigest`, runs through `make schema-digest`
+(see [schema-digest](schema-digest.md)). Spec:
+`docs/specs/2026-09-27-panos-analyst-scope.md` §15.
 
-`make tools-bin` builds the first two. `make build` cross-compiles only the
-generator.
+`make build-local` builds `bin/proteus`. `make build` cross-compiles it for
+linux/amd64.
 
 ## proteus
 
@@ -68,23 +69,9 @@ simulate nat <src> <dst> --device <fw>      the NAT rule and the translated pack
   tags `RUN`, `API`, `SNAP`, `FIND`, `STEP`; secrets redacted; the path is printed
   when a run exits non-zero. The core never logs; `runlog` is used above it.
 
-## panos-demo
-
-`panos-demo <cfg>` walks twelve sections over one configuration: load, scopes,
-targets, rules, objects, groups, lookups, matching, and the caveats. `-v` explains
-each answer. `-probe <addr>` chooses the address the lookup sections use.
-
-Use it to check a whole configuration at once, especially a real one.
-
-## panos-schemagen
-
-`digest` turns an appliance `schema.xml` into a committed digest. `generate` turns
-digests into `internal/config/v11_2/*/model.go`. See [schema-codegen](schema-codegen.md).
-
 ## Build / run pointers
 
-- `make tools-bin` — `bin/proteus`, `bin/panos-demo`.
-- `make build-local` — `bin/panos-schemagen` for this machine.
+- `make build-local` — `bin/proteus` for this machine.
 - Fixtures live in `testdata/config/`; with `--file` no command needs a device.
 
 ## Public API
@@ -104,7 +91,7 @@ None. `cmd/proteus` is `main` only; the commands live in `internal/cli` behind
 
 ## See also
 
-- `internal/cli/`, `cmd/proteus/main.go`, `cmd/panos-demo/main.go`
+- `internal/cli/`, `cmd/proteus/main.go`
 - `QUICKSTART.md` — the same commands, task by task, with output
 - [fetch-and-store](fetch-and-store.md) — what `fetch` and the store do
 - [reporting](reporting.md) — what `Unresolved` means

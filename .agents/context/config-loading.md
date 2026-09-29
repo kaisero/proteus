@@ -53,7 +53,7 @@ The schema is large. `internal/digest` stores a trimmed, gzipped form, and
 `internal/config/embed.go` embeds it with `go:embed schemadigest`.
 
 An embed directive cannot reach outside its own package, so the digests have one
-committed home, `internal/config/schemadigest/`. The generator reads and writes them
+committed home, `internal/config/schemadigest/`. The schemadigest tool writes them
 there, so there is no second copy to keep in step. When the directory was
 gitignored, a pristine checkout did not compile at all.
 
@@ -175,5 +175,5 @@ func ParseScope(s string) (Scope, error)
 
 - `internal/config/load.go`, `internal/config/tree.go`, `internal/config/walk.go`
 - `internal/schema/refs.go` — target classification and the census
-- [schema-codegen](schema-codegen.md) — where the digest comes from
+- [schema-digest](schema-digest.md) — where the digest comes from
 - [scope-semantics](scope-semantics.md) — what `resolve` builds on this

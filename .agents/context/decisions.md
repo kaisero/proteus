@@ -144,7 +144,7 @@ than approximating it.
 
 `go:embed` cannot reach outside its own package, so `internal/config/schemadigest/` must
 exist for the package to compile. While it was gitignored, a pristine checkout did
-not build. It is committed, and it is the only copy: the generator reads and
+not build. It is committed, and it is the only copy: the schemadigest tool
 writes the digests there.
 
 ## See also

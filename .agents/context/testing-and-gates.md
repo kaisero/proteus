@@ -8,7 +8,7 @@ Validated against 133ba4a on 2026-09-27 · Purpose: what must pass before a comm
 pre-commit hook runs it, which is why it has to stay fast enough to tolerate.
 
 ```
-ci: tidy-check lint test-race test-cov generate-check context-check build vuln
+ci: tidy-check lint test-race test-cov context-check build vuln
 ```
 
 ## The gates
@@ -19,8 +19,7 @@ ci: tidy-check lint test-race test-cov generate-check context-check build vuln
 | `lint` | golangci-lint v2, zero issues tolerated |
 | `test-race` | the shared-index data race class |
 | `test-cov` | coverage falling below the recorded floor |
-| `generate-check` | a hand-edited generated model |
-| `build` | the generator still cross-compiles |
+| `build` | proteus still cross-compiles for linux/amd64 |
 | `vuln` | govulncheck |
 | `context-check` | these agent docs drifting from the real API |
 
@@ -36,7 +35,7 @@ fails if a package drops below its floor.
 tests, not a lower number. This was got wrong once and the commit had to be amended.
 
 Current floors: config 98.1, resolve 95.8, index 95.1, internal/schema 85.9,
-internal/codegen 93.0, internal/digest 71.8, cmd/panos-schemagen 57.6,
+internal/digest 71.8, internal/tools/schemadigest 59.2,
 inventory 96.2, fetch 100.0, store 88.1, estate 100.0, search 97.3, drift 91.1,
 runlog 93.0, simulate 100.0, internal/simulate/securitypolicy 97.5, internal/cli 93.4.
 `coverage-floors.txt` is the authority; these figures only orient.

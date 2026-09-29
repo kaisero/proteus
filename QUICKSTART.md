@@ -11,17 +11,10 @@ same commands drop `--file` and answer for every device in the inventory.
 ## 1. Build
 
 ```bash
-make tools-bin
+make build-local
 ```
 
-That builds `bin/proteus` and `bin/panos-demo`.
-
-`panos-demo` runs every analysis feature against one file and narrates what it
-does. Add `-v` and it also explains why each answer is what it is:
-
-```bash
-./bin/panos-demo -v testdata/config/firewall-multivsys.xml
-```
+That builds `bin/proteus`.
 
 ## 2. Fetch a firewall
 
@@ -750,4 +743,3 @@ Read these tests first. Each one pins a mistake that was actually made.
 | `search.TestAnAddressFollowsEveryStage` | a tag and a group sharing a name; a tag field naming the tag does not name the group |
 | `estate.TestVsysFilterHoldsForEveryVsys` | asking for the first vsys let every later one through |
 | `digest.TestRealSchemaFormCensus` | 5,144 real object references out of 5,898 declarations |
-| `codegen.TestRootNameIsReserved` | the schema contains an inline sequence named `config` |

@@ -62,10 +62,6 @@ jobs:
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version-file: go.mod
-      # The generated model is committed. A schema change must show up as a
-      # reviewable diff, so regenerating it must be a no-op.
-      - name: Generated model is current
-        run: make generate-check
       # Prove the release target (static linux/amd64) compiles.
       - name: Build
         run: make build
