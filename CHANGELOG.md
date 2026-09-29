@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Every run writes a log you can read back.** Each command writes one file under
+  `~/.local/state/panos-analyst/log` with its settings, the snapshot each device
+  resolved to, every API call and what each search or simulation stage kept.
+  `--log-level debug` records every detail, `--verbose` echoes it to the terminal,
+  passwords and API keys never reach it, and a run that ends badly prints where its
+  log is.
 - **Fetch a firewall into a snapshot store.** `panos-analyst inventory init` writes
   an inventory, `panos-analyst fetch` logs in with a username and password, and stores
   the running configuration, interfaces, forwarding table and system info as a

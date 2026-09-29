@@ -11,6 +11,7 @@ import (
 
 	"github.com/okaiser/panos-analyst/config"
 	"github.com/okaiser/panos-analyst/resolve"
+	"github.com/okaiser/panos-analyst/runlog"
 	"github.com/okaiser/panos-analyst/store"
 )
 
@@ -41,6 +42,7 @@ type When struct {
 	At     time.Time     // zero: latest
 	MaxAge time.Duration // zero: no age note
 	Now    time.Time
+	Log    *runlog.Logger // receives which snapshot each device resolved to
 }
 
 // Open reads each device's chosen snapshot and returns one target per vsys, in
@@ -52,19 +54,26 @@ func Open(st *store.Store, devices, vsys []string, w When) ([]Target, []Hole) {
 		sn, err := pick(st, d, w.At)
 		if err != nil {
 			holes = append(holes, Hole{Device: d, Reason: err.Error()})
+			w.Log.Warnf(runlog.TagSnap, "%s: hole: %v", d, err)
 			continue
 		}
 		cfg, rep, err := config.Load(sn.Path(store.ConfigDoc))
 		if err != nil {
 			holes = append(holes, Hole{Device: d, Reason: err.Error()})
+			w.Log.Warnf(runlog.TagSnap, "%s: hole: %v", d, err)
 			continue
 		}
+		w.Log.Infof(runlog.TagSnap, "%s: snapshot %s taken %s, PAN-OS %s read with the %s schema",
+			d, sn.ID, sn.Meta.TakenAt.Format(time.RFC3339), cfg.Version(), cfg.DigestVersion())
 		var notes []string
 		if age := w.Now.Sub(sn.Meta.TakenAt); w.MaxAge > 0 && age > w.MaxAge {
 			notes = append(notes, fmt.Sprintf("snapshot %s is %s old, past the %s limit",
 				sn.ID, age.Round(time.Minute), w.MaxAge))
 		}
 		ts, hs := scopes(d, &sn, cfg, rep, vsys, notes)
+		for _, h := range hs {
+			w.Log.Warnf(runlog.TagSnap, "%s/%s: hole: %s", h.Device, h.Vsys, h.Reason)
+		}
 		targets = append(targets, ts...)
 		holes = append(holes, hs...)
 	}
@@ -72,11 +81,12 @@ func Open(st *store.Store, devices, vsys []string, w When) ([]Target, []Hole) {
 }
 
 // OpenFile reads one configuration file with no inventory or store.
-func OpenFile(path string, vsys []string) ([]Target, []Hole, error) {
+func OpenFile(path string, vsys []string, log *runlog.Logger) ([]Target, []Hole, error) {
 	cfg, rep, err := config.Load(path)
 	if err != nil {
 		return nil, nil, err
 	}
+	log.Infof(runlog.TagSnap, "file %s: PAN-OS %s read with the %s schema", path, cfg.Version(), cfg.DigestVersion())
 	ts, hs := scopes(FileDevice, nil, cfg, rep, vsys, nil)
 	return ts, hs, nil
 }

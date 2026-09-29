@@ -77,7 +77,7 @@ func getenv(k string) string {
 func TestFetchThenAnswerFromLatest(t *testing.T) {
 	inv, st := setup(t, lab(t).Start(t))
 	var out bytes.Buffer
-	if err := fetchDevices(context.Background(), &out, inv, st, []string{"fw01"}, getenv); err != nil {
+	if err := fetchDevices(context.Background(), &out, inv, st, []string{"fw01"}, getenv, nil); err != nil {
 		t.Fatalf("fetch: %v\n%s", err, out.String())
 	}
 	if !strings.Contains(out.String(), "TLS certificate verification OFF") {
@@ -113,7 +113,7 @@ func TestFetchReportsAFailedDocument(t *testing.T) {
 	delete(d.Ops, "<show><interface>all</interface></show>")
 	inv, st := setup(t, d.Start(t))
 	var out bytes.Buffer
-	err := fetchDevices(context.Background(), &out, inv, st, []string{"fw01"}, getenv)
+	err := fetchDevices(context.Background(), &out, inv, st, []string{"fw01"}, getenv, nil)
 	if !errors.Is(err, errIncomplete) {
 		t.Errorf("a stored device with a missing document exits 3, got %v", err)
 	}
@@ -130,14 +130,14 @@ func TestFetchReportsAFailedDocument(t *testing.T) {
 func TestFetchContinuesPastAFailedDevice(t *testing.T) {
 	inv, st := setup(t, lab(t).Start(t))
 	var out bytes.Buffer
-	err := fetchDevices(context.Background(), &out, inv, st, []string{"nope", "fw01"}, getenv)
+	err := fetchDevices(context.Background(), &out, inv, st, []string{"nope", "fw01"}, getenv, nil)
 	if !errors.Is(err, errIncomplete) || !strings.Contains(out.String(), "nope:") {
 		t.Errorf("got %v\n%s", err, out.String())
 	}
 	if _, err := st.Latest("fw01"); err != nil {
 		t.Error("fw01 must still be fetched after the failure")
 	}
-	if err := fetchDevices(context.Background(), &out, inv, st, []string{"nope"}, getenv); err == nil || errors.Is(err, errIncomplete) {
+	if err := fetchDevices(context.Background(), &out, inv, st, []string{"nope"}, getenv, nil); err == nil || errors.Is(err, errIncomplete) {
 		t.Errorf("nothing stored is an error, got %v", err)
 	}
 }
@@ -150,7 +150,7 @@ func TestVerificationOnIsSaid(t *testing.T) {
 	}
 	st, _ := store.Open(t.TempDir())
 	var out bytes.Buffer
-	_ = fetchDevices(context.Background(), &out, inv, st, []string{"fw01"}, getenv)
+	_ = fetchDevices(context.Background(), &out, inv, st, []string{"fw01"}, getenv, nil)
 	if !strings.Contains(out.String(), "TLS certificate verification on") {
 		t.Errorf("the run must say verification is on:\n%s", out.String())
 	}
@@ -182,7 +182,10 @@ func newCLI(t *testing.T) *cli {
 	dir := t.TempDir()
 	return &cli{
 		t: t, dir: dir, cfgPath: filepath.Join(dir, "config.yaml"),
-		env:   map[string]string{"LAB_PW": "not-a-real-password", "PANOS_STORE": filepath.Join(dir, "store")},
+		env: map[string]string{
+			"LAB_PW": "not-a-real-password", "PANOS_STORE": filepath.Join(dir, "store"),
+			"PANOS_LOG_DIR": filepath.Join(dir, "log"),
+		},
 		clock: time.Date(2026, 9, 28, 10, 0, 0, 0, time.UTC),
 	}
 }
@@ -200,10 +203,7 @@ func (c *cli) run(args ...string) (string, string, int) {
 	now := c.clock
 	c.clock = c.clock.Add(time.Minute)
 	a := newApp(&out, &errOut, func(k string) string { return c.env[k] }, func() time.Time { return now })
-	cmd := a.root()
-	cmd.SetArgs(append(args, "--config", c.cfgPath))
-	err := cmd.ExecuteContext(context.Background())
-	code := exitCode(err, &errOut)
+	code := a.execute(context.Background(), append(args, "--config", c.cfgPath))
 	return out.String(), errOut.String(), code
 }
 
@@ -456,5 +456,77 @@ func TestModeName(t *testing.T) {
 		if got := modeName(search.Query{Term: term}); got != want {
 			t.Errorf("modeName(%s) = %s, want %s", term, got, want)
 		}
+	}
+}
+
+// Every run writes a log with its command, settings, snapshots and exit; a run that
+// ends badly prints where the log is.
+func TestRunLog(t *testing.T) {
+	c := newCLI(t)
+	c.inventory(inventoryFor(lab(t).Start(t)))
+	c.want(0, "fetch", "fw01", "--log-level", "debug")
+	_, errOut, code := c.run("search", "198.18.10.100", "--device", "fw01", "--vsys", "vsys9")
+	if code != 3 || !strings.Contains(errOut, "log: ") {
+		t.Fatalf("exit %d, stderr %q", code, errOut)
+	}
+	logs, _ := filepath.Glob(filepath.Join(c.dir, "log", "*.log"))
+	if len(logs) != 2 {
+		t.Fatalf("logs = %v", logs)
+	}
+	fetchLog, searchLog := read(t, logs[0]), read(t, logs[1])
+	for _, want := range []string{"[INFO] [RUN] panos-analyst dev: fetch fw01", "[DEBUG] [API] fw01: keygen -> HTTP 200", "[INFO] [SNAP] fw01: stored", "[INFO] [RUN] exit 0"} {
+		if !strings.Contains(fetchLog, want) {
+			t.Errorf("fetch log misses %q:\n%s", want, fetchLog)
+		}
+	}
+	for _, want := range []string{"[INFO] [RUN] settings: inventory", "[INFO] [SNAP] fw01: snapshot", "[WARN] [SNAP] fw01/vsys9: hole", "[WARN] [RUN] the answer is incomplete", "[INFO] [RUN] exit 3"} {
+		if !strings.Contains(searchLog, want) {
+			t.Errorf("search log misses %q:\n%s", want, searchLog)
+		}
+	}
+	if strings.Contains(fetchLog+searchLog, "not-a-real-password") || strings.Contains(fetchLog+searchLog, "not-a-real-key") {
+		t.Error("a secret reached a log")
+	}
+	c.want(2, "search", "x", "--log-level", "trace")
+	_, errOut, _ = c.run("search", "198.18.10.100", "--device", "fw01", "--verbose", "--log-level", "debug")
+	if !strings.Contains(errOut, "[DEBUG] [FIND] fw01/vsys1: object address dc01") {
+		t.Errorf("--verbose must echo the log:\n%s", errOut)
+	}
+	c.env["PANOS_LOG_DIR"] = filepath.Join(c.cfgPath, "not-a-dir") // under a file, so it cannot be created
+	if _, errOut, code := c.run("search", "x", "--device", "fw01"); code != 0 || !strings.Contains(errOut, "no run log") {
+		t.Errorf("an unwritable log dir warns and carries on: exit %d, %q", code, errOut)
+	}
+}
+
+// With no flags and no PANOS_STORE or PANOS_LOG_DIR, the store and the log follow
+// the XDG directories, and the inventory comes from PANOS_CONFIG.
+func TestDefaultsFromTheEnvironment(t *testing.T) {
+	dir := t.TempDir()
+	cfg := filepath.Join(dir, "inv.yaml")
+	if err := os.WriteFile(cfg, []byte(inventoryFor(lab(t).Start(t))), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	env := map[string]string{
+		"LAB_PW": "not-a-real-password", "PANOS_CONFIG": cfg,
+		"XDG_DATA_HOME": filepath.Join(dir, "data"), "XDG_STATE_HOME": filepath.Join(dir, "state"),
+	}
+	run := func(args ...string) int {
+		var out, errOut bytes.Buffer
+		return newApp(&out, &errOut, func(k string) string { return env[k] }, time.Now).execute(context.Background(), args)
+	}
+	if code := run("fetch", "fw01"); code != 0 {
+		t.Fatalf("fetch: exit %d", code)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "data", "panos-analyst", "fw01", "latest")); err != nil {
+		t.Errorf("the store must default to $XDG_DATA_HOME/panos-analyst: %v", err)
+	}
+	if logs, _ := filepath.Glob(filepath.Join(dir, "state", "panos-analyst", "log", "fetch-*.log")); len(logs) != 1 {
+		t.Errorf("the log must default to $XDG_STATE_HOME/panos-analyst/log: %v", logs)
+	}
+	if got := expandHome("~/x"); !strings.HasSuffix(got, string(filepath.Separator)+"x") || strings.HasPrefix(got, "~") {
+		t.Errorf("expandHome = %s", got)
+	}
+	if expandHome("/abs") != "/abs" {
+		t.Error("an absolute path stays")
 	}
 }

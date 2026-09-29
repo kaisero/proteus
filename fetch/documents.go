@@ -5,6 +5,8 @@ import (
 	"encoding/xml"
 	"errors"
 	"fmt"
+
+	"github.com/okaiser/panos-analyst/runlog"
 )
 
 // A Document is one thing fetched from a device and stored as <Name>.xml.
@@ -23,9 +25,12 @@ type Document struct {
 func OpDocument(name string, cmds ...string) Document {
 	return Document{Name: name, Fetch: func(ctx context.Context, c *Client) ([]byte, error) {
 		var errs []error
-		for _, cmd := range cmds {
+		for i, cmd := range cmds {
 			b, err := c.Op(ctx, cmd)
 			if err == nil {
+				if i > 0 {
+					c.log.Infof(runlog.TagAPI, "%s: %s: fell back to %s", c.name, name, cmd)
+				}
 				return b, nil
 			}
 			var api *APIError

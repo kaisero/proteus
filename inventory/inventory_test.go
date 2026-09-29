@@ -257,6 +257,8 @@ func TestAnalysisSettingsAreValidated(t *testing.T) {
 	for _, doc := range []string{
 		"version: 1\ndefaults: {max_snapshot_age: soon}\ndevices: []\n",
 		"version: 1\ndefaults: {output: yaml}\ndevices: []\n",
+		"version: 1\ndefaults: {log_level: trace}\ndevices: []\n",
+		"version: 1\ndefaults: {log_keep: -1}\ndevices: []\n",
 	} {
 		if _, err := Parse(strings.NewReader(doc)); err == nil {
 			t.Errorf("want an error for %q", doc)

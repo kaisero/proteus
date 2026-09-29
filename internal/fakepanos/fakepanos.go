@@ -24,6 +24,9 @@ type Device struct {
 	// DropFirst closes the connection without an answer on the first N requests,
 	// which a client sees as a transport error.
 	DropFirst int
+	// TruncateFirst promises a longer body than it sends on the first N
+	// requests, then closes the connection, which a client sees while reading.
+	TruncateFirst int
 
 	mu       sync.Mutex
 	requests []Request
@@ -73,7 +76,22 @@ func (d *Device) serve(w http.ResponseWriter, r *http.Request) {
 	if drop {
 		d.DropFirst--
 	}
+	truncate := !drop && d.TruncateFirst > 0
+	if truncate {
+		d.TruncateFirst--
+	}
 	d.mu.Unlock()
+
+	if truncate {
+		if hj, ok := w.(http.Hijacker); ok {
+			if conn, buf, err := hj.Hijack(); err == nil {
+				_, _ = buf.WriteString("HTTP/1.1 200 OK\r\nContent-Length: 1000\r\n\r\n<response")
+				_ = buf.Flush()
+				_ = conn.Close()
+				return
+			}
+		}
+	}
 
 	if drop {
 		if hj, ok := w.(http.Hijacker); ok {

@@ -14,8 +14,10 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/okaiser/panos-analyst/inventory"
+	"github.com/okaiser/panos-analyst/runlog"
 )
 
 // Client talks to one firewall's XML API.
@@ -23,18 +25,26 @@ type Client struct {
 	base string // https://<host>/api/
 	http *http.Client
 	key  string
+	log  *runlog.Logger
+	name string // the device, for log lines
 }
 
 // NewClient returns a client for one device. It verifies the device's TLS
 // certificate unless the inventory turned that off (spec S8).
-func NewClient(t inventory.Target) *Client {
+//
+// log receives one API line per call at debug level, and registers the password
+// and the API key as secrets the moment each exists. A nil log discards.
+func NewClient(t inventory.Target, log *runlog.Logger) *Client {
 	tr := http.DefaultTransport.(*http.Transport).Clone()
 	//nolint:gosec // G402: skipping verification is the inventory's documented,
 	// per-device opt-out for self-signed lab certificates (spec S8).
 	tr.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12, InsecureSkipVerify: t.InsecureTLS}
+	log.AddSecret(t.Password)
 	return &Client{
 		base: "https://" + t.Host + "/api/",
 		http: &http.Client{Transport: tr, Timeout: t.Timeout},
+		log:  log,
+		name: t.Name,
 	}
 }
 
@@ -64,6 +74,7 @@ func (e *APIError) Error() string {
 // Source: PAN-OS XML API, "Get Your API Key" and "Structure of a PAN-OS XML API
 // Request", https://docs.paloaltonetworks.com/ngfw/api/getting-started/structure-of-a-pan-os-xml-api-request
 func (c *Client) Keygen(ctx context.Context, user, password string) error {
+	c.log.AddSecret(password)
 	body, err := c.do(ctx, url.Values{"type": {"keygen"}, "user": {user}, "password": {password}}, false)
 	if err != nil {
 		return fmt.Errorf("keygen for %s: %w", user, err)
@@ -75,6 +86,8 @@ func (c *Client) Keygen(ctx context.Context, user, password string) error {
 		return fmt.Errorf("keygen for %s: the response held no key", user)
 	}
 	c.key = r.Key
+	c.log.AddSecret(r.Key)
+	c.log.Infof(runlog.TagAPI, "%s: logged in as %s", c.name, user)
 	return nil
 }
 
@@ -102,8 +115,12 @@ func (c *Client) do(ctx context.Context, form url.Values, needKey bool) ([]byte,
 	if needKey && c.key == "" {
 		return nil, errors.New("fetch: no API key; call Keygen first")
 	}
+	what := form.Get("type")
+	if cmd := form.Get("cmd"); cmd != "" {
+		what += " " + cmd
+	}
 	var lastErr error
-	for range 2 {
+	for attempt := range 2 {
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.base, strings.NewReader(form.Encode()))
 		if err != nil {
 			return nil, err
@@ -112,21 +129,29 @@ func (c *Client) do(ctx context.Context, form url.Values, needKey bool) ([]byte,
 		if needKey {
 			req.Header.Set("X-PAN-KEY", c.key)
 		}
+		start := time.Now()
 		resp, err := c.http.Do(req)
 		if err != nil {
 			if ctx.Err() != nil {
 				return nil, err
 			}
 			lastErr = err
+			c.log.Warnf(runlog.TagAPI, "%s: %s: attempt %d: %v", c.name, what, attempt+1, err)
 			continue
 		}
 		body, err := io.ReadAll(resp.Body)
 		_ = resp.Body.Close()
 		if err != nil {
 			lastErr = err
+			c.log.Warnf(runlog.TagAPI, "%s: %s: attempt %d: reading the body: %v", c.name, what, attempt+1, err)
 			continue
 		}
-		return body, checkResponse(resp.StatusCode, body)
+		err = checkResponse(resp.StatusCode, body)
+		c.log.Debugf(runlog.TagAPI, "%s: %s -> HTTP %d, %d bytes, %s", c.name, what, resp.StatusCode, len(body), time.Since(start).Round(time.Millisecond))
+		if err != nil {
+			c.log.Warnf(runlog.TagAPI, "%s: %s: %v", c.name, what, err)
+		}
+		return body, err
 	}
 	return nil, fmt.Errorf("fetch: %s: %w", c.base, lastErr)
 }

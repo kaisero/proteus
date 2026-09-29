@@ -25,6 +25,8 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+
+	"github.com/okaiser/panos-analyst/runlog"
 )
 
 // version is set at build time via -ldflags.
@@ -80,9 +82,36 @@ func exitCode(err error, stderr io.Writer) int {
 
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
-	err := newApp(os.Stdout, os.Stderr, os.Getenv, time.Now).root().ExecuteContext(ctx)
+	code := newApp(os.Stdout, os.Stderr, os.Getenv, time.Now).execute(ctx, os.Args[1:])
 	stop()
-	os.Exit(exitCode(err, os.Stderr))
+	os.Exit(code)
+}
+
+// execute runs one command and returns its exit code. The run log opens before
+// the command runs and records its exit last, so a run that ended badly can be
+// read back; the log's path is printed when it did.
+func (a *app) execute(ctx context.Context, argv []string) int {
+	start := a.now()
+	cmd := a.root()
+	cmd.SetArgs(argv)
+	a.argv = argv
+	err := cmd.ExecuteContext(ctx)
+	code := exitCode(err, a.stderr)
+	if a.log == nil {
+		return code
+	}
+	switch {
+	case code == exitIncomplete:
+		a.log.Warnf(runlog.TagRun, "the answer is incomplete: it has holes or unresolved entries")
+	case err != nil:
+		a.log.Errorf(runlog.TagRun, "%v", err)
+	}
+	a.log.Infof(runlog.TagRun, "exit %d after %s", code, a.now().Sub(start).Round(time.Millisecond))
+	if code != exitOK {
+		fmt.Fprintf(a.stderr, "log: %s\n", a.log.Path())
+	}
+	_ = a.log.Close()
+	return code
 }
 
 // app holds what every command shares: where it writes, how it reads the
@@ -93,6 +122,11 @@ type app struct {
 	now            func() time.Time
 
 	configFlag, storeFlag, outputFlag, maxAgeFlag string
+	logLevelFlag, logDirFlag                      string
+	verbose                                       bool
+
+	argv []string
+	log  *runlog.Logger // the run log; nil until the command starts
 }
 
 func newApp(stdout, stderr io.Writer, getenv func(string) string, now func() time.Time) *app {
@@ -117,6 +151,10 @@ func (a *app) root() *cobra.Command {
 	pf.StringVar(&a.storeFlag, "store", "", "snapshot store (default $PANOS_STORE, the inventory's store, or ~/.local/share/panos-analyst)")
 	pf.StringVar(&a.outputFlag, "output", "", "text or json (default $PANOS_OUTPUT, the inventory's output, or text)")
 	pf.StringVar(&a.maxAgeFlag, "max-age", "", "note snapshots older than this, e.g. 24h or 7d (default $PANOS_MAX_SNAPSHOT_AGE, the inventory's, or 24h)")
+	pf.StringVar(&a.logLevelFlag, "log-level", "", "error, warn, info or debug (default $PANOS_LOG_LEVEL, the inventory's, or info)")
+	pf.StringVar(&a.logDirFlag, "log-dir", "", "where run logs go (default $PANOS_LOG_DIR, the inventory's, or ~/.local/state/panos-analyst/log)")
+	pf.BoolVar(&a.verbose, "verbose", false, "echo the run log to stderr")
+	cmd.PersistentPreRunE = func(c *cobra.Command, _ []string) error { return a.openLog(c) }
 
 	inv := &cobra.Command{Use: "inventory", Short: "Manage the device inventory"}
 	inv.AddCommand(a.inventoryInitCmd())

@@ -11,6 +11,7 @@ import (
 
 	"github.com/okaiser/panos-analyst/estate"
 	"github.com/okaiser/panos-analyst/index"
+	"github.com/okaiser/panos-analyst/runlog"
 	"github.com/okaiser/panos-analyst/search"
 )
 
@@ -82,7 +83,9 @@ func (a *app) searchCmd() *cobra.Command {
 					return usageErr("%v", err)
 				}
 				byTarget[i] = fs
+				a.log.Infof(runlog.TagFind, "%s/%s: %d findings for %q (%s)", t.Device, t.Vsys, len(fs), q.Term, modeName(q))
 				for _, f := range fs {
+					a.log.Debugf(runlog.TagFind, "%s/%s: %s %s %s %s", t.Device, t.Vsys, f.Stage, f.Kind, f.Name, detail(f))
 					results = append(results, result{target: targetOf(t), Finding: f, Scope: f.Scope.String()})
 				}
 			}

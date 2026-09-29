@@ -28,6 +28,9 @@ defaults:
   password_env: PANOS_PASSWORD   # the environment variable holding its password
   max_snapshot_age: 24h          # answers from older snapshots carry a note
   output: text                   # text or json
+  log_level: info                # error, warn, info or debug; debug explains every answer
+  log_keep: 20                   # run logs kept
+  # log_dir: ~/.local/state/panos-analyst/log
   # store: ~/.local/share/panos-analyst   # where snapshots are kept
 
 devices:

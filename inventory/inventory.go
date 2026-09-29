@@ -52,6 +52,9 @@ type Settings struct {
 	Store          string `yaml:"store"`            // snapshot store root
 	MaxSnapshotAge string `yaml:"max_snapshot_age"` // e.g. 24h or 7d
 	Output         string `yaml:"output"`           // text or json
+	LogLevel       string `yaml:"log_level"`        // error, warn, info or debug
+	LogDir         string `yaml:"log_dir"`          // where run logs go
+	LogKeep        int    `yaml:"log_keep"`         // run logs kept
 }
 
 // Device is one firewall.
@@ -131,6 +134,14 @@ func (inv *Inventory) validate() error {
 		if _, err := ParseAge(a); err != nil {
 			return fmt.Errorf("inventory: defaults: max_snapshot_age: %w", err)
 		}
+	}
+	if inv.Defaults.LogKeep < 0 {
+		return errors.New("inventory: defaults: log_keep must not be negative")
+	}
+	switch strings.ToLower(inv.Defaults.LogLevel) {
+	case "", "error", "warn", "info", "debug":
+	default:
+		return fmt.Errorf("inventory: defaults: log_level %q, want error, warn, info or debug", inv.Defaults.LogLevel)
 	}
 	switch inv.Defaults.Output {
 	case "", "text", "json":

@@ -11,12 +11,64 @@ import (
 	"strings"
 	"time"
 
+	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
 	"github.com/okaiser/panos-analyst/estate"
 	"github.com/okaiser/panos-analyst/inventory"
+	"github.com/okaiser/panos-analyst/runlog"
 	"github.com/okaiser/panos-analyst/store"
 )
+
+// openLog opens the run log for a command: its level, directory and retention come
+// from the same precedence as every other setting. It records the command line and
+// the resolved settings.
+func (a *app) openLog(c *cobra.Command) error {
+	var def inventory.Settings
+	path := a.configFlag
+	if path == "" {
+		path, _ = inventory.DefaultPath(a.getenv)
+	}
+	if inv, err := inventory.Load(path); err == nil {
+		def = inv.Defaults
+	}
+	level, err := runlog.ParseLevel(first(a.logLevelFlag, a.getenv("PANOS_LOG_LEVEL"), def.LogLevel, "info"))
+	if err != nil {
+		return usageErr("%v", err)
+	}
+	dir := first(a.logDirFlag, a.getenv("PANOS_LOG_DIR"), expandHome(def.LogDir))
+	if dir == "" {
+		if dir, err = defaultLogDir(a.getenv); err != nil {
+			return err
+		}
+	}
+	var echo io.Writer
+	if a.verbose {
+		echo = a.stderr
+	}
+	name := strings.TrimPrefix(c.CommandPath(), c.Root().Name()+" ")
+	l, err := runlog.Open(runlog.Options{Dir: dir, Command: name, Keep: def.LogKeep, Level: level, Echo: echo, Now: a.now})
+	if err != nil {
+		fmt.Fprintf(a.stderr, "panos-analyst: warning: no run log: %v\n", err)
+		return nil
+	}
+	a.log = l
+	l.Infof(runlog.TagRun, "panos-analyst %s: %s", version, strings.Join(a.argv, " "))
+	return nil
+}
+
+// defaultLogDir is $XDG_STATE_HOME/panos-analyst/log, else
+// ~/.local/state/panos-analyst/log.
+func defaultLogDir(getenv func(string) string) (string, error) {
+	if x := getenv("XDG_STATE_HOME"); x != "" {
+		return filepath.Join(x, "panos-analyst", "log"), nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, ".local", "state", "panos-analyst", "log"), nil
+}
 
 // settings are the four values of spec §15 C14, resolved with the precedence
 // default < file < PANOS_* env < flag.
@@ -71,6 +123,8 @@ func (a *app) settings(needInventory bool) (settings, error) {
 	if s.output != "text" && s.output != "json" {
 		return s, usageErr("output %q, want text or json", s.output)
 	}
+	a.log.Infof(runlog.TagRun, "settings: inventory %s, store %s, output %s, max snapshot age %s",
+		s.invPath, s.storeRoot, s.output, s.maxAge)
 	return s, nil
 }
 
@@ -121,7 +175,7 @@ func (a *app) targets(ctx context.Context, sel selection, s settings, progress i
 		if len(sel.devices) > 0 || len(sel.labels) > 0 || sel.at != "" || sel.fresh {
 			return nil, nil, usageErr("--file reads one configuration; it cannot be combined with --device, --label, --at or --fresh")
 		}
-		return estate.OpenFile(sel.file, sel.vsys)
+		return estate.OpenFile(sel.file, sel.vsys, a.log)
 	}
 	if s.inv == nil {
 		return nil, nil, fmt.Errorf("no inventory at %s; run panos-analyst inventory init, or pass --file", s.invPath)
@@ -134,7 +188,7 @@ func (a *app) targets(ctx context.Context, sel selection, s settings, progress i
 		return nil, nil, usageErr("the selection matches no device")
 	}
 	var when estate.When
-	when.Now, when.MaxAge = a.now(), s.maxAge
+	when.Now, when.MaxAge, when.Log = a.now(), s.maxAge, a.log
 	if sel.at != "" {
 		if when.At, err = estate.ParseAt(sel.at); err != nil {
 			return nil, nil, usageErr("%v", err)
@@ -146,7 +200,7 @@ func (a *app) targets(ctx context.Context, sel selection, s settings, progress i
 	}
 	failed := map[string]string{}
 	if sel.fresh {
-		errs, _ := fetchEach(ctx, progress, s.inv, st, names, a.getenv)
+		errs, _ := fetchEach(ctx, progress, s.inv, st, names, a.getenv, a.log)
 		for i, e := range errs {
 			if e != nil {
 				failed[names[i]] = e.Error()

@@ -92,7 +92,7 @@ func TestStaleSnapshotsCarryANote(t *testing.T) {
 }
 
 func TestOpenFile(t *testing.T) {
-	ts, holes, err := OpenFile("../testdata/config/firewall-version-12.2.xml", nil)
+	ts, holes, err := OpenFile("../testdata/config/firewall-version-12.2.xml", nil, nil)
 	if err != nil || len(holes) != 0 {
 		t.Fatal(err, holes)
 	}
@@ -102,7 +102,7 @@ func TestOpenFile(t *testing.T) {
 	if len(ts[0].Notes) != 1 || !strings.Contains(ts[0].Notes[0], "12.2.0") {
 		t.Errorf("the version gap must be a note, got %v", ts[0].Notes)
 	}
-	if _, _, err := OpenFile("../testdata/config/nope.xml", nil); err == nil {
+	if _, _, err := OpenFile("../testdata/config/nope.xml", nil, nil); err == nil {
 		t.Error("a missing file must be an error")
 	}
 }
@@ -137,7 +137,7 @@ func TestParseAt(t *testing.T) {
 
 // Asking for the first vsys must not let the later ones through.
 func TestVsysFilterHoldsForEveryVsys(t *testing.T) {
-	ts, holes, err := OpenFile("../testdata/config/firewall-multivsys.xml", []string{"vsys1"})
+	ts, holes, err := OpenFile("../testdata/config/firewall-multivsys.xml", []string{"vsys1"}, nil)
 	if err != nil || len(holes) != 0 {
 		t.Fatal(err, holes)
 	}

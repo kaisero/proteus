@@ -12,6 +12,7 @@ import (
 
 	"github.com/okaiser/panos-analyst/fetch"
 	"github.com/okaiser/panos-analyst/inventory"
+	"github.com/okaiser/panos-analyst/runlog"
 	"github.com/okaiser/panos-analyst/store"
 )
 
@@ -51,7 +52,7 @@ func (a *app) fetchCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return fetchDevices(c.Context(), a.stdout, s.inv, st, names, a.getenv)
+			return fetchDevices(c.Context(), a.stdout, s.inv, st, names, a.getenv, a.log)
 		},
 	}
 	cmd.Flags().BoolVar(&all, "all", false, "fetch every device in the inventory")
@@ -64,9 +65,9 @@ func (a *app) fetchCmd() *cobra.Command {
 // reported and the rest still run (spec S10). Some failures exit 3; all of them
 // exit 1.
 func fetchDevices(ctx context.Context, out io.Writer, inv *inventory.Inventory, st *store.Store,
-	names []string, getenv func(string) string,
+	names []string, getenv func(string) string, log *runlog.Logger,
 ) error {
-	errs, stored := fetchEach(ctx, out, inv, st, names, getenv)
+	errs, stored := fetchEach(ctx, out, inv, st, names, getenv, log)
 	var joined []error
 	anyStored := false
 	for i, name := range names {
@@ -89,7 +90,7 @@ func fetchDevices(ctx context.Context, out io.Writer, inv *inventory.Inventory, 
 // its error and whether a snapshot was stored. Each device's report is printed
 // whole, so reports never interleave.
 func fetchEach(ctx context.Context, out io.Writer, inv *inventory.Inventory, st *store.Store,
-	names []string, getenv func(string) string,
+	names []string, getenv func(string) string, log *runlog.Logger,
 ) ([]error, []bool) {
 	reports := make([]bytes.Buffer, len(names))
 	errs := make([]error, len(names))
@@ -102,7 +103,7 @@ func fetchEach(ctx context.Context, out io.Writer, inv *inventory.Inventory, st 
 			defer wg.Done()
 			sem <- struct{}{}
 			defer func() { <-sem }()
-			stored[i], errs[i] = fetchOne(ctx, &reports[i], inv, st, name, getenv)
+			stored[i], errs[i] = fetchOne(ctx, &reports[i], inv, st, name, getenv, log)
 			if errs[i] != nil {
 				fmt.Fprintf(&reports[i], "%s: %v\n", name, errs[i])
 			}
@@ -116,7 +117,7 @@ func fetchEach(ctx context.Context, out io.Writer, inv *inventory.Inventory, st 
 }
 
 func fetchOne(ctx context.Context, out io.Writer, inv *inventory.Inventory, st *store.Store,
-	name string, getenv func(string) string,
+	name string, getenv func(string) string, log *runlog.Logger,
 ) (bool, error) {
 	t, err := inv.Resolve(name, getenv)
 	if err != nil {
@@ -127,7 +128,8 @@ func fetchOne(ctx context.Context, out io.Writer, inv *inventory.Inventory, st *
 	} else {
 		fmt.Fprintf(out, "%s: TLS certificate verification on\n", name)
 	}
-	res, err := fetch.Run(ctx, t, fetch.Documents)
+	log.Infof(runlog.TagAPI, "%s: fetching %s, TLS verification %s", name, t.Host, map[bool]string{true: "off", false: "on"}[t.InsecureTLS])
+	res, err := fetch.Run(ctx, t, fetch.Documents, log)
 	if err != nil {
 		return false, err
 	}
@@ -153,6 +155,7 @@ func fetchOne(ctx context.Context, out io.Writer, inv *inventory.Inventory, st *
 	}
 	fmt.Fprintf(out, "  stored %s@%s (%s, PAN-OS %s, serial %s)\n",
 		sn.Device, sn.ID, res.System.Model, res.System.SWVersion, res.System.Serial)
+	log.Infof(runlog.TagSnap, "%s: stored %s", name, sn.ID)
 	return true, errors.Join(docErrs...)
 }
 

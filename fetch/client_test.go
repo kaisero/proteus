@@ -37,7 +37,7 @@ func target(host string) inventory.Target {
 
 func loggedIn(t *testing.T, d *fakepanos.Device) *Client {
 	t.Helper()
-	c := NewClient(target(d.Start(t)))
+	c := NewClient(target(d.Start(t)), nil)
 	if err := c.Keygen(context.Background(), testUser, testPass); err != nil {
 		t.Fatalf("Keygen: %v", err)
 	}
@@ -68,7 +68,7 @@ func TestKeygenKeepsSecretsOutOfURLs(t *testing.T) {
 
 func TestKeygenRefusalIsAnAPIErrorAndIsNotRetried(t *testing.T) {
 	d := device()
-	c := NewClient(target(d.Start(t)))
+	c := NewClient(target(d.Start(t)), nil)
 	err := c.Keygen(context.Background(), testUser, "wrong")
 	var api *APIError
 	if !errors.As(err, &api) || api.HTTPStatus != 403 || !strings.Contains(api.Message, "Invalid Credential") {
@@ -85,7 +85,7 @@ func TestKeygenRefusalIsAnAPIErrorAndIsNotRetried(t *testing.T) {
 func TestKeygenNeedsAKeyInTheAnswer(t *testing.T) {
 	d := device()
 	d.Key = ""
-	c := NewClient(target(d.Start(t)))
+	c := NewClient(target(d.Start(t)), nil)
 	if err := c.Keygen(context.Background(), testUser, testPass); err == nil {
 		t.Error("a success without a key must be an error")
 	}
@@ -134,7 +134,7 @@ func TestExportConfigAcceptsABareConfig(t *testing.T) {
 }
 
 func TestCallsNeedAKey(t *testing.T) {
-	c := NewClient(target(device().Start(t)))
+	c := NewClient(target(device().Start(t)), nil)
 	if _, err := c.ExportConfig(context.Background()); err == nil {
 		t.Error("a call before Keygen must fail")
 	}
@@ -144,13 +144,13 @@ func TestCallsNeedAKey(t *testing.T) {
 func TestOneRetryOnATransportError(t *testing.T) {
 	d := device()
 	d.DropFirst = 1
-	c := NewClient(target(d.Start(t)))
+	c := NewClient(target(d.Start(t)), nil)
 	if err := c.Keygen(context.Background(), testUser, testPass); err != nil {
 		t.Fatalf("one drop must be survived: %v", err)
 	}
 	d2 := device()
 	d2.DropFirst = 2
-	c2 := NewClient(target(d2.Start(t)))
+	c2 := NewClient(target(d2.Start(t)), nil)
 	if err := c2.Keygen(context.Background(), testUser, testPass); err == nil {
 		t.Error("two drops must fail")
 	}
@@ -165,7 +165,7 @@ func TestACancelledContextIsNotRetried(t *testing.T) {
 	d.DropFirst = 1
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if err := NewClient(target(d.Start(t))).Keygen(ctx, testUser, testPass); err == nil {
+	if err := NewClient(target(d.Start(t)), nil).Keygen(ctx, testUser, testPass); err == nil {
 		t.Error("a cancelled context must fail")
 	}
 	if n := len(d.Requests()); n != 0 {
@@ -178,7 +178,7 @@ func TestACancelledContextIsNotRetried(t *testing.T) {
 func TestVerificationRejectsAnUntrustedCertificate(t *testing.T) {
 	tg := target(device().Start(t))
 	tg.InsecureTLS = false
-	err := NewClient(tg).Keygen(context.Background(), testUser, testPass)
+	err := NewClient(tg, nil).Keygen(context.Background(), testUser, testPass)
 	if err == nil || !strings.Contains(err.Error(), "certificate") {
 		t.Errorf("want a certificate error, got %v", err)
 	}
@@ -210,5 +210,25 @@ func TestOnlyReadCalls(t *testing.T) {
 	}
 	if got := strings.Join(methods, ","); got != "ExportConfig,Keygen,Op" {
 		t.Errorf("Client methods = %s; a new one needs R2 review", got)
+	}
+}
+
+// A body cut off mid-read is a transport failure: retried once.
+func TestATruncatedBodyIsRetried(t *testing.T) {
+	d := device()
+	d.TruncateFirst = 1
+	if err := NewClient(target(d.Start(t)), nil).Keygen(context.Background(), testUser, testPass); err != nil {
+		t.Errorf("one truncated body must be survived: %v", err)
+	}
+	d2 := device()
+	d2.TruncateFirst = 2
+	if err := NewClient(target(d2.Start(t)), nil).Keygen(context.Background(), testUser, testPass); err == nil {
+		t.Error("two truncated bodies must fail")
+	}
+}
+
+func TestABadHostFailsBeforeSending(t *testing.T) {
+	if err := NewClient(target("bad host\x7f"), nil).Keygen(context.Background(), testUser, testPass); err == nil {
+		t.Error("an unparseable host must fail")
 	}
 }
