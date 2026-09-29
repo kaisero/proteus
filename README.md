@@ -204,7 +204,7 @@ One binary, `panos-analyst`. Questions are verbs; housekeeping is grouped by nou
 | `snapshot show` | Per device and vsys: snapshot, age, version, rule count, fetched documents |
 | `snapshot diff [--from] [--to]` | Objects and rules added, removed or changed between two snapshots |
 | `search <term>` | Every place a value or name appears: objects by value and by name, groups, references, literals |
-| `simulate secpolicy <src> <dst>` | The rules one flow could hit on one device, and the first match |
+| `simulate secpolicy <src> <dst>` | The rule one flow would hit on one device: source and destination by address or FQDN, `--port`, `--url`, zones given or derived; every stage says how certain it is, and `--why` shows them |
 
 Every question takes the same selectors: `--device`, `--label k=v`, `--vsys`,
 `--at <time>` for older snapshots, `--fresh` to fetch first, or `--file <config.xml>`
@@ -219,6 +219,12 @@ Settings come from, in rising precedence, the defaults, the inventory's
 `--config`), the store (`store:`, `PANOS_STORE`, `--store`), the snapshot age limit
 (`max_snapshot_age:`, `PANOS_MAX_SNAPSHOT_AGE`, `--max-age`) and the output
 (`output:`, `PANOS_OUTPUT`, `--output`). `PANOS_USERS` points at a user snapshot.
+
+Every run writes a log you can read back when an answer needs explaining:
+`log_level:` (`PANOS_LOG_LEVEL`, `--log-level`: error, warn, info, debug),
+`log_dir:` (`PANOS_LOG_DIR`, `--log-dir`, default `~/.local/state/panos-analyst/log`)
+and `log_keep:`. `--verbose` echoes it to the terminal. Passwords and API keys never
+reach it.
 
 `panos-demo <config.xml> [-v]` runs every library feature against one file in
 twelve sections and narrates what it does.
@@ -265,7 +271,10 @@ go-panos-schema/
 ├── inventory/             # devices, credentials and TLS choice, from YAML
 ├── fetch/                 # read-only XML API client and the document list
 ├── store/                 # timestamped on-disk snapshots, latest, retention
-├── estate/                # selectors and a time, to devices, vsys and configs
+├── estate/                # selectors and a time to targets; the simulation registry
+├── simulate/              # the staged simulation framework and its fidelity
+│   └── securitypolicy/    # the first simulation: which rule a flow would hit
+├── runlog/                # the run log: levels, redaction, rotation
 ├── search/                # every place a value or name appears, in one scope
 ├── drift/                 # what changed between two configurations of a scope
 ├── schema/                # public: query the schema itself (design not settled)

@@ -278,21 +278,136 @@ Against the store, a stored forwarding table also answers zone questions.
 
 ## 11. Simulate a flow
 
+`simulate secpolicy` answers "which rule would this traffic hit". It runs named
+stages that narrow the candidate rules, and each stage says how certain it is:
+**exact**, **overmatch** (may hold more than the device would match), **inferred**
+(from data the device may not be using) or **undermatch** (may be missing matches).
+The run's fidelity is the weakest stage's.
+
+Source and destination are an address or an FQDN. `--port`, `--url` and the zones
+narrow the flow:
+
 ```
 $ panos-analyst simulate secpolicy 10.1.0.5 10.2.0.5 --file testdata/config/firewall-zones.xml --from-zone inside --to-zone dmz --port 443
 10.1.0.5 -> 10.2.0.5 tcp/443
 file / vsys1   testdata/config/firewall-zones.xml
-  zones: from inside, to dmz
+  zones      from inside, to dmz (given)
+  relevance  unknown: no stored forwarding table
+  fidelity   overmatch: kept rules whose service is application-default, predefined or absent: from-inside; not evaluated: application
     1. from-inside                allow  [local       vsys:vsys1]
-not evaluated: application, service
 first match: from-inside (allow)
 ```
 
-The candidates are listed in evaluation order, and the first is the match. The
-last lines say what was not evaluated: application and service always, zones when
-none were given. The device may decline a rule on something not evaluated. Today
-`simulate secpolicy` runs on one device and one vsys; zone derivation and estate
-simulation follow.
+`from-inside` names no service, so a port cannot rule it out: it stays, and the
+fidelity says why. Application is never evaluated yet.
+
+Without `--from-zone` and `--to-zone`, zones are derived: from the stored forwarding
+table against a fetched device, else from the configuration's interfaces and
+routes. `--why` shows every stage and how many candidates it left:
+
+```
+$ panos-analyst simulate secpolicy 10.1.0.5 10.2.0.5 --file testdata/config/firewall-zones.xml --why
+10.1.0.5 -> 10.2.0.5 tcp
+file / vsys1   testdata/config/firewall-zones.xml
+  zones      from inside, to dmz (configuration)
+  relevance  unknown: no stored forwarding table
+  fidelity   inferred; not evaluated: service, application
+  resolve-source       exact          2  10.1.0.5: 0 hits, 0 negated rules
+  resolve-destination  exact          2  10.2.0.5: 0 hits, 0 negated rules
+  derive-zones         inferred       1  from inside; to dmz (configuration)
+  match-service        overmatch      1  no port given
+  match-url            exact          1  no candidate names a URL category
+  drop-disabled        exact          1  0 disabled
+  order                exact          1  1 in order
+  first-match          overmatch      1  from-inside (allow), position 1
+    1. from-inside                allow  [local       vsys:vsys1]
+first match: from-inside (allow)
+```
+
+A derived zone is **inferred** even from the device's own forwarding table: the
+source zone is the zone of the interface a packet arrives on, which a table only
+predicts. Against a fetched device, the answer also says whether the device is
+**relevant**: whether a route more specific than the default covers either end.
+
+A URL matches custom URL categories; a rule naming a PAN-DB category cannot be
+judged from a configuration, so it stays:
+
+```
+$ panos-analyst simulate secpolicy 10.0.0.1 10.6.0.1 --file testdata/config/firewall-simulate.xml --url shop.example.com/cart
+10.0.0.1 -> 10.6.0.1 tcp shop.example.com/cart
+file / vsys1   testdata/config/firewall-simulate.xml
+  zones      not evaluated
+  relevance  unknown: no stored forwarding table
+  fidelity   overmatch: kept rules naming a category the configuration does not define, such as a PAN-DB category: social; not evaluated: zones, service, application
+    7. shop                       allow  [local       vsys:vsys1]
+    8. social                     deny   [local       vsys:vsys1]
+    9. anything                   allow  [local       vsys:vsys1]
+first match: shop (allow)
+```
+
+A port matches services; `application-default` and predefined services such as
+`service-https` stay for the same reason:
+
+```
+$ panos-analyst simulate secpolicy 10.0.0.1 10.5.0.1 --file testdata/config/firewall-simulate.xml --port 8443
+10.0.0.1 -> 10.5.0.1 tcp/8443
+file / vsys1   testdata/config/firewall-simulate.xml
+  zones      not evaluated
+  relevance  unknown: no stored forwarding table
+  fidelity   overmatch: kept rules whose service is application-default, predefined or absent: app-default, predefined-https; not evaluated: zones, application
+    4. custom-port                allow  [local       vsys:vsys1]
+    5. app-default                allow  [local       vsys:vsys1]
+    6. predefined-https           allow  [local       vsys:vsys1]
+    9. anything                   allow  [local       vsys:vsys1]
+first match: custom-port (allow)
+```
+
+An FQDN is resolved with this machine's DNS, and the name matches FQDN objects while
+each address matches everything else. Those addresses may differ from what the
+firewall resolves, so the stage is inferred. Without an address, only FQDN objects
+match, and the answer says it may be missing rules:
+
+```
+$ panos-analyst simulate secpolicy 10.0.0.1 www.example.com --file testdata/config/firewall-simulate.xml --no-dns
+10.0.0.1 -> www.example.com tcp
+file / vsys1   testdata/config/firewall-simulate.xml
+  dns        www.example.com -> []
+  zones      not evaluated
+  relevance  unknown: no stored forwarding table
+  fidelity   undermatch: www.example.com resolved to no address, so only FQDN objects of that name were matched; an fqdn object matches this name, but the addresses it resolves to are not in the configuration, so rules reaching those addresses another way are not reported; not evaluated: zones, service, application
+    2. to-web-by-name             allow  [local       vsys:vsys1]
+    9. anything                   allow  [local       vsys:vsys1]
+unresolved: file/vsys1: an fqdn object matches this name, but the addresses it resolves to are not in the configuration, so rules reaching those addresses another way are not reported
+unresolved: file/vsys1: www.example.com resolved to no address, so only FQDN objects of that name were matched
+
+first match: to-web-by-name (allow)
+```
+
+That exits 3. Negated source and destination are evaluated, and disabled rules
+never win. A simulation runs on one device and vsys; estate simulation follows.
+
+## 11a. Read the run log
+
+Every command writes one log file under `~/.local/state/panos-analyst/log` (or
+`log_dir`, `PANOS_LOG_DIR`, `--log-dir`). A run that ends with an error or exit 3
+prints its path on stderr. `--log-level debug` records every API call, every
+finding and, for a simulation, the rules each stage kept; `--verbose` echoes the log
+to the terminal. Passwords and API keys never reach it.
+
+```
+$ panos-analyst simulate secpolicy 10.1.0.5 10.2.0.5 --file testdata/config/firewall-zones.xml --log-level debug
+$ cut -d' ' -f2- ~/.local/state/panos-analyst/log/simulate_secpolicy-*.log | grep -E 'SNAP|derive-zones|first-match|exit'
+[INFO] [SNAP] file testdata/config/firewall-zones.xml: PAN-OS 11.2.0 read with the 11.2.0 schema
+[INFO] [STEP] secpolicy/derive-zones: inferred, 1 candidates, 8µs - from inside; to dmz (configuration)
+[DEBUG] [STEP] secpolicy/derive-zones: 10.1.0.5: inside via ethernet1/1 10.1.0.1/24
+[DEBUG] [STEP] secpolicy/derive-zones: 10.2.0.5: dmz via ethernet1/2.20 10.2.0.1/24
+[DEBUG] [STEP] secpolicy/derive-zones: left: from-inside
+[INFO] [STEP] secpolicy/first-match: overmatch; not evaluated: application, 1 candidates, 0s - from-inside (allow), position 1
+[INFO] [RUN] exit 0 after 41ms
+```
+
+Each line is `<time> [<LEVEL>] [<TAG>] <message>` (the `cut` drops the time); `grep '\[STEP\]'` finds the
+stages, `grep '\[API\]'` the device calls.
 
 ## 12. What changed
 

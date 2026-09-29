@@ -49,8 +49,9 @@ type Hole struct{ ... }
 type Target struct{ ... }
 type When struct{ ... }
 
+func Kinds() []string
 func Open(st *store.Store, devices, vsys []string, w When) ([]Target, []Hole)
-func OpenFile(path string, vsys []string) ([]Target, []Hole, error)
+func OpenFile(path string, vsys []string, log *runlog.Logger) ([]Target, []Hole, error)
 func ParseAt(s string) (time.Time, error)
 ```
 <!-- /GENERATED:api -->

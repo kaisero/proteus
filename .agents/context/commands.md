@@ -34,15 +34,22 @@ simulate secpolicy <src> <dst>              the rules one flow could hit, and th
   port covers, URL by tokens, else exact); `--exact`, `--within`, `--contains`
   override. Filters: `--kind`, `--field`, `--show objects,groups,refs,literals`,
   `--direct`.
-- **`simulate secpolicy` is a stopgap** until the staged simulator (M4): today's
-  composition for one device and vsys; zones only when given. Its text ends with
-  `first match: <rule> (<action>)`, which `scripts/device-probe.sh` reads.
+- **`simulate <kind>`** has one subcommand per kind registered in
+  `estate.Simulations`; `secpolicy` is the first. It runs on one device and vsys
+  (M5 fans out), takes an address or FQDN per side, `--port`, `--url`, zones given
+  or derived, and prints each stage with `--why`. Its text ends with
+  `first match: <rule> (<action>)`, which `scripts/device-probe.sh` reads. See
+  [simulator](simulator.md).
 - **Output and exit codes:** `--output text|json`; JSON is one envelope with
   `format`, `command`, `input`, `results`, `holes`, `unresolved`, `notes`. Exit 0
   complete, 1 error, 2 usage, 3 holes or unresolved.
 - **Settings**, rising precedence default < inventory `defaults:` < `PANOS_*` <
-  flag: inventory path, store root, `max_snapshot_age`, output. `PANOS_USERS` names
-  a user snapshot; a stored forwarding table supplies zones.
+  flag: inventory path, store root, `max_snapshot_age`, output, and the run log's
+  `log_level`, `log_dir`, `log_keep` (plus `--verbose`). `PANOS_USERS` names a user
+  snapshot; a stored forwarding table supplies zones.
+- **Run log:** one file per run under `log_dir`, `<time> [<LEVEL>] [<TAG>] <msg>`,
+  tags `RUN`, `API`, `SNAP`, `FIND`, `STEP`; secrets redacted; the path is printed
+  when a run exits non-zero. The core never logs; `runlog` is used above it.
 
 ## panos-demo
 

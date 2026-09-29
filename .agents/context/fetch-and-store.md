@@ -84,10 +84,10 @@ func (c *Client) Keygen(ctx context.Context, user, password string) error
 func (c *Client) Op(ctx context.Context, cmd string) ([]byte, error)
 func (e *APIError) Error() string
 func (r Result) OK(name string) bool
-func NewClient(t inventory.Target) *Client
+func NewClient(t inventory.Target, log *runlog.Logger) *Client
 func OpDocument(name string, cmds ...string) Document
 func ParseSystemInfo(b []byte) (System, error)
-func Run(ctx context.Context, t inventory.Target, docs []Document) (Result, error)
+func Run(ctx context.Context, t inventory.Target, docs []Document, log *runlog.Logger) (Result, error)
 ```
 <!-- /GENERATED:api -->
 

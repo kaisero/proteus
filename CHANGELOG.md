@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **A simulation says how certain its answer is.** `panos-analyst simulate
+  secpolicy` runs named stages that narrow the candidate rules by source and
+  destination (an address, or an FQDN resolved through DNS), zone, port and URL
+  category. Each stage declares whether its output is exact, may over-match, is
+  inferred or may be missing matches, and the answer carries the weakest. `--why`
+  shows every stage. Negated sources and destinations are evaluated, and rules the
+  configuration cannot judge, such as `application-default` or a PAN-DB category,
+  are kept and named rather than dropped.
 - **Every run writes a log you can read back.** Each command writes one file under
   `~/.local/state/panos-analyst/log` with its settings, the snapshot each device
   resolved to, every API call and what each search or simulation stage kept.
@@ -150,6 +158,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Zones no longer have to be given to simulate.** Without `--from-zone` and
+  `--to-zone`, they are derived from the device's stored forwarding table, or from its
+  configuration, and the answer says which and marks them as inferred.
 - **The project is now `panos-analyst`.** The module path is
   `github.com/okaiser/panos-analyst`; update imports that used
   `github.com/okaiser/go-panos-schema`.
