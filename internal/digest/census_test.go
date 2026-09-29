@@ -33,7 +33,7 @@ var wantCensus = map[schema.TargetForm]int{
 const wantTotal = 5898
 
 func TestRealSchemaFormCensus(t *testing.T) {
-	f, err := os.Open("../../schemadigest/panos-11.2.0-firewall.json.gz")
+	f, err := os.Open("../config/schemadigest/panos-11.2.0-firewall.json.gz")
 	if err != nil {
 		t.Skip("no committed digest to census")
 	}
@@ -65,7 +65,7 @@ func TestRealSchemaFormCensus(t *testing.T) {
 
 // Nothing unrecognised may be accepted as a reference.
 func TestNoUnrecognisedTargetParses(t *testing.T) {
-	f, err := os.Open("../../schemadigest/panos-11.2.0-firewall.json.gz")
+	f, err := os.Open("../config/schemadigest/panos-11.2.0-firewall.json.gz")
 	if err != nil {
 		t.Skip("no committed digest")
 	}
@@ -109,7 +109,7 @@ const (
 )
 
 func TestReferenceFieldCensus(t *testing.T) {
-	f, err := os.Open("../../schemadigest/panos-11.2.0-firewall.json.gz")
+	f, err := os.Open("../config/schemadigest/panos-11.2.0-firewall.json.gz")
 	if err != nil {
 		t.Skip("no committed digest to census")
 	}

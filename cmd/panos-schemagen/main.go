@@ -2,8 +2,8 @@
 //
 // Usage:
 //
-//	panos-schemagen digest   -schema schemas -out schemadigest -version 11.2.0
-//	panos-schemagen generate -digest schemadigest -out internal/config
+//	panos-schemagen digest   -schema schemas -out internal/config/schemadigest -version 11.2.0
+//	panos-schemagen generate -digest internal/config/schemadigest -out internal/config
 //
 // The schema is not published; copy it off an appliance with `make schema-pull`.
 package main
@@ -25,7 +25,7 @@ func main() {
 	case "digest":
 		fs := flag.NewFlagSet("digest", flag.ExitOnError)
 		schemaDir := fs.String("schema", "schemas", "directory holding schema.xml and cms-schema.xml")
-		outDir := fs.String("out", "schemadigest", "directory to write digests into")
+		outDir := fs.String("out", "internal/config/schemadigest", "directory to write digests into")
 		ver := fs.String("version", "", "PAN-OS config version, e.g. 11.2.0")
 		_ = fs.Parse(os.Args[2:])
 		if *ver == "" {
@@ -36,7 +36,7 @@ func main() {
 		}
 	case "generate":
 		fs := flag.NewFlagSet("generate", flag.ExitOnError)
-		digestDir := fs.String("digest", "schemadigest", "directory holding committed digests")
+		digestDir := fs.String("digest", "internal/config/schemadigest", "directory holding committed digests")
 		outDir := fs.String("out", "internal/config", "directory to write generated packages into")
 		_ = fs.Parse(os.Args[2:])
 		if err := runGenerate(*digestDir, *outDir); err != nil {

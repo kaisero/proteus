@@ -7,7 +7,7 @@ LDFLAGS := -s -w -X main.version=$(VERSION)
 # Host to pull a PAN-OS schema from, e.g. make schema-pull HOST=labadmin@10.0.0.5
 HOST ?=
 SCHEMA_DIR := schemas
-DIGEST_DIR := schemadigest
+DIGEST_DIR := internal/config/schemadigest
 
 # PAN-OS config version the schemas in $(SCHEMA_DIR) came from, e.g. 11.2.0.
 # Read it from the <config version="..."> attribute of a config from that device.
@@ -75,7 +75,7 @@ tidy-check: ## Fail if go.mod/go.sum are not tidy
 
 gate: tidy-check lint test ## Fast pre-commit gate (tidy + lint + unit tests)
 
-ci: tidy-check lint test-race test-cov generate-check digest-check context-check build vuln ## Everything CI runs
+ci: tidy-check lint test-race test-cov generate-check context-check build vuln ## Everything CI runs
 
 ## --- generate / build ---
 
@@ -83,13 +83,7 @@ schema-digest: build-local ## Build committed digests from $(SCHEMA_DIR) (PANOS_
 	@test -n "$(PANOS_VERSION)" || { echo "usage: make schema-digest PANOS_VERSION=11.2.0"; exit 1; }
 	$(BIN_DIR)/$(BINARY) digest -schema $(SCHEMA_DIR) -out $(DIGEST_DIR) -version $(PANOS_VERSION)
 
-# go:embed cannot reach outside a package directory, so the digests are copied in.
-# The originals in $(DIGEST_DIR) are the committed ones.
-internal/config/schemadigest: $(DIGEST_DIR)
-	@mkdir -p internal/config/schemadigest
-	cp $(DIGEST_DIR)/*.json.gz internal/config/schemadigest/
-
-generate: build-local internal/config/schemadigest ## Regenerate the config model from the committed digests
+generate: build-local ## Regenerate the config model from the committed digests
 	$(BIN_DIR)/$(BINARY) generate -digest $(DIGEST_DIR) -out internal/config
 
 # Only the generated model is checked. internal/config/ also holds hand-written code, and
@@ -113,14 +107,6 @@ context: ## Refresh the generated API blocks in .agents/context/
 
 context-check: ## Fail if the agent context docs have drifted from the real API
 	@python3 scripts/context-api.py --check
-
-digest-check: ## Fail if the embedded digests differ from the committed originals
-	@for f in $(DIGEST_DIR)/*.json.gz; do \
-		cmp -s "$$f" "internal/config/schemadigest/$$(basename $$f)" || { \
-			echo "internal/config/schemadigest/$$(basename $$f) differs from $$f; run make internal/config/schemadigest"; \
-			exit 1; }; \
-	done
-	@echo "embedded digests match the originals"
 
 tools-bin: ## Build panos-analyst and panos-demo for local use
 	CGO_ENABLED=0 go build -ldflags '$(LDFLAGS)' -o $(BIN_DIR)/panos-demo ./cmd/panos-demo
