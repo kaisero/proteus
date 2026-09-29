@@ -71,6 +71,7 @@ type Relevance struct {
 
 // state is what the stages share.
 type state struct {
+	env     *simulate.Env
 	in      simulate.Input
 	target  simulate.Target
 	view    *index.View
@@ -87,7 +88,7 @@ func (Simulation) Run(ctx context.Context, env *simulate.Env, in simulate.Input)
 		return run, fmt.Errorf("%s: %s/%s: %w", Kind, in.Device, in.Vsys, err)
 	}
 	run.Notes = t.Notes
-	s := &state{in: in, target: t, view: t.Index.With(t.Providers), rules: t.Index.Rules()}
+	s := &state{env: env, in: in, target: t, view: t.Index.With(t.Providers), rules: t.Index.Rules()}
 	s.verdict.Relevance = relevance(t.Providers.Zones, in.Flow)
 	stages, err := simulate.Execute(ctx, Kind, s, steps, false, env.Log)
 	run.Stages = stages

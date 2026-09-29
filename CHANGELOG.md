@@ -33,6 +33,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   its value, members and the groups holding it. `--expand` puts each name's value in
   parentheses and opens groups as a tree, and `--full` shows lists longer than five
   items. A name that several kinds share needs `--kind`.
+- **Security policy simulation uses the zone after NAT.** When `simulate secpolicy`
+  derives the zones and a destination NAT applies, the destination zone is the one
+  the translated address is routed to, as the firewall matches it. A zone you give
+  still wins, with a note when NAT would give another.
 - **A simulation says how certain its answer is.** `panos-analyst simulate
   secpolicy` runs named stages that narrow the candidate rules by source and
   destination (an address, or an FQDN resolved through DNS), zone, port and URL

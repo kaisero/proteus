@@ -119,8 +119,14 @@ func deriveZones(_ context.Context, s *state) (simulate.Outcome, error) {
 		s.cand.And(fb)
 		s.cand.And(tb)
 		z.From, z.To, z.Source = []string{f.FromZone}, []string{f.ToZone}, "given"
+		detail := fmt.Sprintf("from %s, to %s, as given", f.FromZone, f.ToZone)
+		// A given zone wins; the engine only says when it derives another (§18 N10).
+		if nz := s.postNATZones([]string{f.FromZone}); len(nz.zones) > 0 && !slices.Contains(nz.zones, f.ToZone) {
+			detail += "; note: NAT would give " + nz.describe()
+			z.Detail = "NAT would give " + nz.describe()
+		}
 		return simulate.Outcome{
-			Fidelity: simulate.Exact, Detail: fmt.Sprintf("from %s, to %s, as given", f.FromZone, f.ToZone),
+			Fidelity: simulate.Exact, Detail: detail,
 			Candidates: s.cand, Debug: []string{"left: " + names(s.rules, s.cand)},
 		}, nil
 	}
@@ -130,9 +136,26 @@ func deriveZones(_ context.Context, s *state) (simulate.Outcome, error) {
 	}
 	fromB, from, fromVia := s.zonesOf(index.FromZone, f.Source, true)
 	toB, to, toVia := s.zonesOf(index.ToZone, f.Destination, false)
-	z.From, z.To = from, to
 	var details []string
 	out := simulate.Outcome{Fidelity: simulate.Inferred}
+	// Security policy matches the post-NAT destination zone (spec §18 F5, N10).
+	nz := s.postNATZones(from)
+	switch {
+	case nz.skipped != "":
+		out.Debug = append(out.Debug, nz.skipped)
+	case len(nz.zones) > 0:
+		to, toB = nz.zones, roaring.New()
+		for _, zn := range nz.zones {
+			zb, _ := s.view.Candidates(index.ToZone, zn)
+			toB.Or(zb)
+		}
+		toVia = append(toVia, nz.describe())
+		details = append(details, nz.describe())
+	}
+	if len(nz.doubts) > 0 {
+		out.Fidelity = simulate.Weakest(out.Fidelity, simulate.OverMatchBecause("the NAT rule is not certain: "+strings.Join(nz.doubts, "; ")))
+	}
+	z.From, z.To = from, to
 	if fromB != nil {
 		s.cand.And(fromB)
 		details = append(details, "from "+strings.Join(from, ", "))

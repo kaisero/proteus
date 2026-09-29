@@ -129,7 +129,16 @@ func (a *app) runSimulation(ctx context.Context, sim simulate.Simulation, sel se
 			}
 		}
 		return simulate.Target{Config: t.Config, Index: idx, Providers: p, Notes: t.Notes}, nil
-	}}
+	}, Resolve: a.lookup}
+	if fl.noDNS {
+		env.Resolve = nil
+	}
+	// The device's stored tables, so NAT can give the post-NAT zone (spec §18 N10).
+	if t.Snapshot != nil {
+		if st, err := a.openStore(s.storeRoot); err == nil {
+			env.Network = estate.NewNetwork(st, []string{t.Device}, estate.When{At: t.Snapshot.Meta.TakenAt, Now: a.now(), Log: a.log})
+		}
+	}
 	a.log.Infof(runlog.TagStep, "%s %s -> %s on %s/%s", sim.Kind(), flow.Source, flow.Destination, t.Device, t.Vsys)
 	run, err := sim.Run(ctx, env, simulate.Input{Flow: flow, Device: t.Device, Vsys: t.Vsys})
 	if err != nil {
