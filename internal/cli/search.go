@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -15,10 +16,16 @@ import (
 	"github.com/okaiser/proteus/internal/search"
 )
 
+// searchOptions are search's flags.
+type searchOptions struct {
+	sel                     selection
+	exact, within, contains bool
+	direct                  bool
+	kinds, fields, show     []string
+}
+
 func (a *app) searchCmd() *cobra.Command {
-	var sel selection
-	var exact, within, contains, direct bool
-	var kinds, fields, show []string
+	var o searchOptions
 	cmd := &cobra.Command{
 		Use:   "search <term>",
 		Short: "Find every place a value or name appears",
@@ -28,110 +35,159 @@ func (a *app) searchCmd() *cobra.Command {
 			"The term's type sets the match: an address is covered, a prefix or range overlaps,\n" +
 			"a port is covered, a URL matches by PAN-OS tokens, anything else is exact.",
 		Args: args(cobra.ExactArgs(1)),
-		RunE: func(c *cobra.Command, argv []string) error {
-			q := search.Query{Term: argv[0], Kinds: kinds, Fields: fields, Direct: direct}
-			switch { // the flags exclude each other; the root command checks that
-			case exact:
-				q.Mode = search.Exact
-			case within:
-				q.Mode = search.Within
-			case contains:
-				q.Mode = search.Contains
-			}
-			for _, st := range show {
-				stage, ok := showNames[st]
-				if !ok {
-					return usageErr("--show %q: want objects, groups, refs or literals", st)
-				}
-				q.Show = append(q.Show, stage)
-			}
-			s, err := a.settings(sel.file == "")
-			if err != nil {
-				return err
-			}
-			ts, holes, err := a.targets(c.Context(), sel, s, a.stderr)
-			if err != nil {
-				return err
-			}
-			type result struct {
-				target
-				search.Finding
-				Scope string `json:"scope"`
-			}
-			users, err := a.userSnapshot()
-			if err != nil {
-				return err
-			}
-			var results []result
-			byTarget := make([][]search.Finding, len(ts))
-			for i, t := range ts {
-				q.Providers = index.Providers{Users: users}
-				if t.Snapshot != nil {
-					if z, err := t.Snapshot.Zones(); err == nil {
-						q.Providers.Zones = z
-					}
-				}
-				idx, err := index.For(t.Config, t.Scope)
-				if err != nil {
-					holes = append(holes, estate.Hole{Device: t.Device, Vsys: t.Vsys, Reason: err.Error()})
-					continue
-				}
-				fs, err := search.Run(t.Config, idx, q)
-				if err != nil {
-					// Only a term --within cannot read is the user's to fix.
-					if errors.Is(err, search.ErrWithinNeedsAddress) {
-						err = usageErr("--within: %w", err)
-					}
-					return err
-				}
-				byTarget[i] = fs
-				a.log.Infof(runlog.TagFind, "%s/%s: %d findings for %q (%s)", t.Device, t.Vsys, len(fs), q.Term, modeName(q))
-				for _, f := range fs {
-					a.log.Debugf(runlog.TagFind, "%s/%s: %s %s %s %s", t.Device, t.Vsys, f.Stage, f.Kind, f.Name, detail(f))
-					results = append(results, result{target: targetOf(t), Finding: f, Scope: f.Scope.String()})
-				}
-			}
-			un, notes := qualifiers(ts)
-			if s.output == "json" {
-				in := map[string]any{"term": q.Term, "mode": modeName(q), "kinds": kinds, "fields": fields, "show": show, "direct": direct, "selection": sel.input()}
-				if results == nil {
-					results = []result{}
-				}
-				if err := writeJSON(a.stdout, envelope{Command: "search", Input: in, Results: results, Holes: holes, Unresolved: un, Notes: notes}); err != nil {
-					return err
-				}
-				return finish(holes, un)
-			}
-			fmt.Fprintf(a.stdout, "search %s (%s)\n\n", q.Term, modeName(q))
-			with, without := 0, 0
-			for i, t := range ts {
-				if len(byTarget[i]) == 0 {
-					without++
-					continue
-				}
-				with++
-				fmt.Fprintln(a.stdout, header(t, a.now()))
-				printNotes(a, t)
-				for _, f := range byTarget[i] {
-					fmt.Fprintf(a.stdout, "  %-10s %-20s %-24s %s\n", f.Stage, f.Kind, f.Name, detail(f))
-				}
-			}
-			printQualifiers(a, holes, un, notes)
-			fmt.Fprintf(a.stdout, "%d with results, %d without, %d holes\n", with, without, len(holes))
-			return finish(holes, un)
-		},
+		RunE: func(c *cobra.Command, argv []string) error { return a.runSearch(c.Context(), argv[0], o) },
 	}
-	sel.bind(cmd, true)
+	o.sel.bind(cmd, true)
 	f := cmd.Flags()
-	f.BoolVar(&exact, "exact", false, "the value equals the term")
-	f.BoolVar(&within, "within", false, "the value lies inside the term (addresses, prefixes, ranges)")
-	f.BoolVar(&contains, "contains", false, "the value or name holds the term as text; not a match")
+	f.BoolVar(&o.exact, "exact", false, "the value equals the term")
+	f.BoolVar(&o.within, "within", false, "the value lies inside the term (addresses, prefixes, ranges)")
+	f.BoolVar(&o.contains, "contains", false, "the value or name holds the term as text; not a match")
 	cmd.MarkFlagsMutuallyExclusive("exact", "within", "contains")
-	f.StringSliceVar(&kinds, "kind", nil, "only objects and groups of these kinds")
-	f.StringSliceVar(&fields, "field", nil, "only references and literals from these fields")
-	f.StringSliceVar(&show, "show", nil, "only these stages: objects, groups, refs, literals")
-	f.BoolVar(&direct, "direct", false, "groups one level up only")
+	f.StringSliceVar(&o.kinds, "kind", nil, "only objects and groups of these kinds")
+	f.StringSliceVar(&o.fields, "field", nil, "only references and literals from these fields")
+	f.StringSliceVar(&o.show, "show", nil, "only these stages: objects, groups, refs, literals")
+	f.BoolVar(&o.direct, "direct", false, "groups one level up only")
 	return cmd
+}
+
+// query turns the flags and the term into a search query.
+func (o searchOptions) query(term string) (search.Query, error) {
+	q := search.Query{Term: term, Kinds: o.kinds, Fields: o.fields, Direct: o.direct}
+	switch { // the flags exclude each other; the root command checks that
+	case o.exact:
+		q.Mode = search.Exact
+	case o.within:
+		q.Mode = search.Within
+	case o.contains:
+		q.Mode = search.Contains
+	}
+	for _, st := range o.show {
+		stage, ok := showNames[st]
+		if !ok {
+			return q, usageErr("--show %q: want objects, groups, refs or literals", st)
+		}
+		q.Show = append(q.Show, stage)
+	}
+	return q, nil
+}
+
+// searchAnswer is a search over the selected targets: findings per target, in
+// target order.
+type searchAnswer struct {
+	q        search.Query
+	ts       []estate.Target
+	byTarget [][]search.Finding
+	holes    []estate.Hole
+	un       []unresolved
+	notes    []note
+}
+
+func (a *app) runSearch(ctx context.Context, term string, o searchOptions) error {
+	q, err := o.query(term)
+	if err != nil {
+		return err
+	}
+	s, err := a.settings(o.sel.file == "")
+	if err != nil {
+		return err
+	}
+	ts, holes, err := a.targets(ctx, o.sel, s, a.stderr)
+	if err != nil {
+		return err
+	}
+	ans, err := a.searchTargets(q, ts, holes)
+	if err != nil {
+		return err
+	}
+	if s.output == "json" {
+		err = a.printSearchJSON(ans, o)
+	} else {
+		a.printSearchText(ans)
+	}
+	if err != nil {
+		return err
+	}
+	return finish(ans.holes, ans.un)
+}
+
+// searchTargets runs the query on each target. A target whose index cannot be built
+// becomes a hole.
+func (a *app) searchTargets(q search.Query, ts []estate.Target, holes []estate.Hole) (searchAnswer, error) {
+	users, err := a.userSnapshot()
+	if err != nil {
+		return searchAnswer{}, err
+	}
+	ans := searchAnswer{q: q, ts: ts, byTarget: make([][]search.Finding, len(ts)), holes: holes}
+	for i, t := range ts {
+		q.Providers = index.Providers{Users: users}
+		if t.Snapshot != nil {
+			if z, err := t.Snapshot.Zones(); err == nil {
+				q.Providers.Zones = z
+			}
+		}
+		idx, err := index.For(t.Config, t.Scope)
+		if err != nil {
+			ans.holes = append(ans.holes, estate.Hole{Device: t.Device, Vsys: t.Vsys, Reason: err.Error()})
+			continue
+		}
+		fs, err := search.Run(t.Config, idx, q)
+		if err != nil {
+			// Only a term --within cannot read is the user's to fix.
+			if errors.Is(err, search.ErrWithinNeedsAddress) {
+				err = usageErr("--within: %w", err)
+			}
+			return searchAnswer{}, err
+		}
+		ans.byTarget[i] = fs
+		a.log.Infof(runlog.TagFind, "%s/%s: %d findings for %q (%s)", t.Device, t.Vsys, len(fs), q.Term, modeName(q))
+		for _, f := range fs {
+			a.log.Debugf(runlog.TagFind, "%s/%s: %s %s %s %s", t.Device, t.Vsys, f.Stage, f.Kind, f.Name, detail(f))
+		}
+	}
+	ans.un, ans.notes = qualifiers(ts)
+	return ans, nil
+}
+
+// searchResult is one finding in the JSON envelope.
+type searchResult struct {
+	target
+	search.Finding
+	Scope string `json:"scope"`
+}
+
+func (a *app) printSearchJSON(ans searchAnswer, o searchOptions) error {
+	results := []searchResult{}
+	for i, t := range ans.ts {
+		for _, f := range ans.byTarget[i] {
+			results = append(results, searchResult{target: targetOf(t), Finding: f, Scope: f.Scope.String()})
+		}
+	}
+	in := searchInput{
+		Term: ans.q.Term, Mode: modeName(ans.q), Kinds: o.kinds, Fields: o.fields, Show: o.show, Direct: o.direct,
+		Selection: o.sel.input(),
+	}
+	return writeJSON(a.stdout, envelope{
+		Command: "search", Input: in, Results: results, Holes: ans.holes, Unresolved: ans.un, Notes: ans.notes,
+	})
+}
+
+func (a *app) printSearchText(ans searchAnswer) {
+	fmt.Fprintf(a.stdout, "search %s (%s)\n\n", ans.q.Term, modeName(ans.q))
+	with, without := 0, 0
+	for i, t := range ans.ts {
+		if len(ans.byTarget[i]) == 0 {
+			without++
+			continue
+		}
+		with++
+		fmt.Fprintln(a.stdout, header(t, a.now()))
+		printNotes(a, t)
+		for _, f := range ans.byTarget[i] {
+			fmt.Fprintf(a.stdout, "  %-10s %-20s %-24s %s\n", f.Stage, f.Kind, f.Name, detail(f))
+		}
+	}
+	printQualifiers(a, ans.holes, ans.un, ans.notes)
+	fmt.Fprintf(a.stdout, "%d with results, %d without, %d holes\n", with, without, len(ans.holes))
 }
 
 // portTerm is a port, bare or with its protocol: 443, tcp/443.
@@ -235,28 +291,4 @@ func where(device, vsys string) string {
 		return device
 	}
 	return device + "/" + vsys
-}
-
-// input records the selection for a JSON envelope.
-func (sel selection) input() map[string]any {
-	in := map[string]any{}
-	if len(sel.devices) > 0 {
-		in["device"] = sel.devices
-	}
-	if len(sel.labels) > 0 {
-		in["label"] = sel.labels
-	}
-	if len(sel.vsys) > 0 {
-		in["vsys"] = sel.vsys
-	}
-	if sel.file != "" {
-		in["file"] = sel.file
-	}
-	if sel.at != "" {
-		in["at"] = sel.at
-	}
-	if sel.fresh {
-		in["fresh"] = true
-	}
-	return in
 }

@@ -91,27 +91,75 @@ func (a *app) runSimulation(ctx context.Context, sim simulate.Simulation, sel se
 	if err != nil {
 		return err
 	}
+	// An FQDN that resolves to no address is simulated: FQDN objects still match,
+	// and the answer says it may miss rules.
 	if flow.Source, err = a.endpoint(ctx, src, fl.noDNS); err != nil {
 		return err
 	}
 	if flow.Destination, err = a.endpoint(ctx, dst, fl.noDNS); err != nil {
 		return err
 	}
+	t, holes, err := a.oneTarget(ctx, sel, s)
+	if err != nil {
+		return err
+	}
+	env, err := a.policyEnv(t, s, fl.noDNS)
+	if err != nil {
+		return err
+	}
+	a.log.Infof(runlog.TagStep, "%s %s -> %s on %s/%s", sim.Kind(), flow.Source, flow.Destination, t.Device, t.Vsys)
+	run, err := sim.Run(ctx, env, simulate.Input{Flow: flow, Device: t.Device, Vsys: t.Vsys})
+	if err != nil {
+		return err
+	}
+	a.log.Infof(runlog.TagStep, "%s: fidelity %s", sim.Kind(), run.Fidelity)
+	un, notes := qualifiers([]estate.Target{t})
+	un = dedupeUnresolved(append(un, runUnresolved(run, t.Device, t.Vsys, true)...))
+	verdict, _ := run.Output.(securitypolicy.Verdict)
+	if s.output == "json" {
+		if err := writeJSON(a.stdout, envelope{
+			Command: "simulate " + sim.Kind(), Input: policyInput{Flow: flow, Selection: sel.input()},
+			Results: runJSON(run, t, verdict), Holes: holes, Unresolved: un, Notes: notes,
+		}); err != nil {
+			return err
+		}
+		return finish(holes, un)
+	}
+	a.printRun(run, t, verdict, flow, fl.why)
+	printQualifiers(a, holes, un, notes)
+	if verdict.Rule == nil {
+		fmt.Fprintln(a.stdout, "no enabled rule matches")
+	} else {
+		fmt.Fprintf(a.stdout, "first match: %s (%s)\n", verdict.Rule.Name, verdict.Rule.Action)
+	}
+	return finish(holes, un)
+}
+
+// oneTarget opens the selection and requires exactly one device and vsys: a policy
+// simulation runs on one rulebase.
+func (a *app) oneTarget(ctx context.Context, sel selection, s settings) (estate.Target, []estate.Hole, error) {
 	ts, holes, err := a.targets(ctx, sel, s, a.stderr)
 	if err != nil {
-		return err
+		return estate.Target{}, nil, err
 	}
-	if len(ts) != 1 {
-		if len(ts) == 0 {
-			printQualifiers(a, holes, nil, nil)
-			return fmt.Errorf("the selection has no device and vsys to simulate on")
-		}
-		return usageErr("the selection has %d device and vsys pairs; estate simulation arrives in M5, so select one device and one vsys", len(ts))
+	switch len(ts) {
+	case 1:
+		return ts[0], holes, nil
+	case 0:
+		printQualifiers(a, holes, nil, nil)
+		return estate.Target{}, nil, fmt.Errorf("the selection has no device and vsys to simulate on")
 	}
-	t := ts[0]
+	return estate.Target{}, nil, usageErr(
+		"the selection has %d device and vsys pairs; estate simulation arrives in M5, so select one device and one vsys", len(ts))
+}
+
+// policyEnv is the simulation environment for one target: its configuration, the
+// user and zone providers, and the device's stored tables, so NAT can give the
+// post-NAT zone (spec §18 N10).
+func (a *app) policyEnv(t estate.Target, s settings, noDNS bool) (*simulate.Env, error) {
 	users, err := a.userSnapshot()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	env := &simulate.Env{Log: a.log, Load: func(string, string) (simulate.Target, error) {
 		idx, err := index.For(t.Config, t.Scope)
@@ -128,53 +176,15 @@ func (a *app) runSimulation(ctx context.Context, sim simulate.Simulation, sel se
 		}
 		return simulate.Target{Config: t.Config, Index: idx, Providers: p, Notes: t.Notes}, nil
 	}, Resolve: a.lookup}
-	if fl.noDNS {
+	if noDNS {
 		env.Resolve = nil
 	}
-	// The device's stored tables, so NAT can give the post-NAT zone (spec §18 N10).
 	if t.Snapshot != nil {
 		if st, err := a.openStore(s.storeRoot); err == nil {
 			env.Network = estate.NewNetwork(st, []string{t.Device}, estate.When{At: t.Snapshot.Meta.TakenAt, Now: a.now(), Log: a.log})
 		}
 	}
-	a.log.Infof(runlog.TagStep, "%s %s -> %s on %s/%s", sim.Kind(), flow.Source, flow.Destination, t.Device, t.Vsys)
-	run, err := sim.Run(ctx, env, simulate.Input{Flow: flow, Device: t.Device, Vsys: t.Vsys})
-	if err != nil {
-		return err
-	}
-	a.log.Infof(runlog.TagStep, "%s: fidelity %s", sim.Kind(), run.Fidelity)
-
-	un, notes := qualifiers(ts)
-	for _, st := range run.Stages {
-		for _, u := range st.Unresolved {
-			un = append(un, unresolved{Device: t.Device, Vsys: t.Vsys, Value: u.Value, Reason: u.Reason})
-		}
-	}
-	if run.Fidelity.Level() == "undermatch" {
-		for _, r := range run.Fidelity.Reasons() {
-			un = append(un, unresolved{Device: t.Device, Vsys: t.Vsys, Reason: r})
-		}
-	}
-	un = dedupeUnresolved(un)
-	verdict, _ := run.Output.(securitypolicy.Verdict)
-
-	if s.output == "json" {
-		if err := writeJSON(a.stdout, envelope{
-			Command: "simulate " + sim.Kind(), Input: map[string]any{"flow": flow, "selection": sel.input()},
-			Results: runJSON(run, t, verdict), Holes: holes, Unresolved: un, Notes: notes,
-		}); err != nil {
-			return err
-		}
-		return finish(holes, un)
-	}
-	a.printRun(run, t, verdict, flow, fl.why)
-	printQualifiers(a, holes, un, notes)
-	if verdict.Rule == nil {
-		fmt.Fprintln(a.stdout, "no enabled rule matches")
-	} else {
-		fmt.Fprintf(a.stdout, "first match: %s (%s)\n", verdict.Rule.Name, verdict.Rule.Action)
-	}
-	return finish(holes, un)
+	return env, nil
 }
 
 // parseFlow reads the flow flags. --port takes 443 or tcp/443.
@@ -308,7 +318,19 @@ type stageJSON struct {
 	Unresolved []index.Unresolved `json:"unresolved,omitempty"`
 }
 
-func runJSON(run simulate.Run, t estate.Target, v securitypolicy.Verdict) map[string]any {
+// policyResult is one device and vsys's simulate policy answer in the JSON envelope.
+type policyResult struct {
+	Candidates []ruleJSON                    `json:"candidates"`
+	Fidelity   simulate.Fidelity             `json:"fidelity"`
+	FirstMatch *ruleJSON                     `json:"first_match"`
+	Kind       string                        `json:"kind"`
+	Relevance  securitypolicy.Relevance      `json:"relevance"`
+	Stages     []stageJSON                   `json:"stages"`
+	Target     target                        `json:"target"`
+	Zones      securitypolicy.ZoneDerivation `json:"zones"`
+}
+
+func runJSON(run simulate.Run, t estate.Target, v securitypolicy.Verdict) policyResult {
 	stages := make([]stageJSON, len(run.Stages))
 	for i, st := range run.Stages {
 		stages[i] = stageJSON{
@@ -325,9 +347,9 @@ func runJSON(run simulate.Run, t estate.Target, v securitypolicy.Verdict) map[st
 	for i, r := range v.Candidates {
 		cands[i] = toRuleJSON(r)
 	}
-	return map[string]any{
-		"kind": run.Kind, "target": targetOf(t), "fidelity": run.Fidelity, "stages": stages,
-		"first_match": first, "candidates": cands, "zones": v.Zones, "relevance": v.Relevance,
+	return policyResult{
+		Kind: run.Kind, Target: targetOf(t), Fidelity: run.Fidelity, Stages: stages,
+		FirstMatch: first, Candidates: cands, Zones: v.Zones, Relevance: v.Relevance,
 	}
 }
 

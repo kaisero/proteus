@@ -1,21 +1,25 @@
 package cli
 
 import (
-	"errors"
+	"context"
 
 	"github.com/spf13/cobra"
 
-	"github.com/okaiser/proteus/internal/estate"
 	"github.com/okaiser/proteus/internal/runlog"
 	"github.com/okaiser/proteus/internal/simulate"
 	"github.com/okaiser/proteus/internal/simulate/routing"
 )
 
+// routingOptions are simulate routing's flags.
+type routingOptions struct {
+	device, router, at, port string
+	rib, why, noDNS          bool
+}
+
 // routingCmd is simulate routing (spec §17). A path crosses devices, so it takes
 // no selectors but --device, which names the start (R13).
 func (a *app) routingCmd(sim simulate.Simulation) *cobra.Command {
-	var device, router, at, port string
-	var rib, why, noDNS bool
+	var o routingOptions
 	cmd := &cobra.Command{
 		Use:   "routing <source> <destination> | <destination> --device <name>",
 		Short: sim.Describe(),
@@ -30,90 +34,69 @@ func (a *app) routingCmd(sim simulate.Simulation) *cobra.Command {
 			"machine's DNS unless --no-dns.",
 		Args: args(cobra.RangeArgs(1, 2)),
 		RunE: func(c *cobra.Command, argv []string) error {
-			if len(argv) == 1 && device == "" {
+			src, dst := "", argv[len(argv)-1]
+			if len(argv) == 2 {
+				src = argv[0]
+			} else if o.device == "" {
 				return usageErr("give a source, or a start device with --device")
 			}
-			s, err := a.settings(true)
-			if err != nil {
-				return err
-			}
-			flow, err := parseFlow(flowFlags{protocol: "tcp", port: port})
-			if err != nil {
-				return err
-			}
-			if len(argv) == 2 {
-				if flow.Source, err = a.endpoint(c.Context(), argv[0], noDNS); err != nil {
-					return err
-				}
-			}
-			if flow.Destination, err = a.endpoint(c.Context(), argv[len(argv)-1], noDNS); err != nil {
-				return err
-			}
-			for _, ep := range []simulate.Endpoint{flow.Source, flow.Destination} {
-				if ep.Name != "" && len(ep.Addrs) == 0 {
-					return usageErr("%s resolved to no address", ep.Name)
-				}
-			}
-			when := estate.When{Now: a.now(), MaxAge: s.maxAge, Log: a.log}
-			if at != "" {
-				if when.At, err = estate.ParseAt(at); err != nil {
-					return usageErr("%w", err)
-				}
-			}
-			st, err := a.openStore(s.storeRoot)
-			if err != nil {
-				return err
-			}
-			env := &simulate.Env{
-				Log: a.log, Network: estate.NewNetwork(st, s.inv.Names(), when),
-				Load: storeLoader(st, when),
-			}
-			params := map[string]string{"device": device, "router": router}
-			if rib {
-				params["rib"] = "true"
-			}
-			a.log.Infof(runlog.TagStep, "routing %s -> %s, start %q", flow.Source, flow.Destination, device)
-			run, err := sim.Run(c.Context(), env, simulate.Input{Flow: flow, Params: params})
-			if choice, ok := errors.AsType[*simulate.ChoiceError](err); ok {
-				return usageErr("%w", choice)
-			}
-			if err != nil {
-				return err
-			}
-			path, _ := run.Output.(routing.Path)
-			a.log.Infof(runlog.TagStep, "routing: %s, fidelity %s", path.Outcome, run.Fidelity)
-
-			var un []unresolved
-			for _, stg := range run.Stages {
-				for _, u := range stg.Unresolved {
-					un = append(un, unresolved{Device: run.Device, Value: u.Value, Reason: u.Reason})
-				}
-			}
-			un = dedupeUnresolved(un)
-			if s.output == "json" {
-				in := map[string]any{"flow": flow, "device": device, "router": router, "rib": rib, "at": at}
-				res := struct {
-					routing.Path
-					Fidelity simulate.Fidelity `json:"fidelity"`
-					Stages   []simulate.Stage  `json:"stages"`
-				}{path, run.Fidelity, run.Stages}
-				if err := writeJSON(a.stdout, envelope{Command: "simulate routing", Input: in, Results: res, Unresolved: un}); err != nil {
-					return err
-				}
-				return finish(nil, un)
-			}
-			renderPath(a.stdout, run, path, a.now(), why)
-			printQualifiers(a, nil, un, nil)
-			return finish(nil, un)
+			return a.runRouting(c.Context(), sim, src, dst, o)
 		},
 	}
 	f := cmd.Flags()
-	f.StringVar(&device, "device", "", "start on this device")
-	f.StringVar(&router, "router", "", "start in this logical router of --device")
-	f.StringVar(&at, "at", "", "read each device's newest snapshot at or before this time (id, RFC 3339 or date)")
-	f.StringVar(&port, "port", "", "destination port, 443 or tcp/443: decides NAT and PBF rules that name a service")
-	f.BoolVar(&rib, "rib", false, "list the routing table's other routes to the destination at each firewall")
-	f.BoolVar(&why, "why", false, "show every stage: its fidelity and what it found")
-	f.BoolVar(&noDNS, "no-dns", false, "do not resolve an FQDN endpoint")
+	f.StringVar(&o.device, "device", "", "start on this device")
+	f.StringVar(&o.router, "router", "", "start in this logical router of --device")
+	f.StringVar(&o.at, "at", "", "read each device's newest snapshot at or before this time (id, RFC 3339 or date)")
+	f.StringVar(&o.port, "port", "", "destination port, 443 or tcp/443: decides NAT and PBF rules that name a service")
+	f.BoolVar(&o.rib, "rib", false, "list the routing table's other routes to the destination at each firewall")
+	f.BoolVar(&o.why, "why", false, "show every stage: its fidelity and what it found")
+	f.BoolVar(&o.noDNS, "no-dns", false, "do not resolve an FQDN endpoint")
 	return cmd
+}
+
+func (a *app) runRouting(ctx context.Context, sim simulate.Simulation, src, dst string, o routingOptions) error {
+	s, err := a.settings(true)
+	if err != nil {
+		return err
+	}
+	flow, err := parseFlow(flowFlags{protocol: "tcp", port: o.port})
+	if err != nil {
+		return err
+	}
+	if err := a.endpoints(ctx, &flow, src, dst, o.noDNS); err != nil {
+		return err
+	}
+	es, err := a.openEstate(s, o.at)
+	if err != nil {
+		return err
+	}
+	env := es.env(a)
+	env.Resolve = nil // routing resolves only the endpoints, above
+	params := map[string]string{"device": o.device, "router": o.router}
+	if o.rib {
+		params["rib"] = "true"
+	}
+	a.log.Infof(runlog.TagStep, "routing %s -> %s, start %q", flow.Source, flow.Destination, o.device)
+	run, err := runEstate(ctx, sim, env, simulate.Input{Flow: flow, Params: params})
+	if err != nil {
+		return err
+	}
+	path, _ := run.Output.(routing.Path)
+	a.log.Infof(runlog.TagStep, "routing: %s, fidelity %s", path.Outcome, run.Fidelity)
+	un := dedupeUnresolved(runUnresolved(run, run.Device, "", false))
+	if s.output == "json" {
+		in := routingInput{Flow: flow, Device: o.device, Router: o.router, RIB: o.rib, At: o.at}
+		res := struct {
+			routing.Path
+			Fidelity simulate.Fidelity `json:"fidelity"`
+			Stages   []simulate.Stage  `json:"stages"`
+		}{path, run.Fidelity, run.Stages}
+		if err := writeJSON(a.stdout, envelope{Command: "simulate routing", Input: in, Results: res, Unresolved: un}); err != nil {
+			return err
+		}
+		return finish(nil, un)
+	}
+	renderPath(a.stdout, run, path, a.now(), o.why)
+	printQualifiers(a, nil, un, nil)
+	return finish(nil, un)
 }

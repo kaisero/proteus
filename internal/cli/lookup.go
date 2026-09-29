@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"slices"
@@ -20,10 +21,15 @@ const (
 	maxDepth = 3
 )
 
+// lookupOptions are lookup's flags.
+type lookupOptions struct {
+	sel          selection
+	kind         string
+	expand, full bool
+}
+
 func (a *app) lookupCmd() *cobra.Command {
-	var sel selection
-	var kind string
-	var expand, full bool
+	var o lookupOptions
 	cmd := &cobra.Command{
 		Use:   "lookup <name>",
 		Short: "Show the whole rule or object a name refers to",
@@ -34,93 +40,130 @@ func (a *app) lookupCmd() *cobra.Command {
 			"picks one. --expand shows each name's value and every group's members; --full\n" +
 			"lifts the five-item limit on lists.",
 		Args: args(cobra.ExactArgs(1)),
-		RunE: func(c *cobra.Command, argv []string) error {
-			name := argv[0]
-			s, err := a.settings(sel.file == "")
-			if err != nil {
-				return err
-			}
-			ts, holes, err := a.targets(c.Context(), sel, s, a.stderr)
-			if err != nil {
-				return err
-			}
-			type result struct {
-				target
-				Scope string    `json:"scope"`
-				Card  card.Card `json:"card"`
-			}
-			var results []result
-			byTarget := make([][]card.Card, len(ts))
-			kinds := map[string][]string{} // kind -> where it was found
-			for i, t := range ts {
-				idx, err := index.For(t.Config, t.Scope)
-				if err != nil {
-					holes = append(holes, estate.Hole{Device: t.Device, Vsys: t.Vsys, Reason: err.Error()})
-					continue
-				}
-				cs, err := card.Find(t.Config, idx, name, kind)
-				if err != nil {
-					return usageErr("--kind: %v", err)
-				}
-				byTarget[i] = cs
-				var found []string
-				for _, cd := range cs {
-					found = append(found, cd.Kind)
-					kinds[cd.Kind] = append(kinds[cd.Kind], where(t.Device, t.Vsys))
-					results = append(results, result{target: targetOf(t), Scope: cd.Scope.String(), Card: cd})
-				}
-				a.log.Infof(runlog.TagFind, "%s/%s: lookup %q found %v", t.Device, t.Vsys, name, found)
-			}
-			if len(kinds) > 1 {
-				var lines []string
-				for _, k := range sorted(kinds) {
-					lines = append(lines, fmt.Sprintf("  %s on %s", k, strings.Join(kinds[k], ", ")))
-				}
-				return usageErr("%q names more than one kind; pick one with --kind:\n%s", name, strings.Join(lines, "\n"))
-			}
-			un, notes := qualifiers(ts)
-			if len(results) == 0 && len(holes)+len(un) == 0 {
-				return fmt.Errorf("no element named %q in the selection", name)
-			}
-			if s.output == "json" {
-				in := map[string]any{"name": name, "kind": kind, "expand": expand, "full": full, "selection": sel.input()}
-				if results == nil {
-					results = []result{}
-				}
-				if err := writeJSON(a.stdout, envelope{Command: "lookup", Input: in, Results: results, Holes: holes, Unresolved: un, Notes: notes}); err != nil {
-					return err
-				}
-				return finish(holes, un)
-			}
-			r := renderer{w: a.stdout, expand: expand, full: full}
-			with, without := 0, 0
-			for i, t := range ts {
-				if len(byTarget[i]) == 0 {
-					without++
-					continue
-				}
-				with++
-				fmt.Fprintln(a.stdout, header(t, a.now()))
-				printNotes(a, t)
-				for _, cd := range byTarget[i] {
-					r.card(cd)
-					if cd.Kind != card.KindRule {
-						fmt.Fprintf(a.stdout, "  where it is used: proteus search %s %s\n", name, selectorOf(t))
-					}
-					fmt.Fprintln(a.stdout)
-				}
-			}
-			printQualifiers(a, holes, un, notes)
-			fmt.Fprintf(a.stdout, "%d with it, %d without, %d holes\n", with, without, len(holes))
-			return finish(holes, un)
-		},
+		RunE: func(c *cobra.Command, argv []string) error { return a.runLookup(c.Context(), argv[0], o) },
 	}
-	sel.bind(cmd, true)
+	o.sel.bind(cmd, true)
 	f := cmd.Flags()
-	f.StringVar(&kind, "kind", "", "the kind of element: security-rule or an object kind")
-	f.BoolVar(&expand, "expand", false, "show each name's value and every group's members")
-	f.BoolVar(&full, "full", false, "show every item of a list")
+	f.StringVar(&o.kind, "kind", "", "the kind of element: security-rule or an object kind")
+	f.BoolVar(&o.expand, "expand", false, "show each name's value and every group's members")
+	f.BoolVar(&o.full, "full", false, "show every item of a list")
 	return cmd
+}
+
+// lookupAnswer is the cards found per target, in target order.
+type lookupAnswer struct {
+	name     string
+	ts       []estate.Target
+	byTarget [][]card.Card
+	holes    []estate.Hole
+	un       []unresolved
+	notes    []note
+}
+
+func (a *app) runLookup(ctx context.Context, name string, o lookupOptions) error {
+	s, err := a.settings(o.sel.file == "")
+	if err != nil {
+		return err
+	}
+	ts, holes, err := a.targets(ctx, o.sel, s, a.stderr)
+	if err != nil {
+		return err
+	}
+	ans, err := a.lookupTargets(name, o.kind, ts, holes)
+	if err != nil {
+		return err
+	}
+	if s.output == "json" {
+		err = a.printLookupJSON(ans, o)
+	} else {
+		a.printLookupText(ans, o)
+	}
+	if err != nil {
+		return err
+	}
+	return finish(ans.holes, ans.un)
+}
+
+// lookupTargets finds the element on each target. A name that means different kinds
+// on different targets is a usage error: the user has to pick one.
+func (a *app) lookupTargets(name, kind string, ts []estate.Target, holes []estate.Hole) (lookupAnswer, error) {
+	ans := lookupAnswer{name: name, ts: ts, byTarget: make([][]card.Card, len(ts)), holes: holes}
+	kinds := map[string][]string{} // kind -> where it was found
+	found := 0
+	for i, t := range ts {
+		idx, err := index.For(t.Config, t.Scope)
+		if err != nil {
+			ans.holes = append(ans.holes, estate.Hole{Device: t.Device, Vsys: t.Vsys, Reason: err.Error()})
+			continue
+		}
+		cs, err := card.Find(t.Config, idx, name, kind)
+		if err != nil {
+			return lookupAnswer{}, usageErr("--kind: %w", err)
+		}
+		ans.byTarget[i] = cs
+		var here []string
+		for _, cd := range cs {
+			here = append(here, cd.Kind)
+			kinds[cd.Kind] = append(kinds[cd.Kind], where(t.Device, t.Vsys))
+		}
+		found += len(cs)
+		a.log.Infof(runlog.TagFind, "%s/%s: lookup %q found %v", t.Device, t.Vsys, name, here)
+	}
+	if len(kinds) > 1 {
+		var lines []string
+		for _, k := range sorted(kinds) {
+			lines = append(lines, fmt.Sprintf("  %s on %s", k, strings.Join(kinds[k], ", ")))
+		}
+		return lookupAnswer{}, usageErr("%q names more than one kind; pick one with --kind:\n%s", name, strings.Join(lines, "\n"))
+	}
+	ans.un, ans.notes = qualifiers(ts)
+	if found == 0 && len(ans.holes)+len(ans.un) == 0 {
+		return lookupAnswer{}, fmt.Errorf("no element named %q in the selection", name)
+	}
+	return ans, nil
+}
+
+// lookupResult is one card in the JSON envelope.
+type lookupResult struct {
+	target
+	Scope string    `json:"scope"`
+	Card  card.Card `json:"card"`
+}
+
+func (a *app) printLookupJSON(ans lookupAnswer, o lookupOptions) error {
+	results := []lookupResult{}
+	for i, t := range ans.ts {
+		for _, cd := range ans.byTarget[i] {
+			results = append(results, lookupResult{target: targetOf(t), Scope: cd.Scope.String(), Card: cd})
+		}
+	}
+	in := lookupInput{Name: ans.name, Kind: o.kind, Expand: o.expand, Full: o.full, Selection: o.sel.input()}
+	return writeJSON(a.stdout, envelope{
+		Command: "lookup", Input: in, Results: results, Holes: ans.holes, Unresolved: ans.un, Notes: ans.notes,
+	})
+}
+
+func (a *app) printLookupText(ans lookupAnswer, o lookupOptions) {
+	r := renderer{w: a.stdout, expand: o.expand, full: o.full}
+	with, without := 0, 0
+	for i, t := range ans.ts {
+		if len(ans.byTarget[i]) == 0 {
+			without++
+			continue
+		}
+		with++
+		fmt.Fprintln(a.stdout, header(t, a.now()))
+		printNotes(a, t)
+		for _, cd := range ans.byTarget[i] {
+			r.card(cd)
+			if cd.Kind != card.KindRule {
+				fmt.Fprintf(a.stdout, "  where it is used: proteus search %s %s\n", ans.name, selectorOf(t))
+			}
+			fmt.Fprintln(a.stdout)
+		}
+	}
+	printQualifiers(a, ans.holes, ans.un, ans.notes)
+	fmt.Fprintf(a.stdout, "%d with it, %d without, %d holes\n", with, without, len(ans.holes))
 }
 
 // selectorOf is the selector that names the same configuration again.
