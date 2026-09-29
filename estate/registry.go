@@ -4,6 +4,7 @@ import (
 	"sort"
 
 	"github.com/okaiser/panos-analyst/simulate"
+	"github.com/okaiser/panos-analyst/simulate/nat"
 	"github.com/okaiser/panos-analyst/simulate/routing"
 	"github.com/okaiser/panos-analyst/simulate/securitypolicy"
 )
@@ -14,6 +15,7 @@ import (
 var Simulations = map[string]simulate.Simulation{
 	securitypolicy.Kind: securitypolicy.Simulation{},
 	routing.Kind:        routing.Simulation{},
+	nat.Kind:            nat.Simulation{},
 }
 
 // Kinds lists the registered simulation kinds, sorted.

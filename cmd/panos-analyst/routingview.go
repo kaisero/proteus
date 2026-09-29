@@ -172,6 +172,12 @@ func newHopBox(h routing.Hop, now time.Time) hopBox {
 		rows = append(rows, [2]string{"alt", s})
 	}
 
+	return newBox(title, rows)
+}
+
+// newBox lays out a box's title and labelled rows; the routing and NAT renderers
+// share it.
+func newBox(title string, rows [][2]string) hopBox {
 	b := hopBox{title: title, width: utf8.RuneCountInString(title) + 3}
 	for _, r := range rows {
 		l := fmt.Sprintf("│  %-8s%s", r[0], r[1])
@@ -207,19 +213,24 @@ func portText(p simulate.Port) string {
 // that stays inside the interface's own net, reads "connected": a static route
 // into a tunnel has no next hop either.
 func routeText(l routing.Lookup, out simulate.Port) string {
-	first := l.Match.First()
+	return matchText(l.Match, l.Protocol, out)
+}
+
+// matchText is one route match, with its protocol when the routing table gives it.
+func matchText(m simulate.Match, protocol string, out simulate.Port) string {
+	first := m.First()
 	via, ok := addrOrNone(first.NextHop)
-	connected := !ok && (l.Protocol == "connected" ||
-		l.Protocol == "" && out.Addr.IsValid() && out.Link().Overlaps(l.Match.Destination) && out.Addr.Bits() <= l.Match.Destination.Bits())
+	connected := !ok && (protocol == "connected" ||
+		protocol == "" && out.Addr.IsValid() && out.Link().Overlaps(m.Destination) && out.Addr.Bits() <= m.Destination.Bits())
 	if connected {
-		return fmt.Sprintf("%s  connected", l.Match.Destination)
+		return fmt.Sprintf("%s  connected", m.Destination)
 	}
 	if !ok {
 		via = first.Interface
 	}
-	s := fmt.Sprintf("%s via %s", l.Match.Destination, via)
-	if l.Protocol != "" {
-		s += "   " + l.Protocol
+	s := fmt.Sprintf("%s via %s", m.Destination, via)
+	if protocol != "" {
+		s += "   " + protocol
 	}
 	return s
 }

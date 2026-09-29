@@ -6,7 +6,7 @@ import (
 )
 
 func TestRegistry(t *testing.T) {
-	if got := strings.Join(Kinds(), ","); got != "routing,secpolicy" {
+	if got := strings.Join(Kinds(), ","); got != "nat,routing,secpolicy" {
 		t.Errorf("Kinds = %s", got)
 	}
 	for k, s := range Simulations {

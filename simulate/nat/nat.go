@@ -67,6 +67,7 @@ type MatchResult struct {
 	Rule       *Rule              `json:"rule"` // nil: the packet leaves untranslated
 	Doubts     []Doubt            `json:"doubts,omitempty"`
 	Excluded   []Excluded         `json:"excluded,omitempty"`
+	In         simulate.Port      `json:"in"` // the ingress the answer assumed
 	PreNAT     simulate.Forward   `json:"pre_nat"`
 	Dropped    string             `json:"dropped,omitempty"` // why no NAT applies at all
 	Notes      []string           `json:"notes,omitempty"`

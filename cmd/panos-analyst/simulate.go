@@ -16,6 +16,7 @@ import (
 	"github.com/okaiser/panos-analyst/resolve"
 	"github.com/okaiser/panos-analyst/runlog"
 	"github.com/okaiser/panos-analyst/simulate"
+	"github.com/okaiser/panos-analyst/simulate/nat"
 	"github.com/okaiser/panos-analyst/simulate/routing"
 	"github.com/okaiser/panos-analyst/simulate/securitypolicy"
 )
@@ -28,10 +29,11 @@ type flowFlags struct {
 	why, noDNS                             bool
 }
 
-// kindCommands are the kinds whose input is not one flow on one device, and so
+// kindCommands are the kinds whose flags differ from the flow command's, and so
 // need a command of their own.
 var kindCommands = map[string]func(*app, simulate.Simulation) *cobra.Command{
 	routing.Kind: (*app).routingCmd,
+	nat.Kind:     (*app).natCmd,
 }
 
 // simulateCmds returns one subcommand per registered simulation kind. A kind takes

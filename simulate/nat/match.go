@@ -55,7 +55,7 @@ func first(v []string) string {
 // rules above it that could have (doubts), and those that did not, with the field
 // that excluded them.
 func Match(in Input) MatchResult {
-	out := MatchResult{Fidelity: simulate.Exact}
+	out := MatchResult{In: in.In, Fidelity: simulate.Exact}
 	if in.PreNAT != nil {
 		out.PreNAT = *in.PreNAT
 	} else if in.Lookup != nil {

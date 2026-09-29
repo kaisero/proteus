@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **See which NAT rule a packet hits.** `panos-analyst simulate nat <source>
+  <destination> --device <name>` names the NAT rule a packet hits on one firewall,
+  shows the packet before and after translation, and what security policy then
+  matches: the addresses and port before NAT, the zones after it. `--why` lists
+  every rule above the match and what excluded it; rules it cannot decide, such as
+  one naming a service when no port is given, are named with the reason.
 - **See which firewalls a packet crosses.** `panos-analyst simulate routing <source>
   <destination>` follows the fetched firewalls' forwarding tables from the firewall
   the source enters to the one that delivers it, and draws a box per firewall with

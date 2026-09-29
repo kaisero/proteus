@@ -2,12 +2,10 @@ package main
 
 import (
 	"errors"
-	"fmt"
 
 	"github.com/spf13/cobra"
 
 	"github.com/okaiser/panos-analyst/estate"
-	"github.com/okaiser/panos-analyst/index"
 	"github.com/okaiser/panos-analyst/runlog"
 	"github.com/okaiser/panos-analyst/simulate"
 	"github.com/okaiser/panos-analyst/simulate/routing"
@@ -65,17 +63,7 @@ func (a *app) routingCmd(sim simulate.Simulation) *cobra.Command {
 			}
 			env := &simulate.Env{
 				Log: a.log, Network: estate.NewNetwork(st, s.inv.Names(), when),
-				Load: func(dev, vsys string) (simulate.Target, error) {
-					ts, holes := estate.Open(st, []string{dev}, []string{vsys}, when)
-					if len(ts) == 0 {
-						return simulate.Target{}, fmt.Errorf("%s/%s: %v", dev, vsys, holes)
-					}
-					idx, err := index.For(ts[0].Config, ts[0].Scope)
-					if err != nil {
-						return simulate.Target{}, err
-					}
-					return simulate.Target{Config: ts[0].Config, Index: idx, Notes: ts[0].Notes}, nil
-				},
+				Load: storeLoader(st, when),
 			}
 			params := map[string]string{"device": device, "router": router}
 			if rib {
