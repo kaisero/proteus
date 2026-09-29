@@ -1,0 +1,91 @@
+package resolve
+
+import (
+	"testing"
+
+	"github.com/okaiser/panos-analyst/config"
+)
+
+func natRules(t *testing.T, file string) map[string]NATRule {
+	t.Helper()
+	cfg, _, err := config.Load("../testdata/config/" + file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tgs, err := Targets(cfg)
+	if err != nil || len(tgs) != 1 {
+		t.Fatalf("targets: %v %v", tgs, err)
+	}
+	out := map[string]NATRule{}
+	for _, r := range tgs[0].NATRules() {
+		out[r.Name] = r
+	}
+	return out
+}
+
+// fw01's test rules (spec §18.5), as the device showed them in its running NAT
+// policy (testdata/opdata/fw01-running-nat-policy.xml).
+func TestNATTranslationsOfFw01(t *testing.T) {
+	rs := natRules(t, "firewall-nat.xml")
+	if r := rs["t-no-nat"]; r.Source != nil || r.Destination != nil {
+		t.Errorf("t-no-nat translates: %+v", r)
+	}
+	if d := rs["t-dnat-port"].Destination; d == nil || d.Kind != StaticDestination || d.Address != "198.18.10.100" || d.Port != 443 {
+		t.Errorf("t-dnat-port = %+v", d)
+	}
+	if r := rs["t-dnat-port"]; r.Service != "t-8443" || r.DestinationTranslation != "destination-translation" {
+		t.Errorf("t-dnat-port = %+v", r)
+	}
+	if s := rs["t-bidir"].Source; s == nil || s.Kind != StaticIP || !s.BiDirectional || s.Addresses[0] != "198.18.250.20" {
+		t.Errorf("t-bidir = %+v", s)
+	}
+	if r := rs["t-bidir"]; r.StaticAddress != "198.18.250.20" || !r.BiDirectional {
+		t.Errorf("t-bidir views = %+v", r)
+	}
+	if s := rs["t-static-block"].Source; s.Kind != StaticIP || s.Addresses[0] != "198.18.250.32/28" {
+		t.Errorf("t-static-block = %+v", s)
+	}
+	if s := rs["t-pdipp"].Source; s.Kind != PersistentDIPP || s.Interface != "ethernet1/1" || s.InterfaceIP != "" {
+		t.Errorf("t-pdipp = %+v", s)
+	}
+	s := rs["t-dip-pool"].Source
+	if s.Kind != DynamicIP || s.Addresses[0] != "198.18.250.64/29" || s.Fallback == nil || s.Fallback.Kind != DIPP || s.Fallback.Interface != "ethernet1/1" {
+		t.Errorf("t-dip-pool = %+v, fallback %+v", s, s.Fallback)
+	}
+	if d := rs["t-dnat-fqdn"].Destination; d.Kind != DynamicDestination || d.Address != "t-fqdn" || d.Distribution != "round-robin" || d.Port != 0 {
+		t.Errorf("t-dnat-fqdn = %+v", d)
+	}
+	if s := rs["server-access"].Source; s.Kind != DIPP || s.Interface != "ethernet1/2" || s.InterfaceIP != "198.18.10.1/24" {
+		t.Errorf("server-access = %+v", s)
+	}
+	if r := rs["internet-a"]; r.ToInterface != "ethernet1/1" || r.Source.InterfaceIP != "" {
+		t.Errorf("internet-a = %+v", r)
+	}
+	if !rs["t-disabled"].Disabled {
+		t.Error("t-disabled")
+	}
+}
+
+// Shapes the lab does not carry, synthetic: an unknown kind, an HA binding, a
+// dns-rewrite, dynamic-ip on an IPv6 interface, a floating address.
+func TestNATTranslationShapes(t *testing.T) {
+	rs := natRules(t, "firewall-nat-shapes.xml")
+	if s := rs["future"].Source; s == nil || s.Kind != UnknownKind+"magic-ip" {
+		t.Errorf("future = %+v", s)
+	}
+	if r := rs["bound"]; r.HABinding != "primary" || r.Source.FloatingIP != "10.0.0.9" {
+		t.Errorf("bound = %+v %+v", r, r.Source)
+	}
+	if d := rs["rewrite"].Destination; d.DNSRewrite != "reverse" || d.Address != "10.1.1.1" {
+		t.Errorf("rewrite = %+v", d)
+	}
+	if s := rs["v6pool"].Source; s.Kind != DynamicIP || s.IPv6Interface != "ethernet1/9" || s.Interface != "" {
+		t.Errorf("v6pool = %+v", s)
+	}
+	if s := rs["empty"].Source; s != nil {
+		t.Errorf("empty = %+v", s)
+	}
+	if s := rs["object-ip"].Source; s.InterfaceIP != "fw-public" {
+		t.Errorf("object-ip = %+v", s)
+	}
+}
