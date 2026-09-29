@@ -135,9 +135,8 @@ func (e *Element) segments(named bool) []string {
 //
 // A configuration arrives bare, from an export, or wrapped in
 // <response><result>, from the XML API. Parsing starts at the first config
-// element either way. Nested config elements are kept as ordinary children: a
-// template embeds a whole firewall configuration, and a Panorama file holds
-// several.
+// element either way. A nested config element is kept as an ordinary child, so
+// it never ends the parse.
 func parseTree(r io.Reader) (*Element, error) {
 	dec := xml.NewDecoder(r)
 	var root *Element

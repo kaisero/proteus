@@ -4,11 +4,10 @@ Validated against 6cd7766 on 2026-09-29 · Purpose: how the PAN-OS schema become
 
 ## Purpose & responsibilities
 
-PAN-OS ships its own schema on the appliance: `/opt/pancfg/mgmt/factory/schema.xml`
-on a firewall and `cms-schema.xml` on Panorama. The developer tool
-`internal/tools/schemadigest` parses one into a compact, gzipped digest that
-proteus embeds and reads at run time. Only the firewall digest ships (Panorama
-support was removed in M1).
+PAN-OS ships its own schema on every firewall at
+`/opt/pancfg/mgmt/factory/schema.xml`. The developer tool
+`internal/tools/schemadigest` parses it into a compact, gzipped digest that
+proteus embeds and reads at run time.
 
 Nothing in this project hand-writes a field mapping that the schema already
 describes. That is rule R1.
@@ -80,9 +79,6 @@ None. `internal/schema` and `internal/digest` are internal, and the surface is
 
 - **The schema files themselves are not committed.** `/schemas/` is gitignored
   because redistribution is unresolved. The digests are committed instead.
-- **The tool also writes a Panorama digest when `cms-schema.xml` is present.**
-  Remove it before committing: proteus refuses Panorama configurations, and every
-  digest in the directory is embedded.
 - **Only 11.2 digests ship.** Adding 12.2 is a `make schema-digest` run against
   that appliance's `schema.xml`, not a code change.
 

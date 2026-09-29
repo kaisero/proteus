@@ -11,7 +11,7 @@ import (
 //
 // Resolving each declared path separately costs a fresh descent per path, and an
 // entry array declares up to 30 of them, so the trie is not an optimisation kept
-// for later: measured on a 29 MB Panorama configuration it is roughly four times
+// for later: measured on a 29 MB configuration it is roughly four times
 // the speed.
 type pathNode struct {
 	kids       map[string]*pathNode

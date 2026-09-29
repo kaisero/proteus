@@ -28,8 +28,8 @@ func (t *Target) ResolveGroup(name string) (Members, error) {
 // GroupInScope returns the membership of an address group as seen in one scope.
 //
 // The same shared group resolves differently in different vsys, because only
-// shared and the vsys itself contribute members. First observed on Panorama
-// 11.2.7-h1: corp-location was 10.124.0.0/16 in one device group and
+// shared and the vsys itself contribute members. First observed on a lab device,
+// PAN-OS 11.2.7-h1: corp-location was 10.124.0.0/16 in one scope and
 // 10.125.0.0/16 in its sibling. See AGENTS.md R5.
 func GroupInScope(cfg *config.Config, sc config.Scope, name string) (Members, error) {
 	return resolveGroup(cfg, chainFor(sc), name)

@@ -11,11 +11,9 @@ import (
 	"github.com/okaiser/proteus/internal/schema"
 )
 
-// The platform a digest was built from.
-const (
-	PlatformFirewall = "firewall" // schema.xml
-	PlatformPanorama = "panorama" // cms-schema.xml
-)
+// PlatformFirewall is the platform every digest is built from: a firewall's
+// schema.xml. proteus reads firewall configurations only.
+const PlatformFirewall = "firewall"
 
 // formatVersion changes when the on-disk shape changes. Read refuses a digest it
 // does not understand rather than decoding it wrongly.
@@ -38,9 +36,8 @@ func (d *Digest) validate() error {
 	switch {
 	case d == nil:
 		return fmt.Errorf("digest: nil")
-	case d.Platform != PlatformFirewall && d.Platform != PlatformPanorama:
-		return fmt.Errorf("digest: unknown platform %q, want %s or %s",
-			d.Platform, PlatformFirewall, PlatformPanorama)
+	case d.Platform != PlatformFirewall:
+		return fmt.Errorf("digest: unknown platform %q, want %s", d.Platform, PlatformFirewall)
 	case d.Version == "":
 		return fmt.Errorf("digest: empty version")
 	case d.Root == nil:

@@ -315,7 +315,7 @@ make schema-pull HOST=labadmin@your-panos-vm   # into schemas/
 make schema-digest PANOS_VERSION=11.2.0        # into internal/config/schemadigest/
 ```
 
-`schema-pull` fetches `schema.xml`, `cms-schema.xml` and `opschema.xml` from
+`schema-pull` fetches `schema.xml` and `opschema.xml` from
 `/opt/pancfg/mgmt/factory/`. These are vendor files and are not committed. Read
 ARCHITECTURE.md first.
 

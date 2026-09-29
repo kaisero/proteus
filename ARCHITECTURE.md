@@ -22,7 +22,6 @@ PAN-OS ships an authoritative configuration schema on every appliance:
 | File | Size | Describes |
 | --- | --- | --- |
 | `/opt/pancfg/mgmt/factory/schema.xml` | ~4.8 MB | Firewall configuration |
-| `/opt/pancfg/mgmt/factory/cms-schema.xml` | ~10 MB | Panorama configuration |
 | `/opt/pancfg/mgmt/factory/opschema.xml` | ~2.1 MB | Operational commands |
 
 It is not published, and the device API does not serve it: `show config schema`
@@ -32,19 +31,12 @@ The grammar is richer than an XSD. It carries defaults, name length limits, enum
 values, validator names, help strings, and — importantly — `memberof`
 declarations that state which other objects a field may reference.
 
-The alternative is a hand-maintained SDK. Measured against PAN-OS 11.2:
-
-| Approach | Object types |
-| --- | --- |
-| Generated from `cms-schema.xml` (since removed) | 2,289 |
-| pango (hand-maintained specs) | 117 |
-
-Coverage is the smaller argument. Correctness is the larger one. pango types a
-device group's `vsys` assignment as a member list; Panorama writes an entry
-list. pango returns an empty value and does not preserve the original, so the
-data is lost. The schema states the shape unambiguously, and the grammar makes
-the two forms structurally distinct — 2,291 entry lists against 1,911 member
-lists. A reader taking the shape from that grammar cannot choose wrong, because
+The alternative is a hand-maintained SDK, and correctness is the argument
+against it. A hand-maintained specification can type an entry list as a member list. pango
+did exactly that for a vsys assignment: the device writes
+`<entry name="vsys3"/>`, pango read an empty value and kept nothing, so a round
+trip deleted the assignment. The schema states the shape unambiguously, and the
+grammar makes the two forms structurally distinct. A reader taking the shape from that grammar cannot choose wrong, because
 the choice is its input. R1 and R4 exist to keep it that way.
 
 A Go model was once generated from the schema. Nothing read it: the core walks the

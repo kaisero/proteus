@@ -27,8 +27,7 @@ Two details are load-bearing and both have regression tests:
   `type=export&category=configuration` or wrapped in `<response><result>` from
   `type=config&action=show`. Both load.
 - **A nested `<config>` is an ordinary child.** A firewall file holds one under
-  `shared/log-settings`, and a Panorama template embeds a whole firewall
-  configuration. Parsing stops only when
+  `shared/log-settings`. Parsing stops only when
   the outermost one closes. Stopping at the first nested close found 1 reference
   edge where the correct walk finds 18.
 

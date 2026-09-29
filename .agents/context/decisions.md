@@ -6,15 +6,15 @@ Each entry is a decision, the reason, and what would change it. Several were
 reversed after measurement; those are kept, because the reasoning that failed is
 more useful than the conclusion that survived.
 
-## D1 — Generate the model from the schema, not from a hand-written SDK
+## D1 — Take field knowledge from the schema, not from a hand-written SDK
 
 **Decided: schema-first.** `pan-os-python` and `pango` are hand-maintained and
-silently lose fields. `devicegroup.Devices.Vsys` is typed as a member list, but
-Panorama writes `<entry name="vsys3"/>`, so the value is dropped and not even kept
+silently lose fields. pango types a vsys assignment as a member list, but the
+device writes `<entry name="vsys3"/>`, so the value is dropped and not even kept
 in `Misc`. A tool built on that returns a wrong answer with no signal.
 
-The appliance ships its own schema. Generating from it means a field the schema
-describes cannot be missing. **R1** enforces it.
+The appliance ships its own schema. Reading field shapes from its digest means a
+field the schema describes cannot be missing. **R1** enforces it.
 
 **Would change it:** Palo Alto publishing a complete, versioned machine-readable
 model.
@@ -22,9 +22,8 @@ model.
 ## D2 — The index is scope-keyed, never global
 
 A name means different things in different scopes. The same shared dynamic address
-group resolved to `10.124.0.0/16` in one Panorama device group and `10.125.0.0/16`
-in its sibling; sibling vsys on one firewall stand in the same relation. (Panorama
-support was removed in M1.) A global index merges siblings and returns answers that are **wrong**,
+group resolved to `10.124.0.0/16` in one scope and `10.125.0.0/16` in its
+sibling; sibling vsys on one firewall stand in this relation. A global index merges siblings and returns answers that are **wrong**,
 not merely incomplete. **R5** and **R10**.
 
 ## D3 — Reachability, not a verdict

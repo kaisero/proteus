@@ -10,7 +10,7 @@ import (
 
 func fixture(t *testing.T) *schema.Node {
 	t.Helper()
-	f, err := os.Open("../../testdata/schema/cms-schema-trimmed.xml")
+	f, err := os.Open("../../testdata/schema/schema-trimmed.xml")
 	if err != nil {
 		t.Fatalf("open fixture: %v", err)
 	}
@@ -26,7 +26,7 @@ func encoded(t *testing.T) []byte {
 	t.Helper()
 	var buf bytes.Buffer
 	if err := Write(&buf, &Digest{
-		Platform: PlatformPanorama, Version: "11.2.0", Root: fixture(t),
+		Platform: PlatformFirewall, Version: "11.2.0", Root: fixture(t),
 	}); err != nil {
 		t.Fatalf("Write: %v", err)
 	}
@@ -37,7 +37,7 @@ func TestRoundTripPreservesStructure(t *testing.T) {
 	root := fixture(t)
 	var buf bytes.Buffer
 	if err := Write(&buf, &Digest{
-		Platform: PlatformPanorama, Version: "11.2.0", Root: root,
+		Platform: PlatformFirewall, Version: "11.2.0", Root: root,
 	}); err != nil {
 		t.Fatalf("Write: %v", err)
 	}
@@ -45,8 +45,8 @@ func TestRoundTripPreservesStructure(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Read: %v", err)
 	}
-	if got.Platform != PlatformPanorama || got.Version != "11.2.0" {
-		t.Errorf("got %s/%s, want panorama/11.2.0", got.Platform, got.Version)
+	if got.Platform != PlatformFirewall || got.Version != "11.2.0" {
+		t.Errorf("got %s/%s, want firewall/11.2.0", got.Platform, got.Version)
 	}
 	before := schema.EntryTypes(root)
 	after := schema.EntryTypes(got.Root)
@@ -66,12 +66,11 @@ func TestReadRebuildsParents(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Read: %v", err)
 	}
-	vsys := got.Root.Child("devices").Child("entry").Child("device-group").
-		EntrySequence().Child("devices").EntrySequence().Child("vsys")
+	vsys := got.Root.Child("devices").EntrySequence().Child("vsys")
 	if vsys == nil {
 		t.Fatal("vsys not found after round trip")
 	}
-	want := "/config/devices/entry/device-group/entry/devices/entry/vsys"
+	want := "/config/devices/entry/vsys"
 	if vsys.Path() != want {
 		t.Errorf("got %q, want %q", vsys.Path(), want)
 	}
@@ -85,25 +84,25 @@ func TestRoundTripPreservesAnnotations(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Read: %v", err)
 	}
-	rules := got.Root.Child("shared").Child("pre-rulebase").Child("security").
-		Child("rules").EntrySequence()
+	rules := got.Root.Child("devices").EntrySequence().Child("vsys").EntrySequence().
+		Child("rulebase").Child("security").Child("rules").EntrySequence()
 	action := rules.Child("action")
 	if action.Default != "allow" {
 		t.Errorf("default: got %q, want allow", action.Default)
 	}
-	if len(action.EnumValues) != 3 {
-		t.Errorf("enum values: got %v, want 3", action.EnumValues)
+	if len(action.EnumValues) != 6 {
+		t.Errorf("enum values: got %v, want 6", action.EnumValues)
 	}
 	src := rules.Child("source").Child("member")
-	if len(src.MemberOf) != 2 {
-		t.Errorf("memberof: got %v, want 2", src.MemberOf)
+	if len(src.MemberOf) != 12 {
+		t.Errorf("memberof: got %v, want 12", src.MemberOf)
 	}
 	addr := got.Root.Child("shared").Child("address").EntrySequence()
 	if addr.Child("fqdn").MaxLen != 255 {
 		t.Errorf("maxlen: got %d, want 255", addr.Child("fqdn").MaxLen)
 	}
-	if addr.Child("description").Help != "Description" {
-		t.Errorf("help: got %q, want Description", addr.Child("description").Help)
+	if h := rules.Child("disabled").Help; h != "Disable the rule" {
+		t.Errorf("help: got %q, want Disable the rule", h)
 	}
 }
 
@@ -115,7 +114,7 @@ func TestWriteIsGzipped(t *testing.T) {
 }
 
 func TestFilename(t *testing.T) {
-	if got, want := Filename(PlatformPanorama, "11.2.0"), "panos-11.2.0-panorama.json.gz"; got != want {
+	if got, want := Filename(PlatformFirewall, "11.2.0"), "panos-11.2.0-firewall.json.gz"; got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
 }

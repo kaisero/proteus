@@ -157,7 +157,7 @@ func TestDigestVersionsFilterAndSort(t *testing.T) {
 	fsys := fstest.MapFS{
 		"schemadigest/panos-11.2.0-firewall.json.gz": {},
 		"schemadigest/panos-9.1.0-firewall.json.gz":  {},
-		"schemadigest/panos-10.1.0-panorama.json.gz": {},
+		"schemadigest/panos-10.1.0-router.json.gz":   {},
 		"schemadigest/panos-x.y.z-firewall.json.gz":  {},
 		"schemadigest/README":                        {},
 	}
@@ -188,7 +188,7 @@ func TestLoadRejectsMissingFile(t *testing.T) {
 }
 
 func TestLoadRejectsAFileWithNoConfigElement(t *testing.T) {
-	if _, _, err := Load("../../testdata/schema/cms-schema-trimmed.xml"); err == nil {
+	if _, _, err := Load("../../testdata/schema/schema-trimmed.xml"); err == nil {
 		t.Fatal("want an error for a file with no <config> element")
 	}
 }

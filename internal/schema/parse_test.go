@@ -7,7 +7,7 @@ import (
 
 func load(t *testing.T) *Node {
 	t.Helper()
-	f, err := os.Open("../../testdata/schema/cms-schema-trimmed.xml")
+	f, err := os.Open("../../testdata/schema/schema-trimmed.xml")
 	if err != nil {
 		t.Fatalf("open fixture: %v", err)
 	}
@@ -17,6 +17,12 @@ func load(t *testing.T) *Node {
 		t.Fatalf("Parse: %v", err)
 	}
 	return root
+}
+
+// securityRule is the entry sequence of a vsys security rule.
+func securityRule(root *Node) *Node {
+	return root.Child("devices").EntrySequence().Child("vsys").EntrySequence().
+		Child("rulebase").Child("security").Child("rules").EntrySequence()
 }
 
 func TestParseRoot(t *testing.T) {
@@ -36,21 +42,20 @@ func TestParseLeafAttributes(t *testing.T) {
 	if fqdn.Type != "string" || fqdn.MaxLen != 255 {
 		t.Errorf("got type=%q maxlen=%d, want string/255", fqdn.Type, fqdn.MaxLen)
 	}
-	desc := addr.Child("description")
-	if desc.Help != "Description" {
-		t.Errorf("got help=%q, want Description", desc.Help)
+	disabled := securityRule(root).Child("disabled")
+	if disabled.Help != "Disable the rule" {
+		t.Errorf("got help=%q, want Disable the rule", disabled.Help)
 	}
 }
 
 func TestParseEnumValues(t *testing.T) {
 	root := load(t)
-	rules := root.Child("shared").Child("pre-rulebase").Child("security").
-		Child("rules").EntrySequence()
+	rules := securityRule(root)
 	action := rules.Child("action")
 	if action.Default != "allow" {
 		t.Errorf("got default=%q, want allow", action.Default)
 	}
-	want := []string{"allow", "deny", "drop"}
+	want := []string{"deny", "allow", "drop", "reset-client", "reset-server", "reset-both"}
 	if len(action.EnumValues) != len(want) {
 		t.Fatalf("got %v, want %v", action.EnumValues, want)
 	}
@@ -64,14 +69,12 @@ func TestParseEnumValues(t *testing.T) {
 // The distinction pango gets wrong. See AGENTS.md R4.
 func TestParseListShape(t *testing.T) {
 	root := load(t)
-	dg := root.Child("devices").Child("entry").Child("device-group").EntrySequence()
-
-	refTpl := dg.Child("reference-templates")
-	if !refTpl.IsMemberList() || refTpl.IsEntryList() {
-		t.Error("reference-templates must be a member list")
+	source := securityRule(root).Child("source")
+	if !source.IsMemberList() || source.IsEntryList() {
+		t.Error("a security rule's source must be a member list")
 	}
 
-	devices := dg.Child("devices")
+	devices := root.Child("devices")
 	if !devices.IsEntryList() || devices.IsMemberList() {
 		t.Error("devices must be an entry list")
 	}
@@ -84,9 +87,8 @@ func TestParseListShape(t *testing.T) {
 
 func TestParsePath(t *testing.T) {
 	root := load(t)
-	vsys := root.Child("devices").Child("entry").Child("device-group").
-		EntrySequence().Child("devices").EntrySequence().Child("vsys")
-	want := "/config/devices/entry/device-group/entry/devices/entry/vsys"
+	vsys := root.Child("devices").EntrySequence().Child("vsys")
+	want := "/config/devices/entry/vsys"
 	if got := vsys.Path(); got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
@@ -94,26 +96,24 @@ func TestParsePath(t *testing.T) {
 
 func TestParseMemberOf(t *testing.T) {
 	root := load(t)
-	src := root.Child("shared").Child("pre-rulebase").Child("security").
-		Child("rules").EntrySequence().Child("source")
-	member := src.Child("member")
-	want := []string{
+	member := securityRule(root).Child("source").Child("member")
+	got := map[string]bool{}
+	for _, m := range member.MemberOf {
+		got[m] = true
+	}
+	for _, w := range []string{
 		"#config/shared/address/entry/@name",
 		"#config/shared/address-group/entry/@name",
-	}
-	if len(member.MemberOf) != len(want) {
-		t.Fatalf("got %v, want %v", member.MemberOf, want)
-	}
-	for i, w := range want {
-		if member.MemberOf[i] != w {
-			t.Errorf("memberof[%d] = %q, want %q", i, member.MemberOf[i], w)
+	} {
+		if !got[w] {
+			t.Errorf("memberof misses %q; got %v", w, member.MemberOf)
 		}
 	}
 }
 
 func TestReadonlyIsEmpty(t *testing.T) {
-	// The schema declares readonly but describes nothing inside it. parent-dg
-	// lives there, so it must be hand-modelled. See AGENTS.md R8.
+	// The schema declares readonly but describes nothing inside it, so a node
+	// that lives there must be hand-modelled. See AGENTS.md R8.
 	root := load(t)
 	ro := root.Child("readonly")
 	if ro == nil {

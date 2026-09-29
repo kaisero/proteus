@@ -11,7 +11,7 @@ whole.
 ## R1 — The schema is the only source of field knowledge
 
 Field names, types, defaults, name length limits, enum values and list shapes
-come from the PAN-OS schema (`schema.xml`, `cms-schema.xml`). No package may
+come from the PAN-OS firewall schema (`schema.xml`). No package may
 hand-write a field mapping that the schema already describes.
 
 Where the schema genuinely does not describe a node, R8 applies.
@@ -40,9 +40,9 @@ verbatim in an escape-hatch field, and the loader reports a count of what it
 could not type. An input element that is neither typed nor preserved is a bug,
 not an omission.
 
-This rule exists because pango types a device group's `vsys` as a member list
-while Panorama writes an entry list. pango returns an empty value and preserves
-nothing, so a round trip deletes the assignment.
+This rule exists because a hand-written model can type an entry list as a member
+list. pango did so for a vsys assignment: it returned an empty value and preserved
+nothing, so a round trip deleted the assignment.
 
 Check: `go test ./internal/config -run TestRoundTripLosesNothing`
 
@@ -86,9 +86,8 @@ Check: `go test -bench . ./...`
 A node modelled by hand rather than read from the schema is registered in
 `internal/schema.HandModelled`, with the reason and the schema path.
 
-There is none today. The one there was, `/config/readonly/.../parent-dg`, held
-the Panorama device-group hierarchy and left with Panorama support. The registry
-and its check stay, so the next one is declared rather than slipped in.
+There is none today. The registry and its check stay, so the next one is
+declared rather than slipped in.
 
 Check: `go test ./internal/schema -run TestHandModelledIsDeclared`
 
@@ -106,9 +105,9 @@ Check: review.
 No index spans scopes, and no lookup resolves a name without one. A scope is
 `shared` or `vsys:<name>`, and a vsys inherits shared.
 
-A global index merges sibling scopes. First observed on the lab Panorama: one
-shared dynamic address group resolved to `10.124.0.0/16` in one device group and
-`10.125.0.0/16` in its sibling. Sibling vsys on one firewall stand in the same
+A global index merges sibling scopes. First observed on a lab device: one shared
+dynamic address group resolved to `10.124.0.0/16` in one scope and
+`10.125.0.0/16` in its sibling. Sibling vsys on one firewall stand in this
 relation. A merged answer is wrong, not merely incomplete.
 
 Rule bitmaps key on the vsys, because each vsys has its own rulebase.

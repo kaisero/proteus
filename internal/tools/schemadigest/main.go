@@ -16,7 +16,7 @@ import (
 
 func main() {
 	fs := flag.NewFlagSet("schemadigest", flag.ExitOnError)
-	schemaDir := fs.String("schema", "schemas", "directory holding schema.xml and cms-schema.xml")
+	schemaDir := fs.String("schema", "schemas", "directory holding a firewall's schema.xml")
 	outDir := fs.String("out", "internal/config/schemadigest", "directory to write digests into")
 	ver := fs.String("version", "", "PAN-OS config version, e.g. 11.2.0")
 	_ = fs.Parse(os.Args[1:])

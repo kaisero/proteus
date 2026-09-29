@@ -11,8 +11,8 @@ type HandModel struct {
 // handModelled is the complete list. Adding an entry is a deliberate act: every
 // other field in the library comes from the schema (R1).
 //
-// It is empty. The one entry there was, /config/readonly/.../parent-dg, held the
-// Panorama device-group hierarchy and left with Panorama support.
+// It is empty. The registry and its check stay, so the next entry is declared
+// rather than slipped in.
 var handModelled = []HandModel{}
 
 // HandModelled returns the registered hand-modelled nodes.

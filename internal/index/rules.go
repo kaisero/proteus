@@ -95,8 +95,8 @@ func newRulesIndex(in *Interner, rules []resolve.Rule) *rulesIndex {
 
 // addLiteral indexes a field value that is itself an address or prefix.
 //
-// A configuration can be written entirely this way: the lab Panorama had seven
-// literal addresses and no named objects in source and destination. Without this
+// A configuration can be written entirely this way, with literal addresses and
+// no named objects in source and destination. Without this
 // an address lookup finds nothing there.
 func (r *rulesIndex) addLiteral(f Field, value string, bit uint32) {
 	prefixes := prefixesOf(value)

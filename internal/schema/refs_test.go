@@ -46,15 +46,13 @@ func TestParseTargetRejectsLiteral(t *testing.T) {
 
 func TestReferencesFromRuleFields(t *testing.T) {
 	root := load(t)
-	rules := root.Child("shared").Child("pre-rulebase").Child("security").Child("rules")
 	byField := map[string][]string{}
-	for _, fr := range References(rules.EntrySequence()) {
+	for _, fr := range References(securityRule(root)) {
 		byField[fr.Field] = fr.Candidates
 	}
 	for _, field := range []string{"source", "destination"} {
-		kinds := byField[field]
-		if len(kinds) != 2 || kinds[0] != "address" || kinds[1] != "address-group" {
-			t.Errorf("%s: got %v, want [address address-group]", field, kinds)
+		if got, want := strings.Join(byField[field], " "), "region address address-group external-list ip-block-list-v2"; got != want {
+			t.Errorf("%s: got [%s], want [%s]", field, got, want)
 		}
 	}
 	if len(byField["application"]) != 0 {
@@ -114,7 +112,7 @@ func TestClassifyTargetForms(t *testing.T) {
 	}
 }
 
-// 1,710 of the expressions in cms-schema.xml begin substring(, which a
+// 36 of the targets in the 11.2 firewall schema begin substring(, which a
 // leading-string( check misses. Each one accepted becomes a false index edge.
 func TestParseTargetRejectsEveryExpression(t *testing.T) {
 	for _, raw := range []string{
@@ -138,15 +136,14 @@ func TestParseTargetRejectsRuleFieldReference(t *testing.T) {
 // A field usually has several candidate kinds, so References groups by field.
 func TestReferencesGroupCandidatesByField(t *testing.T) {
 	root := load(t)
-	rules := root.Child("shared").Child("pre-rulebase").Child("security").Child("rules")
-	got := References(rules.EntrySequence())
+	got := References(securityRule(root))
 
 	byField := map[string][]string{}
 	for _, fr := range got {
 		byField[fr.Field] = fr.Candidates
 	}
 	for _, field := range []string{"source", "destination"} {
-		want := []string{"address", "address-group"}
+		want := []string{"region", "address", "address-group", "external-list", "ip-block-list-v2"}
 		gotKinds := byField[field]
 		if len(gotKinds) != len(want) {
 			t.Fatalf("%s: got %v, want %v", field, gotKinds, want)

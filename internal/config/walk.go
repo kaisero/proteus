@@ -62,11 +62,10 @@ func buildRefTable(root *schema.Node) refTable {
 // the tree is exhausted or the callback returns false.
 //
 // The tree is already parsed, so this walks memory rather than the file. Two
-// details still matter and are covered by tests. Nested config elements are
-// ordinary children — a template embeds a whole firewall configuration, and a
-// Panorama file holds several — so nothing here treats one as a boundary. And an
-// event's EntryPath names its entries, because two device groups can each hold an
-// object of the same name.
+// details still matter and are covered by tests. A nested config element is an
+// ordinary child, so nothing here treats one as a boundary. And an event's
+// EntryPath names its entries, because two vsys can each hold an object of the
+// same name.
 func (c *Config) Walk(fn func(Event) bool) error {
 	rt := c.schema.refs
 	stop := false
