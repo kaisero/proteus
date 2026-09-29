@@ -78,6 +78,7 @@ possibly a zone of its own.
 
 <!-- GENERATED:api ./resolve -->
 ```go
+type DestinationTranslation struct{ ... }
 type FIBRoute struct{ ... }
 type HAState struct{ ... }
 type InterfaceAddress struct{ ... }
@@ -92,6 +93,7 @@ type RIBNextHop struct{ ... }
 type RIBRoute struct{ ... }
 type Rule struct{ ... }
 type Rulebase int
+type SourceTranslation struct{ ... }
 type StaticRoute struct{ ... }
 type TagFilter struct{ ... }
 type Target struct{ ... }

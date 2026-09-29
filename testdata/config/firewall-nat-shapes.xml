@@ -24,6 +24,11 @@
                   <source><member>any</member></source><destination><member>203.0.113.5</member></destination>
                   <destination-translation><translated-address>10.1.1.1</translated-address><dns-rewrite><direction>reverse</direction></dns-rewrite></destination-translation>
                 </entry>
+                <entry name="dyn-default">
+                  <from><member>any</member></from><to><member>untrust</member></to>
+                  <source><member>any</member></source><destination><member>203.0.113.6</member></destination>
+                  <dynamic-destination-translation><translated-address>10.1.1.6</translated-address></dynamic-destination-translation>
+                </entry>
                 <entry name="v6pool">
                   <from><member>any</member></from><to><member>untrust</member></to>
                   <source><member>any</member></source><destination><member>any</member></destination>

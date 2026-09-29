@@ -159,3 +159,14 @@ func TestSecpolicyUsesThePostNATZone(t *testing.T) {
 		t.Errorf("given zones:\n%s", out)
 	}
 }
+
+// fw01's lte router has no route to 8.8.8.8: the packet is dropped before NAT, and
+// security policy matches nothing.
+func TestSimulateNATDroppedBeforeNAT(t *testing.T) {
+	c := natLab(t)
+	out := c.want(0, "simulate", "nat", "-", "8.8.8.8", "--device", "fw01", "--router", "lte", "--port", "443")
+	if !strings.Contains(out, "│  rule    none: no route to 8.8.8.8: dropped before NAT") || strings.Contains(out, "security policy matches") {
+		t.Errorf("dropped:\n%s", out)
+	}
+	c.want(2, "simulate", "routing", "198.18.1.10", "198.18.250.10", "--port", "x")
+}

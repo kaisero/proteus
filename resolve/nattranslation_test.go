@@ -79,6 +79,9 @@ func TestNATTranslationShapes(t *testing.T) {
 	if s := rs["v6pool"].Source; s.Kind != DynamicIP || s.IPv6Interface != "ethernet1/9" || s.Interface != "" {
 		t.Errorf("v6pool = %+v", s)
 	}
+	if d := rs["dyn-default"].Destination; d.Kind != DynamicDestination || d.Distribution != "round-robin" {
+		t.Errorf("dyn-default = %+v", d)
+	}
 	if s := rs["empty"].Source; s != nil {
 		t.Errorf("empty = %+v", s)
 	}

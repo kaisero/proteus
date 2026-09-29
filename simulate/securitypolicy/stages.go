@@ -151,6 +151,7 @@ func deriveZones(_ context.Context, s *state) (simulate.Outcome, error) {
 		}
 		toVia = append(toVia, nz.describe())
 		details = append(details, nz.describe())
+		z.Source += ", after NAT rule " + strings.Join(nz.rules, ", ")
 	}
 	if len(nz.doubts) > 0 {
 		out.Fidelity = simulate.Weakest(out.Fidelity, simulate.OverMatchBecause("the NAT rule is not certain: "+strings.Join(nz.doubts, "; ")))

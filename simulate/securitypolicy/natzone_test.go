@@ -47,6 +47,7 @@ func natEnv(t *testing.T) *simulate.Env {
 func TestThePostNATZone(t *testing.T) {
 	r, v := run(t, natEnv(t), simulate.Flow{Source: ep("198.19.0.1"), Destination: ep("198.18.250.10"), DestPort: 8443})
 	if strings.Join(v.Zones.To, ",") != "server" || !strings.Contains(stage(r, "derive-zones").Detail, "to server (after NAT rule t-dnat-port)") ||
+		v.Zones.Source != "forwarding table, after NAT rule t-dnat-port" ||
 		first(v) != "t-allow-8443" {
 		t.Errorf("zones %+v, detail %q, first %s", v.Zones, stage(r, "derive-zones").Detail, first(v))
 	}

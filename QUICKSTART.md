@@ -550,6 +550,69 @@ firewalls on the path: fw02 (home -> labor), fw01 (transport -> server)
 - `--output json` gives each hop's `flow`: device, vsys, zones, source and
   destination, the input `simulate secpolicy` takes.
 
+## 11c. Simulate NAT
+
+`simulate nat` answers on one firewall which NAT rule a packet hits, what the
+packet looks like after it, and what security policy then matches: the addresses
+and port before NAT, the zones after it. The examples below use fw01's NAT test
+rules (`testdata/config/firewall-nat.xml`), each checked against fw01's own
+`test nat-policy-match`. A port forward:
+
+```
+$ panos-analyst simulate nat 198.19.0.1 198.18.250.10 --device fw01 --port 8443
+simulate nat 198.19.0.1 -> 198.18.250.10 tcp/8443 on fw01            fidelity: exact
+
+  ┌─ fw01 ─ vsys1 ─ router default ─ snapshot 1m ────────┐
+  │  zones   transport -> server                         │
+  │  in      ethernet1/1   198.19.0.254/24               │
+  │  out     ethernet1/2   198.18.10.1/24                │
+  │  route   0.0.0.0/0 via 198.19.0.1   (pre-NAT)        │
+  │  route   198.18.10.0/24  connected   (post-NAT)      │
+  │  rule    t-dnat-port, matched transport -> transport │
+  │  dest    198.18.250.10:8443 -> 198.18.10.100:443     │
+  └──────────────────────────────────────────────────────┘
+
+  before   198.19.0.1 -> 198.18.250.10:8443  tcp
+  after    198.19.0.1 -> 198.18.10.100:443  tcp
+
+security policy matches: 198.19.0.1 -> 198.18.250.10, port 8443, zones transport -> server
+```
+
+The NAT rule matched on the zone of the **pre-NAT** route (transport), and the
+translated destination is routed into server, which is the zone the security rule
+needs. A source pool:
+
+```
+$ panos-analyst simulate nat 198.18.11.5 198.18.250.200 --device fw01 --port 443
+simulate nat 198.18.11.5 -> 198.18.250.200 tcp/443 on fw01            fidelity: exact
+
+  ┌─ fw01 ─ vsys1 ─ router default ─ snapshot 2m ───────────────────────────────────┐
+  │  zones   client -> transport                                                    │
+  │  in      ethernet1/3   198.18.11.1/24                                           │
+  │  out     ethernet1/1   198.19.0.254/24                                          │
+  │  route   0.0.0.0/0 via 198.19.0.1                                               │
+  │  rule    t-dip-pool, matched client -> transport                                │
+  │  source  198.18.11.5 -> 198.18.250.64/29, port unchanged; fallback 198.19.0.254 │
+  └─────────────────────────────────────────────────────────────────────────────────┘
+
+  before   198.18.11.5 -> 198.18.250.200:443  tcp
+  after    198.18.250.64 -> 198.18.250.200:443  tcp
+
+security policy matches: 198.18.11.5 -> 198.18.250.200, port 443, zones client -> transport
+```
+
+- `--why` lists every rule above the match and the field that excluded it
+  (`not t-no-nat   from zone client ≠ transport`), then every stage.
+- A rule the answer cannot decide is a `doubt` row with the reason, for example a
+  rule naming a service when no `--port` is given.
+- The ingress is where the source is connected, else where its return route leaves
+  (inferred); `--from-zone` or `--from-interface` sets it.
+- `simulate secpolicy` uses the post-NAT zone: for the port forward above it finds
+  `zones  from transport, to server (forwarding table, after NAT rule t-dnat-port)`
+  and `first match: t-allow-8443`, the rule fw01 applied to real traffic.
+- `simulate routing` applies NAT on every firewall of a path, and later firewalls
+  see the translated packet.
+
 ## 12. What changed
 
 `snapshot diff` compares two snapshots of each selected device, per vsys and

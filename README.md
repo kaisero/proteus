@@ -206,6 +206,7 @@ One binary, `panos-analyst`. Questions are verbs; housekeeping is grouped by nou
 | `search <term>` | Every place a value or name appears: objects by value and by name, groups, references, literals |
 | `lookup <name>` | The whole rule or object behind a name: a rule as the rule editor shows it, an object with its value, members and groups; `--expand` adds values and group trees, `--full` shows every list item |
 | `simulate secpolicy <src> <dst>` | The rule one flow would hit on one device: source and destination by address or FQDN, `--port`, `--url`, zones given or derived; every stage says how certain it is, and `--why` shows them |
+| `simulate nat <src> <dst> --device <name>` | The NAT rule a packet hits on one firewall, the packet before and after translation, and what security policy then matches (pre-NAT addresses and port, post-NAT zones); `--why` lists the rules above the match and what excluded each |
 | `simulate routing <src> <dst>` | The firewalls a packet crosses, one box per firewall with its zones, interfaces and route; `<dst> --device <name>` starts on one device, `--rib` adds the routing table's other routes, and the answer names ECMP, PBF, NAT and a path leaving the inventory |
 
 Every question takes the same selectors: `--device`, `--label k=v`, `--vsys`,
@@ -253,9 +254,13 @@ The library reports each of these rather than hiding it.
   `simulate` agreed on 3 of 7 without zones, and on 7 of 7 with them. The library
   can also infer a zone from an address, and it reports every limit of that
   inference.
-- **`simulate routing` follows the forwarding table, IPv4 only.** It names, but
-  does not follow, policy-based forwarding and NAT; with ECMP it follows the lowest
-  next hop and names the others. A path ends where it leaves the inventory,
+- **`simulate routing` follows the forwarding table, IPv4 only.** It applies NAT on
+  every firewall, and names, but does not follow, policy-based forwarding; with ECMP
+  it follows the lowest next hop and names the others.
+- **`simulate nat` knows what a configuration fixes, not what the device picks at
+  runtime.** A DIPP port, a dynamic-IP pool address and a dynamic destination's
+  distribution are shown as candidates; NAT64 and NPTv6 are not simulated; a
+  rule's active/active binding is ignored with a note. A path ends where it leaves the inventory,
   including into a tunnel. Firewalls in virtual wire or Layer 2 are not seen on a
   path; the answer names them.
 - **URL matching rules are documentation-derived.** A firewall's validator
@@ -283,7 +288,10 @@ go-panos-schema/
 ├── estate/                # selectors and a time to targets; the simulation registry
 ├── simulate/              # the staged simulation framework and its fidelity
 │   ├── securitypolicy/    # the first simulation: which rule a flow would hit
-│   └── routing/           # which firewalls a packet crosses, hop by hop
+│   ├── routing/           # which firewalls a packet crosses, hop by hop
+│   ├── nat/               # the NAT engine and simulation: rule, translation
+│   ├── topology/          # interfaces and forwarding tables, shared by simulations
+│   └── policy/            # rulebase address matching and the PBF check
 ├── runlog/                # the run log: levels, redaction, rotation
 ├── search/                # every place a value or name appears, in one scope
 ├── card/                  # the whole rule or object behind a name, for lookup

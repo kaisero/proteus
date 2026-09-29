@@ -1,6 +1,6 @@
 # commands
 
-Validated against 7a7cefe on 2026-09-29 · Purpose: the three binaries, what each is for, and which one to reach for.
+Validated against 54cfdf9 on 2026-09-29 · Purpose: the three binaries, what each is for, and which one to reach for.
 
 ## Purpose & responsibilities
 
@@ -25,6 +25,7 @@ search <term>                               every place a value or name appears
 lookup <name>                               the whole rule or object behind a name
 simulate secpolicy <src> <dst>              the rules one flow could hit, and the first match
 simulate routing <src> <dst>                the firewalls a packet crosses, hop by hop
+simulate nat <src> <dst> --device <fw>      the NAT rule and the translated packet
 ```
 
 - **Two question verbs.** `search` answers "where does this appear" in five stages:
@@ -47,6 +48,10 @@ simulate routing <src> <dst>                the firewalls a packet crosses, hop 
   or derived, and prints each stage with `--why`. Its text ends with
   `first match: <rule> (<action>)`, which `scripts/device-probe.sh` reads. See
   [simulator](simulator.md).
+- **`simulate nat <src> <dst> --device <fw>`** (own command via `kindCommands`):
+  `--router`, `--port`, `--protocol`, `--from-zone` or `--from-interface`, `--why`,
+  `--no-dns` (resolves no FQDN at all, also a translated destination's). A source
+  of `-` is any. Exit 2 for a missing device, several routers, IPv6.
 - **`simulate routing <src> <dst>`** (or `<dst> --device <name> [--router]`) has
   its own command (`kindCommands`): no selectors but `--device`, `--at`, `--rib`,
   `--why`. It reads every inventory device's stored interfaces and tables, draws a

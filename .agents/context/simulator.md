@@ -1,13 +1,15 @@
 # simulator
 
-Validated against ceb05c1 on 2026-09-29 · Purpose: how a simulation runs as stages, how certain its answer is, and how to trace one after the fact.
+Validated against 54cfdf9 on 2026-09-29 · Purpose: how a simulation runs as stages, how certain its answer is, and how to trace one after the fact.
 
 ## Purpose & responsibilities
 
 `simulate` is the framework of spec §11: a run of named stages over one flow, each
 declaring its fidelity. It is a leaf (R12). `simulate/securitypolicy` answers which
 rule one flow hits on one device; `simulate/routing` (spec §17) which firewalls a
-packet crosses. `estate.Simulations` is the registry; the command makes one
+packet crosses; `simulate/nat` (spec §18) the NAT rule and the translated packet on
+one firewall. `simulate/nat` is also the NAT engine routing and securitypolicy
+call; `simulate/topology` and `simulate/policy` are leaf packages they share. `estate.Simulations` is the registry; the command makes one
 `simulate <kind>` subcommand per entry, from `kindCommands` when a kind needs its own
 flags (routing). `runlog` records each stage.
 
@@ -64,6 +66,18 @@ another node; ties and default-only are `ChoiceError`, exit 2).
 | `hop<N>/nat` | exact; inferred when a NAT rule could translate, or after an earlier hop could |
 | `hop<N>/next` | exact; undermatch when the path leaves the estate or by an interface; unresolved for two owners, over 16 hops |
 
+### nat
+
+`nat.Match(Input)` finds the first rule that surely matches the pre-NAT packet, the
+doubts above it (N11) and the excluded rules with their field; `nat.Rules` places
+each bi-directional rule's implicit destination rule directly after it (verified on
+fw01). `nat.Translate` gives the source candidates (port "assigned at runtime" for
+DIPP), the destination with its port, first-to-first for static ranges, and the
+post-NAT lookup. The `nat` kind's stages: `place`, `pbf`, `lookup`, `match`,
+`translate`, `post-lookup`. Routing's `nat` stage calls the engine and replaces the
+hop's egress after a destination NAT; secpolicy's `derive-zones` runs it per source
+zone for the post-NAT destination zone.
+
 `Run.Output` is `routing.Path`: `Hops` (one per device and vsys; a vsys crossing
 splits through the external zones), `Outcome`, `End`, `Hidden` (off-path devices
 with interfaces without a router).
@@ -73,20 +87,26 @@ with interfaces without a router).
 - `go test ./simulate/... ./runlog`
 - `./bin/panos-analyst simulate secpolicy <src> <dst> --file <cfg> --why`
 - `./bin/panos-analyst simulate routing <src> <dst> --why` (needs fetched devices)
+- `./bin/panos-analyst simulate nat <src> <dst> --device <fw> --port <p> --why`
+- `scripts/device-probe.sh --nat <device> <router> <src,dst,port>...` against the device
 - `--log-level debug`, then `grep '\[STEP\]'` in the run log: the rules each stage left.
 
 ## Public API
 
 <!-- GENERATED:api ./simulate -->
 ```go
+type ChoiceError struct{ ... }
 type DeviceData struct{ ... }
 type Endpoint struct{ ... }
 type Env struct{ ... }
 type Fidelity struct{ ... }
 type Flow struct{ ... }
+type Forward struct{ ... }
 type Input struct{ ... }
+type Match struct{ ... }
 type Network interface{ ... }
 type Outcome struct{ ... }
+type Port struct{ ... }
 type Run struct{ ... }
 type Simulation interface{ ... }
 type Stage struct{ ... }
@@ -94,6 +114,7 @@ type StageState struct{ ... }
 type Step[S any] struct{ ... }
 type Target struct{ ... }
 
+func (e *ChoiceError) Error() string
 func (e Endpoint) String() string
 func (f Fidelity) Declared() bool
 func (f Fidelity) Level() string
@@ -101,6 +122,8 @@ func (f Fidelity) MarshalJSON() ([]byte, error)
 func (f Fidelity) Reasons() []string
 func (f Fidelity) Skipped() []string
 func (f Fidelity) String() string
+func (m Match) First() resolve.FIBRoute
+func (p Port) Link() netip.Prefix
 func Addr(a netip.Addr) Endpoint
 func Execute[S any](ctx context.Context, kind string, state *S, steps []Step[S], keepBitmaps bool, log *runlog.Logger) ([]Stage, error)
 func NotEvaluated(dimensions ...string) Fidelity
@@ -127,35 +150,71 @@ func (Simulation) Stages() []string
 
 <!-- GENERATED:api ./simulate/routing -->
 ```go
-type ChoiceError struct{ ... }
 type Hop struct{ ... }
 type Lookup struct{ ... }
-type Match struct{ ... }
 type NotFollowed struct{ ... }
 type Outcome string
 type Path struct{ ... }
-type Placed string
-type Placement struct{ ... }
-type Port struct{ ... }
 type Simulation struct{}
-type Topology struct{ ... }
 
 func (Simulation) Describe() string
 func (Simulation) Kind() string
 func (Simulation) Run(ctx context.Context, env *simulate.Env, in simulate.Input) (simulate.Run, error)
 func (Simulation) Stages() []string
-func (e *ChoiceError) Error() string
-func (m Match) First() resolve.FIBRoute
-func (p Port) Link() netip.Prefix
-func (t *Topology) Connected(a netip.Addr) []Port
-func (t *Topology) Interface(node, name string) (Port, bool)
-func (t *Topology) Lookup(node, router string, a netip.Addr) (Match, bool)
+```
+<!-- /GENERATED:api -->
+
+<!-- GENERATED:api ./simulate/nat -->
+```go
+type Doubt struct{ ... }
+type Excluded struct{ ... }
+type Input struct{ ... }
+type MatchResult struct{ ... }
+type Result struct{ ... }
+type Rule struct{ ... }
+type Simulation struct{}
+type Translation struct{ ... }
+
+func (Simulation) Describe() string
+func (Simulation) Kind() string
+func (Simulation) Run(ctx context.Context, env *simulate.Env, in simulate.Input) (simulate.Run, error)
+func (Simulation) Stages() []string
+func FQDNs(in Input, r *Rule) []string
+func Match(in Input) MatchResult
+func Rules(t *resolve.Target) []Rule
+func Translate(in Input, m MatchResult) Result
+```
+<!-- /GENERATED:api -->
+
+<!-- GENERATED:api ./simulate/topology -->
+```go
+type Placed string
+type Placement struct{ ... }
+type Topology struct{ ... }
+
+func (t *Topology) Connected(a netip.Addr) []simulate.Port
+func (t *Topology) Forward(node, router string, a netip.Addr) simulate.Forward
+func (t *Topology) Interface(node, name string) (simulate.Port, bool)
+func (t *Topology) Lookup(node, router string, a netip.Addr) (simulate.Match, bool)
 func (t *Topology) Nodes() []string
-func (t *Topology) Owners(a netip.Addr) []Port
-func (t *Topology) Peers(out Port, nh netip.Addr) []Port
+func (t *Topology) Owners(a netip.Addr) []simulate.Port
+func (t *Topology) Peers(out simulate.Port, nh netip.Addr) []simulate.Port
 func (t *Topology) Place(src netip.Addr) (Placement, error)
 func (t *Topology) Routers(node string) []string
+func (t *Topology) Start(node, router string, src netip.Addr) (simulate.Port, bool, error)
 func NewTopology(devs []simulate.DeviceData) *Topology
+```
+<!-- /GENERATED:api -->
+
+<!-- GENERATED:api ./simulate/policy -->
+```go
+type Vsys struct{ ... }
+
+func (v Vsys) Holds(value string, a netip.Addr) bool
+func (v Vsys) PBF(src, dst netip.Addr, in simulate.Port) (rule resolve.PBFRule, note string, ok bool)
+func (v Vsys) Sides(rb resolve.Rulebase, src, dst netip.Addr, negated func(int) (bool, bool)) (*roaring.Bitmap, *roaring.Bitmap)
+func FromFits(r resolve.PBFRule, in simulate.Port) bool
+func Load(load func(device, vsys string) (simulate.Target, error), device, vsys string) (Vsys, bool)
 ```
 <!-- /GENERATED:api -->
 
@@ -198,9 +257,13 @@ func ParseLevel(s string) (Level, error)
   `simulate` receives the log through `Env`.
 - **`Run.Output` is `any`.** Each kind documents its type; securitypolicy's is
   `Verdict`, routing's `routing.Path`.
-- **Routing detects PBF and NAT, it does not follow them.** The stages run in
-  packet-flow order (pbf, lookup, zones, nat) so a later simulation replaces them in
-  place (`routing.TestPBFForwardAndSourceNAT`).
+- **Routing applies NAT and detects PBF.** The stages run in packet-flow order
+  (pbf, lookup, zones, nat); a destination NAT adds a post-NAT lookup to the hop
+  (`routing.TestDestinationNAT`).
+- **NAT matches the pre-NAT packet, security policy the post-NAT zones.** Both
+  verified on fw01 with real traffic (spec §18 F5, F6); the fixtures
+  `testdata/opdata/fw01-nat-policy-match.tsv` hold the device's answers and
+  `nat.TestTheRuleFw01Named` replays them.
 - **Unverified shapes fail conservative.** The lab has no HA pair, multi-vsys,
   discard or next-lr route: an unknown `nh_type` is unresolved, an HA state short of
   a confirmed pair is not followed (spec §17.2).
