@@ -500,22 +500,23 @@ func TestSimulateDerivesZonesFromTheStore(t *testing.T) {
 }
 
 func TestExitCode(t *testing.T) {
-	var errOut bytes.Buffer
 	for _, tc := range []struct {
-		err  error
-		want int
+		name   string
+		err    error
+		want   int
+		stderr string
 	}{
-		{nil, 0},
-		{errors.New("boom"), 1},
-		{usageErr("bad flag"), 2},
-		{errIncomplete, 3},
+		{"complete", nil, 0, ""},
+		{"an error", errors.New("boom"), 1, "proteus: boom\n"},
+		{"a usage error", usageErr("bad flag"), 2, "proteus: bad flag\n"},
+		{"an incomplete answer says nothing more", errIncomplete, 3, ""},
 	} {
-		if got := exitCode(tc.err, &errOut); got != tc.want {
-			t.Errorf("exitCode(%v) = %d, want %d", tc.err, got, tc.want)
-		}
-	}
-	if !strings.Contains(errOut.String(), "boom") || strings.Contains(errOut.String(), "exit 3") {
-		t.Errorf("stderr = %q", errOut.String())
+		t.Run(tc.name, func(t *testing.T) {
+			var errOut bytes.Buffer
+			if got := exitCode(tc.err, &errOut); got != tc.want || errOut.String() != tc.stderr {
+				t.Errorf("exitCode(%v) = %d, stderr %q; want %d, %q", tc.err, got, errOut.String(), tc.want, tc.stderr)
+			}
+		})
 	}
 	if (&exitErr{code: 3}).Error() != "exit 3" {
 		t.Error("an exitErr without a message names its code")

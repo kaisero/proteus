@@ -125,14 +125,21 @@ func TestEchoAndNil(t *testing.T) {
 }
 
 func TestParseLevel(t *testing.T) {
-	for in, want := range map[string]Level{"error": Error, "WARN": Warn, "Info": Info, "debug": Debug} {
-		if got, err := ParseLevel(in); err != nil || got != want {
-			t.Errorf("ParseLevel(%s) = %v, %v", in, got, err)
+	for _, tc := range []struct {
+		in   string
+		want Level
+	}{{"error", Error}, {"WARN", Warn}, {"Info", Info}, {"debug", Debug}} {
+		t.Run(tc.in, func(t *testing.T) {
+			if got, err := ParseLevel(tc.in); err != nil || got != tc.want {
+				t.Errorf("ParseLevel(%s) = %v, %v", tc.in, got, err)
+			}
+		})
+	}
+	t.Run("trace", func(t *testing.T) {
+		if _, err := ParseLevel("trace"); err == nil {
+			t.Error("an unknown level must be an error")
 		}
-	}
-	if _, err := ParseLevel("trace"); err == nil {
-		t.Error("an unknown level must be an error")
-	}
+	})
 	if Level(9).String() != "Level(9)" || Debug.String() != "DEBUG" {
 		t.Error("String")
 	}

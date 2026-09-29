@@ -89,38 +89,42 @@ func TestADefaultLiteralPassword(t *testing.T) {
 }
 
 func TestResolveNeedsCredentials(t *testing.T) {
-	inv, _ := Parse(strings.NewReader(sample))
-	_, err := inv.Resolve("fw01", env(nil))
-	if err == nil || !strings.Contains(err.Error(), "LAB_PASSWORD") {
-		t.Errorf("want an error naming the empty variable, got %v", err)
-	}
-	if _, err := inv.Resolve("nope", env(nil)); err == nil {
-		t.Error("an unknown device must be an error")
-	}
-	bare, _ := Parse(strings.NewReader("version: 1\ndevices:\n  - {name: a, host: h}\n"))
-	if _, err := bare.Resolve("a", env(nil)); err == nil || !strings.Contains(err.Error(), "username") {
-		t.Errorf("want a missing-username error, got %v", err)
-	}
-	userOnly, _ := Parse(strings.NewReader("version: 1\ndevices:\n  - {name: a, host: h, username: u}\n"))
-	if _, err := userOnly.Resolve("a", env(nil)); err == nil || !strings.Contains(err.Error(), "password") {
-		t.Errorf("want a missing-password error, got %v", err)
+	for _, tc := range []struct {
+		name, doc, device, want string
+	}{
+		{"an empty password variable is named", sample, "fw01", "LAB_PASSWORD"},
+		{"an unknown device", sample, "nope", "nope"},
+		{"no username", "version: 1\ndevices:\n  - {name: a, host: h}\n", "a", "username"},
+		{"no password", "version: 1\ndevices:\n  - {name: a, host: h, username: u}\n", "a", "password"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			inv, err := Parse(strings.NewReader(tc.doc))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := inv.Resolve(tc.device, env(nil)); err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Errorf("want an error naming %q, got %v", tc.want, err)
+			}
+		})
 	}
 }
 
 func TestParseRejects(t *testing.T) {
-	for name, doc := range map[string]string{
-		"wrong version":    "version: 2\ndevices: []\n",
-		"unknown field":    "version: 1\ndevices:\n  - name: a\n    host: h\n    hots: typo\n",
-		"no host":          "version: 1\ndevices:\n  - name: a\n",
-		"duplicate name":   "version: 1\ndevices:\n  - {name: a, host: h}\n  - {name: a, host: i}\n",
-		"unsafe name":      "version: 1\ndevices:\n  - {name: ../x, host: h}\n",
-		"negative keep":    "version: 1\ndefaults: {snapshot_keep: -1}\ndevices: []\n",
-		"negative timeout": "version: 1\ndevices:\n  - {name: a, host: h, timeout: -1}\n",
-		"not yaml":         "version: [\n",
+	for _, tc := range []struct{ name, doc string }{
+		{"wrong version", "version: 2\ndevices: []\n"},
+		{"unknown field", "version: 1\ndevices:\n  - name: a\n    host: h\n    hots: typo\n"},
+		{"no host", "version: 1\ndevices:\n  - name: a\n"},
+		{"duplicate name", "version: 1\ndevices:\n  - {name: a, host: h}\n  - {name: a, host: i}\n"},
+		{"unsafe name", "version: 1\ndevices:\n  - {name: ../x, host: h}\n"},
+		{"negative keep", "version: 1\ndefaults: {snapshot_keep: -1}\ndevices: []\n"},
+		{"negative timeout", "version: 1\ndevices:\n  - {name: a, host: h, timeout: -1}\n"},
+		{"not yaml", "version: [\n"},
 	} {
-		if _, err := Parse(strings.NewReader(doc)); err == nil {
-			t.Errorf("%s: want an error", name)
-		}
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := Parse(strings.NewReader(tc.doc)); err == nil {
+				t.Error("want an error")
+			}
+		})
 	}
 }
 
@@ -243,28 +247,41 @@ devices:
 }
 
 func TestParseAge(t *testing.T) {
-	for in, want := range map[string]time.Duration{"24h": 24 * time.Hour, "7d": 7 * 24 * time.Hour, "0": 0, "90m": 90 * time.Minute} {
-		if got, err := ParseAge(in); err != nil || got != want {
-			t.Errorf("ParseAge(%s) = %v, %v", in, got, err)
-		}
-	}
-	for _, bad := range []string{"x", "-1h", "xd", "-2d"} {
-		if _, err := ParseAge(bad); err == nil {
-			t.Errorf("ParseAge(%s) must fail", bad)
-		}
+	for _, tc := range []struct {
+		in   string
+		want time.Duration
+		ok   bool
+	}{
+		{"24h", 24 * time.Hour, true},
+		{"7d", 7 * 24 * time.Hour, true},
+		{"0", 0, true},
+		{"90m", 90 * time.Minute, true},
+		{"x", 0, false},
+		{"-1h", 0, false},
+		{"xd", 0, false},
+		{"-2d", 0, false},
+	} {
+		t.Run(tc.in, func(t *testing.T) {
+			got, err := ParseAge(tc.in)
+			if (err == nil) != tc.ok || got != tc.want {
+				t.Errorf("ParseAge(%s) = %v, %v; want %v, ok %v", tc.in, got, err, tc.want, tc.ok)
+			}
+		})
 	}
 }
 
 func TestAnalysisSettingsAreValidated(t *testing.T) {
-	for _, doc := range []string{
-		"version: 1\ndefaults: {max_snapshot_age: soon}\ndevices: []\n",
-		"version: 1\ndefaults: {output: yaml}\ndevices: []\n",
-		"version: 1\ndefaults: {log_level: trace}\ndevices: []\n",
-		"version: 1\ndefaults: {log_keep: -1}\ndevices: []\n",
+	for _, tc := range []struct{ name, doc string }{
+		{"max_snapshot_age", "version: 1\ndefaults: {max_snapshot_age: soon}\ndevices: []\n"},
+		{"output", "version: 1\ndefaults: {output: yaml}\ndevices: []\n"},
+		{"log_level", "version: 1\ndefaults: {log_level: trace}\ndevices: []\n"},
+		{"log_keep", "version: 1\ndefaults: {log_keep: -1}\ndevices: []\n"},
 	} {
-		if _, err := Parse(strings.NewReader(doc)); err == nil {
-			t.Errorf("want an error for %q", doc)
-		}
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := Parse(strings.NewReader(tc.doc)); err == nil {
+				t.Errorf("want an error for %q", tc.doc)
+			}
+		})
 	}
 	inv, err := Parse(strings.NewReader("version: 1\ndefaults: {max_snapshot_age: 7d, output: json, store: /s}\ndevices: []\n"))
 	if err != nil || inv.Defaults.Output != "json" || inv.Defaults.Store != "/s" {

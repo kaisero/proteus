@@ -274,3 +274,30 @@ func TestACancelDuringTheRetryPauseStops(t *testing.T) {
 		t.Errorf("err = %v after %s", err, time.Since(start))
 	}
 }
+
+// PAN-OS writes a refusal three ways, and an export answers with a bare <config>.
+func TestCheckResponse(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		status  int
+		body    string
+		refused bool
+		code    string
+		message string
+	}{
+		{"success", 200, `<response status="success"><result/></response>`, false, "", ""},
+		{"a bare export", 200, `<config version="11.2.0"/>`, false, "", ""},
+		{"an error with lines", 200, `<response status="error" code="17"><msg><line>invalid</line><line>syntax</line></msg></response>`, true, "17", "invalid syntax"},
+		{"an error with text", 200, `<response status="error" code="12"><msg>no such node</msg></response>`, true, "12", "no such node"},
+		{"a keygen refusal", 403, `<response status="error" code="403"><result><msg>Invalid Credential</msg></result></response>`, true, "403", "Invalid Credential"},
+		{"an HTTP error without XML", 502, `Bad Gateway`, true, "", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := checkResponse(tc.status, []byte(tc.body))
+			api, ok := errors.AsType[*APIError](err)
+			if ok != tc.refused || (ok && (api.Code != tc.code || api.Message != tc.message || api.HTTPStatus != tc.status)) {
+				t.Errorf("checkResponse = %#v", err)
+			}
+		})
+	}
+}
