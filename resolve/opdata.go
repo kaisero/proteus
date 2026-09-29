@@ -20,6 +20,10 @@ type InterfaceState struct {
 	Vsys   string
 	Router string // the logical router, from "lr:<name>"; empty when unrouted
 	Prefix netip.Prefix
+	// Addrs is every address the interface holds: the primary, then the <addr>
+	// members, then the <dyn-addr> members (DHCP, PPPoE). Both lists were empty on
+	// fw01 and fw02, so their member shape is unverified.
+	Addrs []netip.Prefix
 }
 
 // FIBRoute is one forwarding entry, in the router and address family that hold it.
@@ -30,7 +34,16 @@ type FIBRoute struct {
 	Interface   string
 	NextHop     string
 	Flags       string
+	// NextHopType is the entry's nh_type. Verified on fw01 and fw02: 0 is an ordinary
+	// route, 3 (flags "uh") an address of the device itself. Other values are kept as
+	// text for the caller to treat as unknown.
+	NextHopType string
+	// ECMP is the table's <ecmp> flag. It was 0 on both lab devices.
+	ECMP bool
 }
+
+// NextHopLocal is the nh_type of an address the device owns.
+const NextHopLocal = "3"
 
 // opResponse is the envelope the API returns. A caller may also hand over a bare
 // <result>, which is what the CLI prints with op-command-xml-output on.
@@ -41,6 +54,23 @@ type opResponse struct {
 }
 
 type opResult struct {
+	Text string `xml:",chardata"`
+	JSON string `xml:"json"`
+
+	Enabled string `xml:"enabled"`
+	Group   struct {
+		Mode      string `xml:"mode"`
+		LocalInfo struct {
+			State  string `xml:"state"`
+			Serial string `xml:"serial-num"`
+		} `xml:"local-info"`
+		PeerInfo struct {
+			State  string `xml:"state"`
+			Serial string `xml:"serial-num"`
+			MgmtIP string `xml:"mgmt-ip"`
+		} `xml:"peer-info"`
+	} `xml:"group"`
+
 	Ifnet struct {
 		Entries []struct {
 			Name string `xml:"name"`
@@ -48,6 +78,12 @@ type opResult struct {
 			Zone string `xml:"zone"`
 			Fwd  string `xml:"fwd"`
 			IP   string `xml:"ip"`
+			Addr struct {
+				Members []string `xml:"member"`
+			} `xml:"addr"`
+			DynAddr struct {
+				Members []string `xml:"member"`
+			} `xml:"dyn-addr"`
 		} `xml:"entry"`
 	} `xml:"ifnet"`
 
@@ -55,12 +91,14 @@ type opResult struct {
 		Entries []struct {
 			VR      string `xml:"vr"`
 			Type    string `xml:"type"`
+			ECMP    string `xml:"ecmp"`
 			Entries struct {
 				Routes []struct {
 					Dst       string `xml:"dst"`
 					Interface string `xml:"interface"`
 					NextHop   string `xml:"nexthop"`
 					Flags     string `xml:"flags"`
+					NHType    string `xml:"nh_type"`
 				} `xml:"entry"`
 			} `xml:"entries"`
 		} `xml:"entry"`
@@ -126,6 +164,12 @@ func ReadInterfaceStates(b []byte) ([]InterfaceState, error) {
 		// route may leave by it, so it is kept.
 		if p, err := netip.ParsePrefix(strings.TrimSpace(e.IP)); err == nil {
 			st.Prefix = p
+			st.Addrs = append(st.Addrs, p)
+		}
+		for _, m := range append(e.Addr.Members, e.DynAddr.Members...) {
+			if p, err := netip.ParsePrefix(strings.TrimSpace(m)); err == nil {
+				st.Addrs = append(st.Addrs, p)
+			}
 		}
 		if st.Name == "" {
 			continue
@@ -161,25 +205,36 @@ func ReadFIBRoutes(b []byte) ([]FIBRoute, error) {
 		return nil, err
 	}
 	var out []FIBRoute
+	// A firewall with several dataplanes may report the same table once per
+	// dataplane (unverified: both lab devices have one). A route is kept once.
+	seen := map[FIBRoute]bool{}
 	tables := 0
 	for _, fib := range res.FIBs.Entries {
 		tables++
 		router := strings.TrimSpace(fib.VR)
 		// A firewall reports one table per router per address family. Type 1 is IPv6.
 		v6 := strings.TrimSpace(fib.Type) == "1"
+		ecmp := strings.TrimSpace(fib.ECMP) == "1"
 		for _, r := range fib.Entries.Routes {
 			p, err := netip.ParsePrefix(strings.TrimSpace(r.Dst))
 			if err != nil {
 				continue
 			}
-			out = append(out, FIBRoute{
+			route := FIBRoute{
 				Router:      router,
 				IPv6:        v6,
 				Destination: p.Masked(),
 				Interface:   strings.TrimSpace(r.Interface),
 				NextHop:     strings.TrimSpace(r.NextHop),
 				Flags:       strings.TrimSpace(r.Flags),
-			})
+				NextHopType: strings.TrimSpace(r.NHType),
+				ECMP:        ecmp,
+			}
+			if seen[route] {
+				continue
+			}
+			seen[route] = true
+			out = append(out, route)
 		}
 	}
 	if tables == 0 {
