@@ -12,9 +12,9 @@ func natRules(t *testing.T, file string) map[string]NATRule {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tgs, err := Targets(cfg)
-	if err != nil || len(tgs) != 1 {
-		t.Fatalf("targets: %v %v", tgs, err)
+	tgs := Targets(cfg)
+	if len(tgs) != 1 {
+		t.Fatalf("targets: %v", tgs)
 	}
 	out := map[string]NATRule{}
 	for _, r := range tgs[0].NATRules() {

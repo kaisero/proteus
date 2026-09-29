@@ -97,9 +97,7 @@ func (a *app) snapshotShowCmd() *cobra.Command {
 			for _, t := range ts {
 				r := row{target: targetOf(t), Version: t.Config.DetailVersion()}
 				if tg, err := resolve.TargetFor(t.Config, firstDevice(t.Config), t.Vsys); err == nil {
-					if rules, err := tg.Rules(resolve.Security); err == nil {
-						r.Rules = len(rules)
-					}
+					r.Rules = len(tg.Rules(resolve.Security))
 				}
 				if t.Snapshot != nil {
 					m := t.Snapshot.Meta
@@ -198,11 +196,7 @@ func (a *app) snapshotDiffCmd() *cobra.Command {
 					continue
 				}
 				for _, sc := range diffScopes(before, after, sel.vsys) {
-					ch, err := drift.Compare(before, after, sc)
-					if err != nil {
-						holes = append(holes, estate.Hole{Device: d, Vsys: sc.Name, Reason: err.Error()})
-						continue
-					}
+					ch := drift.Compare(before, after, sc)
 					if ch == nil {
 						ch = []drift.Change{}
 					}
@@ -288,7 +282,7 @@ func pair(st *store.Store, device, from, to string) (store.Snapshot, store.Snaps
 func diffScopes(before, after *config.Config, want []string) []config.Scope {
 	seen := map[string]bool{}
 	for _, cfg := range []*config.Config{before, after} {
-		vs, _ := resolve.Vsyses(cfg)
+		vs := resolve.Vsyses(cfg)
 		for _, v := range vs {
 			seen[v] = true
 		}

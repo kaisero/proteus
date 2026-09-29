@@ -12,9 +12,9 @@ func routingTarget(t *testing.T) *Target {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tgs, err := Targets(cfg)
-	if err != nil || len(tgs) != 1 {
-		t.Fatalf("targets: %v %v", tgs, err)
+	tgs := Targets(cfg)
+	if len(tgs) != 1 {
+		t.Fatalf("targets: %v", tgs)
 	}
 	return tgs[0]
 }
@@ -40,7 +40,7 @@ func TestPBFRules(t *testing.T) {
 	if rs[3].ActionKind != PBFForwardToVsys || rs[3].ForwardVsys != "vsys2" || !rs[3].Disabled {
 		t.Errorf("to vsys = %+v", rs[3])
 	}
-	if rules, _ := routingTarget(t).Rules(PBF); len(rules) != 5 || PBF.String() != "pbf" {
+	if rules := routingTarget(t).Rules(PBF); len(rules) != 5 || PBF.String() != "pbf" {
 		t.Error("Rules(PBF)")
 	}
 }

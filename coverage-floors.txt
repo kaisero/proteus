@@ -10,19 +10,19 @@
 #
 #   github.com/okaiser/proteus/internal/schema  86.9
 
-github.com/okaiser/proteus/internal/schema  86.9
+github.com/okaiser/proteus/internal/schema  88.1
 github.com/okaiser/proteus/internal/digest  71.8
 github.com/okaiser/proteus/internal/config  98.1
-github.com/okaiser/proteus/internal/resolve  96.6
-github.com/okaiser/proteus/internal/index  95.1
+github.com/okaiser/proteus/internal/resolve  96.9
+github.com/okaiser/proteus/internal/index  97.0
 github.com/okaiser/proteus/internal/inventory  96.2
 github.com/okaiser/proteus/internal/fetch  100.0
 github.com/okaiser/proteus/internal/store  88.1
-github.com/okaiser/proteus/internal/cli      93.4
+github.com/okaiser/proteus/internal/cli      93.6
 github.com/okaiser/proteus/internal/estate  100.0
 github.com/okaiser/proteus/internal/search  97.3
 github.com/okaiser/proteus/internal/card  94.4
-github.com/okaiser/proteus/internal/drift  91.1
+github.com/okaiser/proteus/internal/drift  100.0
 github.com/okaiser/proteus/internal/runlog  93.0
 github.com/okaiser/proteus/internal/simulate  100.0
 github.com/okaiser/proteus/internal/simulate/securitypolicy  98.0

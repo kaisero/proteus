@@ -369,7 +369,7 @@ func (s *state) crossVsys(h *Hop, out simulate.Outcome) (simulate.Outcome, error
 func (s *state) externalZone(dev, from, to string) (string, bool) {
 	if s.env.Load != nil {
 		if t, err := s.env.Load(dev, vsysName(from)); err == nil && t.Config != nil {
-			zs, _ := resolve.ZonesInScope(t.Config, config.Scope{Sort: config.ScopeVsys, Name: vsysName(from)})
+			zs := resolve.ZonesInScope(t.Config, config.Scope{Sort: config.ScopeVsys, Name: vsysName(from)})
 			for _, z := range zs {
 				if z.Mode == "external" && slices.Contains(z.Interfaces, vsysName(to)) {
 					return z.Name, true

@@ -40,7 +40,7 @@ var zoneModes = []string{"layer3", "layer2", "virtual-wire", "tap", "external"}
 //
 // A vsys that defines no zones has none, and that is an answer rather than an
 // error.
-func ZonesInScope(cfg *config.Config, sc config.Scope) ([]Zone, error) {
+func ZonesInScope(cfg *config.Config, sc config.Scope) []Zone {
 	entries := entriesInScope(cfg, sc, "zone")
 	out := make([]Zone, 0, len(entries))
 	for _, e := range entries {
@@ -54,7 +54,7 @@ func ZonesInScope(cfg *config.Config, sc config.Scope) ([]Zone, error) {
 		}
 		out = append(out, z)
 	}
-	return out, nil
+	return out
 }
 
 // InterfaceAddresses returns every address configured on an interface.
@@ -66,12 +66,12 @@ func ZonesInScope(cfg *config.Config, sc config.Scope) ([]Zone, error) {
 // under network/interface, and its addresses are the ip lists in its own subtree —
 // stopping at the next entry down, because that is a subinterface with a name and a
 // zone of its own.
-func InterfaceAddresses(cfg *config.Config) ([]InterfaceAddress, error) {
+func InterfaceAddresses(cfg *config.Config) []InterfaceAddress {
 	var out []InterfaceAddress
 	for _, iface := range cfg.Root().Find("devices", "entry", "network", "interface") {
 		collectInterfaceAddresses(iface, &out)
 	}
-	return out, nil
+	return out
 }
 
 func collectInterfaceAddresses(e *config.Element, out *[]InterfaceAddress) {
@@ -117,7 +117,7 @@ func ownAddresses(entry *config.Element) []netip.Prefix {
 }
 
 // StaticRoutes returns the configured routes of every virtual router.
-func StaticRoutes(cfg *config.Config) ([]StaticRoute, error) {
+func StaticRoutes(cfg *config.Config) []StaticRoute {
 	var out []StaticRoute
 	for _, vr := range cfg.Root().Find("devices", "entry", "network", "virtual-router", "entry") {
 		name := vr.Attr("name")
@@ -135,7 +135,7 @@ func StaticRoutes(cfg *config.Config) ([]StaticRoute, error) {
 			})
 		}
 	}
-	return out, nil
+	return out
 }
 
 // DynamicRoutingProtocols returns the routing protocols a virtual router enables.

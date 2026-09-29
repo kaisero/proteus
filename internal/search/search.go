@@ -108,7 +108,7 @@ func (s *searcher) kindsByName() map[string][]string {
 	}
 	s.byName = map[string][]string{}
 	for _, k := range resolve.ObjectKinds(s.cfg) {
-		objs, _ := resolve.ObjectsInScope(s.cfg, s.sc, k)
+		objs := resolve.ObjectsInScope(s.cfg, s.sc, k)
 		for _, o := range objs {
 			s.byName[o.Name] = append(s.byName[o.Name], k)
 		}

@@ -19,10 +19,7 @@ func load(t *testing.T, name string) *config.Config {
 var vsys1 = config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}
 
 func TestCompareFindsEachChange(t *testing.T) {
-	got, err := Compare(load(t, "firewall-lab.xml"), load(t, "firewall-lab-changed.xml"), vsys1)
-	if err != nil {
-		t.Fatal(err)
-	}
+	got := Compare(load(t, "firewall-lab.xml"), load(t, "firewall-lab-changed.xml"), vsys1)
 	var lines []string
 	for _, c := range got {
 		lines = append(lines, string(c.Op)+" "+c.Kind+" "+c.Name)
@@ -42,9 +39,8 @@ func TestCompareFindsEachChange(t *testing.T) {
 }
 
 func TestIdenticalConfigurationsDoNotDiffer(t *testing.T) {
-	got, err := Compare(load(t, "firewall-lab.xml"), load(t, "firewall-lab.xml"), vsys1)
-	if err != nil || len(got) != 0 {
-		t.Errorf("got %v, %v", got, err)
+	if got := Compare(load(t, "firewall-lab.xml"), load(t, "firewall-lab.xml"), vsys1); len(got) != 0 {
+		t.Errorf("got %v", got)
 	}
 }
 
@@ -53,10 +49,7 @@ func TestSharedIsItsOwnScope(t *testing.T) {
 	before := load(t, "firewall-lab.xml")
 	after := load(t, "firewall-multivsys.xml")
 	shared := config.Scope{Sort: config.ScopeShared}
-	got, err := Compare(before, after, shared)
-	if err != nil {
-		t.Fatal(err)
-	}
+	got := Compare(before, after, shared)
 	var lines []string
 	for _, c := range got {
 		lines = append(lines, string(c.Op)+" "+c.Kind+" "+c.Name)
@@ -67,7 +60,7 @@ func TestSharedIsItsOwnScope(t *testing.T) {
 			t.Errorf("missing %q in %s", want, joined)
 		}
 	}
-	vsysOnly, _ := Compare(before, after, vsys1)
+	vsysOnly := Compare(before, after, vsys1)
 	for _, c := range vsysOnly {
 		if c.Name == "shared-dns" || c.Name == "pushed-pre" {
 			t.Errorf("a shared change leaked into the vsys comparison: %+v", c)

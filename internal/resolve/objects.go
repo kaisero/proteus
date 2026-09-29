@@ -23,15 +23,15 @@ type Object struct {
 
 // Objects returns the objects of one kind visible to the target, with a
 // descendant definition shadowing an ancestor's of the same name.
-func (t *Target) Objects(kind string) ([]Object, error) {
-	return objectsInChain(t.cfg, t.Chain(), kind, nil), nil
+func (t *Target) Objects(kind string) []Object {
+	return objectsInChain(t.cfg, t.Chain(), kind, nil)
 }
 
 // ObjectsInScope returns the objects of one kind visible in a scope and its
 // ancestors.
-func ObjectsInScope(cfg *config.Config, sc config.Scope, kind string) ([]Object, error) {
+func ObjectsInScope(cfg *config.Config, sc config.Scope, kind string) []Object {
 	chain := chainFor(sc)
-	return objectsInChain(cfg, chain, kind, nil), nil
+	return objectsInChain(cfg, chain, kind, nil)
 }
 
 // ObjectsAt reads a kind from an explicit container path, for the kinds whose name
@@ -40,9 +40,9 @@ func ObjectsInScope(cfg *config.Config, sc config.Scope, kind string) ([]Object,
 // "user" is the example: the schema puts a user array both at local-user-database/user
 // and directly under a vsys, and they are different things. A caller that means one of
 // them has to say which.
-func ObjectsAt(cfg *config.Config, sc config.Scope, kind string, within []string) ([]Object, error) {
+func ObjectsAt(cfg *config.Config, sc config.Scope, kind string, within []string) []Object {
 	chain := chainFor(sc)
-	return objectsInChain(cfg, chain, kind, within), nil
+	return objectsInChain(cfg, chain, kind, within)
 }
 
 // chainFor returns the scopes a scope inherits from, shared first.

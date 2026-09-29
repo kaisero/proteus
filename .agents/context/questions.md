@@ -102,7 +102,7 @@ func Rule(cfg *config.Config, idx *index.Index, r resolve.Rule, rules int) Card
 type Change struct{ ... }
 type Op string
 
-func Compare(before, after *config.Config, sc config.Scope) ([]Change, error)
+func Compare(before, after *config.Config, sc config.Scope) []Change
 ```
 <!-- /GENERATED:api -->
 

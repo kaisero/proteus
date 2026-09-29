@@ -38,7 +38,7 @@ func (t *Target) Scope() config.Scope {
 func (t *Target) Chain() []config.Scope { return append([]config.Scope{}, t.chain...) }
 
 // Vsyses returns the vsys names a configuration defines, sorted.
-func Vsyses(cfg *config.Config) ([]string, error) {
+func Vsyses(cfg *config.Config) []string {
 	var out []string
 	for _, v := range cfg.Root().Find("devices", "entry", "vsys", "entry") {
 		if n := v.Attr("name"); n != "" {
@@ -46,15 +46,12 @@ func Vsyses(cfg *config.Config) ([]string, error) {
 		}
 	}
 	sort.Strings(out)
-	return out, nil
+	return out
 }
 
 // Targets returns one policy target per vsys the configuration defines.
-func Targets(cfg *config.Config) ([]*Target, error) {
-	names, err := Vsyses(cfg)
-	if err != nil {
-		return nil, err
-	}
+func Targets(cfg *config.Config) []*Target {
+	names := Vsyses(cfg)
 	device := ""
 	if devs := cfg.Root().Find("devices", "entry"); len(devs) > 0 {
 		device = devs[0].Attr("name")
@@ -72,15 +69,12 @@ func Targets(cfg *config.Config) ([]*Target, error) {
 			},
 		})
 	}
-	return out, nil
+	return out
 }
 
 // TargetFor returns one target by device name and vsys.
 func TargetFor(cfg *config.Config, device, vsys string) (*Target, error) {
-	all, err := Targets(cfg)
-	if err != nil {
-		return nil, err
-	}
+	all := Targets(cfg)
 	var devices, vsyses []string
 	for _, t := range all {
 		if t.serial == device && t.vsys == vsys {

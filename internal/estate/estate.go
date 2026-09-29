@@ -103,7 +103,7 @@ func pick(st *store.Store, device string, at time.Time) (store.Snapshot, error) 
 func scopes(device string, sn *store.Snapshot, cfg *config.Config, rep config.Report,
 	vsys, notes []string,
 ) ([]Target, []Hole) {
-	have, _ := resolve.Vsyses(cfg)
+	have := resolve.Vsyses(cfg)
 	if rep.VersionGap != "" {
 		notes = append(notes, rep.VersionGap)
 	}

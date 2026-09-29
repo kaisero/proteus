@@ -38,15 +38,8 @@ type Change struct {
 // every shared change; compare shared for those. A rule is compared by action,
 // disabled and its member lists. Its position is not compared: one inserted rule
 // would otherwise mark every rule below it as changed.
-func Compare(before, after *config.Config, sc config.Scope) ([]Change, error) {
-	a, err := render(before, sc)
-	if err != nil {
-		return nil, err
-	}
-	b, err := render(after, sc)
-	if err != nil {
-		return nil, err
-	}
+func Compare(before, after *config.Config, sc config.Scope) []Change {
+	a, b := render(before, sc), render(after, sc)
 	var out []Change
 	for k, old := range a {
 		nu, ok := b[k]
@@ -68,19 +61,16 @@ func Compare(before, after *config.Config, sc config.Scope) ([]Change, error) {
 		}
 		return out[i].Name < out[j].Name
 	})
-	return out, nil
+	return out
 }
 
 type key struct{ kind, name string }
 
 // render reduces every object and rule defined in the scope to one comparable line.
-func render(cfg *config.Config, sc config.Scope) (map[key]string, error) {
+func render(cfg *config.Config, sc config.Scope) map[key]string {
 	out := map[key]string{}
 	for _, kind := range resolve.ObjectKinds(cfg) {
-		objs, err := resolve.ObjectsInScope(cfg, sc, kind)
-		if err != nil {
-			return nil, err
-		}
+		objs := resolve.ObjectsInScope(cfg, sc, kind)
 		for _, o := range objs {
 			if o.Scope != sc {
 				continue
@@ -92,19 +82,13 @@ func render(cfg *config.Config, sc config.Scope) (map[key]string, error) {
 			out[key{kind, o.Name}] = line
 		}
 	}
-	tgs, err := resolve.Targets(cfg)
-	if err != nil {
-		return nil, err
-	}
+	tgs := resolve.Targets(cfg)
 	for _, tg := range tgs {
 		if sc.Sort == config.ScopeVsys && tg.Scope() != sc {
 			continue
 		}
 		for _, rb := range []resolve.Rulebase{resolve.Security, resolve.NAT} {
-			rules, err := tg.Rules(rb)
-			if err != nil {
-				return nil, err
-			}
+			rules := tg.Rules(rb)
 			for _, r := range rules {
 				if r.Scope == sc {
 					out[key{rb.String() + " rule", r.Name}] = renderRule(r)
@@ -115,7 +99,7 @@ func render(cfg *config.Config, sc config.Scope) (map[key]string, error) {
 			break // shared rules are the same in every vsys
 		}
 	}
-	return out, nil
+	return out
 }
 
 func renderRule(r resolve.Rule) string {

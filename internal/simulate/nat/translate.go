@@ -156,7 +156,7 @@ func (t translator) values(name string, r *Rule, hostOnly bool) []string {
 		return []string{v}
 	}
 	for _, kind := range []string{"address", "address-group"} {
-		objs, _ := resolve.ObjectsInScope(t.v.Config, t.v.Scope, kind)
+		objs := resolve.ObjectsInScope(t.v.Config, t.v.Scope, kind)
 		for _, o := range objs {
 			if o.Name != name {
 				continue

@@ -13,10 +13,7 @@ func TestURLFilteringProfilesInScope(t *testing.T) {
 	cfg := loadT(t, "../../testdata/config/firewall-urlprofile.xml")
 	sc := config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}
 
-	profs, err := URLFilteringProfilesInScope(cfg, sc)
-	if err != nil {
-		t.Fatal(err)
-	}
+	profs := URLFilteringProfilesInScope(cfg, sc)
 	if len(profs) != 1 {
 		t.Fatalf("got %d profiles, want 1", len(profs))
 	}
@@ -41,10 +38,7 @@ func TestProfileGroupsInScope(t *testing.T) {
 	cfg := loadT(t, "../../testdata/config/firewall-urlprofile.xml")
 	sc := config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}
 
-	groups, err := ProfileGroupsInScope(cfg, sc)
-	if err != nil {
-		t.Fatal(err)
-	}
+	groups := ProfileGroupsInScope(cfg, sc)
 	if len(groups) != 1 || groups[0].Name != "default" {
 		t.Fatalf("got %+v, want one group named default", groups)
 	}
@@ -61,17 +55,11 @@ func TestProfileReadersOnAConfigurationWithNoProfiles(t *testing.T) {
 	cfg := loadT(t, "../../testdata/config/firewall-urlcat.xml")
 	sc := config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}
 
-	profs, err := URLFilteringProfilesInScope(cfg, sc)
-	if err != nil {
-		t.Fatal(err)
-	}
+	profs := URLFilteringProfilesInScope(cfg, sc)
 	if len(profs) != 0 {
 		t.Errorf("got %d profiles, want none", len(profs))
 	}
-	groups, err := ProfileGroupsInScope(cfg, sc)
-	if err != nil {
-		t.Fatal(err)
-	}
+	groups := ProfileGroupsInScope(cfg, sc)
 	if len(groups) != 0 {
 		t.Errorf("got %d groups, want none", len(groups))
 	}
@@ -81,14 +69,8 @@ func TestProfileReadersOnAConfigurationWithNoProfiles(t *testing.T) {
 // matching field.
 func TestRulesReadProfileSettings(t *testing.T) {
 	cfg := loadT(t, "../../testdata/config/firewall-urlprofile.xml")
-	tgs, err := Targets(cfg)
-	if err != nil {
-		t.Fatal(err)
-	}
-	rules, err := tgs[0].Rules(Security)
-	if err != nil {
-		t.Fatal(err)
-	}
+	tgs := Targets(cfg)
+	rules := tgs[0].Rules(Security)
 	byName := map[string]Rule{}
 	for _, r := range rules {
 		byName[r.Name] = r
@@ -110,10 +92,7 @@ func TestURLFilteringProfilesShadowShared(t *testing.T) {
 	cfg := loadT(t, "../../testdata/config/firewall-urlprofile-shadow.xml")
 	sc := config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}
 
-	profs, err := URLFilteringProfilesInScope(cfg, sc)
-	if err != nil {
-		t.Fatal(err)
-	}
+	profs := URLFilteringProfilesInScope(cfg, sc)
 	got := map[string]URLFilteringProfile{}
 	for _, p := range profs {
 		got[p.Name] = p

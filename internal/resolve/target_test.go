@@ -8,10 +8,7 @@ import (
 
 // A firewall's policy targets are its vsys, one each, keyed by device and vsys.
 func TestTargetsAreKeyedByDeviceAndVsys(t *testing.T) {
-	got, err := Targets(vsysLab(t))
-	if err != nil {
-		t.Fatalf("Targets: %v", err)
-	}
+	got := Targets(vsysLab(t))
 	want := []string{
 		"localhost.localdomain/vsys1",
 		"localhost.localdomain/vsys2",

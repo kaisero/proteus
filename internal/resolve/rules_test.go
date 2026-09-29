@@ -10,10 +10,7 @@ import (
 // A sibling vsys's rules must never appear.
 func TestRulesExcludeASiblingVsys(t *testing.T) {
 	tg, _ := TargetFor(vsysLab(t), "localhost.localdomain", "vsys1")
-	rules, err := tg.Rules(Security)
-	if err != nil {
-		t.Fatalf("Rules: %v", err)
-	}
+	rules := tg.Rules(Security)
 	if len(rules) != 1 || rules[0].Name != "Corp DC Access" {
 		names := make([]string, len(rules))
 		for i, r := range rules {
@@ -25,7 +22,7 @@ func TestRulesExcludeASiblingVsys(t *testing.T) {
 		t.Errorf("source = %v, want [corp-location]", got)
 	}
 	sibling, _ := TargetFor(vsysLab(t), "localhost.localdomain", "vsys2")
-	if got, _ := sibling.Rules(Security); len(got) != 0 {
+	if got := sibling.Rules(Security); len(got) != 0 {
 		t.Errorf("vsys2 has no rules of its own, got %d", len(got))
 	}
 }
@@ -36,10 +33,7 @@ func TestFirewallRulesCarryScopeAndPosition(t *testing.T) {
 	if err != nil {
 		t.Fatalf("TargetFor: %v", err)
 	}
-	rules, err := tg.Rules(Security)
-	if err != nil {
-		t.Fatalf("Rules: %v", err)
-	}
+	rules := tg.Rules(Security)
 	byName := map[string]Rule{}
 	for i, r := range rules {
 		if r.Position != i+1 {
@@ -64,10 +58,7 @@ func TestFirewallRulesCarryScopeAndPosition(t *testing.T) {
 // The NAT rulebase reads through the same path.
 func TestNatRulebaseIsEmptyInTheFixture(t *testing.T) {
 	tg, _ := TargetFor(fwLab(t), "localhost.localdomain", "vsys1")
-	got, err := tg.Rules(NAT)
-	if err != nil {
-		t.Fatalf("Rules(NAT): %v", err)
-	}
+	got := tg.Rules(NAT)
 	if len(got) != 0 {
 		t.Errorf("the fixture has no NAT rules, got %d", len(got))
 	}
@@ -93,7 +84,7 @@ func TestRulesReadNegation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rules, _ := tg.Rules(Security)
+	rules := tg.Rules(Security)
 	if !rules[0].NegateSource || rules[0].NegateDestination || rules[1].NegateSource {
 		t.Errorf("negation = %v %v %v", rules[0].NegateSource, rules[0].NegateDestination, rules[1].NegateSource)
 	}
@@ -104,7 +95,7 @@ func TestRulesReadWhatTheEditorShows(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rules, _ := tg.Rules(Security)
+	rules := tg.Rules(Security)
 	big := rules[1]
 	if big.UUID != "0b3f5e2a-9d41-4c1e-8f7a-2b6c9d1ec21e" || big.Description == "" || big.LogStart != "yes" ||
 		big.LogEnd != "yes" || big.LogSetting != "log-to-panorama" || big.Schedule != "business-hours" {
@@ -113,7 +104,7 @@ func TestRulesReadWhatTheEditorShows(t *testing.T) {
 	if small := rules[0]; small.Description != "" || small.LogSetting != "" || small.LogStart != "no" {
 		t.Errorf("absent elements read empty: %+v", small)
 	}
-	objs, _ := ObjectsInScope(loadT(t, "../../testdata/config/firewall-lookup.xml"), config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}, "address")
+	objs := ObjectsInScope(loadT(t, "../../testdata/config/firewall-lookup.xml"), config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}, "address")
 	for _, o := range objs {
 		if o.Name == "net-vienna" && o.Description != "Vienna office" {
 			t.Errorf("description = %q", o.Description)

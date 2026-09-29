@@ -22,7 +22,7 @@ func Object(cfg *config.Config, idx *index.Index, o resolve.Object) Card {
 	it := b.objectItem(o, nil)
 	switch {
 	case o.Kind == "profile-group":
-		groups, _ := resolve.ProfileGroupsInScope(cfg, b.sc)
+		groups := resolve.ProfileGroupsInScope(cfg, b.sc)
 		for _, g := range groups {
 			if g.Name == o.Name {
 				c.Sections = append(c.Sections, Section{Title: "profiles", Rows: []Row{{Items: profileItems(g.Kinds)}}})

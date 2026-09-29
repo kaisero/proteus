@@ -30,10 +30,7 @@ func TestScopedObjectsExcludeSiblings(t *testing.T) {
 	if err != nil {
 		t.Fatalf("TargetFor: %v", err)
 	}
-	objs, err := tg.Objects("address")
-	if err != nil {
-		t.Fatalf("Objects: %v", err)
-	}
+	objs := tg.Objects("address")
 	names := map[string]bool{}
 	for _, o := range objs {
 		names[o.Name] = true
@@ -49,7 +46,7 @@ func TestScopedObjectsExcludeSiblings(t *testing.T) {
 
 func TestScopedObjectsCarryValueAndTags(t *testing.T) {
 	tg, _ := TargetFor(vsysLab(t), "localhost.localdomain", "vsys1")
-	objs, _ := tg.Objects("address")
+	objs := tg.Objects("address")
 	for _, o := range objs {
 		if o.Name != "corp-location-vienna" {
 			continue
@@ -73,10 +70,7 @@ func TestShadowingIsReported(t *testing.T) {
 	if err != nil {
 		t.Fatalf("TargetFor: %v", err)
 	}
-	objs, err := tg.Objects("address")
-	if err != nil {
-		t.Fatalf("Objects: %v", err)
-	}
+	objs := tg.Objects("address")
 	var shadowed *Object
 	for i := range objs {
 		if objs[i].Name == "web-server" {
@@ -117,10 +111,7 @@ func TestObjectsFindsAKindNestedUnderProfiles(t *testing.T) {
 	cfg := loadT(t, "../../testdata/config/firewall-urlcat.xml")
 	sc := config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}
 
-	objs, err := ObjectsInScope(cfg, sc, "custom-url-category")
-	if err != nil {
-		t.Fatal(err)
-	}
+	objs := ObjectsInScope(cfg, sc, "custom-url-category")
 	if len(objs) != 1 {
 		t.Fatalf("got %d custom URL categories, want 1", len(objs))
 	}
@@ -141,10 +132,7 @@ func TestObjectsReadsAServicePort(t *testing.T) {
 	cfg := loadT(t, "../../testdata/config/firewall-urlcat.xml")
 	sc := config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}
 
-	objs, err := ObjectsInScope(cfg, sc, "service")
-	if err != nil {
-		t.Fatal(err)
-	}
+	objs := ObjectsInScope(cfg, sc, "service")
 	got := map[string]string{}
 	for _, o := range objs {
 		got[o.Name] = o.Value
@@ -164,10 +152,7 @@ func TestObjectSubtypeReadsBothForms(t *testing.T) {
 	cfg := loadT(t, "../../testdata/config/firewall-urlcat-edge.xml")
 	sc := config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}
 
-	cats, err := ObjectsInScope(cfg, sc, "custom-url-category")
-	if err != nil {
-		t.Fatal(err)
-	}
+	cats := ObjectsInScope(cfg, sc, "custom-url-category")
 	got := map[string]string{}
 	for _, o := range cats {
 		got[o.Name] = o.Subtype
@@ -179,10 +164,7 @@ func TestObjectSubtypeReadsBothForms(t *testing.T) {
 		t.Errorf("cat-bad-member subtype = %q, want %q", got["cat-bad-member"], "URL List")
 	}
 
-	edls, err := ObjectsInScope(cfg, sc, "external-list")
-	if err != nil {
-		t.Fatal(err)
-	}
+	edls := ObjectsInScope(cfg, sc, "external-list")
 	if len(edls) != 1 {
 		t.Fatalf("got %d external lists, want 1", len(edls))
 	}
@@ -196,10 +178,7 @@ func TestObjectSubtypeIsEmptyWhenAbsent(t *testing.T) {
 	cfg := loadT(t, "../../testdata/config/firewall-urlcat.xml")
 	sc := config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}
 
-	objs, err := ObjectsInScope(cfg, sc, "address")
-	if err != nil {
-		t.Fatal(err)
-	}
+	objs := ObjectsInScope(cfg, sc, "address")
 	for _, o := range objs {
 		if o.Subtype != "" {
 			t.Errorf("%s subtype = %q, want empty", o.Name, o.Subtype)
@@ -214,10 +193,7 @@ func TestObjectsReadsServiceGroupMembers(t *testing.T) {
 	cfg := loadT(t, "../../testdata/config/firewall-urlcat.xml")
 	sc := config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}
 
-	objs, err := ObjectsInScope(cfg, sc, "service-group")
-	if err != nil {
-		t.Fatal(err)
-	}
+	objs := ObjectsInScope(cfg, sc, "service-group")
 	if len(objs) != 1 {
 		t.Fatalf("got %d service groups, want 1", len(objs))
 	}
@@ -235,10 +211,7 @@ func TestObjectsAtReadsAnExplicitContainer(t *testing.T) {
 	cfg := loadT(t, "../../testdata/config/firewall-users.xml")
 	sc := config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}
 
-	local, err := ObjectsAt(cfg, sc, "user", []string{"local-user-database", "user"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	local := ObjectsAt(cfg, sc, "user", []string{"local-user-database", "user"})
 	names := map[string]bool{}
 	for _, o := range local {
 		names[o.Name] = true
@@ -250,10 +223,7 @@ func TestObjectsAtReadsAnExplicitContainer(t *testing.T) {
 	}
 
 	// The guessed container finds none of them, which is why the explicit form exists.
-	guessed, err := ObjectsInScope(cfg, sc, "user")
-	if err != nil {
-		t.Fatal(err)
-	}
+	guessed := ObjectsInScope(cfg, sc, "user")
 	if len(guessed) != 0 {
 		t.Errorf("the guessed container returned %d objects; the fixture no longer shows the problem", len(guessed))
 	}
@@ -265,10 +235,7 @@ func TestObjectsReadsUserGroupMembers(t *testing.T) {
 	cfg := loadT(t, "../../testdata/config/firewall-users.xml")
 	sc := config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}
 
-	groups, err := ObjectsInScope(cfg, sc, "user-group")
-	if err != nil {
-		t.Fatal(err)
-	}
+	groups := ObjectsInScope(cfg, sc, "user-group")
 	if len(groups) != 1 {
 		t.Fatalf("got %d user groups, want 1", len(groups))
 	}
@@ -284,10 +251,7 @@ func TestObjectValueReadsEveryForm(t *testing.T) {
 	cfg := loadT(t, "../../testdata/config/firewall-urlcat-edge.xml")
 	sc := config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}
 
-	addrs, err := ObjectsInScope(cfg, sc, "address")
-	if err != nil {
-		t.Fatal(err)
-	}
+	addrs := ObjectsInScope(cfg, sc, "address")
 	got := map[string]string{}
 	for _, o := range addrs {
 		got[o.Name] = o.Value
@@ -299,10 +263,7 @@ func TestObjectValueReadsEveryForm(t *testing.T) {
 		t.Errorf("ip-netmask value = %q", got["tagged-host"])
 	}
 
-	groups, err := ObjectsInScope(cfg, sc, "address-group")
-	if err != nil {
-		t.Fatal(err)
-	}
+	groups := ObjectsInScope(cfg, sc, "address-group")
 	for _, g := range groups {
 		if g.Name == "dyn-grp" && g.Value != "'prod'" {
 			t.Errorf("a dynamic group's value should be its filter, got %q", g.Value)
@@ -315,10 +276,7 @@ func TestObjectValueReadsEveryForm(t *testing.T) {
 func TestConfigScopeHoldsNoObjectsOfItsOwn(t *testing.T) {
 	cfg := fwLab(t)
 	sc := config.Scope{Sort: config.ScopeConfig}
-	objs, err := ObjectsInScope(cfg, sc, "address")
-	if err != nil {
-		t.Fatal(err)
-	}
+	objs := ObjectsInScope(cfg, sc, "address")
 	for _, o := range objs {
 		if o.Scope.Sort != config.ScopeShared {
 			t.Errorf("%s came from %s, want shared only", o.Name, o.Scope)
@@ -327,10 +285,7 @@ func TestConfigScopeHoldsNoObjectsOfItsOwn(t *testing.T) {
 	if len(objs) == 0 {
 		t.Error("shared-dns is in shared and must still be visible")
 	}
-	zones, err := ZonesInScope(cfg, sc)
-	if err != nil {
-		t.Fatal(err)
-	}
+	zones := ZonesInScope(cfg, sc)
 	if len(zones) != 0 {
 		t.Errorf("zones = %v, want none", zones)
 	}

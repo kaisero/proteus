@@ -16,10 +16,7 @@ func zonesCfg(t *testing.T) *config.Config {
 func TestZonesInScope(t *testing.T) {
 	sc := config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}
 
-	zones, err := ZonesInScope(zonesCfg(t), sc)
-	if err != nil {
-		t.Fatal(err)
-	}
+	zones := ZonesInScope(zonesCfg(t), sc)
 	got := map[string]Zone{}
 	for _, z := range zones {
 		got[z.Name] = z
@@ -50,10 +47,7 @@ func TestZonesInScope(t *testing.T) {
 // subinterface behind layer3/units, and a loopback address directly under units.
 // Missing the layer3 wrapper silently dropped every base ethernet address.
 func TestInterfaceAddressesReadsEveryShape(t *testing.T) {
-	addrs, err := InterfaceAddresses(zonesCfg(t))
-	if err != nil {
-		t.Fatal(err)
-	}
+	addrs := InterfaceAddresses(zonesCfg(t))
 	got := map[string]string{}
 	for _, a := range addrs {
 		got[a.Interface] = a.Prefix.String()
@@ -82,10 +76,7 @@ func TestInterfaceAddressesReadsEveryShape(t *testing.T) {
 // A route with an egress interface is what ties a destination to a zone. One with only a
 // next hop resolves through another route, which a file cannot follow reliably.
 func TestStaticRoutes(t *testing.T) {
-	routes, err := StaticRoutes(zonesCfg(t))
-	if err != nil {
-		t.Fatal(err)
-	}
+	routes := StaticRoutes(zonesCfg(t))
 	got := map[string]StaticRoute{}
 	for _, r := range routes {
 		got[r.Name] = r
@@ -122,10 +113,7 @@ func TestDynamicRoutingProtocols(t *testing.T) {
 
 // A vsys that defines no zones has none, and that is an answer, not an error.
 func TestZonesInScopeOnAVsysWithNone(t *testing.T) {
-	zones, err := ZonesInScope(vsysLab(t), config.Scope{Sort: config.ScopeVsys, Name: "vsys3"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	zones := ZonesInScope(vsysLab(t), config.Scope{Sort: config.ScopeVsys, Name: "vsys3"})
 	if len(zones) != 0 {
 		t.Errorf("got %d zones in vsys3, want none: %+v", len(zones), zones)
 	}

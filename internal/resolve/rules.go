@@ -81,13 +81,13 @@ type Rule struct {
 // firewall keeps pushed rules is not yet observed on a device: the 11.2.0
 // firewall schema declares no pre-rulebase at all, and /config/panorama as an
 // empty node. See docs/specs/2026-09-27-panos-analyst-scope.md §5.3.
-func (t *Target) Rules(rb Rulebase) ([]Rule, error) {
+func (t *Target) Rules(rb Rulebase) []Rule {
 	es := t.ruleEntries(rb)
 	out := make([]Rule, len(es))
 	for i, e := range es {
 		out[i] = e.Rule
 	}
-	return out, nil
+	return out
 }
 
 // ruleEntry is a rule and the element it was read from, for the readers of the

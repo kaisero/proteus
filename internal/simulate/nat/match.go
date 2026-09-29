@@ -194,7 +194,7 @@ func (r *Rule) fits(in Input, pre simulate.Forward, src, dst *roaring.Bitmap, v 
 func services(v rulebase.Vsys) map[string]string {
 	out := map[string]string{}
 	for _, kind := range []string{"service", "service-group"} {
-		objs, _ := resolve.ObjectsInScope(v.Config, v.Scope, kind)
+		objs := resolve.ObjectsInScope(v.Config, v.Scope, kind)
 		for _, o := range objs {
 			out[kind+":"+o.Name] = o.Value
 		}

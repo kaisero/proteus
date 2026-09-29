@@ -23,10 +23,7 @@ func vsysLab(t *testing.T) *config.Config {
 }
 
 func TestVsysesFromAFirewall(t *testing.T) {
-	got, err := Vsyses(fwLab(t))
-	if err != nil {
-		t.Fatalf("Vsyses: %v", err)
-	}
+	got := Vsyses(fwLab(t))
 	if len(got) != 2 || got[0] != "vsys1" || got[1] != "vsys2" {
 		t.Errorf("got %v, want [vsys1 vsys2]", got)
 	}
@@ -35,10 +32,7 @@ func TestVsysesFromAFirewall(t *testing.T) {
 // A firewall's own rules sit in the plain rulebase, not pre or post, and they
 // evaluate after any pushed pre-rules and before any pushed post-rules.
 func TestFirewallRuleOrderIncludesTheLocalLayer(t *testing.T) {
-	tgs, err := Targets(fwLab(t))
-	if err != nil {
-		t.Fatalf("Targets: %v", err)
-	}
+	tgs := Targets(fwLab(t))
 	if len(tgs) != 2 {
 		t.Fatalf("got %d targets, want one per vsys", len(tgs))
 	}
@@ -56,10 +50,7 @@ func TestFirewallRuleOrderIncludesTheLocalLayer(t *testing.T) {
 		t.Errorf("scope = %q, want vsys:vsys1", got)
 	}
 
-	rules, err := vsys1.Rules(Security)
-	if err != nil {
-		t.Fatalf("Rules: %v", err)
-	}
+	rules := vsys1.Rules(Security)
 	want := []struct {
 		name  string
 		layer Layer
@@ -89,16 +80,10 @@ func TestFirewallRuleOrderIncludesTheLocalLayer(t *testing.T) {
 
 // One vsys must not see another's rules or objects.
 func TestVsysesAreIsolated(t *testing.T) {
-	tgs, _ := Targets(fwLab(t))
+	tgs := Targets(fwLab(t))
 	for _, tg := range tgs {
-		rules, err := tg.Rules(Security)
-		if err != nil {
-			t.Fatal(err)
-		}
-		objs, err := tg.Objects("address")
-		if err != nil {
-			t.Fatal(err)
-		}
+		rules := tg.Rules(Security)
+		objs := tg.Objects("address")
 		names := map[string]bool{}
 		for _, r := range rules {
 			names[r.Name] = true

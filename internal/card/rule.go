@@ -61,7 +61,7 @@ func Rule(cfg *config.Config, idx *index.Index, r resolve.Rule, rules int) Card 
 func (b *builder) profiles(r resolve.Rule) Row {
 	row := Row{}
 	if len(r.ProfileGroups) > 0 {
-		groups, _ := resolve.ProfileGroupsInScope(b.cfg, b.sc)
+		groups := resolve.ProfileGroupsInScope(b.cfg, b.sc)
 		for _, name := range r.ProfileGroups {
 			it := Item{Name: name, Kind: "profile-group"}
 			for _, g := range groups {

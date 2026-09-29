@@ -33,7 +33,7 @@ func Load(load func(device, vsys string) (simulate.Target, error), device, vsys 
 	if err != nil || t.Config == nil {
 		return Vsys{}, false
 	}
-	tgs, _ := resolve.Targets(t.Config)
+	tgs := resolve.Targets(t.Config)
 	for _, tg := range tgs {
 		if tg.Scope().Name == vsys {
 			return Vsys{Config: t.Config, Target: tg, Scope: tg.Scope()}, true
@@ -78,11 +78,9 @@ func (v Vsys) Sides(rb resolve.Rulebase, src, dst netip.Addr, negated func(int) 
 // Holds reports whether an address, or an address object's value, holds a.
 func (v Vsys) Holds(value string, a netip.Addr) bool {
 	vals := []string{value}
-	if objs, err := resolve.ObjectsInScope(v.Config, v.Scope, "address"); err == nil {
-		for _, o := range objs {
-			if o.Name == value {
-				vals = append(vals, o.Value)
-			}
+	for _, o := range resolve.ObjectsInScope(v.Config, v.Scope, "address") {
+		if o.Name == value {
+			vals = append(vals, o.Value)
 		}
 	}
 	for _, val := range vals {

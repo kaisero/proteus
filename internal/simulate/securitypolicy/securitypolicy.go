@@ -127,7 +127,7 @@ func isDefault(route string) bool {
 func definedIn(cfg *config.Config, sc config.Scope, field string) map[string]bool {
 	out := map[string]bool{}
 	for _, kind := range cfg.FieldKinds("rulebase/security/rules")[field] {
-		objs, _ := resolve.ObjectsInScope(cfg, sc, kind)
+		objs := resolve.ObjectsInScope(cfg, sc, kind)
 		for _, o := range objs {
 			out[o.Name] = true
 		}

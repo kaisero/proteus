@@ -93,22 +93,10 @@ func ForRulebase(cfg *config.Config, sc config.Scope, rb resolve.Rulebase) (*Ind
 func build(cfg *config.Config, sc config.Scope, rb resolve.Rulebase) (*Index, error) {
 	in := NewInterner()
 
-	addrs, err := resolve.ObjectsInScope(cfg, sc, "address")
-	if err != nil {
-		return nil, err
-	}
-	groups, err := resolve.ObjectsInScope(cfg, sc, "address-group")
-	if err != nil {
-		return nil, err
-	}
-	svcGroups, err := resolve.ObjectsInScope(cfg, sc, "service-group")
-	if err != nil {
-		return nil, err
-	}
-	appGroups, err := resolve.ObjectsInScope(cfg, sc, "application-group")
-	if err != nil {
-		return nil, err
-	}
+	addrs := resolve.ObjectsInScope(cfg, sc, "address")
+	groups := resolve.ObjectsInScope(cfg, sc, "address-group")
+	svcGroups := resolve.ObjectsInScope(cfg, sc, "service-group")
+	appGroups := resolve.ObjectsInScope(cfg, sc, "application-group")
 	// Intern the addresses first, so their ids are dense and stable.
 	for _, o := range addrs {
 		in.ID(o.Name)
@@ -130,54 +118,21 @@ func build(cfg *config.Config, sc config.Scope, rb resolve.Rulebase) (*Index, er
 	// the schema declares the object kinds each field accepts, and a kind maps to
 	// the resolver that can answer for it. A kind with no resolver is not silently
 	// dropped; see opaque rule-field values.
-	cats, err := resolve.ObjectsInScope(cfg, sc, "custom-url-category")
-	if err != nil {
-		return nil, err
-	}
-	svcs, err := resolve.ObjectsInScope(cfg, sc, "service")
-	if err != nil {
-		return nil, err
-	}
+	cats := resolve.ObjectsInScope(cfg, sc, "custom-url-category")
+	svcs := resolve.ObjectsInScope(cfg, sc, "service")
 	// "user" is ambiguous in the schema, so the container is named rather than
 	// guessed: a vsys has both a local user database and a separate user array.
-	localUsers, err := resolve.ObjectsAt(cfg, sc, "user", []string{"local-user-database", "user"})
-	if err != nil {
-		return nil, err
-	}
-	userGroups, err := resolve.ObjectsInScope(cfg, sc, "user-group")
-	if err != nil {
-		return nil, err
-	}
-	dynUsers, err := resolve.ObjectsInScope(cfg, sc, "dynamic-user-group")
-	if err != nil {
-		return nil, err
-	}
+	localUsers := resolve.ObjectsAt(cfg, sc, "user", []string{"local-user-database", "user"})
+	userGroups := resolve.ObjectsInScope(cfg, sc, "user-group")
+	dynUsers := resolve.ObjectsInScope(cfg, sc, "dynamic-user-group")
 
-	apps, err := resolve.ObjectsInScope(cfg, sc, "application")
-	if err != nil {
-		return nil, err
-	}
-	appFilters, err := resolve.ObjectsInScope(cfg, sc, "application-filter")
-	if err != nil {
-		return nil, err
-	}
-	appContainers, err := resolve.ObjectsInScope(cfg, sc, "application-container")
-	if err != nil {
-		return nil, err
-	}
+	apps := resolve.ObjectsInScope(cfg, sc, "application")
+	appFilters := resolve.ObjectsInScope(cfg, sc, "application-filter")
+	appContainers := resolve.ObjectsInScope(cfg, sc, "application-container")
 
-	zones, err := resolve.ZonesInScope(cfg, sc)
-	if err != nil {
-		return nil, err
-	}
-	ifAddrs, err := resolve.InterfaceAddresses(cfg)
-	if err != nil {
-		return nil, err
-	}
-	routes, err := resolve.StaticRoutes(cfg)
-	if err != nil {
-		return nil, err
-	}
+	zones := resolve.ZonesInScope(cfg, sc)
+	ifAddrs := resolve.InterfaceAddresses(cfg)
+	routes := resolve.StaticRoutes(cfg)
 
 	addrRes := newAddressResolver(addrs, ri)
 
@@ -195,14 +150,8 @@ func build(cfg *config.Config, sc config.Scope, rb resolve.Rulebase) (*Index, er
 		}
 	}
 
-	profs, err := resolve.URLFilteringProfilesInScope(cfg, sc)
-	if err != nil {
-		return nil, err
-	}
-	pgroups, err := resolve.ProfileGroupsInScope(cfg, sc)
-	if err != nil {
-		return nil, err
-	}
+	profs := resolve.URLFilteringProfilesInScope(cfg, sc)
+	pgroups := resolve.ProfileGroupsInScope(cfg, sc)
 
 	return &Index{
 		scope:     sc,
@@ -225,13 +174,10 @@ func rulesForScope(cfg *config.Config, sc config.Scope, rb resolve.Rulebase) ([]
 	if sc.Sort != config.ScopeVsys {
 		return nil, nil
 	}
-	tgs, err := resolve.Targets(cfg)
-	if err != nil {
-		return nil, err
-	}
+	tgs := resolve.Targets(cfg)
 	for _, tg := range tgs {
 		if tg.Scope() == sc {
-			return tg.Rules(rb)
+			return tg.Rules(rb), nil
 		}
 	}
 	return nil, fmt.Errorf("index: no vsys named %q", sc.Name)

@@ -35,22 +35,13 @@ func TestLiveConfigLoads(t *testing.T) {
 		t.Log("untyped: none")
 	}
 
-	tgs, err := resolve.Targets(cfg)
-	if err != nil {
-		t.Fatalf("Targets: %v", err)
-	}
+	tgs := resolve.Targets(cfg)
 	if len(tgs) == 0 {
 		t.Log("the configuration defines no vsys")
 	}
 	for _, tg := range tgs {
-		rules, err := tg.Rules(resolve.Security)
-		if err != nil {
-			t.Fatalf("Rules for %s/%s: %v", tg.Serial(), tg.Vsys(), err)
-		}
-		objs, err := tg.Objects("address")
-		if err != nil {
-			t.Fatalf("Objects for %s/%s: %v", tg.Serial(), tg.Vsys(), err)
-		}
+		rules := tg.Rules(resolve.Security)
+		objs := tg.Objects("address")
 		t.Logf("%s/%s: %d rules, %d visible addresses",
 			tg.Serial(), tg.Vsys(), len(rules), len(objs))
 		for _, r := range rules {

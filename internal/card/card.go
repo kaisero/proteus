@@ -83,7 +83,7 @@ func (b *builder) object(kind, name string) (resolve.Object, bool) {
 	m, ok := b.byKind[kind]
 	if !ok {
 		m = map[string]resolve.Object{}
-		objs, _ := resolve.ObjectsInScope(b.cfg, b.sc, kind)
+		objs := resolve.ObjectsInScope(b.cfg, b.sc, kind)
 		for _, o := range objs {
 			m[o.Name] = o
 		}

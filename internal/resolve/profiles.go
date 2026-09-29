@@ -26,7 +26,7 @@ type ProfileGroup struct {
 
 // URLFilteringProfilesInScope returns the url-filtering profiles visible in a scope,
 // a descendant definition shadowing an ancestor's of the same name.
-func URLFilteringProfilesInScope(cfg *config.Config, sc config.Scope) ([]URLFilteringProfile, error) {
+func URLFilteringProfilesInScope(cfg *config.Config, sc config.Scope) []URLFilteringProfile {
 	entries := entriesInScope(cfg, sc, "url-filtering")
 	out := make([]URLFilteringProfile, 0, len(entries))
 	for _, e := range entries {
@@ -36,11 +36,11 @@ func URLFilteringProfilesInScope(cfg *config.Config, sc config.Scope) ([]URLFilt
 			Lists: memberLists(e.el),
 		})
 	}
-	return out, nil
+	return out
 }
 
 // ProfileGroupsInScope returns the security profile groups visible in a scope.
-func ProfileGroupsInScope(cfg *config.Config, sc config.Scope) ([]ProfileGroup, error) {
+func ProfileGroupsInScope(cfg *config.Config, sc config.Scope) []ProfileGroup {
 	entries := entriesInScope(cfg, sc, "profile-group")
 	out := make([]ProfileGroup, 0, len(entries))
 	for _, e := range entries {
@@ -50,7 +50,7 @@ func ProfileGroupsInScope(cfg *config.Config, sc config.Scope) ([]ProfileGroup, 
 			Kinds: memberLists(e.el),
 		})
 	}
-	return out, nil
+	return out
 }
 
 // scopedEntry is one entry of a kind, with the scope it was found in.
