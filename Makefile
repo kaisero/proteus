@@ -16,7 +16,7 @@ PANOS_VERSION ?=
 # Pinned dev-tool versions (CI installs the same ones; keep in sync with .github).
 GOLANGCI_VERSION    := v2.13.1
 GOFUMPT_VERSION     := v0.11.0
-GOVULNCHECK_VERSION := latest
+GOVULNCHECK_VERSION := v1.7.0
 
 GOBIN       := $(shell go env GOPATH)/bin
 GOLANGCI    := $(GOBIN)/golangci-lint
@@ -24,7 +24,7 @@ GOFUMPT     := $(GOBIN)/gofumpt
 GOVULNCHECK := $(GOBIN)/govulncheck
 
 .PHONY: help tools fmt fmt-check vet lint test test-race cover test-cov \
-        vuln tidy-check gate ci build build-local schema-digest context context-check \
+        vuln vuln-tool tidy-check gate ci build build-local schema-digest context context-check \
         schema-pull hooks clean
 
 help: ## Show this help
@@ -33,9 +33,11 @@ help: ## Show this help
 
 ## --- dev tools ---
 
-tools: ## Install pinned dev tools (golangci-lint, gofumpt, govulncheck)
+tools: vuln-tool ## Install pinned dev tools (golangci-lint, gofumpt, govulncheck)
 	go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_VERSION)
 	go install mvdan.cc/gofumpt@$(GOFUMPT_VERSION)
+
+vuln-tool: ## Install the pinned govulncheck (CI uses this too)
 	go install golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION)
 
 ## --- checks ---

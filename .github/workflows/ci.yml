@@ -4,6 +4,9 @@ on:
   push:
     branches: [main, develop]
   pull_request:
+  # A new vulnerability in a dependency shows up without a push.
+  schedule:
+    - cron: "0 6 * * 1"
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -65,3 +68,21 @@ jobs:
       # Prove the release target (static linux/amd64) compiles.
       - name: Build
         run: make build
+
+  checks:
+    name: Checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version-file: go.mod
+      # The agent docs quote the real API; a block that drifted fails here.
+      - name: Agent context matches the code
+        run: make context-check
+      # The version is pinned in the Makefile, so CI and a local run scan alike.
+      - name: Vulnerability scan
+        run: make vuln-tool vuln
