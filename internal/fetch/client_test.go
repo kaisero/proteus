@@ -3,6 +3,7 @@ package fetch
 import (
 	"context"
 	"errors"
+	"os"
 	"reflect"
 	"strings"
 	"testing"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/okaiser/proteus/internal/fakepanos"
 	"github.com/okaiser/proteus/internal/inventory"
+	"github.com/okaiser/proteus/internal/runlog"
 )
 
 const (
@@ -144,13 +146,13 @@ func TestCallsNeedAKey(t *testing.T) {
 func TestOneRetryOnATransportError(t *testing.T) {
 	d := device()
 	d.DropFirst = 1
-	c := NewClient(target(d.Start(t)), nil)
+	c := quick(NewClient(target(d.Start(t)), nil))
 	if err := c.Keygen(context.Background(), testUser, testPass); err != nil {
 		t.Fatalf("one drop must be survived: %v", err)
 	}
 	d2 := device()
 	d2.DropFirst = 2
-	c2 := NewClient(target(d2.Start(t)), nil)
+	c2 := quick(NewClient(target(d2.Start(t)), nil))
 	if err := c2.Keygen(context.Background(), testUser, testPass); err == nil {
 		t.Error("two drops must fail")
 	}
@@ -217,12 +219,12 @@ func TestOnlyReadCalls(t *testing.T) {
 func TestATruncatedBodyIsRetried(t *testing.T) {
 	d := device()
 	d.TruncateFirst = 1
-	if err := NewClient(target(d.Start(t)), nil).Keygen(context.Background(), testUser, testPass); err != nil {
+	if err := quick(NewClient(target(d.Start(t)), nil)).Keygen(context.Background(), testUser, testPass); err != nil {
 		t.Errorf("one truncated body must be survived: %v", err)
 	}
 	d2 := device()
 	d2.TruncateFirst = 2
-	if err := NewClient(target(d2.Start(t)), nil).Keygen(context.Background(), testUser, testPass); err == nil {
+	if err := quick(NewClient(target(d2.Start(t)), nil)).Keygen(context.Background(), testUser, testPass); err == nil {
 		t.Error("two truncated bodies must fail")
 	}
 }
@@ -230,5 +232,45 @@ func TestATruncatedBodyIsRetried(t *testing.T) {
 func TestABadHostFailsBeforeSending(t *testing.T) {
 	if err := NewClient(target("bad host\x7f"), nil).Keygen(context.Background(), testUser, testPass); err == nil {
 		t.Error("an unparseable host must fail")
+	}
+}
+
+// quick shortens the pause before a retry, so the retry tests stay fast.
+func quick(c *Client) *Client {
+	c.retryWait = time.Millisecond
+	return c
+}
+
+// A certificate that fails verification fails the same way twice, so the client
+// does not try again.
+func TestACertificateErrorIsNotRetried(t *testing.T) {
+	tg := target(device().Start(t))
+	tg.InsecureTLS = false
+	l, err := runlog.Open(runlog.Options{Dir: t.TempDir(), Command: "fetch", Level: runlog.Debug})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := quick(NewClient(tg, l)).Keygen(context.Background(), testUser, testPass); err == nil {
+		t.Fatal("want a certificate error")
+	}
+	_ = l.Close()
+	b, _ := os.ReadFile(l.Path())
+	if strings.Count(string(b), ": attempt ") != 1 {
+		t.Errorf("want one attempt, log:\n%s", b)
+	}
+}
+
+// A run cancelled while the client waits to retry stops at once.
+func TestACancelDuringTheRetryPauseStops(t *testing.T) {
+	d := device()
+	d.DropFirst = 1
+	c := NewClient(target(d.Start(t)), nil)
+	c.retryWait = time.Minute
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	err := c.Keygen(ctx, testUser, testPass)
+	if !errors.Is(err, context.DeadlineExceeded) || time.Since(start) > 10*time.Second {
+		t.Errorf("err = %v after %s", err, time.Since(start))
 	}
 }

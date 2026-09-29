@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"regexp"
@@ -79,7 +80,11 @@ func (a *app) searchCmd() *cobra.Command {
 				}
 				fs, err := search.Run(t.Config, idx, q)
 				if err != nil {
-					return usageErr("%v", err)
+					// Only a term --within cannot read is the user's to fix.
+					if errors.Is(err, search.ErrWithinNeedsAddress) {
+						err = usageErr("--within: %w", err)
+					}
+					return err
 				}
 				byTarget[i] = fs
 				a.log.Infof(runlog.TagFind, "%s/%s: %d findings for %q (%s)", t.Device, t.Vsys, len(fs), q.Term, modeName(q))

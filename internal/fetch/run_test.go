@@ -96,7 +96,7 @@ func TestRunLogsCallsWithoutSecrets(t *testing.T) {
 	for _, want := range []string{
 		"[DEBUG] [API] lab: keygen -> HTTP 200", "[INFO] [API] lab: logged in as reader",
 		"[DEBUG] [API] lab: op <show><interface>all</interface></show> -> HTTP 200", "[INFO] [API] lab: fib: fell back to <show><routing><fib/></routing></show>",
-		"[WARN] [API] lab: op <show><advanced-routing>", "[INFO] [API] lab: config: ",
+		"[DEBUG] [API] lab: op <show><advanced-routing>", "[INFO] [API] lab: config: ",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("missing %q in:\n%s", want, got)
@@ -104,5 +104,37 @@ func TestRunLogsCallsWithoutSecrets(t *testing.T) {
 	}
 	if strings.Contains(got, testPass) || strings.Contains(got, testKey) {
 		t.Errorf("a secret reached the log:\n%s", got)
+	}
+	// A refusal the fetcher recovers from by falling back is not a warning.
+	if strings.Contains(got, "[WARN]") {
+		t.Errorf("a handled refusal was logged as a warning:\n%s", got)
+	}
+}
+
+// A document that fails for good is warned about once, by the caller that gives up
+// on it, not again by the client that saw the refusal.
+func TestAFailedDocumentIsWarnedAboutOnce(t *testing.T) {
+	d := fullDevice(t)
+	delete(d.Ops, "<show><interface>all</interface></show>")
+	l, err := runlog.Open(runlog.Options{Dir: t.TempDir(), Command: "fetch", Level: runlog.Debug})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Run(context.Background(), target(d.Start(t)), Documents, l); err != nil {
+		t.Fatal(err)
+	}
+	_ = l.Close()
+	b, err := os.ReadFile(l.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var warns []string
+	for line := range strings.SplitSeq(string(b), "\n") {
+		if strings.Contains(line, "[WARN]") && strings.Contains(line, "interface") {
+			warns = append(warns, line)
+		}
+	}
+	if len(warns) != 1 || !strings.Contains(warns[0], "interfaces failed") {
+		t.Errorf("want one warning for the failed document, got:\n%s", strings.Join(warns, "\n"))
 	}
 }

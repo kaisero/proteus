@@ -59,7 +59,7 @@ func (a *app) natCmd(sim simulate.Simulation) *cobra.Command {
 			when := estate.When{Now: a.now(), MaxAge: s.maxAge, Log: a.log}
 			if at != "" {
 				if when.At, err = estate.ParseAt(at); err != nil {
-					return usageErr("%v", err)
+					return usageErr("%w", err)
 				}
 			}
 			st, err := a.openStore(s.storeRoot)
@@ -75,7 +75,7 @@ func (a *app) natCmd(sim simulate.Simulation) *cobra.Command {
 			a.log.Infof(runlog.TagStep, "nat %s -> %s on %s", flow.Source, flow.Destination, device)
 			run, err := sim.Run(c.Context(), env, simulate.Input{Flow: flow, Params: params})
 			if choice, ok := errors.AsType[*simulate.ChoiceError](err); ok {
-				return usageErr("%v", choice)
+				return usageErr("%w", choice)
 			}
 			if err != nil {
 				return err

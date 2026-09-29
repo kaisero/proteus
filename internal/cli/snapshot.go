@@ -161,7 +161,7 @@ func (a *app) snapshotDiffCmd() *cobra.Command {
 			}
 			names, err := s.inv.Select(sel.devices, sel.labels)
 			if err != nil {
-				return usageErr("%v", err)
+				return usageErr("%w", err)
 			}
 			st, err := a.openStore(s.storeRoot)
 			if err != nil {

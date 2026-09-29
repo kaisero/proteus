@@ -34,7 +34,7 @@ func (a *app) openLog(c *cobra.Command) error {
 	}
 	level, err := runlog.ParseLevel(first(a.logLevelFlag, a.getenv("PROTEUS_LOG_LEVEL"), def.LogLevel, "info"))
 	if err != nil {
-		return usageErr("%v", err)
+		return usageErr("%w", err)
 	}
 	dir := first(a.logDirFlag, a.getenv("PROTEUS_LOG_DIR"), expandHome(def.LogDir))
 	if dir == "" {
@@ -117,7 +117,7 @@ func (a *app) settings(needInventory bool) (settings, error) {
 
 	age := first(a.maxAgeFlag, a.getenv("PROTEUS_MAX_SNAPSHOT_AGE"), def.MaxSnapshotAge, "24h")
 	if s.maxAge, err = inventory.ParseAge(age); err != nil {
-		return s, usageErr("%v", err)
+		return s, usageErr("%w", err)
 	}
 	s.output = first(a.outputFlag, a.getenv("PROTEUS_OUTPUT"), def.Output, "text")
 	if s.output != "text" && s.output != "json" {
@@ -182,7 +182,7 @@ func (a *app) targets(ctx context.Context, sel selection, s settings, progress i
 	}
 	names, err := s.inv.Select(sel.devices, sel.labels)
 	if err != nil {
-		return nil, nil, usageErr("%v", err)
+		return nil, nil, usageErr("%w", err)
 	}
 	if len(names) == 0 {
 		return nil, nil, usageErr("the selection matches no device")
@@ -191,7 +191,7 @@ func (a *app) targets(ctx context.Context, sel selection, s settings, progress i
 	when.Now, when.MaxAge, when.Log = a.now(), s.maxAge, a.log
 	if sel.at != "" {
 		if when.At, err = estate.ParseAt(sel.at); err != nil {
-			return nil, nil, usageErr("%v", err)
+			return nil, nil, usageErr("%w", err)
 		}
 	}
 	st, err := a.openStore(s.storeRoot)

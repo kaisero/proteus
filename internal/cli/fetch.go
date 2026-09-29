@@ -45,7 +45,7 @@ func (a *app) fetchCmd() *cobra.Command {
 			}
 			if all || len(labels) > 0 {
 				if names, err = s.inv.Select(nil, labels); err != nil {
-					return usageErr("%v", err)
+					return usageErr("%w", err)
 				}
 			}
 			st, err := a.openStore(s.storeRoot)

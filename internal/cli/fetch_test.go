@@ -293,7 +293,9 @@ func TestSearchAcrossTheEstate(t *testing.T) {
 	if out := c.want(0, "search", "198.18.10.100", "--device", "fw01", "--show", "objects,refs"); strings.Contains(out, "\n  group ") || !strings.Contains(out, "reference") {
 		t.Errorf("--show objects,refs:\n%s", out)
 	}
-	c.want(2, "search", "web", "--within", "--device", "fw01")
+	if _, errOut, code := c.run("search", "web", "--within", "--device", "fw01"); code != 2 || !strings.Contains(errOut, "--within: ") {
+		t.Errorf("--within on a name: exit %d, stderr %q", code, errOut)
+	}
 	c.want(2, "search", "x", "--file", "f.xml", "--device", "fw01")
 	c.want(2, "search", "x", "--label", "nolabel")
 	c.want(2, "search", "x", "--label", "site=nowhere")

@@ -27,7 +27,12 @@ type Client struct {
 	key  string
 	log  *runlog.Logger
 	name string // the device, for log lines
+	// retryWait is the pause before the one retry of a transport error.
+	retryWait time.Duration
 }
+
+// defaultRetryWait gives a device that dropped a connection a moment to recover.
+const defaultRetryWait = 500 * time.Millisecond
 
 // NewClient returns a client for one device. It verifies the device's TLS
 // certificate unless the inventory turned that off (spec S8).
@@ -45,6 +50,8 @@ func NewClient(t inventory.Target, log *runlog.Logger) *Client {
 		http: &http.Client{Transport: tr, Timeout: t.Timeout},
 		log:  log,
 		name: t.Name,
+
+		retryWait: defaultRetryWait,
 	}
 }
 
@@ -108,9 +115,10 @@ func (c *Client) ExportConfig(ctx context.Context) ([]byte, error) {
 	return c.do(ctx, url.Values{"type": {"export"}, "category": {"configuration"}}, true)
 }
 
-// do sends one request, retrying once on a transport error and never on a refusal.
-// Every request is a POST: the XML API accepts it for these types, and it keeps
-// arguments out of the URL.
+// do sends one request. A transport error is retried once, after a short pause; a
+// refusal and a certificate error are not, because a second attempt fails the same
+// way. Every request is a POST: the XML API accepts it for these types, and it
+// keeps arguments out of the URL.
 func (c *Client) do(ctx context.Context, form url.Values, needKey bool) ([]byte, error) {
 	if needKey && c.key == "" {
 		return nil, errors.New("fetch: no API key; call Keygen first")
@@ -121,6 +129,13 @@ func (c *Client) do(ctx context.Context, form url.Values, needKey bool) ([]byte,
 	}
 	var lastErr error
 	for attempt := range 2 {
+		if attempt > 0 {
+			select {
+			case <-ctx.Done():
+				return nil, fmt.Errorf("fetch: %s: %w", c.base, ctx.Err())
+			case <-time.After(c.retryWait):
+			}
+		}
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.base, strings.NewReader(form.Encode()))
 		if err != nil {
 			return nil, err
@@ -136,24 +151,36 @@ func (c *Client) do(ctx context.Context, form url.Values, needKey bool) ([]byte,
 				return nil, err
 			}
 			lastErr = err
-			c.log.Warnf(runlog.TagAPI, "%s: %s: attempt %d: %v", c.name, what, attempt+1, err)
+			c.log.Debugf(runlog.TagAPI, "%s: %s: attempt %d: %v", c.name, what, attempt+1, err)
+			if isCertificateError(err) {
+				break
+			}
 			continue
 		}
 		body, err := io.ReadAll(resp.Body)
 		_ = resp.Body.Close()
 		if err != nil {
 			lastErr = err
-			c.log.Warnf(runlog.TagAPI, "%s: %s: attempt %d: reading the body: %v", c.name, what, attempt+1, err)
+			c.log.Debugf(runlog.TagAPI, "%s: %s: attempt %d: reading the body: %v", c.name, what, attempt+1, err)
 			continue
 		}
 		err = checkResponse(resp.StatusCode, body)
 		c.log.Debugf(runlog.TagAPI, "%s: %s -> HTTP %d, %d bytes, %s", c.name, what, resp.StatusCode, len(body), time.Since(start).Round(time.Millisecond))
 		if err != nil {
-			c.log.Warnf(runlog.TagAPI, "%s: %s: %v", c.name, what, err)
+			// The caller decides what a refusal means and logs it at warn.
+			c.log.Debugf(runlog.TagAPI, "%s: %s: refused: %v", c.name, what, err)
 		}
 		return body, err
 	}
 	return nil, fmt.Errorf("fetch: %s: %w", c.base, lastErr)
+}
+
+// isCertificateError reports whether a transport error is the device's certificate
+// failing verification. Retrying cannot change that answer. The TLS client wraps
+// every x509 failure in a CertificateVerificationError.
+func isCertificateError(err error) bool {
+	_, ok := errors.AsType[*tls.CertificateVerificationError](err)
+	return ok
 }
 
 // checkResponse turns an HTTP error or a PAN-OS error envelope into an APIError. A

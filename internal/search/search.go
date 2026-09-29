@@ -73,7 +73,7 @@ type Finding struct {
 
 // ErrWithinNeedsAddress is returned when Within is asked of a term that is not an
 // address, a prefix or a range.
-var ErrWithinNeedsAddress = errors.New("search: --within needs an address, a prefix or a range")
+var ErrWithinNeedsAddress = errors.New("search: within mode needs an address, a prefix or a range")
 
 // Run searches one scope.
 func Run(cfg *config.Config, idx *index.Index, q Query) ([]Finding, error) {
