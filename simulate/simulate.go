@@ -73,6 +73,9 @@ type Env struct {
 	// Network is the operational data beyond one device, for a simulation that
 	// crosses devices. Nil for a run that needs none.
 	Network Network
+	// Resolve resolves an FQDN with this machine's DNS; nil resolves nothing. The
+	// command layer sets it, so simulations stay free of I/O.
+	Resolve func(ctx context.Context, name string) ([]netip.Addr, error)
 }
 
 // Network is the operational data a simulation reads beyond one device's

@@ -171,6 +171,10 @@ func (r *Rule) fits(in Input, pre simulate.Forward, src, dst *roaring.Bitmap, v 
 	} else if doubt != "" {
 		doubts = append(doubts, doubt)
 	}
+	// With no source, a rule that names one cannot be decided (spec §18 N11).
+	if src := r.Fields["source"]; len(in.Flow.Source.Addrs) == 0 && len(src) > 0 && !slices.Contains(src, "any") {
+		doubts = append(doubts, "the source is unknown")
+	}
 	if r.explicit >= 0 {
 		pos := uint32(r.explicit) //nolint:gosec // a rulebase position fits in 32 bits
 		if !src.Contains(pos) {

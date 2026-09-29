@@ -298,3 +298,20 @@ func firstAddr(cands []string) netip.Addr {
 	}
 	return netip.Addr{}
 }
+
+// FQDNs lists the names a rule's dynamic destination needs resolved, so a caller
+// can fill Input.Resolved before Translate.
+func FQDNs(in Input, r *Rule) []string {
+	if r == nil || r.Destination == nil || r.Destination.Kind != resolve.DynamicDestination {
+		return nil
+	}
+	v, _ := policy.Load(func(string, string) (simulate.Target, error) { return in.Target, nil }, in.In.Device, in.Vsys)
+	res := &Result{}
+	var out []string
+	for _, val := range (translator{in: in, v: v, res: res}).values(r.Destination.Address, r, false) {
+		if len(index.PrefixesOf(val)) == 0 {
+			out = append(out, val)
+		}
+	}
+	return out
+}

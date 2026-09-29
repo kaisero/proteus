@@ -151,7 +151,6 @@ func TestTranslationCases(t *testing.T) {
 		{"static of different sizes", "10.0.0.1", "203.0.113.16", "static translation of 10.0.0.0/29"},
 		{"static to a group", "10.0.0.1", "203.0.113.17", "is not one address"},
 		{"static to an FQDN", "10.0.0.1", "203.0.113.18", "is not one address"},
-		{"static without a source", "", "203.0.113.22", "static translation of 10.0.0.0/28"},
 		{"destination of another size", "10.9.9.9", "203.0.113.20", "static translation of 203.0.113.20"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -177,6 +176,9 @@ func TestTranslationCases(t *testing.T) {
 	tr := translator{in: Input{}, v: policyOf(t, "firewall-nat-translations.xml"), res: &Result{}}
 	if _, err := tr.mapStatic("10.0.0.0/28", "198.51.100.16/28", netip.MustParseAddr("10.0.1.1")); !strings.Contains(err, "outside") {
 		t.Errorf("outside: %q", err)
+	}
+	if _, err := tr.mapStatic("10.0.0.0/28", "198.51.100.16/28", netip.Addr{}); !strings.Contains(err, "not simulated") {
+		t.Errorf("no address: %q", err)
 	}
 	if _, err := tr.mapStatic("pool-grp", "198.51.100.16/28", netip.MustParseAddr("198.51.100.1")); !strings.Contains(err, "not simulated") {
 		t.Errorf("a group as the original: %q", err)
