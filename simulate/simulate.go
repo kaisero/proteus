@@ -9,6 +9,7 @@ import (
 
 	"github.com/okaiser/panos-analyst/config"
 	"github.com/okaiser/panos-analyst/index"
+	"github.com/okaiser/panos-analyst/resolve"
 	"github.com/okaiser/panos-analyst/runlog"
 )
 
@@ -69,6 +70,32 @@ type Target struct {
 type Env struct {
 	Load func(device, vsys string) (Target, error)
 	Log  *runlog.Logger
+	// Network is the operational data beyond one device, for a simulation that
+	// crosses devices. Nil for a run that needs none.
+	Network Network
+}
+
+// Network is the operational data a simulation reads beyond one device's
+// configuration: interface state and routing tables of every device it may cross.
+// Configuration still comes through Env.Load, and only for devices a run reaches.
+// Spec §17.4.
+type Network interface {
+	// Devices names one node per firewall; an HA pair is one node.
+	Devices() []string
+	// Device returns a node's data. A member name of an HA pair returns the pair's
+	// node. A device with no usable snapshot is an error naming it.
+	Device(name string) (DeviceData, error)
+}
+
+// DeviceData is one node's operational data, from one snapshot.
+type DeviceData struct {
+	Name       string
+	SnapshotID string
+	TakenAt    time.Time
+	Interfaces []resolve.InterfaceState
+	FIB        []resolve.FIBRoute
+	RIB        []resolve.RIBRoute // nil when the snapshot has none
+	Notes      []string           // an HA pair, a fetch from the peer, an old snapshot
 }
 
 // StageState is the candidate set as a stage left it. Its count answers "why did
