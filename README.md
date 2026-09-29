@@ -291,7 +291,7 @@ go-panos-schema/
 │   ├── routing/           # which firewalls a packet crosses, hop by hop
 │   ├── nat/               # the NAT engine and simulation: rule, translation
 │   ├── topology/          # interfaces and forwarding tables, shared by simulations
-│   └── policy/            # rulebase address matching and the PBF check
+│   └── rulebase/          # rulebase address matching and the PBF check
 ├── runlog/                # the run log: levels, redaction, rotation
 ├── search/                # every place a value or name appears, in one scope
 ├── card/                  # the whole rule or object behind a name, for lookup

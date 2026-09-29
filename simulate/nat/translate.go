@@ -10,7 +10,7 @@ import (
 	"github.com/okaiser/panos-analyst/index"
 	"github.com/okaiser/panos-analyst/resolve"
 	"github.com/okaiser/panos-analyst/simulate"
-	"github.com/okaiser/panos-analyst/simulate/policy"
+	"github.com/okaiser/panos-analyst/simulate/rulebase"
 )
 
 // Port kinds of a translation.
@@ -47,7 +47,7 @@ func Translate(in Input, m MatchResult) Result {
 	if m.Rule == nil {
 		return out
 	}
-	v, _ := policy.Load(func(string, string) (simulate.Target, error) { return in.Target, nil }, in.In.Device, in.Vsys)
+	v, _ := rulebase.Load(func(string, string) (simulate.Target, error) { return in.Target, nil }, in.In.Device, in.Vsys)
 	tr := translator{in: in, v: v, res: &out}
 	if s := m.Rule.Source; s != nil {
 		out.Source = tr.source(s, m.Rule)
@@ -76,7 +76,7 @@ func Translate(in Input, m MatchResult) Result {
 
 type translator struct {
 	in  Input
-	v   policy.Vsys
+	v   rulebase.Vsys
 	res *Result
 }
 
@@ -305,7 +305,7 @@ func FQDNs(in Input, r *Rule) []string {
 	if r == nil || r.Destination == nil || r.Destination.Kind != resolve.DynamicDestination {
 		return nil
 	}
-	v, _ := policy.Load(func(string, string) (simulate.Target, error) { return in.Target, nil }, in.In.Device, in.Vsys)
+	v, _ := rulebase.Load(func(string, string) (simulate.Target, error) { return in.Target, nil }, in.In.Device, in.Vsys)
 	res := &Result{}
 	var out []string
 	for _, val := range (translator{in: in, v: v, res: res}).values(r.Destination.Address, r, false) {

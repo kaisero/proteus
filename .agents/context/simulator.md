@@ -9,7 +9,7 @@ declaring its fidelity. It is a leaf (R12). `simulate/securitypolicy` answers wh
 rule one flow hits on one device; `simulate/routing` (spec §17) which firewalls a
 packet crosses; `simulate/nat` (spec §18) the NAT rule and the translated packet on
 one firewall. `simulate/nat` is also the NAT engine routing and securitypolicy
-call; `simulate/topology` and `simulate/policy` are leaf packages they share. `estate.Simulations` is the registry; the command makes one
+call; `simulate/topology` and `simulate/rulebase` are leaf packages they share. `estate.Simulations` is the registry; the command makes one
 `simulate <kind>` subcommand per entry, from `kindCommands` when a kind needs its own
 flags (routing). `runlog` records each stage.
 
@@ -206,7 +206,7 @@ func NewTopology(devs []simulate.DeviceData) *Topology
 ```
 <!-- /GENERATED:api -->
 
-<!-- GENERATED:api ./simulate/policy -->
+<!-- GENERATED:api ./simulate/rulebase -->
 ```go
 type Vsys struct{ ... }
 

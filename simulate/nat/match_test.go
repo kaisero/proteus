@@ -10,7 +10,7 @@ import (
 
 	"github.com/okaiser/panos-analyst/config"
 	"github.com/okaiser/panos-analyst/simulate"
-	"github.com/okaiser/panos-analyst/simulate/policy"
+	"github.com/okaiser/panos-analyst/simulate/rulebase"
 )
 
 func natConfig(t *testing.T, file string) *config.Config {
@@ -220,10 +220,10 @@ func TestAVersionGapIsNoted(t *testing.T) {
 	}
 }
 
-func policyOf(t *testing.T, file string) policy.Vsys {
+func policyOf(t *testing.T, file string) rulebase.Vsys {
 	t.Helper()
 	cfg := natConfig(t, file)
-	v, ok := policy.Load(func(string, string) (simulate.Target, error) { return simulate.Target{Config: cfg}, nil }, "fw", "vsys1")
+	v, ok := rulebase.Load(func(string, string) (simulate.Target, error) { return simulate.Target{Config: cfg}, nil }, "fw", "vsys1")
 	if !ok {
 		t.Fatal("vsys1")
 	}

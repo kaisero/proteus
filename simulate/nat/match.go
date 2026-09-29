@@ -12,7 +12,7 @@ import (
 	"github.com/okaiser/panos-analyst/index"
 	"github.com/okaiser/panos-analyst/resolve"
 	"github.com/okaiser/panos-analyst/simulate"
-	"github.com/okaiser/panos-analyst/simulate/policy"
+	"github.com/okaiser/panos-analyst/simulate/rulebase"
 )
 
 // Rules returns a vsys's NAT rules in the dataplane's order: each bi-directional
@@ -78,7 +78,7 @@ func Match(in Input) MatchResult {
 		out.Fidelity = simulate.UnderMatch(reason)
 		return out
 	}
-	v, ok := policy.Load(func(string, string) (simulate.Target, error) { return in.Target, nil }, in.In.Device, in.Vsys)
+	v, ok := rulebase.Load(func(string, string) (simulate.Target, error) { return in.Target, nil }, in.In.Device, in.Vsys)
 	if !ok {
 		out.Fidelity = simulate.NotEvaluated("NAT")
 		out.Dropped = "no configuration for " + in.Vsys
@@ -141,7 +141,7 @@ func (r *Rule) label() string {
 
 // fits decides one rule: a field that excludes it, or a doubt, or neither (a sure
 // match).
-func (r *Rule) fits(in Input, pre simulate.Forward, src, dst *roaring.Bitmap, v policy.Vsys, svc map[string]string) (string, string) {
+func (r *Rule) fits(in Input, pre simulate.Forward, src, dst *roaring.Bitmap, v rulebase.Vsys, svc map[string]string) (string, string) {
 	if r.Disabled {
 		return "disabled", ""
 	}
@@ -191,7 +191,7 @@ func (r *Rule) fits(in Input, pre simulate.Forward, src, dst *roaring.Bitmap, v 
 
 // services maps each service and service group name of the vsys to its value:
 // "tcp/443,8443" for a service, "a, b" for a group.
-func services(v policy.Vsys) map[string]string {
+func services(v rulebase.Vsys) map[string]string {
 	out := map[string]string{}
 	for _, kind := range []string{"service", "service-group"} {
 		objs, _ := resolve.ObjectsInScope(v.Config, v.Scope, kind)

@@ -142,7 +142,7 @@ none of `estate`, `store` or `fetch`. `simulate/routing` imports none of `estate
 `store`, `fetch`, `search` or `drift`, and no I/O package: every device's data
 reaches it through `simulate.Network`. What the simulations share lives in the
 leaf packages `simulate/topology` (interfaces, forwarding tables, placement) and
-`simulate/policy` (rulebase matching, PBF), which import no simulation and no I/O
+`simulate/rulebase` (rulebase matching, PBF), which import no simulation and no I/O
 package. `simulate/nat` is also the NAT engine: `routing` and `securitypolicy` may
 import it, and it imports neither of them, nor I/O.
 

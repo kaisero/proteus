@@ -80,7 +80,7 @@ Hard invariants:
   schema digest, and the schema questions `config` answers.
 - [scope-semantics](scope-semantics.md): targets, rule order, scoped visibility,
   shadowing, group membership.
-- [simulator](simulator.md): `simulate`, `simulate/securitypolicy`, `simulate/routing`, `simulate/nat`, `simulate/topology`, `simulate/policy`, `runlog` — the staged simulator, fidelity, the routing path, NAT, and the run log.
+- [simulator](simulator.md): `simulate`, `simulate/securitypolicy`, `simulate/routing`, `simulate/nat`, `simulate/topology`, `simulate/rulebase`, `runlog` — the staged simulator, fidelity, the routing path, NAT, and the run log.
 - [questions](questions.md): `estate`, `search`, `card`, `drift` — how a question becomes targets, findings, cards and changes.
 - [fetch-and-store](fetch-and-store.md): the inventory, the read-only fetcher, and
   the snapshot store.

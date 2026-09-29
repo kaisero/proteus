@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/okaiser/panos-analyst/simulate"
-	"github.com/okaiser/panos-analyst/simulate/policy"
+	"github.com/okaiser/panos-analyst/simulate/rulebase"
 	"github.com/okaiser/panos-analyst/simulate/topology"
 )
 
@@ -139,7 +139,7 @@ func pbfStage(_ context.Context, s *state) (simulate.Outcome, error) {
 	pre := s.topo.Forward(s.data.Name, s.nat.In.Router, s.in.Flow.Destination.Addrs[0])
 	s.pre = pre
 	s.nat.Vsys = vsysName(s.nat.In.Vsys, pre.Out.Vsys)
-	v, ok := policy.Load(s.env.Load, s.data.Name, s.nat.Vsys)
+	v, ok := rulebase.Load(s.env.Load, s.data.Name, s.nat.Vsys)
 	if !ok {
 		return simulate.Outcome{
 			Fidelity: simulate.NotEvaluated("policy-based forwarding"),

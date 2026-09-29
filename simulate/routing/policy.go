@@ -8,7 +8,7 @@ import (
 
 	"github.com/okaiser/panos-analyst/simulate"
 	natsim "github.com/okaiser/panos-analyst/simulate/nat"
-	"github.com/okaiser/panos-analyst/simulate/policy"
+	"github.com/okaiser/panos-analyst/simulate/rulebase"
 )
 
 // Policy-based forwarding and NAT are detected, not simulated (spec §17 R10): a
@@ -18,8 +18,8 @@ import (
 // egress zone from the route lookup (KB "Packet Flow Sequence in PAN-OS").
 
 // policy loads the hop's configuration; false when there is none to read.
-func (s *state) policy(h *Hop) (policy.Vsys, bool) {
-	return policy.Load(s.env.Load, h.Device, h.Vsys)
+func (s *state) policy(h *Hop) (rulebase.Vsys, bool) {
+	return rulebase.Load(s.env.Load, h.Device, h.Vsys)
 }
 
 // pbf names the first PBF rule of the hop's vsys that could take this packet.

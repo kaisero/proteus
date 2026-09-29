@@ -1,7 +1,7 @@
-// Package policy matches a flow's addresses against one vsys's PBF and NAT
+// Package rulebase matches a flow's addresses against one vsys's PBF and NAT
 // rulebases through the rulebase's own index, and checks policy-based forwarding.
 // The routing and NAT simulations share it (spec §17 R10, §18 D4).
-package policy
+package rulebase
 
 import (
 	"fmt"
