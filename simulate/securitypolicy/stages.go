@@ -209,7 +209,7 @@ func matchService(_ context.Context, s *state) (simulate.Outcome, error) {
 	s.cand.And(b)
 	out := simulate.Outcome{Fidelity: simulate.Exact, Detail: term, Candidates: s.cand, Unresolved: rep.Unresolved}
 	if still := roaring.And(kept, s.cand); !still.IsEmpty() {
-		out.Fidelity = simulate.OverMatchBecause("kept rules whose service is application-default or predefined: " + names(s.rules, still))
+		out.Fidelity = simulate.OverMatchBecause("kept rules whose service is application-default, predefined or absent: " + names(s.rules, still))
 	}
 	for _, u := range rep.Unresolved {
 		out.Fidelity = simulate.Weakest(out.Fidelity, simulate.UnderMatch(u.Reason))
@@ -231,6 +231,8 @@ func matchURL(_ context.Context, s *state) (simulate.Outcome, error) {
 	b, rep := s.view.Candidates(index.Category, url)
 	kept := s.unevaluable("category")
 	b.Or(kept)
+	// A rule without a category matches every URL, as "any" does.
+	b.Or(s.withoutField("category"))
 	s.cand.And(b)
 	out := simulate.Outcome{Fidelity: simulate.Exact, Detail: url, Candidates: s.cand, Unresolved: rep.Unresolved}
 	for _, h := range rep.Hits {
@@ -246,12 +248,28 @@ func matchURL(_ context.Context, s *state) (simulate.Outcome, error) {
 	return out, nil
 }
 
+// withoutField returns the rules that name nothing in a field.
+func (s *state) withoutField(field string) *roaring.Bitmap {
+	out := roaring.New()
+	for i, r := range s.rules {
+		if len(r.Fields[field]) == 0 {
+			out.Add(uint32(i))
+		}
+	}
+	return out
+}
+
 // unevaluable returns the rules whose field names a value the configuration does
-// not define, or one of the given keywords.
+// not define, one of the given keywords, or nothing at all: a rule a configuration
+// exports without the field cannot be judged on it, so it is kept, not dropped.
 func (s *state) unevaluable(field string, keywords ...string) *roaring.Bitmap {
 	defined := definedIn(s.target.Config, s.target.Index.Scope(), field)
 	out := roaring.New()
 	for i, r := range s.rules {
+		if len(r.Fields[field]) == 0 && field != "category" {
+			out.Add(uint32(i))
+			continue
+		}
 		for _, v := range r.Fields[field] {
 			if v == "any" {
 				continue

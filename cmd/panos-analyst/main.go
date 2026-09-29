@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/netip"
 	"os"
 	"os/signal"
 	"time"
@@ -125,12 +126,13 @@ type app struct {
 	logLevelFlag, logDirFlag                      string
 	verbose                                       bool
 
-	argv []string
-	log  *runlog.Logger // the run log; nil until the command starts
+	argv   []string
+	log    *runlog.Logger // the run log; nil until the command starts
+	lookup func(ctx context.Context, name string) ([]netip.Addr, error)
 }
 
 func newApp(stdout, stderr io.Writer, getenv func(string) string, now func() time.Time) *app {
-	return &app{stdout: stdout, stderr: stderr, getenv: getenv, now: now}
+	return &app{stdout: stdout, stderr: stderr, getenv: getenv, now: now, lookup: lookupDNS}
 }
 
 func (a *app) root() *cobra.Command {
@@ -161,7 +163,7 @@ func (a *app) root() *cobra.Command {
 	snap := &cobra.Command{Use: "snapshot", Short: "List, show and compare stored snapshots"}
 	snap.AddCommand(a.snapshotListCmd(), a.snapshotShowCmd(), a.snapshotDiffCmd())
 	sim := &cobra.Command{Use: "simulate", Short: "Simulate what a device would do"}
-	sim.AddCommand(a.secpolicyCmd())
+	sim.AddCommand(a.simulateCmds()...)
 
 	cmd.AddCommand(a.fetchCmd(), inv, snap, a.searchCmd(), sim)
 	return cmd

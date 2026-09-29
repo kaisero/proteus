@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"strings"
@@ -375,32 +376,106 @@ func TestSnapshotDiff(t *testing.T) {
 func TestSimulateSecpolicy(t *testing.T) {
 	c := newCLI(t)
 	file := "../../testdata/config/firewall-zones.xml"
-	out := c.want(0, "simulate", "secpolicy", "10.1.0.5", "10.2.0.5", "--file", file, "--vsys", "vsys1")
-	if !strings.Contains(out, "not evaluated: application, service, zones") {
-		t.Errorf("without zones they are not evaluated:\n%s", out)
-	}
-	if !strings.Contains(out, "first match: ") && !strings.Contains(out, "no enabled rule matches") {
-		t.Errorf("the verdict line is missing:\n%s", out)
+	out := c.want(0, "simulate", "secpolicy", "10.1.0.5", "10.2.0.5", "--file", file, "--vsys", "vsys1", "--why")
+	for _, want := range []string{
+		"zones      from inside, to dmz (configuration)", "fidelity   inferred; not evaluated: service, application",
+		"derive-zones         inferred", "first-match          overmatch", "first match: from-inside (allow)",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q in:\n%s", want, out)
+		}
 	}
 	c.want(2, "simulate", "secpolicy", "1.1.1.1", "2.2.2.2", "--file", "../../testdata/config/firewall-multivsys.xml")
 	c.want(2, "simulate", "secpolicy", "1.1.1.1", "2.2.2.2", "--file", file, "--from-zone", "inside")
 	c.want(2, "simulate", "secpolicy", "1.1.1.1")
+	c.want(2, "simulate", "secpolicy", "10.0.0.0/8", "2.2.2.2", "--file", file)
+	c.want(2, "simulate", "secpolicy", "host", "2.2.2.2", "--file", file)
+	c.want(2, "simulate", "secpolicy", "1.1.1.1", "2.2.2.2", "--file", file, "--port", "https")
+	c.want(2, "simulate", "secpolicy", "1.1.1.1", "2.2.2.2", "--file", file, "--source-port", "70000")
 	c.want(1, "simulate", "secpolicy", "1.1.1.1", "2.2.2.2", "--file", file, "--vsys", "vsys9")
-	out = c.want(0, "simulate", "secpolicy", "198.18.10.100", "198.18.1.5", "--file", "../../testdata/config/firewall-lab.xml",
-		"--vsys", "vsys1", "--port", "443", "--from-zone", "a", "--to-zone", "b", "--user", "u")
-	if !strings.Contains(out, "zones: from a, to b") || !strings.Contains(out, "tcp/443") || !strings.Contains(out, "user") {
-		t.Errorf("zones, port and user must be shown:\n%s", out)
+	out = c.want(0, "simulate", "secpolicy", "10.1.0.5", "10.2.0.5", "--file", file, "--from-zone", "dmz", "--to-zone", "inside")
+	if !strings.Contains(out, "no enabled rule matches") {
+		t.Errorf("no match:\n%s", out)
 	}
 	out = c.want(0, "simulate", "secpolicy", "198.18.10.100", "198.18.1.5", "--file", "../../testdata/config/firewall-lab.xml",
-		"--vsys", "vsys1", "--output", "json")
+		"--vsys", "vsys1", "--port", "tcp/443", "--output", "json")
 	var env struct {
 		Results struct {
-			FirstMatch   *struct{ Name string } `json:"first_match"`
-			NotEvaluated []string               `json:"not_evaluated"`
+			FirstMatch *struct{ Name string } `json:"first_match"`
+			Fidelity   struct{ Level string }
+			Stages     []struct{ Slug string }
 		}
 	}
-	if err := json.Unmarshal([]byte(out), &env); err != nil || env.Results.FirstMatch == nil || env.Results.FirstMatch.Name != "dc-to-home" {
+	if err := json.Unmarshal([]byte(out), &env); err != nil || env.Results.FirstMatch == nil ||
+		env.Results.FirstMatch.Name != "dc-to-home" || len(env.Results.Stages) != 8 || env.Results.Fidelity.Level == "" {
 		t.Errorf("json: %v %s", err, out)
+	}
+}
+
+// A URL and a port narrow the candidates; an FQDN resolves through DNS.
+func TestSimulateDimensions(t *testing.T) {
+	c := newCLI(t)
+	file := "../../testdata/config/firewall-simulate.xml"
+	out := c.want(0, "simulate", "secpolicy", "10.0.0.1", "10.6.0.1", "--file", file, "--url", "shop.example.com/cart")
+	if !strings.Contains(out, "first match: shop (allow)") || !strings.Contains(out, "social") {
+		t.Errorf("url:\n%s", out)
+	}
+	out = c.want(0, "simulate", "secpolicy", "10.0.0.1", "10.5.0.1", "--file", file, "--port", "8443")
+	if !strings.Contains(out, "first match: custom-port (allow)") || !strings.Contains(out, "app-default") {
+		t.Errorf("port:\n%s", out)
+	}
+	out = c.want(3, "simulate", "secpolicy", "10.0.0.1", "www.example.com", "--file", file, "--no-dns")
+	if strings.Count(out, "resolved to no address") != 2 { // the fidelity line and one unresolved line
+		t.Errorf("an unresolved FQDN is an incomplete answer, said once:\n%s", out)
+	}
+}
+
+func TestSimulateResolvesAnFQDN(t *testing.T) {
+	var out, errOut bytes.Buffer
+	dir := t.TempDir()
+	a := newApp(&out, &errOut, func(k string) string {
+		return map[string]string{"PANOS_LOG_DIR": filepath.Join(dir, "log"), "PANOS_CONFIG": filepath.Join(dir, "none.yaml")}[k]
+	}, time.Now)
+	a.lookup = func(context.Context, string) ([]netip.Addr, error) {
+		return []netip.Addr{netip.MustParseAddr("203.0.113.10")}, nil
+	}
+	code := a.execute(context.Background(), []string{
+		"simulate", "secpolicy", "10.0.0.1", "WWW.example.com",
+		"--file", "../../testdata/config/firewall-simulate.xml",
+	})
+	if code != 0 || !strings.Contains(out.String(), "dns        www.example.com -> [203.0.113.10]") ||
+		!strings.Contains(out.String(), "to-web-by-address") {
+		t.Errorf("exit %d:\n%s\n%s", code, out.String(), errOut.String())
+	}
+	out.Reset()
+	a = newApp(&out, &errOut, func(k string) string {
+		return map[string]string{"PANOS_LOG_DIR": filepath.Join(dir, "log"), "PANOS_CONFIG": filepath.Join(dir, "none.yaml")}[k]
+	}, time.Now)
+	a.lookup = func(context.Context, string) ([]netip.Addr, error) { return nil, errors.New("no such host") }
+	if code := a.execute(context.Background(), []string{
+		"simulate", "secpolicy", "10.0.0.1", "www.example.com",
+		"--file", "../../testdata/config/firewall-simulate.xml",
+	}); code != 3 {
+		t.Errorf("a failed lookup leaves the FQDN unresolved: exit %d", code)
+	}
+}
+
+// Zones derive from a fetched device's forwarding table.
+func TestSimulateDerivesZonesFromTheStore(t *testing.T) {
+	c := newCLI(t)
+	d := lab(t)
+	d.Config = read(t, "../../testdata/config/firewall-fw01-zones.xml")
+	c.inventory(inventoryFor(d.Start(t)))
+	c.want(0, "fetch", "fw01")
+	out := c.want(0, "simulate", "secpolicy", "198.18.11.5", "198.18.10.5", "--device", "fw01", "--why")
+	for _, want := range []string{"zones      from client, to server (forwarding table)", "relevant   198.18.", "first match: client-to-server (allow)"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q in:\n%s", want, out)
+		}
+	}
+	out = c.want(0, "simulate", "secpolicy", "8.8.8.8", "1.1.1.1", "--device", "fw01")
+	if !strings.Contains(out, "not relevant: only a default route") {
+		t.Errorf("relevance:\n%s", out)
 	}
 }
 

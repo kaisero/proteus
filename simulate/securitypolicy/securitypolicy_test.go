@@ -259,3 +259,17 @@ func ruleNames(v Verdict) string {
 	}
 	return strings.Join(out, ",")
 }
+
+// A rule without a category matches every URL; a rule without a service cannot be
+// judged on a port, so it stays and the stage says so.
+func TestAbsentFields(t *testing.T) {
+	e := env(t, "firewall-simulate.xml", false)
+	_, v := run(t, e, simulate.Flow{Source: ep("10.0.0.1"), Destination: ep("10.7.0.1"), URL: "shop.example.com"})
+	if first(v) != "anything" {
+		t.Errorf("a rule without a category matches a URL: %s", ruleNames(v))
+	}
+	r, v := run(t, env(t, "firewall-lab.xml", false), simulate.Flow{Source: ep("198.18.10.100"), Destination: ep("198.18.1.5"), DestPort: 443})
+	if first(v) != "dc-to-home" || !strings.Contains(stage(r, "match-service").Fidelity.String(), "absent") {
+		t.Errorf("a rule without a service stays: %s; %s", ruleNames(v), stage(r, "match-service").Fidelity)
+	}
+}

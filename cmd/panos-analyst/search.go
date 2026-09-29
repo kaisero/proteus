@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"regexp"
-	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -257,6 +256,3 @@ func (sel selection) input() map[string]any {
 	}
 	return in
 }
-
-// join is strings.Join, named for the renderers.
-var join = strings.Join
