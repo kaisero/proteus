@@ -388,7 +388,7 @@ func TestSettingsPrecedence(t *testing.T) {
 	delete(c.env, "PROTEUS_STORE")
 	c.want(3, "snapshot", "list", "fw01") // the file's store is empty
 	c.want(0, "snapshot", "list", "fw01", "--store", filepath.Join(c.dir, "store"))
-	c.want(2, "snapshot", "list", "fw01", "--output", "yaml")
+	c.want(2, "snapshot", "list", "fw01", "--output", "xml")
 	c.want(2, "snapshot", "list", "fw01", "--max-age", "soon")
 	c.env["PROTEUS_MAX_SNAPSHOT_AGE"] = "1m"
 	out := c.want(0, "snapshot", "show", "--store", filepath.Join(c.dir, "store"))

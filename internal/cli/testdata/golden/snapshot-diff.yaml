@@ -1,0 +1,40 @@
+format: 1
+command: snapshot diff
+input:
+  from: ""
+  selection:
+    vsys:
+      - vsys1
+  to: ""
+results:
+  - device: fw01
+    from: 2026-09-28T10-00-00Z
+    to: 2026-09-28T10-01-00Z
+    scope: shared
+    changes: []
+  - device: fw01
+    from: 2026-09-28T10-00-00Z
+    to: 2026-09-28T10-01-00Z
+    scope: vsys:vsys1
+    changes:
+      - op: changed
+        kind: address
+        name: net-home
+        old: 198.18.1.0/24
+        new: 198.18.2.0/24
+      - op: removed
+        kind: address
+        name: net-labor
+        old: 198.18.0.0/15
+      - op: changed
+        kind: security rule
+        name: dc-to-home
+        old: allow application=ssl destination=net-home source=g-servers
+        new: allow disabled application=ssl destination=net-home source=g-servers
+      - op: added
+        kind: security rule
+        name: new-rule
+        new: allow application=dns destination=any source=net-home
+holes: []
+unresolved: []
+notes: []

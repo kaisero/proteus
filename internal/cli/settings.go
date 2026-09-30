@@ -66,7 +66,7 @@ func (a *app) settingTable() []setting {
 			set: func(v string) error { a.storeRoot = v; return nil },
 		},
 		{
-			name: "output", usage: "output format: text or json", flag: &a.outputFlag, env: "PROTEUS_OUTPUT",
+			name: "output", usage: "output format: text, json or yaml", flag: &a.outputFlag, env: "PROTEUS_OUTPUT",
 			fileKey: "output", file: func(s inventory.Settings) string { return s.Output },
 			def: constant("text"), defText: "text",
 			set: func(v string) (err error) { a.format, err = parseFormat(v); return err },

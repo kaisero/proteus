@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Read any answer as YAML.** `--output yaml` prints the same envelope as
+  `--output json`, with the same keys, in YAML that YAML 1.1 and 1.2 readers both read
+  back unchanged.
 - **Choose colour with `--color`.** `--color auto|always|never`, `PROTEUS_COLOR` or the
   inventory's `color:` sets it; `auto` is the default. Colour output itself arrives in a
   later change.

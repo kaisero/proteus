@@ -15,7 +15,7 @@ const (
 )
 
 // formats are the values --output takes, in the order the help lists them.
-var formats = []format{formatText, formatJSON}
+var formats = []format{formatText, formatJSON, formatYAML}
 
 func parseFormat(s string) (format, error) {
 	for _, f := range formats {

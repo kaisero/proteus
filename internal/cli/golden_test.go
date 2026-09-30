@@ -94,6 +94,7 @@ func TestGoldenJSON(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			golden(t, tc.name, newCLI(t).want(tc.code, append(tc.args, "--output", "json")...))
+			goldenFile(t, tc.name+".yaml", newCLI(t).want(tc.code, append(tc.args, "--output", "yaml")...))
 		})
 	}
 
@@ -108,6 +109,9 @@ func TestGoldenJSON(t *testing.T) {
 		golden(t, "snapshot-list", c.want(0, "snapshot", "list", "fw01", "--output", "json"))
 		golden(t, "snapshot-show", c.want(0, "snapshot", "show", "--output", "json"))
 		golden(t, "snapshot-diff", c.want(0, "snapshot", "diff", "--vsys", "vsys1", "--output", "json"))
+		goldenFile(t, "snapshot-list.yaml", c.want(0, "snapshot", "list", "fw01", "--output", "yaml"))
+		goldenFile(t, "snapshot-show.yaml", c.want(0, "snapshot", "show", "--output", "yaml"))
+		goldenFile(t, "snapshot-diff.yaml", c.want(0, "snapshot", "diff", "--vsys", "vsys1", "--output", "yaml"))
 	})
 
 	t.Run("empty-store", func(t *testing.T) {
@@ -123,12 +127,17 @@ func TestGoldenJSON(t *testing.T) {
 		out := natLab(t).want(0, "simulate", "nat", "198.18.1.10", "198.18.250.10", "--device", "fw01",
 			"--router", "default", "--from-zone", "transport", "--port", "8443", "--output", "json")
 		golden(t, "simulate-nat", out)
+		outYAML := natLab(t).want(0, "simulate", "nat", "198.18.1.10", "198.18.250.10", "--device", "fw01",
+			"--router", "default", "--from-zone", "transport", "--port", "8443", "--output", "yaml")
+		goldenFile(t, "simulate-nat.yaml", outYAML)
 	})
 
 	t.Run("simulate-routing", func(t *testing.T) {
 		t.Parallel()
 		out := routingLab(t, false).want(0, "simulate", "routing", "198.18.10.5", "8.8.8.8", "--output", "json")
 		golden(t, "simulate-routing", out)
+		outYAML := routingLab(t, false).want(0, "simulate", "routing", "198.18.10.5", "8.8.8.8", "--output", "yaml")
+		goldenFile(t, "simulate-routing.yaml", outYAML)
 	})
 }
 

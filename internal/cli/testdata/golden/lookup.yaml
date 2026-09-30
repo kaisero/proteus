@@ -1,0 +1,138 @@
+format: 1
+command: lookup
+input:
+  expand: false
+  full: false
+  kind: ""
+  name: branch-to-dc
+  selection:
+    file: ../../testdata/config/firewall-lookup.xml
+results:
+  - device: file
+    vsys: vsys1
+    scope: vsys:vsys1
+    card:
+      kind: security-rule
+      name: branch-to-dc
+      position: 2
+      of: 2
+      layer: local
+      uuid: 0b3f5e2a-9d41-4c1e-8f7a-2b6c9d1ec21e
+      tags:
+        - branch
+      description: Branch offices to the shared data-center services
+      sections:
+        - title: source
+          rows:
+            - label: zones
+              items:
+                - name: branch-vpn
+                - name: sdwan
+            - label: addresses
+              items:
+                - name: branch-networks
+                  kind: address-group
+                  children:
+                    - name: net-vienna
+                      kind: address
+                      value: 10.20.0.0/16
+                    - name: net-graz
+                      kind: address
+                      value: 10.21.0.0/16
+                    - name: net-linz
+                      kind: address
+                      value: 10.22.0.0/16
+                    - name: west-branches
+                      kind: address-group
+                      children:
+                        - name: net-salzburg
+                          kind: address
+                          value: 10.23.0.0/16
+                - name: tagged-laptops
+                  kind: address-group
+                  value: dynamic, filter 'laptop' and 'managed'
+                - name: 10.99.0.0/24
+                  literal: true
+            - label: users
+              items:
+                - name: acme\branch-staff
+        - title: destination
+          rows:
+            - label: zones
+              items:
+                - name: datacenter
+            - label: addresses
+              negated: true
+              items:
+                - name: dc-mgmt
+                  kind: address-group
+                  children:
+                    - name: dc-mgmt-net
+                      kind: address
+                      value: 10.1.250.0/24
+                    - name: oob-net
+                      kind: address
+                      value: 10.1.251.0/24
+        - title: application
+          rows:
+            - label: ""
+              items:
+                - name: ssl
+                - name: web-browsing
+                - name: ms-rdp
+                - name: ssh
+                - name: dns
+                - name: ldap
+                - name: kerberos
+        - title: service
+          rows:
+            - label: ""
+              items:
+                - name: svc-web
+                  kind: service-group
+                  children:
+                    - name: service-https
+                      predefined: true
+                    - name: svc-rdp
+                      kind: service
+                      value: tcp/3389
+        - title: url category
+          rows:
+            - label: ""
+              items:
+                - name: corp-allowed
+                  kind: custom-url-category
+                  value: custom, 2 entries
+                - name: business-and-economy
+                  predefined: true
+        - title: profile
+          rows:
+            - label: group
+              items:
+                - name: strict-inspect
+                  kind: profile-group
+                  children:
+                    - name: as-strict
+                      kind: spyware
+                      value: spyware
+                    - name: url-strict
+                      kind: url-filtering
+                      value: url-filtering
+                    - name: av-strict
+                      kind: virus
+                      value: virus
+        - title: action
+          rows:
+            - label: ""
+              text: allow
+        - title: log
+          rows:
+            - label: ""
+              text: at session start and end, forwarded to log-to-panorama
+        - title: schedule
+          rows:
+            - label: ""
+              text: business-hours
+holes: []
+unresolved: []
+notes: []

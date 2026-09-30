@@ -1,0 +1,114 @@
+format: 1
+command: simulate policy
+input:
+  flow:
+    source:
+      addrs:
+        - 10.1.0.5
+      resolved: false
+    destination:
+      addrs:
+        - 10.2.0.5
+      resolved: false
+    protocol: tcp
+    port: 443
+  selection:
+    file: ../../testdata/config/firewall-zones.xml
+results:
+  - candidates:
+      - position: 1
+        name: from-inside
+        action: allow
+        layer: local
+        scope: vsys:vsys1
+    fidelity:
+      level: inferred
+      reasons:
+        - 'kept rules whose service is application-default, predefined or absent: from-inside'
+      not_evaluated:
+        - application
+    first_match:
+      position: 1
+      name: from-inside
+      action: allow
+      layer: local
+      scope: vsys:vsys1
+    kind: policy
+    relevance:
+      known: false
+      relevant: false
+      reason: no stored forwarding table
+    stages:
+      - slug: resolve-source
+        name: Resolve the source
+        fidelity:
+          level: exact
+        candidates: 2
+        detail: '10.1.0.5: 0 hits, 0 negated rules'
+        elapsed_ms: 0
+      - slug: resolve-destination
+        name: Resolve the destination
+        fidelity:
+          level: exact
+        candidates: 2
+        detail: '10.2.0.5: 0 hits, 0 negated rules'
+        elapsed_ms: 0
+      - slug: derive-zones
+        name: Derive the zones
+        fidelity:
+          level: inferred
+        candidates: 1
+        detail: from inside; to dmz (configuration)
+        elapsed_ms: 0
+      - slug: match-service
+        name: Match the service
+        fidelity:
+          level: overmatch
+          reasons:
+            - 'kept rules whose service is application-default, predefined or absent: from-inside'
+        candidates: 1
+        detail: tcp/443
+        elapsed_ms: 0
+      - slug: match-url
+        name: Match the URL category
+        fidelity:
+          level: exact
+        candidates: 1
+        detail: no candidate names a URL category
+        elapsed_ms: 0
+      - slug: drop-disabled
+        name: Drop disabled rules
+        fidelity:
+          level: exact
+        candidates: 1
+        detail: 0 disabled
+        elapsed_ms: 0
+      - slug: order
+        name: Order by evaluation
+        fidelity:
+          level: exact
+        candidates: 1
+        detail: 1 in order
+        elapsed_ms: 0
+      - slug: first-match
+        name: Take the first match
+        fidelity:
+          level: overmatch
+          not_evaluated:
+            - application
+        candidates: 1
+        detail: from-inside (allow), position 1
+        elapsed_ms: 0
+    target:
+      device: file
+      vsys: vsys1
+    zones:
+      from:
+        - inside
+      to:
+        - dmz
+      source: configuration
+      detail: '10.1.0.5: inside via ethernet1/1 10.1.0.1/24; 10.2.0.5: dmz via ethernet1/2.20 10.2.0.1/24'
+holes: []
+unresolved: []
+notes: []

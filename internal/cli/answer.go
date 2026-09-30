@@ -71,6 +71,11 @@ func (a *app) emit(ans answer) error {
 			Command: ans.Command(), Input: ans.Input(), Results: ans.Results(),
 			Holes: q.Holes, Unresolved: q.Unresolved, Notes: q.Notes,
 		})
+	case formatYAML:
+		err = writeYAML(a.stdout, envelope{
+			Command: ans.Command(), Input: ans.Input(), Results: ans.Results(),
+			Holes: q.Holes, Unresolved: q.Unresolved, Notes: q.Notes,
+		})
 	default:
 		err = ans.Text(&textOut{w: a.stdout, now: a.now()})
 	}

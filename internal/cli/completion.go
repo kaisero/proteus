@@ -12,7 +12,7 @@ import (
 // names from the inventory, and the fixed values of --output, --log-level and
 // --color. Cobra's own completion command writes the shell scripts.
 func (a *app) registerCompletions(root *cobra.Command) {
-	_ = root.RegisterFlagCompletionFunc("output", fixedValues("text", "json"))
+	_ = root.RegisterFlagCompletionFunc("output", fixedValues("text", "json", "yaml"))
 	_ = root.RegisterFlagCompletionFunc("log-level", fixedValues("error", "warn", "info", "debug"))
 	_ = root.RegisterFlagCompletionFunc("color", fixedValues("auto", "always", "never"))
 	var walk func(c *cobra.Command)

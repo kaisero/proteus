@@ -42,7 +42,7 @@ func TestCompletionOffersDeviceNamesAndFixedValues(t *testing.T) {
 		{"snapshot list takes no second", []string{"snapshot", "list", "fw01", ""}, ""},
 		{"--device on a question", []string{"search", "x", "--device", ""}, "fw01,fw02"},
 		{"--device on simulate nat", []string{"simulate", "nat", "a", "b", "--device", ""}, "fw01,fw02"},
-		{"--output", []string{"search", "x", "--output", ""}, "text,json"},
+		{"--output", []string{"search", "x", "--output", ""}, "text,json,yaml"},
 		{"--log-level", []string{"fetch", "--log-level", ""}, "error,warn,info,debug"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
