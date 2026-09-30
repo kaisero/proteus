@@ -24,6 +24,7 @@ type routingOptions struct {
 func (a *app) routingCmd(sim simulate.Simulation) *cobra.Command {
 	var o routingOptions
 	o.sim = sim
+	var fl flowFlags
 	cmd := &cobra.Command{
 		Use:   "routing <source> <destination> | <destination> --device <name>",
 		Short: sim.Describe(),
@@ -33,7 +34,8 @@ func (a *app) routingCmd(sim simulate.Simulation) *cobra.Command {
 			"it leaves; --device names the start instead, and is needed with a destination\n" +
 			"alone. It follows each firewall's stored forwarding table from one firewall to\n" +
 			"the next, and names what may make the answer incomplete: ECMP, policy-based\n" +
-			"forwarding, NAT, and a path that leaves the inventory.\n\n" +
+			"forwarding, NAT, and a path that leaves the inventory. --port decides NAT and\n" +
+			"PBF rules that name a service.\n\n" +
 			"Source and destination are IPv4 addresses or FQDNs; an FQDN is resolved with this\n" +
 			"machine's DNS unless --no-dns.",
 		Args: args(cobra.RangeArgs(1, 2)),
@@ -44,17 +46,18 @@ func (a *app) routingCmd(sim simulate.Simulation) *cobra.Command {
 			} else if o.device == "" {
 				return usageErr("give a source, or a start device with --device")
 			}
+			o.port = fl.port
 			return a.emitRun(a.runRouting(c.Context(), o))
 		},
 	}
 	f := cmd.Flags()
-	f.StringVar(&o.device, "device", "", "start on this device")
+	f.StringVar(&o.device, "device", "", "the firewall the path starts on; needed with a destination alone")
 	f.StringVar(&o.router, "router", "", "start in this logical router of --device")
 	f.StringVar(&o.at, "at", "", "read each device's newest snapshot at or before this time (id, RFC 3339 or date)")
-	f.StringVar(&o.port, "port", "", "destination port, 443 or tcp/443: decides NAT and PBF rules that name a service")
+	fl.bindPort(cmd)
 	f.BoolVar(&o.rib, "rib", false, "list the routing table's other routes to the destination at each firewall")
-	f.BoolVar(&o.why, "why", false, "show every stage: its fidelity and what it found")
-	f.BoolVar(&o.noDNS, "no-dns", false, "do not resolve an FQDN endpoint")
+	bindWhy(cmd, &o.why)
+	bindNoDNS(cmd, &o.noDNS)
 	return cmd
 }
 

@@ -38,7 +38,8 @@ func (a *app) natCmd(sim simulate.Simulation) *cobra.Command {
 			"where its return route leaves; --from-zone or --from-interface sets it. The\n" +
 			"destination zone and interface come from the stored forwarding table.\n\n" +
 			"Source and destination are IPv4 addresses or FQDNs; the source may be -, for\n" +
-			"any. --why lists every rule above the match and what excluded it.\n\n" +
+			"any. --why lists every rule above the match and what excluded it. --no-dns also\n" +
+			"leaves a translated destination's FQDN unresolved.\n\n" +
 			"Stages: place, pbf, lookup, match, translate, post-lookup",
 		Args: args(cobra.ExactArgs(2)),
 		RunE: func(c *cobra.Command, argv []string) error {
@@ -53,12 +54,12 @@ func (a *app) natCmd(sim simulate.Simulation) *cobra.Command {
 	f.StringVar(&o.fromZone, "from-zone", "", "the zone the packet arrives in")
 	f.StringVar(&o.fromIf, "from-interface", "", "the interface the packet arrives on")
 	cmd.MarkFlagsMutuallyExclusive("from-zone", "from-interface")
-	f.StringVar(&o.fl.protocol, "protocol", "tcp", "tcp, udp, sctp, icmp or a protocol number")
-	f.StringVar(&o.fl.port, "port", "", "destination port: 443 or tcp/443")
-	f.IntVar(&o.fl.sourcePort, "source-port", 0, "source port")
+	o.fl.bindProtocol(cmd)
+	o.fl.bindPort(cmd)
+	o.fl.bindSourcePort(cmd)
 	f.StringVar(&o.at, "at", "", "read the newest snapshot at or before this time (id, RFC 3339 or date)")
-	f.BoolVar(&o.fl.why, "why", false, "list the rules above the match and every stage")
-	f.BoolVar(&o.fl.noDNS, "no-dns", false, "resolve no FQDN, neither an endpoint nor a translated destination")
+	bindWhy(cmd, &o.fl.why)
+	bindNoDNS(cmd, &o.fl.noDNS)
 	return cmd
 }
 

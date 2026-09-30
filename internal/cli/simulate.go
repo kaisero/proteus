@@ -76,19 +76,14 @@ func (a *app) simulateCmd(sim simulate.Simulation) *cobra.Command {
 			return a.emitRun(a.runSimulation(c.Context(), o))
 		},
 	}
-	o.sel.bind(cmd, true)
-	f := cmd.Flags()
-	f.StringVar(&o.fl.protocol, "protocol", "tcp", "tcp, udp, sctp, icmp or a protocol number")
-	f.StringVar(&o.fl.port, "port", "", "destination port: 443 or tcp/443")
-	f.IntVar(&o.fl.sourcePort, "source-port", 0, "source port")
-	f.StringVar(&o.fl.fromZone, "from-zone", "", "source zone; derived when absent")
-	f.StringVar(&o.fl.toZone, "to-zone", "", "destination zone; derived when absent")
-	cmd.MarkFlagsRequiredTogether("from-zone", "to-zone")
-	f.StringVar(&o.fl.url, "url", "", "URL, matched against URL categories")
-	f.StringVar(&o.fl.application, "application", "", "application (not evaluated yet)")
-	f.StringVar(&o.fl.user, "user", "", "source user (not evaluated yet)")
-	f.BoolVar(&o.fl.why, "why", false, "show every stage: its fidelity, what it kept, and why")
-	f.BoolVar(&o.fl.noDNS, "no-dns", false, "do not resolve an FQDN endpoint")
+	o.sel.bind(cmd, selectOpts{file: true, at: true, fresh: true})
+	o.fl.bindProtocol(cmd)
+	o.fl.bindPort(cmd)
+	o.fl.bindSourcePort(cmd)
+	o.fl.bindZones(cmd)
+	o.fl.bindL7(cmd)
+	bindWhy(cmd, &o.fl.why)
+	bindNoDNS(cmd, &o.fl.noDNS)
 	return cmd
 }
 
@@ -382,7 +377,37 @@ func dedupeUnresolved(in []unresolved) []unresolved {
 	return out
 }
 
-// bindWhy registers --why with the one help text every command shares.
+func (fl *flowFlags) bindProtocol(cmd *cobra.Command) {
+	cmd.Flags().StringVar(&fl.protocol, "protocol", "tcp", "tcp, udp, sctp, icmp or a protocol number")
+}
+
+func (fl *flowFlags) bindPort(cmd *cobra.Command) {
+	cmd.Flags().StringVar(&fl.port, "port", "", "destination port: 443 or tcp/443")
+}
+
+func (fl *flowFlags) bindSourcePort(cmd *cobra.Command) {
+	cmd.Flags().IntVar(&fl.sourcePort, "source-port", 0, "source port")
+}
+
+func (fl *flowFlags) bindZones(cmd *cobra.Command) {
+	cmd.Flags().StringVar(&fl.fromZone, "from-zone", "", "source zone; derived when absent")
+	cmd.Flags().StringVar(&fl.toZone, "to-zone", "", "destination zone; derived when absent")
+	cmd.MarkFlagsRequiredTogether("from-zone", "to-zone")
+}
+
+func (fl *flowFlags) bindL7(cmd *cobra.Command) {
+	cmd.Flags().StringVar(&fl.url, "url", "", "URL, matched against URL categories")
+	cmd.Flags().StringVar(&fl.application, "application", "", "application (not evaluated yet)")
+	cmd.Flags().StringVar(&fl.user, "user", "", "source user (not evaluated yet)")
+}
+
+// bindWhy registers --why with the one help text every command shares; a command's
+// Long says what its --why shows beyond that.
 func bindWhy(cmd *cobra.Command, v *bool) {
 	cmd.Flags().BoolVar(v, "why", false, "show every stage: what it decided and why")
+}
+
+// bindNoDNS registers --no-dns.
+func bindNoDNS(cmd *cobra.Command, v *bool) {
+	cmd.Flags().BoolVar(v, "no-dns", false, "do not resolve an FQDN")
 }

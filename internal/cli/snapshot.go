@@ -119,7 +119,7 @@ func (a *app) snapshotShowCmd() *cobra.Command {
 			return a.emitRun(a.runSnapshotShow(c.Context(), o))
 		},
 	}
-	o.sel.bind(cmd, true)
+	o.sel.bind(cmd, selectOpts{file: true, at: true, fresh: true})
 	return cmd
 }
 
@@ -218,13 +218,10 @@ func (a *app) snapshotDiffCmd() *cobra.Command {
 			"snapshot before latest with latest; --from and --to pick other points in time.",
 		Args: args(cobra.NoArgs),
 		RunE: func(c *cobra.Command, _ []string) error {
-			if o.sel.file != "" || o.sel.at != "" {
-				return usageErr("diff compares stored snapshots; use --from and --to, not --file or --at")
-			}
 			return a.emitRun(a.runSnapshotDiff(c.Context(), o))
 		},
 	}
-	o.sel.bind(cmd, false)
+	o.sel.bind(cmd, selectOpts{})
 	cmd.Flags().StringVar(&o.from, "from", "", "compare from the newest snapshot at or before this time (default: the one before --to)")
 	cmd.Flags().StringVar(&o.to, "to", "", "compare to the newest snapshot at or before this time (default: latest)")
 	return cmd

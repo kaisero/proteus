@@ -41,7 +41,7 @@ func (a *app) searchCmd() *cobra.Command {
 			return a.emitRun(a.runSearch(c.Context(), o))
 		},
 	}
-	o.sel.bind(cmd, true)
+	o.sel.bind(cmd, selectOpts{file: true, at: true, fresh: true})
 	f := cmd.Flags()
 	f.BoolVar(&o.exact, "exact", false, "the value equals the term")
 	f.BoolVar(&o.within, "within", false, "the value lies inside the term (addresses, prefixes, ranges)")

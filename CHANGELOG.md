@@ -197,6 +197,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **`snapshot diff` no longer offers `--file`, `--at` or `--fresh`.** It always
+  refused them; they are now unknown flags. Shared flags have one help text in every
+  command.
 - **Exit codes are the same in every command, and machine output ends stderr with one
   JSON line.** An unknown command or help topic exits 2 at every level. Ctrl-C exits 130
   and SIGTERM 143, with the run log closed. With `--output json`, the last stderr line

@@ -46,7 +46,7 @@ func (a *app) lookupCmd() *cobra.Command {
 			return a.emitRun(a.runLookup(c.Context(), o))
 		},
 	}
-	o.sel.bind(cmd, true)
+	o.sel.bind(cmd, selectOpts{file: true, at: true, fresh: true})
 	f := cmd.Flags()
 	f.StringVar(&o.kind, "kind", "", "the kind of element: security-rule or an object kind")
 	f.BoolVar(&o.expand, "expand", false, "show each name's value and every group's members")

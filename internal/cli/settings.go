@@ -223,20 +223,31 @@ type selection struct {
 	fresh                 bool
 }
 
-func (sel *selection) bind(cmd *cobra.Command, withFresh bool) {
+// selectOpts say which of --file, --at and --fresh a command takes.
+type selectOpts struct{ file, at, fresh bool }
+
+func (sel *selection) bind(cmd *cobra.Command, o selectOpts) {
 	fs := cmd.Flags()
 	fs.StringSliceVar(&sel.devices, "device", nil, "only these devices (repeatable)")
 	fs.StringArrayVar(&sel.labels, "label", nil, "only devices with this key=value label (repeatable; all must hold)")
 	fs.StringSliceVar(&sel.vsys, "vsys", nil, "only these vsys (repeatable; default every vsys)")
-	fs.StringVar(&sel.file, "file", "", "read one configuration file instead of the store")
-	fs.StringVar(&sel.at, "at", "", "read each device's newest snapshot at or before this time (id, RFC 3339 or date)")
-	// --file reads one configuration; the store's selectors mean nothing with it.
-	for _, other := range []string{"device", "label", "at"} {
-		cmd.MarkFlagsMutuallyExclusive("file", other)
+	if o.at {
+		fs.StringVar(&sel.at, "at", "", "read each device's newest snapshot at or before this time (id, RFC 3339 or date)")
 	}
-	if withFresh {
+	if o.fresh {
 		fs.BoolVar(&sel.fresh, "fresh", false, "fetch the selected devices first")
-		cmd.MarkFlagsMutuallyExclusive("file", "fresh")
+	}
+	if !o.file {
+		return
+	}
+	fs.StringVar(&sel.file, "file", "", "read one configuration file instead of the store")
+	// --file reads one configuration; the store's selectors mean nothing with it.
+	// MarkFlagsMutuallyExclusive panics on a flag that does not exist, so only the
+	// registered ones are named.
+	for _, other := range []string{"device", "label", "at", "fresh"} {
+		if fs.Lookup(other) != nil {
+			cmd.MarkFlagsMutuallyExclusive("file", other)
+		}
 	}
 }
 
