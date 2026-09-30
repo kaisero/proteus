@@ -42,14 +42,21 @@ func TestRunStopsAtTheFirstError(t *testing.T) {
 	t.Parallel()
 	c := &counter{}
 	boom := errors.New("boom")
+	var onStep []Record
 	recs, err := Run(context.Background(), "fw1", c, []Step[counter]{
 		step("a", Result{}, nil), step("b", Result{}, boom), step("c", Result{}, nil),
-	}, Options{})
+	}, Options{OnStep: func(_ string, r Record) { onStep = append(onStep, r) }})
 	if !errors.Is(err, boom) || err.Error() != "fw1/b: boom" || c.n != 2 {
 		t.Fatalf("err %v, ran %d", err, c.n)
 	}
 	if last := recs[len(recs)-1]; last.Status != Failed || !errors.Is(last.Err, boom) {
 		t.Errorf("last record = %+v", last)
+	}
+	if len(onStep) != 2 {
+		t.Fatalf("OnStep called %d times, want 2", len(onStep))
+	}
+	if last := onStep[len(onStep)-1]; last.Status != Failed || !errors.Is(last.Err, boom) {
+		t.Errorf("OnStep last call = %+v", last)
 	}
 }
 
