@@ -1,6 +1,6 @@
 # fetch-and-store
 
-Validated against 7a7cefe on 2026-09-29 · Purpose: how a device's configuration and operational state get from the firewall into a snapshot the core can read.
+Validated against e37ee52 on 2026-09-30 · Purpose: how a device's configuration and operational state get from the firewall into a snapshot the core can read.
 
 ## Purpose & responsibilities
 
@@ -53,7 +53,11 @@ the HA state: a passive member of an active-passive pair is fetched from its act
 peer (`ha_peer` or the reported management address, through
 `ActiveOptions.PeerHost`) once the peer confirms the pair by serial; any doubt
 fetches the device asked and adds `Result.Notes`. `Result.FetchedFrom` and
-`Meta.FetchedFrom` name the peer that answered.
+`Meta.FetchedFrom` name the peer that answered. The CLI fetches up to eight
+devices at once and answers one result per device named, with its stages;
+`fetch --why` prints them, and a device's TLS and HA notes go to the envelope's
+`notes`. An HA state that cannot be read skips the `ha` step as "HA state
+unreadable".
 
 ### Store
 

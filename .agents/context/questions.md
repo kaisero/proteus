@@ -69,6 +69,7 @@ func NewNetwork(st *store.Store, devices []string, w When) *Network
 func Open(st *store.Store, devices, vsys []string, w When) ([]Target, []Hole)
 func OpenFile(path string, vsys []string, log *runlog.Logger) ([]Target, []Hole, error)
 func ParseAt(s string) (time.Time, error)
+func StaleNote(id string, age, limit time.Duration) string
 ```
 <!-- /GENERATED:api -->
 

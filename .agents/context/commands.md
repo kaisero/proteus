@@ -1,6 +1,6 @@
 # commands
 
-Validated against 54cfdf9 on 2026-09-29 · Purpose: the proteus command, what each subcommand is for, and which one to reach for.
+Validated against e37ee52 on 2026-09-30 · Purpose: the proteus command, what each subcommand is for, and which one to reach for.
 
 ## Purpose & responsibilities
 
@@ -16,7 +16,7 @@ linux/amd64.
 ## proteus
 
 ```
-fetch <device>... | --label k=v | --all     log in, fetch six documents, store a snapshot
+fetch <device>... | --label k=v | --all     log in, fetch six documents, store a snapshot (--why: stages)
 inventory init                              write an inventory template, mode 0600
 snapshot list <device>                      snapshots, newest first; * marks latest
 snapshot show                               per device and vsys: snapshot, age, version, rules
@@ -39,7 +39,8 @@ simulate nat <src> <dst> --device <fw>      the NAT rule and the translated pack
   `--direct`.
 - **`lookup <name>`** prints a rule as the rule editor lays it out, or an object
   with its value, members and holding groups. The kind is inferred; a name several
-  kinds share exits 2 until `--kind` picks one; found nowhere exits 1. `--expand`
+  kinds share exits 2 until `--kind` picks one; found nowhere exits 0 with empty
+  `results`. `--expand`
   shows values in parentheses and groups as trees (three levels); lists stop at five
   items unless `--full`. See [questions](questions.md).
 - **`simulate <kind>`** has one subcommand per kind registered in
@@ -51,23 +52,50 @@ simulate nat <src> <dst> --device <fw>      the NAT rule and the translated pack
 - **`simulate nat <src> <dst> --device <fw>`** (own command via `kindCommands`):
   `--router`, `--port`, `--protocol`, `--from-zone` or `--from-interface`, `--why`,
   `--no-dns` (resolves no FQDN at all, also a translated destination's). A source
-  of `-` is any. Exit 2 for a missing device, several routers, IPv6.
+  of `-` is any. `--device` is required (exit 2 without it); exit 2 for a device
+  not in the inventory, several routers, IPv6; a device without a snapshot is a
+  hole (exit 3).
 - **`simulate routing <src> <dst>`** (or `<dst> --device <name> [--router]`) has
   its own command (`kindCommands`): no selectors but `--device`, `--at`, `--rib`,
   `--why`. It reads every inventory device's stored interfaces and tables, draws a
   box per firewall and vsys, and exits 2 for a start it cannot choose (ties,
-  default-only, several routers, IPv6). `scripts/device-probe.sh --routing <device>
+  default-only, several routers, IPv6); a start device without a snapshot is a hole
+  (exit 3). `scripts/device-probe.sh --routing <device>
   <router> <dst>...` checks its first lookup against the device.
-- **Output and exit codes:** `--output text|json`; JSON is one envelope with
-  `format`, `command`, `input`, `results`, `holes`, `unresolved`, `notes`. Exit 0
-  complete, 1 error, 2 usage, 3 holes or unresolved.
+- **Output:** `--output text|json|yaml`. JSON and YAML are the same envelope:
+  `format` (1), `command`, `input`, `results` (always an array), `holes`,
+  `unresolved`, `notes`. Every note the text shows is in `notes` too.
+- **Colour:** `--color auto|always|never` (also `PROTEUS_COLOR`, inventory `color:`),
+  default `auto`. JSON and YAML are never coloured. `NO_COLOR`, `CLICOLOR_FORCE` and
+  `TERM=dumb` act on `auto` only; `auto` colours a terminal and nothing else.
+  Colour follows meaning (`palette`: bad, warn, ok, head, dim, accent), wraps one
+  token or cell, never a line; columns go through `table`, which aligns by visible
+  width.
+- **Exit codes** (spec §4.1): 0 complete, possibly empty; 1 no answer; 2 the command
+  line must change (unknown command, flag or topic, bad setting, a device not in the
+  inventory, an empty selection); 3 holes or unresolved; 130 SIGINT; 143 SIGTERM.
+  `fetch`: all stored 0, a failure with one device stored 3, none stored 1; it
+  prints its answer in all three.
+- **Errors on stderr:** text mode prints `proteus: <message>` and `log: <path>`. In
+  JSON and YAML mode the last stderr line of a non-zero exit is one JSON object,
+  `{"format":1,"exit":N,"error":…,"log":…}`, also for command-line errors.
+- **A new command** builds an `answer` (`Command`, `Input`, `Results`,
+  `Qualifiers`, `Text`) and ends its `RunE` with `a.emitRun(a.runX(...))`. It never
+  writes to stdout itself; `emit` renders the format, logs the `answer:` line and
+  sets the exit from the qualifiers. It also needs a row in `contractRows`
+  (`contract_test.go`) and goldens.
+- **`fetch --why`** prints each device's stages, `resolve`, `login`, `ha`,
+  `documents`, `store`, with status (`ok`, `partial`, `skipped`, `failed`) and
+  detail; JSON always carries them as `stages`. On a terminal a progress line per
+  finished stage goes to stderr.
 - **Settings**, rising precedence default < inventory `defaults:` < `PROTEUS_*` <
-  flag: inventory path, store root, `max_snapshot_age`, output, and the run log's
+  flag: inventory path, store root, `max_snapshot_age`, output, color, and the run log's
   `log_level`, `log_dir`, `log_keep` (plus `--verbose`). `PROTEUS_USERS` names a user
   snapshot; a stored forwarding table supplies zones.
 - **Run log:** one file per run under `log_dir`, `<time> [<LEVEL>] [<TAG>] <msg>`,
   tags `RUN`, `API`, `SNAP`, `FIND`, `STEP`; secrets redacted; the path is printed
-  when a run exits non-zero. The core never logs; `runlog` is used above it.
+  when a run exits non-zero. Help, completion and a bare group write no log and
+  ignore a bad setting. The core never logs; `runlog` is used above it.
 
 ## Build / run pointers
 

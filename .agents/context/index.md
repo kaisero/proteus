@@ -54,6 +54,9 @@ Repo map:
   `refs.go`, `profileuse.go`, `snapshot.go`, `intern.go`.
 - `internal/schema`, `internal/digest` — schema parsing and the digest format;
   `internal/tools/schemadigest` — the dev tool that writes a digest. `internal/archtest` — the R12 import check.
+- `internal/task/` — staged operations: `Run` runs named steps in order, records
+  each step's status, detail and time, logs them, and stops at the first error.
+  `fetch` uses it per device.
 - `internal/estate/` — selectors and a time to targets and holes; `internal/search/` — five-stage findings for one term; `internal/card/` — the whole element behind one name, for `lookup`; `internal/drift/` — changes between two configurations.
 - `internal/inventory/` — the YAML device list and credentials; `internal/fetch/` — the read-only XML
   API client and the `Document` list; `internal/store/` — timestamped snapshots, `latest`.
