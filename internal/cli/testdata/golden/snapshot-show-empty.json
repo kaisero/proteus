@@ -1,0 +1,14 @@
+{
+  "format": 1,
+  "command": "snapshot show",
+  "input": {},
+  "results": [],
+  "holes": [
+    {
+      "device": "fw01",
+      "reason": "store: fw01 has no snapshot with a configuration; run proteus fetch fw01"
+    }
+  ],
+  "unresolved": [],
+  "notes": []
+}

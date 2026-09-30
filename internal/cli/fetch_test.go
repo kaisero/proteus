@@ -260,7 +260,7 @@ func TestHousekeeping(t *testing.T) {
 	t.Parallel()
 	c := newCLI(t)
 	c.want(1, "fetch", "fw01")
-	c.want(1, "snapshot", "list", "fw01")
+	c.want(3, "snapshot", "list", "fw01")
 	if out := c.want(0, "inventory", "init"); !strings.Contains(out, "wrote") {
 		t.Errorf("init: %s", out)
 	}
@@ -273,7 +273,7 @@ func TestHousekeeping(t *testing.T) {
 		t.Errorf("fetch --all: %s", out)
 	}
 	c.want(0, "fetch", "--label", "site=s1")
-	c.want(1, "snapshot", "list", "../x")
+	c.want(2, "snapshot", "list", "../x")
 	out := c.want(0, "snapshot", "list", "fw01")
 	if !strings.HasPrefix(out, "* ") || !strings.Contains(out, "6 documents, 0 failed") {
 		t.Errorf("snapshot list:\n%s", out)
@@ -380,7 +380,7 @@ func TestSettingsPrecedence(t *testing.T) {
 		t.Errorf("--output must win over PROTEUS_OUTPUT:\n%s", out)
 	}
 	delete(c.env, "PROTEUS_STORE")
-	c.want(1, "snapshot", "list", "fw01") // the file's store is empty
+	c.want(3, "snapshot", "list", "fw01") // the file's store is empty
 	c.want(0, "snapshot", "list", "fw01", "--store", filepath.Join(c.dir, "store"))
 	c.want(2, "snapshot", "list", "fw01", "--output", "yaml")
 	c.want(2, "snapshot", "list", "fw01", "--max-age", "soon")

@@ -14,6 +14,18 @@ import (
 	"github.com/okaiser/proteus/internal/store"
 )
 
+// snapshotListOptions are snapshot list's flags.
+type snapshotListOptions struct{ device string }
+
+// snapshotShowOptions are snapshot show's flags.
+type snapshotShowOptions struct{ sel selection }
+
+// snapshotDiffOptions are snapshot diff's flags.
+type snapshotDiffOptions struct {
+	sel      selection
+	from, to string
+}
+
 func (a *app) snapshotListCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "list <device>",
@@ -21,7 +33,9 @@ func (a *app) snapshotListCmd() *cobra.Command {
 		Args:  args(cobra.ExactArgs(1)),
 
 		ValidArgsFunction: a.completeOneDevice,
-		RunE:              func(_ *cobra.Command, argv []string) error { return a.runSnapshotList(argv[0]) },
+		RunE: func(c *cobra.Command, argv []string) error {
+			return a.emitRun(a.runSnapshotList(c.Context(), snapshotListOptions{device: argv[0]}))
+		},
 	}
 }
 
@@ -34,25 +48,38 @@ type snapshotRow struct {
 	Failed    int    `json:"failed"`
 }
 
-func (a *app) runSnapshotList(device string) error {
+// snapshotListAnswer is the stored snapshots of one device, newest first.
+type snapshotListAnswer struct {
+	device string
+	rows   []snapshotRow
+	holes  []estate.Hole
+}
+
+func (a *app) runSnapshotList(_ context.Context, o snapshotListOptions) (answer, error) {
 	s, err := a.settings(false)
 	if err != nil {
-		return err
+		return nil, err
 	}
+	if s.inv != nil {
+		if _, err := s.inv.Select([]string{o.device}, nil); err != nil {
+			return nil, usageErr("%w", err)
+		}
+	}
+	ans := snapshotListAnswer{device: o.device, rows: []snapshotRow{}}
 	st, err := a.openStore(s.storeRoot)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	ids, err := st.List(device)
+	ids, err := st.List(o.device)
 	if err != nil {
-		return err
+		ans.holes = []estate.Hole{{Device: o.device, Reason: err.Error()}}
+		return ans, nil
 	}
-	latest, _ := st.Latest(device)
-	var rows []snapshotRow
+	latest, _ := st.Latest(o.device)
 	for _, id := range ids {
-		sn, err := st.Get(device, id)
+		sn, err := st.Get(o.device, id)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		r := snapshotRow{ID: id, Latest: id == latest.ID, SWVersion: sn.Meta.SWVersion, Documents: len(sn.Meta.Documents)}
 		for _, d := range sn.Meta.Documents {
@@ -60,30 +87,39 @@ func (a *app) runSnapshotList(device string) error {
 				r.Failed++
 			}
 		}
-		rows = append(rows, r)
+		ans.rows = append(ans.rows, r)
 	}
-	if a.format == formatJSON {
-		return writeJSON(a.stdout, envelope{Command: "snapshot list", Input: snapshotListInput{Device: device}, Results: rows})
-	}
-	for _, r := range rows {
+	return ans, nil
+}
+
+func (l snapshotListAnswer) Command() string        { return "snapshot list" }
+func (l snapshotListAnswer) Input() any             { return snapshotListInput{Device: l.device} }
+func (l snapshotListAnswer) Results() any           { return l.rows }
+func (l snapshotListAnswer) Qualifiers() qualifiers { return qualifiers{Holes: l.holes} }
+
+func (l snapshotListAnswer) Text(t *textOut) error {
+	for _, r := range l.rows {
 		mark := " "
 		if r.Latest {
 			mark = "*"
 		}
-		fmt.Fprintf(a.stdout, "%s %s  PAN-OS %-8s %d documents, %d failed\n", mark, r.ID, r.SWVersion, r.Documents, r.Failed)
+		fmt.Fprintf(t, "%s %s  PAN-OS %-8s %d documents, %d failed\n", mark, r.ID, r.SWVersion, r.Documents, r.Failed)
 	}
-	return nil
+	printQualifiers(t, l.Qualifiers())
+	return t.err
 }
 
 func (a *app) snapshotShowCmd() *cobra.Command {
-	var sel selection
+	var o snapshotShowOptions
 	cmd := &cobra.Command{
 		Use:   "show",
 		Short: "Show the snapshots a question would read: version, vsys, rule counts, documents",
 		Args:  args(cobra.NoArgs),
-		RunE:  func(c *cobra.Command, _ []string) error { return a.runSnapshotShow(c.Context(), sel) },
+		RunE: func(c *cobra.Command, _ []string) error {
+			return a.emitRun(a.runSnapshotShow(c.Context(), o))
+		},
 	}
-	sel.bind(cmd, true)
+	o.sel.bind(cmd, true)
 	return cmd
 }
 
@@ -99,17 +135,31 @@ type showRow struct {
 	Document []store.DocumentMeta `json:"documents,omitempty"`
 }
 
-func (a *app) runSnapshotShow(ctx context.Context, sel selection) error {
-	s, err := a.settings(sel.file == "")
+// snapshotShowAnswer is the snapshots a question would read: one row per device and
+// vsys.
+type snapshotShowAnswer struct {
+	o     snapshotShowOptions
+	ts    []estate.Target
+	rows  []showRow
+	holes []estate.Hole
+	un    []unresolved
+	notes []note
+}
+
+func (a *app) runSnapshotShow(ctx context.Context, o snapshotShowOptions) (answer, error) {
+	s, err := a.settings(o.sel.file == "")
 	if err != nil {
-		return err
+		return nil, err
 	}
-	ts, holes, err := a.targets(ctx, sel, s, a.stderr)
+	ts, holes, err := a.targets(ctx, o.sel, s, a.stderr)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	var rows []showRow
+	ans := snapshotShowAnswer{o: o, ts: ts, rows: []showRow{}, holes: holes}
 	for _, t := range ts {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		r := showRow{target: targetOf(t), Version: t.Config.DetailVersion()}
 		if tg, err := resolve.TargetFor(t.Config, firstDevice(t.Config), t.Vsys); err == nil {
 			r.Rules = len(tg.Rules(resolve.Security))
@@ -118,67 +168,65 @@ func (a *app) runSnapshotShow(ctx context.Context, sel selection) error {
 			m := t.Snapshot.Meta
 			r.Host, r.Model, r.Serial, r.From, r.Document = m.Host, m.Model, m.Serial, m.FetchedFrom, m.Documents
 		}
-		rows = append(rows, r)
+		ans.rows = append(ans.rows, r)
 	}
-	un, notes := targetQualifiers(ts)
-	if a.format == formatJSON {
-		if err := writeJSON(a.stdout, envelope{
-			Command: "snapshot show", Input: sel.input(), Results: rows, Holes: holes, Unresolved: un, Notes: notes,
-		}); err != nil {
-			return err
-		}
-	} else {
-		a.printSnapshotShow(ts, rows)
-		printQualifiers(a.stdout, qualifiers{Holes: holes, Unresolved: un, Notes: notes})
-	}
-	return finish(holes, un)
+	ans.un, ans.notes = targetQualifiers(ts)
+	return ans, nil
 }
 
-// printSnapshotShow prints one block per device and one line per vsys.
-func (a *app) printSnapshotShow(ts []estate.Target, rows []showRow) {
+func (s snapshotShowAnswer) Command() string { return "snapshot show" }
+func (s snapshotShowAnswer) Input() any      { return s.o.sel.input() }
+func (s snapshotShowAnswer) Results() any    { return s.rows }
+func (s snapshotShowAnswer) Qualifiers() qualifiers {
+	return qualifiers{Holes: s.holes, Unresolved: s.un, Notes: s.notes}
+}
+
+// Text prints one block per device and one line per vsys.
+func (s snapshotShowAnswer) Text(t *textOut) error {
 	last := ""
-	for i, r := range rows {
+	for i, r := range s.rows {
 		if r.Device != last {
 			last = r.Device
-			fmt.Fprintf(a.stdout, "%s   %s\n", r.Device, source(ts[i], a.now()))
-			printNotes(a.stdout, ts[i])
+			fmt.Fprintf(t, "%s   %s\n", r.Device, source(s.ts[i], t.now))
+			printNotes(t, s.ts[i])
 			if r.Host != "" {
-				fmt.Fprintf(a.stdout, "  %s, %s, serial %s\n", r.Host, r.Model, r.Serial)
+				fmt.Fprintf(t, "  %s, %s, serial %s\n", r.Host, r.Model, r.Serial)
 			}
 			if r.From != "" {
-				fmt.Fprintf(a.stdout, "  fetched from the active HA peer %s\n", r.From)
+				fmt.Fprintf(t, "  fetched from the active HA peer %s\n", r.From)
 			}
 			for _, d := range r.Document {
 				if d.Error != "" {
-					fmt.Fprintf(a.stdout, "  %-12s FAILED  %s\n", d.Name, d.Error)
+					fmt.Fprintf(t, "  %-12s FAILED  %s\n", d.Name, d.Error)
 				} else {
-					fmt.Fprintf(a.stdout, "  %-12s %8d bytes\n", d.Name, d.Bytes)
+					fmt.Fprintf(t, "  %-12s %8d bytes\n", d.Name, d.Bytes)
 				}
 			}
 		}
-		fmt.Fprintf(a.stdout, "  %-8s PAN-OS %s, security rules: %d\n", r.Vsys, r.Version, r.Rules)
+		fmt.Fprintf(t, "  %-8s PAN-OS %s, security rules: %d\n", r.Vsys, r.Version, r.Rules)
 	}
+	printQualifiers(t, s.Qualifiers())
+	return t.err
 }
 
 func (a *app) snapshotDiffCmd() *cobra.Command {
-	var sel selection
-	var from, to string
+	var o snapshotDiffOptions
 	cmd := &cobra.Command{
 		Use:   "diff",
 		Short: "Show what changed between two snapshots of each selected device",
 		Long: "Diff compares objects and rules per vsys and shared. By default it compares the\n" +
 			"snapshot before latest with latest; --from and --to pick other points in time.",
 		Args: args(cobra.NoArgs),
-		RunE: func(*cobra.Command, []string) error {
-			if sel.file != "" || sel.at != "" {
+		RunE: func(c *cobra.Command, _ []string) error {
+			if o.sel.file != "" || o.sel.at != "" {
 				return usageErr("diff compares stored snapshots; use --from and --to, not --file or --at")
 			}
-			return a.runSnapshotDiff(sel, from, to)
+			return a.emitRun(a.runSnapshotDiff(c.Context(), o))
 		},
 	}
-	sel.bind(cmd, false)
-	cmd.Flags().StringVar(&from, "from", "", "compare from the newest snapshot at or before this time (default: the one before --to)")
-	cmd.Flags().StringVar(&to, "to", "", "compare to the newest snapshot at or before this time (default: latest)")
+	o.sel.bind(cmd, false)
+	cmd.Flags().StringVar(&o.from, "from", "", "compare from the newest snapshot at or before this time (default: the one before --to)")
+	cmd.Flags().StringVar(&o.to, "to", "", "compare to the newest snapshot at or before this time (default: latest)")
 	return cmd
 }
 
@@ -191,78 +239,87 @@ type diffResult struct {
 	Changes []drift.Change `json:"changes"`
 }
 
-func (a *app) runSnapshotDiff(sel selection, from, to string) error {
+// snapshotDiffAnswer is what changed between two snapshots of each selected device.
+type snapshotDiffAnswer struct {
+	o       snapshotDiffOptions
+	results []diffResult
+	holes   []estate.Hole
+	notes   []note
+}
+
+func (a *app) runSnapshotDiff(ctx context.Context, o snapshotDiffOptions) (answer, error) {
 	s, err := a.settings(true)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	names, err := s.inv.Select(sel.devices, sel.labels)
+	names, err := s.inv.Select(o.sel.devices, o.sel.labels)
 	if err != nil {
-		return usageErr("%w", err)
+		return nil, usageErr("%w", err)
 	}
 	st, err := a.openStore(s.storeRoot)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	var results []diffResult
-	var holes []estate.Hole
-	var notes []note
+	ans := snapshotDiffAnswer{o: o, results: []diffResult{}}
 	for _, d := range names {
-		older, newer, err := pair(st, d, from, to)
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		older, newer, err := pair(st, d, o.from, o.to)
 		if err != nil {
-			holes = append(holes, estate.Hole{Device: d, Reason: err.Error()})
+			ans.holes = append(ans.holes, estate.Hole{Device: d, Reason: err.Error()})
 			continue
 		}
 		// After an HA failover the entry's snapshots come from the other member,
 		// whose configuration is synced but not identical.
 		if was, now := older.Meta.Serial, newer.Meta.Serial; was != "" && now != "" && was != now {
-			notes = append(notes, note{Device: d, Note: fmt.Sprintf(
+			ans.notes = append(ans.notes, note{Device: d, Note: fmt.Sprintf(
 				"the snapshots come from different firewalls (serial %s, then %s), as after an HA failover; settings an HA pair does not sync show as changes", was, now)})
 		}
 		before, _, err1 := config.Load(older.Path(store.ConfigDoc))
 		after, _, err2 := config.Load(newer.Path(store.ConfigDoc))
 		if err1 != nil || err2 != nil {
-			holes = append(holes, estate.Hole{Device: d, Reason: fmt.Sprintf("unreadable configuration: %v %v", err1, err2)})
+			ans.holes = append(ans.holes, estate.Hole{Device: d, Reason: fmt.Sprintf("unreadable configuration: %v %v", err1, err2)})
 			continue
 		}
-		for _, sc := range diffScopes(before, after, sel.vsys) {
+		for _, sc := range diffScopes(before, after, o.sel.vsys) {
 			ch := drift.Compare(before, after, sc)
 			if ch == nil {
 				ch = []drift.Change{}
 			}
-			results = append(results, diffResult{Device: d, From: older.ID, To: newer.ID, Scope: sc.String(), Changes: ch})
+			ans.results = append(ans.results, diffResult{Device: d, From: older.ID, To: newer.ID, Scope: sc.String(), Changes: ch})
 		}
 	}
-	if a.format == formatJSON {
-		in := snapshotDiffInput{Selection: sel.input(), From: from, To: to}
-		if err := writeJSON(a.stdout, envelope{Command: "snapshot diff", Input: in, Results: results, Holes: holes, Notes: notes}); err != nil {
-			return err
-		}
-	} else {
-		a.printDiff(results, notes)
-		printQualifiers(a.stdout, qualifiers{Holes: holes})
-	}
-	return finish(holes, nil)
+	return ans, nil
 }
 
-// printDiff prints one block per device and one section per scope.
-func (a *app) printDiff(results []diffResult, notes []note) {
+func (d snapshotDiffAnswer) Command() string { return "snapshot diff" }
+func (d snapshotDiffAnswer) Input() any {
+	return snapshotDiffInput{Selection: d.o.sel.input(), From: d.o.from, To: d.o.to}
+}
+func (d snapshotDiffAnswer) Results() any { return d.results }
+func (d snapshotDiffAnswer) Qualifiers() qualifiers {
+	return qualifiers{Holes: d.holes, Notes: d.notes}
+}
+
+// Text prints one block per device and one section per scope.
+func (d snapshotDiffAnswer) Text(t *textOut) error {
 	last := ""
-	for _, r := range results {
+	for _, r := range d.results {
 		if r.Device != last {
 			last = r.Device
-			fmt.Fprintf(a.stdout, "%s   %s -> %s\n", r.Device, r.From, r.To)
-			for _, n := range notes {
+			fmt.Fprintf(t, "%s   %s -> %s\n", r.Device, r.From, r.To)
+			for _, n := range d.notes {
 				if n.Device == r.Device {
-					fmt.Fprintf(a.stdout, "  note: %s\n", n.Note)
+					fmt.Fprintf(t, "  note: %s\n", n.Note)
 				}
 			}
 		}
 		if len(r.Changes) == 0 {
-			fmt.Fprintf(a.stdout, "  %-10s no changes\n", r.Scope)
+			fmt.Fprintf(t, "  %-10s no changes\n", r.Scope)
 			continue
 		}
-		fmt.Fprintf(a.stdout, "  %s\n", r.Scope)
+		fmt.Fprintf(t, "  %s\n", r.Scope)
 		for _, c := range r.Changes {
 			detail := c.New
 			switch c.Op {
@@ -271,9 +328,11 @@ func (a *app) printDiff(results []diffResult, notes []note) {
 			case drift.Changed:
 				detail = c.Old + " -> " + c.New
 			}
-			fmt.Fprintf(a.stdout, "    %-8s %-20s %-24s %s\n", c.Op, c.Kind, c.Name, detail)
+			fmt.Fprintf(t, "    %-8s %-20s %-24s %s\n", c.Op, c.Kind, c.Name, detail)
 		}
 	}
+	printQualifiers(t, qualifiers{Holes: d.holes})
+	return t.err
 }
 
 // pair picks the two snapshots of a device to compare.

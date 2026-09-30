@@ -15,7 +15,7 @@ import (
 // planStep is the last step of docs/plans/2026-09-30-cli-consistency.md that has
 // landed. A row or check that waits for a later step is skipped until then; each
 // step raises this number. When it reaches 11, nothing is skipped.
-const planStep = 3
+const planStep = 4
 
 // fixture builds a fresh CLI for one run. complete is false for the "no snapshot"
 // fixture: the same inventory, never fetched.
@@ -89,9 +89,9 @@ func contractRows() []contractRow {
 		{name: "fetch-broken-doc", fixture: brokenDocFixture, args: []string{"fetch", "fw01"}, complete: 3, empty: 3, answers: true, until: 9},
 		{name: "inventory-init", fixture: emptyFixture, args: []string{"inventory", "init"}, raw: true, until: 9},
 		{name: "inventory-init-exists", fixture: labFixture(0), args: []string{"inventory", "init"}, complete: 2, empty: 2, until: 9},
-		{name: "snapshot-list", fixture: labFixture(1), args: []string{"snapshot", "list", "fw01"}, empty: 3, until: 4},
-		{name: "snapshot-show", fixture: labFixture(1), args: []string{"snapshot", "show"}, empty: 3, until: 4},
-		{name: "snapshot-diff", fixture: labFixture(2), args: []string{"snapshot", "diff"}, empty: 3, until: 4},
+		{name: "snapshot-list", fixture: labFixture(1), args: []string{"snapshot", "list", "fw01"}, empty: 3, until: 0},
+		{name: "snapshot-show", fixture: labFixture(1), args: []string{"snapshot", "show"}, empty: 3, until: 0},
+		{name: "snapshot-diff", fixture: labFixture(2), args: []string{"snapshot", "diff"}, empty: 3, until: 0},
 		{name: "search", fixture: labFixture(1), args: []string{"search", "198.18.10.100"}, empty: 3},
 		{name: "lookup", fixture: labFixture(1), args: []string{"lookup", "dc01"}, empty: 3},
 		{name: "lookup-missing", fixture: labFixture(1), args: []string{"lookup", "no-such-name"}, empty: 3, until: 0},

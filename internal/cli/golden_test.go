@@ -110,6 +110,14 @@ func TestGoldenJSON(t *testing.T) {
 		golden(t, "snapshot-diff", c.want(0, "snapshot", "diff", "--vsys", "vsys1", "--output", "json"))
 	})
 
+	t.Run("empty-store", func(t *testing.T) {
+		t.Parallel()
+		c := newCLI(t)
+		c.inventory(inventoryFor(lab(t).Start(t)))
+		golden(t, "snapshot-list-empty", c.want(3, "snapshot", "list", "fw01", "--output", "json"))
+		golden(t, "snapshot-show-empty", c.want(3, "snapshot", "show", "--output", "json"))
+	})
+
 	t.Run("simulate-nat", func(t *testing.T) {
 		t.Parallel()
 		out := natLab(t).want(0, "simulate", "nat", "198.18.1.10", "198.18.250.10", "--device", "fw01",

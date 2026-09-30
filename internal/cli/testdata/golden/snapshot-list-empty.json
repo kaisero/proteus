@@ -1,0 +1,16 @@
+{
+  "format": 1,
+  "command": "snapshot list",
+  "input": {
+    "device": "fw01"
+  },
+  "results": [],
+  "holes": [
+    {
+      "device": "fw01",
+      "reason": "store: no snapshots of fw01: open TMP no such file or directory"
+    }
+  ],
+  "unresolved": [],
+  "notes": []
+}
