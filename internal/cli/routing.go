@@ -84,7 +84,7 @@ func (a *app) runRouting(ctx context.Context, sim simulate.Simulation, src, dst 
 	path, _ := run.Output.(routing.Path)
 	a.log.Infof(runlog.TagStep, "routing: %s, fidelity %s", path.Outcome, run.Fidelity)
 	un := dedupeUnresolved(runUnresolved(run, run.Device, "", false))
-	if s.output == "json" {
+	if a.format == formatJSON {
 		in := routingInput{Flow: flow, Device: o.device, Router: o.router, RIB: o.rib, At: o.at}
 		res := struct {
 			routing.Path

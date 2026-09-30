@@ -40,7 +40,8 @@ func (a *app) natCmd(sim simulate.Simulation) *cobra.Command {
 		RunE: func(c *cobra.Command, argv []string) error { return a.runNAT(c.Context(), sim, argv[0], argv[1], o) },
 	}
 	f := cmd.Flags()
-	f.StringVar(&o.device, "device", "", "the firewall (required)")
+	f.StringVar(&o.device, "device", "", "the firewall to simulate on")
+	_ = cmd.MarkFlagRequired("device")
 	f.StringVar(&o.router, "router", "", "the logical router, when the firewall has several")
 	f.StringVar(&o.fromZone, "from-zone", "", "the zone the packet arrives in")
 	f.StringVar(&o.fromIf, "from-interface", "", "the interface the packet arrives on")
@@ -86,7 +87,7 @@ func (a *app) runNAT(ctx context.Context, sim simulate.Simulation, src, dst stri
 	res, _ := run.Output.(nat.Result)
 	a.log.Infof(runlog.TagStep, "nat: fidelity %s", run.Fidelity)
 	un := dedupeUnresolved(runUnresolved(run, run.Device, run.Vsys, true))
-	if s.output == "json" {
+	if a.format == formatJSON {
 		in := natInput{Flow: flow, Device: o.device, Router: o.router, FromZone: o.fromZone, FromInterface: o.fromIf, At: o.at}
 		out := struct {
 			nat.Result

@@ -116,7 +116,7 @@ func (a *app) runSimulation(ctx context.Context, sim simulate.Simulation, sel se
 	un, notes := qualifiers([]estate.Target{t})
 	un = dedupeUnresolved(append(un, runUnresolved(run, t.Device, t.Vsys, true)...))
 	verdict, _ := run.Output.(securitypolicy.Verdict)
-	if s.output == "json" {
+	if a.format == formatJSON {
 		if err := writeJSON(a.stdout, envelope{
 			Command: "simulate " + sim.Kind(), Input: policyInput{Flow: flow, Selection: sel.input()},
 			Results: runJSON(run, t, verdict), Holes: holes, Unresolved: un, Notes: notes,

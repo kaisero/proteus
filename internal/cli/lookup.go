@@ -73,7 +73,7 @@ func (a *app) runLookup(ctx context.Context, name string, o lookupOptions) error
 	if err != nil {
 		return err
 	}
-	if s.output == "json" {
+	if a.format == formatJSON {
 		err = a.printLookupJSON(ans, o)
 	} else {
 		a.printLookupText(ans, o)

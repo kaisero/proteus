@@ -62,7 +62,7 @@ func (a *app) runSnapshotList(device string) error {
 		}
 		rows = append(rows, r)
 	}
-	if s.output == "json" {
+	if a.format == formatJSON {
 		return writeJSON(a.stdout, envelope{Command: "snapshot list", Input: snapshotListInput{Device: device}, Results: rows})
 	}
 	for _, r := range rows {
@@ -121,7 +121,7 @@ func (a *app) runSnapshotShow(ctx context.Context, sel selection) error {
 		rows = append(rows, r)
 	}
 	un, notes := qualifiers(ts)
-	if s.output == "json" {
+	if a.format == formatJSON {
 		if err := writeJSON(a.stdout, envelope{
 			Command: "snapshot show", Input: sel.input(), Results: rows, Holes: holes, Unresolved: un, Notes: notes,
 		}); err != nil {
@@ -233,7 +233,7 @@ func (a *app) runSnapshotDiff(sel selection, from, to string) error {
 			results = append(results, diffResult{Device: d, From: older.ID, To: newer.ID, Scope: sc.String(), Changes: ch})
 		}
 	}
-	if s.output == "json" {
+	if a.format == formatJSON {
 		in := snapshotDiffInput{Selection: sel.input(), From: from, To: to}
 		if err := writeJSON(a.stdout, envelope{Command: "snapshot diff", Input: in, Results: results, Holes: holes, Notes: notes}); err != nil {
 			return err

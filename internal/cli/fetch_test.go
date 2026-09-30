@@ -622,7 +622,7 @@ func TestRunLog(t *testing.T) {
 			t.Errorf("fetch log misses %q:\n%s", want, fetchLog)
 		}
 	}
-	for _, want := range []string{"[INFO] [RUN] settings: inventory", "[INFO] [SNAP] fw01: snapshot", "[WARN] [SNAP] fw01/vsys9: hole", "[WARN] [RUN] the answer is incomplete", "[INFO] [RUN] exit 3"} {
+	for _, want := range []string{"[INFO] [RUN] setting log-level=info from default", "[INFO] [SNAP] fw01: snapshot", "[WARN] [SNAP] fw01/vsys9: hole", "[WARN] [RUN] the answer is incomplete", "[INFO] [RUN] exit 3"} {
 		if !strings.Contains(searchLog, want) {
 			t.Errorf("search log misses %q:\n%s", want, searchLog)
 		}

@@ -99,7 +99,7 @@ func (a *app) runSearch(ctx context.Context, term string, o searchOptions) error
 	if err != nil {
 		return err
 	}
-	if s.output == "json" {
+	if a.format == formatJSON {
 		err = a.printSearchJSON(ans, o)
 	} else {
 		a.printSearchText(ans)

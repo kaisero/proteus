@@ -113,6 +113,17 @@ type app struct {
 	configFlag, storeFlag, outputFlag, maxAgeFlag string
 	logLevelFlag, logDirFlag                      string
 	verbose                                       bool
+	colorFlag                                     string
+
+	// Resolved by resolveSettings in the root hook.
+	hookRan      bool
+	settingLines []string
+	format       format
+	color        colorMode
+	storeRoot    string
+	maxAge       time.Duration
+	logLevel     runlog.Level
+	logDir       string
 
 	argv   []string
 	log    *runlog.Logger // the run log; nil until the command starts
@@ -121,7 +132,7 @@ type app struct {
 	// the address. Tests point it at a second fake device.
 	peerHost func(mgmtIP string) string
 
-	// The inventory, read once per command by loadInventory before the run log
+	// The inventory, read once per command by resolveSettings before the run log
 	// opens, so the log settings and every other setting come from one file.
 	invPath string
 	inv     *inventory.Inventory
@@ -146,20 +157,25 @@ func (a *app) root() *cobra.Command {
 		return &exitErr{code: exitUsage, err: err}
 	})
 	pf := cmd.PersistentFlags()
-	pf.StringVar(&a.configFlag, "config", "", "inventory file (default $PROTEUS_CONFIG or ~/.config/proteus/config.yaml)")
-	pf.StringVar(&a.storeFlag, "store", "", "snapshot store (default $PROTEUS_STORE, the inventory's store, or ~/.local/share/proteus)")
-	pf.StringVar(&a.outputFlag, "output", "", "text or json (default $PROTEUS_OUTPUT, the inventory's output, or text)")
-	pf.StringVar(&a.maxAgeFlag, "max-age", "", "note snapshots older than this, e.g. 24h or 7d (default $PROTEUS_MAX_SNAPSHOT_AGE, the inventory's, or 24h)")
-	pf.StringVar(&a.logLevelFlag, "log-level", "", "error, warn, info or debug (default $PROTEUS_LOG_LEVEL, the inventory's, or info)")
-	pf.StringVar(&a.logDirFlag, "log-dir", "", "where run logs go (default $PROTEUS_LOG_DIR, the inventory's, or ~/.local/state/proteus/log)")
+	for _, s := range append([]setting{a.configSetting()}, a.settingTable()...) {
+		pf.StringVar(s.flag, s.name, "", s.help())
+	}
 	pf.BoolVar(&a.verbose, "verbose", false, "echo the run log to stderr")
 	cmd.PersistentPreRunE = func(c *cobra.Command, _ []string) error {
-		a.loadInventory()
+		if skipsHook(c) {
+			return nil
+		}
+		if err := a.resolveSettings(); err != nil {
+			return err
+		}
 		if err := a.openLog(c); err != nil {
 			return err
 		}
-		// Cobra checks flag groups after this hook and returns a plain error, which
-		// would exit 1. Checking here keeps a flag conflict a usage error (exit 2).
+		// Cobra checks required flags and flag groups after this hook and returns
+		// plain errors, which would exit 1. Checking here keeps them usage errors.
+		if err := c.ValidateRequiredFlags(); err != nil {
+			return &exitErr{code: exitUsage, err: err}
+		}
 		if err := c.ValidateFlagGroups(); err != nil {
 			return &exitErr{code: exitUsage, err: err}
 		}
@@ -176,6 +192,22 @@ func (a *app) root() *cobra.Command {
 	cmd.AddCommand(a.fetchCmd(), inv, snap, a.searchCmd(), a.lookupCmd(), sim)
 	a.registerCompletions(cmd)
 	return cmd
+}
+
+// skipsHook is true for commands that only print: help, shell completion, and the
+// command groups. They open no run log and resolve no settings, so a bad setting
+// cannot break help or tab completion (spec §4.7).
+func skipsHook(c *cobra.Command) bool {
+	if c.HasSubCommands() {
+		return true
+	}
+	for p := c; p != nil; p = p.Parent() {
+		switch p.Name() {
+		case "help", "completion", cobra.ShellCompRequestCmd, cobra.ShellCompNoDescRequestCmd:
+			return true
+		}
+	}
+	return false
 }
 
 // args wraps a cobra argument check so a wrong count is a usage error.

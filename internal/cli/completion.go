@@ -4,14 +4,17 @@ import (
 	"slices"
 
 	"github.com/spf13/cobra"
+
+	"github.com/okaiser/proteus/internal/inventory"
 )
 
 // registerCompletions teaches shell completion the values proteus knows: device
-// names from the inventory, and the fixed values of --output and --log-level.
-// Cobra's own completion command writes the shell scripts.
+// names from the inventory, and the fixed values of --output, --log-level and
+// --color. Cobra's own completion command writes the shell scripts.
 func (a *app) registerCompletions(root *cobra.Command) {
 	_ = root.RegisterFlagCompletionFunc("output", fixedValues("text", "json"))
 	_ = root.RegisterFlagCompletionFunc("log-level", fixedValues("error", "warn", "info", "debug"))
+	_ = root.RegisterFlagCompletionFunc("color", fixedValues("auto", "always", "never"))
 	var walk func(c *cobra.Command)
 	walk = func(c *cobra.Command) {
 		if c.Flags().Lookup("device") != nil {
@@ -28,12 +31,16 @@ func (a *app) registerCompletions(root *cobra.Command) {
 // Completion runs no pre-run hook, so it reads the inventory itself; without one
 // there is nothing to offer.
 func (a *app) completeDevices(_ *cobra.Command, given []string, _ string) ([]string, cobra.ShellCompDirective) {
-	a.loadInventory()
-	if a.inv == nil {
+	path := a.configFlag
+	if path == "" {
+		path, _ = inventory.DefaultPath(a.getenv)
+	}
+	inv, _ := inventory.Load(expandHome(path))
+	if inv == nil {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
 	var out []string
-	for _, n := range a.inv.Names() {
+	for _, n := range inv.Names() {
 		if !slices.Contains(given, n) {
 			out = append(out, n)
 		}

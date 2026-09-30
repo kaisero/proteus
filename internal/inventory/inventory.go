@@ -55,6 +55,7 @@ type Settings struct {
 	LogLevel       string `yaml:"log_level"`        // error, warn, info or debug
 	LogDir         string `yaml:"log_dir"`          // where run logs go
 	LogKeep        int    `yaml:"log_keep"`         // run logs kept
+	Color          string `yaml:"color"`            // auto, always or never
 }
 
 // Device is one firewall.
@@ -134,23 +135,8 @@ func (inv *Inventory) validate() error {
 	if inv.Defaults.Timeout < 0 || inv.Defaults.SnapshotKeep < 0 {
 		return errors.New("inventory: defaults: timeout and snapshot_keep must not be negative")
 	}
-	if a := inv.Defaults.MaxSnapshotAge; a != "" {
-		if _, err := ParseAge(a); err != nil {
-			return fmt.Errorf("inventory: defaults: max_snapshot_age: %w", err)
-		}
-	}
 	if inv.Defaults.LogKeep < 0 {
 		return errors.New("inventory: defaults: log_keep must not be negative")
-	}
-	switch strings.ToLower(inv.Defaults.LogLevel) {
-	case "", "error", "warn", "info", "debug":
-	default:
-		return fmt.Errorf("inventory: defaults: log_level %q, want error, warn, info or debug", inv.Defaults.LogLevel)
-	}
-	switch inv.Defaults.Output {
-	case "", "text", "json":
-	default:
-		return fmt.Errorf("inventory: defaults: output %q, want text or json", inv.Defaults.Output)
 	}
 	seen := map[string]bool{}
 	for i, d := range inv.Devices {

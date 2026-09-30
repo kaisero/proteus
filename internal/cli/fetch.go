@@ -185,13 +185,7 @@ func (a *app) inventoryInitCmd() *cobra.Command {
 		Short: "Write an inventory template",
 		Args:  args(cobra.NoArgs),
 		RunE: func(*cobra.Command, []string) error {
-			path := a.configFlag
-			if path == "" {
-				var err error
-				if path, err = inventory.DefaultPath(a.getenv); err != nil {
-					return err
-				}
-			}
+			path := a.invPath
 			if err := inventory.WriteTemplate(path); err != nil {
 				return err
 			}

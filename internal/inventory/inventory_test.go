@@ -170,6 +170,15 @@ func TestLoadRefusesAReadableFile(t *testing.T) {
 	if _, err := Load(bad); err == nil || !strings.Contains(err.Error(), bad) {
 		t.Errorf("a bad file's error must name it, got %v", err)
 	}
+	// A path that passes the mode check but cannot be read as a file (here, a
+	// directory) still surfaces its own error.
+	dir := filepath.Join(t.TempDir(), "adir")
+	if err := os.Mkdir(dir, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(dir); err == nil {
+		t.Error("an unreadable path must be an error")
+	}
 }
 
 // The template is a working inventory, and it states the TLS choice explicitly.
@@ -289,9 +298,6 @@ func TestParseAge(t *testing.T) {
 func TestAnalysisSettingsAreValidated(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct{ name, doc string }{
-		{"max_snapshot_age", "version: 1\ndefaults: {max_snapshot_age: soon}\ndevices: []\n"},
-		{"output", "version: 1\ndefaults: {output: yaml}\ndevices: []\n"},
-		{"log_level", "version: 1\ndefaults: {log_level: trace}\ndevices: []\n"},
 		{"log_keep", "version: 1\ndefaults: {log_keep: -1}\ndevices: []\n"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
