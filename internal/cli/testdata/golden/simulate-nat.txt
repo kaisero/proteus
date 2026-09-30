@@ -1,0 +1,24 @@
+simulate nat 198.18.1.10 -> 198.18.250.10 tcp/8443 on fw01            fidelity: exact
+
+  ┌─ fw01 ─ vsys1 ─ router default ─ snapshot 1m ────────┐
+  │  zones   transport -> server                         │
+  │  out     ethernet1/2   198.18.10.1/24                │
+  │  route   0.0.0.0/0 via 198.19.0.1   (pre-NAT)        │
+  │  route   198.18.10.0/24  connected   (post-NAT)      │
+  │  rule    t-dnat-port, matched transport -> transport │
+  │  dest    198.18.250.10:8443 -> 198.18.10.100:443     │
+  └──────────────────────────────────────────────────────┘
+
+  before   198.18.1.10 -> 198.18.250.10:8443  tcp
+  after    198.18.1.10 -> 198.18.10.100:443  tcp
+
+security policy matches: 198.18.1.10 -> 198.18.250.10, port 8443, zones transport -> server
+
+  not t-no-nat               from zone client ≠ transport
+  not t-disabled             disabled
+  place          exact      given: zone transport
+  pbf            exact      no PBF rule could take the packet
+  lookup         exact      198.18.250.10 leaves by ethernet1/1 (zone transport)
+  match          exact      rule t-dnat-port
+  translate      exact      destination -> 198.18.10.100
+  post-lookup    exact      198.18.10.100 leaves by ethernet1/2 (zone server)

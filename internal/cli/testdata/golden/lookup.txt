@@ -1,0 +1,20 @@
+file / vsys1   ../../testdata/config/firewall-lookup.xml
+security rule  branch-to-dc                 position 2 of 2, local, enabled
+  uuid         0b3f5e2a-9d41-4c1e-8f7a-2b6c9d1ec21e
+  tags         branch
+  description  Branch offices to the shared data-center services
+
+  source       zones      branch-vpn, sdwan
+               addresses  branch-networks, tagged-laptops, 10.99.0.0/24
+               users      acme\branch-staff
+  destination  zones      datacenter
+               addresses  NOT dc-mgmt
+  application  ssl, web-browsing, ms-rdp, ssh, dns, … (+2 more)
+  service      svc-web
+  url category corp-allowed, business-and-economy
+  profile      group      strict-inspect (as-strict, url-strict, av-strict)
+  action       allow
+  log          at session start and end, forwarded to log-to-panorama
+  schedule     business-hours
+
+1 with it, 0 without, 0 holes

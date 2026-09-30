@@ -1,0 +1,15 @@
+10.1.0.5 -> 10.2.0.5 tcp/443
+file / vsys1   ../../testdata/config/firewall-zones.xml
+  zones      from inside, to dmz (configuration)
+  relevance  unknown: no stored forwarding table
+  fidelity   inferred: kept rules whose service is application-default, predefined or absent: from-inside; not evaluated: application
+  resolve-source       exact          2  10.1.0.5: 0 hits, 0 negated rules
+  resolve-destination  exact          2  10.2.0.5: 0 hits, 0 negated rules
+  derive-zones         inferred       1  from inside; to dmz (configuration)
+  match-service        overmatch      1  tcp/443
+  match-url            exact          1  no candidate names a URL category
+  drop-disabled        exact          1  0 disabled
+  order                exact          1  1 in order
+  first-match          overmatch      1  from-inside (allow), position 1
+    1. from-inside                allow  [local       vsys:vsys1]
+first match: from-inside (allow)

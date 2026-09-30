@@ -11,21 +11,41 @@ import (
 
 var update = flag.Bool("update", false, "rewrite the golden files in testdata/golden")
 
-// Values that change from run to run: stage timings and the fake devices' ports.
+// Values that change from run to run: stage timings, the fake devices' ports and the
+// harness's temporary directories.
 var (
-	elapsed  = regexp.MustCompile(`"elapsed_(ms|ns)": [0-9.e-]+`)
-	fakePort = regexp.MustCompile(`127\.0\.0\.1:[0-9]+`)
+	elapsedJSON = regexp.MustCompile(`"elapsed_(ms|ns)": [0-9.e-]+`)
+	elapsedYAML = regexp.MustCompile(`elapsed_(ms|ns): [0-9.e-]+`)
+	elapsedText = regexp.MustCompile(`\b[0-9]+(\.[0-9]+)?(ns|µs|ms|s)\b`)
+	fakePort    = regexp.MustCompile(`127\.0\.0\.1:[0-9]+`)
+	tempDir     = regexp.MustCompile(`/[^\s"]*/(TestGolden|TestContract)[^\s"]*`)
 )
 
-// golden compares a command's JSON output with testdata/golden/<name>.json. The JSON
-// envelope is a contract (spec §15 C10): a field that changes name or shape must show
-// up here as a reviewed diff. Run go test ./internal/cli -run TestGolden -update to
-// rewrite the files, then read the diff.
-func golden(t *testing.T, name, out string) {
-	t.Helper()
-	out = elapsed.ReplaceAllString(out, `"elapsed_$1": 0`)
+// normalise replaces what differs between runs. Text timings only occur in --why
+// stage tables and the progress line, so the text pattern cannot hit a count.
+func normalise(out string) string {
+	out = elapsedJSON.ReplaceAllString(out, `"elapsed_$1": 0`)
+	out = elapsedYAML.ReplaceAllString(out, `elapsed_$1: 0`)
 	out = fakePort.ReplaceAllString(out, "127.0.0.1:PORT")
-	path := filepath.Join("testdata", "golden", name+".json")
+	return tempDir.ReplaceAllString(out, "TMP")
+}
+
+// golden compares a command's JSON output with testdata/golden/<name>.json.
+func golden(t *testing.T, name, out string) { t.Helper(); goldenFile(t, name+".json", out) }
+
+// goldenText compares text output; timings are normalised too.
+func goldenText(t *testing.T, name, out string) {
+	t.Helper()
+	goldenFile(t, name+".txt", elapsedText.ReplaceAllString(out, "T"))
+}
+
+// goldenFile compares out with testdata/golden/<file>. The JSON envelope and the text
+// layout are contracts: a change must show up here as a reviewed diff. Run go test
+// ./internal/cli -run TestGolden -update to rewrite the files, then read the diff.
+func goldenFile(t *testing.T, file, out string) {
+	t.Helper()
+	out = normalise(out)
+	path := filepath.Join("testdata", "golden", file)
 	if *update {
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			t.Fatal(err)
@@ -101,5 +121,50 @@ func TestGoldenJSON(t *testing.T) {
 		t.Parallel()
 		out := routingLab(t, false).want(0, "simulate", "routing", "198.18.10.5", "8.8.8.8", "--output", "json")
 		golden(t, "simulate-routing", out)
+	})
+}
+
+// Every command's text output, so a change of layout shows up as a reviewed diff.
+func TestGoldenText(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name string
+		code int
+		args []string
+	}{
+		{"search", 0, []string{"search", "10.124.0.1", "--file", fixture("firewall-multivsys.xml")}},
+		{"lookup", 0, []string{"lookup", "branch-to-dc", "--file", fixture("firewall-lookup.xml")}},
+		{"snapshot-show-file", 0, []string{"snapshot", "show", "--file", fixture("firewall-multivsys.xml")}},
+		{"simulate-policy", 0, []string{"simulate", "policy", "10.1.0.5", "10.2.0.5", "--port", "443", "--file", fixture("firewall-zones.xml")}},
+		{"simulate-policy-why", 0, []string{"simulate", "policy", "10.1.0.5", "10.2.0.5", "--port", "443", "--why", "--file", fixture("firewall-zones.xml")}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			goldenText(t, tc.name, newCLI(t).want(tc.code, tc.args...))
+		})
+	}
+
+	t.Run("store", func(t *testing.T) {
+		t.Parallel()
+		d := lab(t)
+		c := newCLI(t)
+		c.inventory(inventoryFor(d.Start(t)))
+		goldenText(t, "fetch", c.want(0, "fetch", "fw01"))
+		d.Config = read(t, fixture("firewall-lab-changed.xml"))
+		c.want(0, "fetch", "fw01")
+		goldenText(t, "snapshot-list", c.want(0, "snapshot", "list", "fw01"))
+		goldenText(t, "snapshot-show", c.want(0, "snapshot", "show"))
+		goldenText(t, "snapshot-diff", c.want(0, "snapshot", "diff", "--vsys", "vsys1"))
+	})
+
+	t.Run("simulate-nat", func(t *testing.T) {
+		t.Parallel()
+		goldenText(t, "simulate-nat", natLab(t).want(0, "simulate", "nat", "198.18.1.10", "198.18.250.10",
+			"--device", "fw01", "--router", "default", "--from-zone", "transport", "--port", "8443", "--why"))
+	})
+
+	t.Run("simulate-routing", func(t *testing.T) {
+		t.Parallel()
+		goldenText(t, "simulate-routing", routingLab(t, false).want(0, "simulate", "routing", "198.18.10.5", "8.8.8.8", "--why"))
 	})
 }

@@ -1,0 +1,34 @@
+simulate routing 198.18.10.5 -> 8.8.8.8            fidelity: undermatch
+
+  198.18.10.5
+     │ 198.18.10.0/24
+  ┌─ fw01 ─ vsys1 ─ router default ─ snapshot 1m ────────┐
+  │  zones   server -> transport                         │
+  │  in      ethernet1/2   198.18.10.1/24                │
+  │  out     ethernet1/1   198.19.0.254/24               │
+  │  route   0.0.0.0/0 via 198.19.0.1   static           │
+  └──┬───────────────────────────────────────────────────┘
+     │ 198.19.0.0/24   198.19.0.254 -> 198.19.0.1
+  ┌─ fw02 ─ vsys1 ─ router default ─ snapshot 1m ────────┐
+  │  zones   labor -> wan                                │
+  │  in      vlan.32       198.19.0.1/24                 │
+  │  out     ethernet1/1   192.168.0.138/24              │
+  │  route   0.0.0.0/0 via 192.168.0.1   static          │
+  └──┬───────────────────────────────────────────────────┘
+     │ 192.168.0.0/24
+  192.168.0.1   leaves the estate (not in the inventory)
+
+firewalls on the path: fw01 (server -> transport), fw02 (labor -> wan)
+may be incomplete: the path leaves the estate at 192.168.0.1
+
+  place          exact      connected: 198.18.10.5 on fw01 ethernet1/2
+  hop1/pbf       exact      no PBF rule could match
+  hop1/lookup    exact      8.8.8.8 in router default: 0.0.0.0/0 via 198.19.0.1 on ethernet1/1
+  hop1/zones     exact      server -> transport
+  hop1/nat       exact      no NAT rule matches
+  hop1/next      exact      next: fw02 vlan.32
+  hop2/pbf       exact      no PBF rule could match
+  hop2/lookup    exact      8.8.8.8 in router default: 0.0.0.0/0 via 192.168.0.1 on ethernet1/1
+  hop2/zones     exact      labor -> wan
+  hop2/nat       exact      no NAT rule matches
+  hop2/next      undermatch the path leaves the estate at 192.168.0.1
