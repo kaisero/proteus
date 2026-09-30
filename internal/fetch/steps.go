@@ -60,7 +60,10 @@ func loginStep(ctx context.Context, s *State) (task.Result, error) {
 // stale.
 func haStep(ctx context.Context, s *State) (task.Result, error) {
 	local, ok := haState(ctx, s.client)
-	if !ok || !local.Enabled {
+	if !ok {
+		return task.Result{Status: task.Skipped, Detail: "HA state unreadable"}, nil
+	}
+	if !local.Enabled {
 		return task.Result{Status: task.Skipped, Detail: "HA is not enabled"}, nil
 	}
 	if !strings.EqualFold(local.Mode, "active-passive") {

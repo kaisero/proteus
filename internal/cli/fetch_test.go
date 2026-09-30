@@ -838,3 +838,50 @@ func TestAnInterruptedFetchListsEveryDevice(t *testing.T) {
 		t.Errorf("results = %+v", res)
 	}
 }
+
+// fetchNotes is the top-level notes of fetch's JSON envelope.
+func fetchNotes(t *testing.T, out string) []note {
+	t.Helper()
+	var env struct {
+		Notes []note `json:"notes"`
+	}
+	if err := json.Unmarshal([]byte(out), &env); err != nil {
+		t.Fatalf("%v:\n%s", err, out)
+	}
+	return env.Notes
+}
+
+// Every note the text shows is in the envelope's notes too (spec §3.2): TLS
+// verification off, and an HA state that was not followed.
+func TestFetchNotesReachTheEnvelope(t *testing.T) {
+	t.Parallel()
+	c := newCLI(t)
+	c.inventory(inventoryFor(lab(t).Start(t)))
+	if got := fetchNotes(t, c.want(0, "fetch", "fw01", "--output", "json")); !slices.Contains(got, note{Device: "fw01", Note: tlsOffNote}) {
+		t.Errorf("a lab fetch has the TLS note, got %+v", got)
+	}
+
+	haCmd := "<show><high-availability><state/></high-availability></show>"
+	d := lab(t)
+	d.Ops[haCmd] = fakepanos.Success(`<enabled>yes</enabled><group><mode>active-passive</mode><local-info><state>passive` +
+		`</state><serial-num>A</serial-num></local-info><peer-info><state>suspended</state><serial-num>B</serial-num>` +
+		`<mgmt-ip>192.0.2.2</mgmt-ip></peer-info></group>`)
+	c = newCLI(t)
+	c.inventory(inventoryFor(d.Start(t)))
+	got := fetchNotes(t, c.want(0, "fetch", "fw01", "--output", "json"))
+	if !slices.ContainsFunc(got, func(n note) bool {
+		return n.Device == "fw01" && strings.Contains(n.Note, `passive, but the peer is "suspended"`)
+	}) {
+		t.Errorf("the HA note is missing from the envelope: %+v", got)
+	}
+}
+
+// A selection that matches no device is a command line to change (spec §4.1).
+func TestFetchAnEmptySelectionIsAUsageError(t *testing.T) {
+	t.Parallel()
+	c := newCLI(t)
+	c.inventory(inventoryFor(lab(t).Start(t)))
+	if _, errOut, code := c.run("fetch", "--label", "site=nowhere"); code != exitUsage || !strings.Contains(errOut, "matches no device") {
+		t.Errorf("exit %d, stderr %q", code, errOut)
+	}
+}

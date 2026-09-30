@@ -72,6 +72,9 @@ func (a *app) runFetch(ctx context.Context, o fetchOptions) (answer, error) {
 	} else if names, err = s.inv.Select(nil, o.labels); err != nil {
 		return nil, usageErr("%w", err)
 	}
+	if len(names) == 0 {
+		return nil, usageErr("the selection matches no device")
+	}
 	st, err := a.openStore(s.storeRoot)
 	if err != nil {
 		return nil, err
@@ -272,10 +275,17 @@ func (f fetchAnswer) Input() any {
 }
 func (f fetchAnswer) Results() any { return f.results }
 
-// Qualifiers holds one hole per device that failed.
+// Qualifiers holds one hole per device that failed, and every note the text shows:
+// TLS verification off and each note of the fetch (spec §3.2).
 func (f fetchAnswer) Qualifiers() qualifiers {
 	var q qualifiers
 	for _, r := range f.results {
+		if r.TLSVerification != nil && !*r.TLSVerification {
+			q.Notes = append(q.Notes, note{Device: r.Device, Note: tlsOffNote})
+		}
+		for _, n := range r.Notes {
+			q.Notes = append(q.Notes, note{Device: r.Device, Note: n})
+		}
 		if r.Error != "" {
 			q.Holes = append(q.Holes, estate.Hole{Device: r.Device, Reason: r.Error})
 		}

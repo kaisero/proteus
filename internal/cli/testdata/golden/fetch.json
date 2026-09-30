@@ -87,5 +87,10 @@
   ],
   "holes": [],
   "unresolved": [],
-  "notes": []
+  "notes": [
+    {
+      "device": "fw01",
+      "note": "TLS certificate verification is off (insecure_tls)"
+    }
+  ]
 }

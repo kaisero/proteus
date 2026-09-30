@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/okaiser/proteus/internal/fakepanos"
+	"github.com/okaiser/proteus/internal/task"
 )
 
 // The HA pair shapes are synthetic: no lab device runs HA yet.
@@ -121,5 +122,29 @@ func TestHAStepUsesTheInventoryPeer(t *testing.T) {
 		ActiveOptions{PeerHost: func(string) string { t.Error("PeerHost must not be asked"); return "" }}, nil)
 	if err != nil || hostname(res) != "active" || res.FetchedFrom != tg.HAPeer {
 		t.Errorf("res = %+v, err %v", res, err)
+	}
+}
+
+// The ha stage says why it was skipped: HA off is not the same as a state that could
+// not be read.
+func TestHAStepSaysWhyItSkipped(t *testing.T) {
+	t.Parallel()
+	off := member("alone")
+	off.Ops[haStateCmd] = fakepanos.Success("<enabled>no</enabled>")
+	for name, tc := range map[string]struct {
+		d      *fakepanos.Device
+		detail string
+	}{
+		"not enabled": {off, "HA is not enabled"},
+		"unreadable":  {member("old"), "HA state unreadable"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			s := NewState(target(tc.d.Start(t)), []Document{SystemInfo}, ActiveOptions{}, nil)
+			recs, err := task.Run(context.Background(), s.Target.Name, &s, Steps(), task.Options{})
+			if err != nil || len(recs) < 2 || recs[1].Slug != "ha" || recs[1].Status != task.Skipped || recs[1].Detail != tc.detail {
+				t.Errorf("records = %+v, err %v", recs, err)
+			}
+		})
 	}
 }

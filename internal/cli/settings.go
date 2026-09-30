@@ -251,6 +251,9 @@ func (sel *selection) bind(cmd *cobra.Command, o selectOpts) {
 	}
 }
 
+// tlsOffNote is the note on a device fetched without TLS certificate verification.
+const tlsOffNote = "TLS certificate verification is off (insecure_tls)"
+
 // targets opens what a question runs against: one file, or the selected devices'
 // snapshots. What a --fresh fetch found becomes notes on that device's targets: TLS
 // verification off, a failed document, or a failed fetch that leaves the previous
@@ -288,7 +291,7 @@ func (a *app) targets(ctx context.Context, sel selection, s settings) ([]estate.
 		for _, r := range a.fetcher(s.inv, st).each(ctx, names) {
 			var ns []string
 			if r.TLSVerification != nil && !*r.TLSVerification {
-				ns = append(ns, "TLS certificate verification is off (insecure_tls)")
+				ns = append(ns, tlsOffNote)
 			}
 			for _, d := range r.Documents {
 				if d.Error != "" {
