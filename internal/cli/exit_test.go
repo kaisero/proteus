@@ -1,9 +1,14 @@
 package cli
 
 import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"os"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 )
 
 // name returns a completion value's command name, without its tab-separated
@@ -54,5 +59,104 @@ func TestUnknownCommandsAreUsageErrors(t *testing.T) {
 	}
 	if _, errOut, code := c.run("help", "snapshot", "bogus"); code != exitUsage {
 		t.Errorf("help snapshot bogus: exit %d, want 2; stderr %q", code, errOut)
+	}
+}
+
+// effectiveColor mirrors effectiveFormat, used by errors that print before --color is
+// resolved. It has no test of its own in the plan's Task 14 brief, so this one covers
+// it directly rather than leave it untested until the later task that calls it.
+func TestEffectiveColorBeforeAndAfterTheHook(t *testing.T) {
+	t.Parallel()
+	a := newApp(&bytes.Buffer{}, &bytes.Buffer{}, func(string) string { return "" }, time.Now)
+	a.argv = []string{"search", "--color", "never"}
+	if got := a.effectiveColor(); got != colorNever {
+		t.Errorf("before the hook: %q, want %q", got, colorNever)
+	}
+	a.argv = []string{"search", "--color", "bogus"}
+	if got := a.effectiveColor(); got != colorAuto {
+		t.Errorf("an unparsable value falls back to %q, got %q", colorAuto, got)
+	}
+	a.hookRan, a.color = true, colorAlways
+	if got := a.effectiveColor(); got != colorAlways {
+		t.Errorf("after the hook, the resolved value wins: got %q, want %q", got, colorAlways)
+	}
+}
+
+func TestLastFlag(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		argv []string
+		want string
+	}{
+		{[]string{"search", "--output", "json"}, "json"},
+		{[]string{"search", "--output=yaml", "--output", "json"}, "json"},
+		{[]string{"search", "--", "--output", "json"}, ""},
+		{[]string{"search", "--output"}, ""},
+	} {
+		if got := lastFlag(tc.argv, "output"); got != tc.want {
+			t.Errorf("%v: %q, want %q", tc.argv, got, tc.want)
+		}
+	}
+}
+
+func TestEarlyErrorsFollowTheFormat(t *testing.T) {
+	t.Parallel()
+	for _, args := range [][]string{
+		{"search", "--bogus", "--output", "json"},
+		{"bogus", "--output", "json"},
+		{"search", "--output", "json"},
+	} {
+		c := newCLI(t)
+		out, errOut, code := c.run(args...)
+		var line struct {
+			Format int    `json:"format"`
+			Exit   int    `json:"exit"`
+			Error  string `json:"error"`
+			Log    string `json:"log"`
+		}
+		if code != exitUsage || out != "" || json.Unmarshal([]byte(strings.TrimSpace(errOut)), &line) != nil ||
+			line.Exit != 2 || line.Error == "" || line.Log != "" {
+			t.Errorf("%v: exit %d, stdout %q, stderr %q", args, code, out, errOut)
+		}
+	}
+}
+
+func TestIncompleteJSONRunsEndWithTheExitLine(t *testing.T) {
+	t.Parallel()
+	c := newCLI(t)
+	c.inventory(inventoryFor(lab(t).Start(t)))
+	_, errOut, code := c.run("snapshot", "show", "--output", "json")
+	if code != exitIncomplete || !strings.Contains(errOut, `"exit":3`) || strings.Contains(errOut, `"error"`) ||
+		!strings.Contains(errOut, `"log":`) {
+		t.Errorf("exit %d, stderr %q", code, errOut)
+	}
+}
+
+// A signal that arrives while a command is running still closes the run log, and
+// the log keeps both the signal and the command's own error.
+func TestASignalDuringACommandEndsTheRunLog(t *testing.T) {
+	t.Parallel()
+	c := newCLI(t)
+	c.inventory(inventoryFor(lab(t).Start(t)))
+	c.want(0, "fetch", "fw01")
+
+	var out, errOut bytes.Buffer
+	now := c.clock
+	a := newApp(&out, &errOut, func(k string) string { return c.env[k] }, func() time.Time { return now })
+	ctx, cancel := context.WithCancelCause(context.Background())
+	cancel(signalCause{os.Interrupt})
+	code := a.execute(ctx, []string{"search", "198.18.10.100", "--config", c.cfgPath})
+	if code != 130 {
+		t.Fatalf("exit %d, want 130\nstdout:\n%s\nstderr:\n%s", code, out.String(), errOut.String())
+	}
+	if !strings.HasSuffix(strings.TrimRight(errOut.String(), "\n"), "log: "+a.log.Path()) {
+		t.Errorf("text mode stderr must end with the log line, got %q", errOut.String())
+	}
+	logContent, err := os.ReadFile(a.log.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(logContent), "exit 130") {
+		t.Errorf("run log must record exit 130:\n%s", logContent)
 	}
 }

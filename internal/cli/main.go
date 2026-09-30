@@ -52,25 +52,6 @@ func usageErr(format string, args ...any) error {
 // errIncomplete is returned after an answer with holes or unresolved entries.
 var errIncomplete = &exitErr{code: exitIncomplete}
 
-// exitCode maps a command's error to the exit code and the message to print; a nil
-// message prints nothing. A signal wins over the error it caused, but a command that
-// finished as the signal arrived still exits 0.
-func (a *app) exitCode(ctx context.Context, err error) (int, error) {
-	if err == nil {
-		return exitOK, nil
-	}
-	if c, ok := errors.AsType[signalCause](context.Cause(ctx)); ok {
-		return c.code(), c
-	}
-	if e, ok := errors.AsType[*exitErr](err); ok {
-		return e.code, e.err
-	}
-	if strings.HasPrefix(err.Error(), "unknown command ") {
-		return exitUsage, err
-	}
-	return exitError, err
-}
-
 // Run executes one command line and returns the process exit code. version is
 // the build's version string, reported by --version and in the run log.
 func Run(ctx context.Context, version string, args []string, stdout, stderr io.Writer, getenv func(string) string) int {
@@ -84,27 +65,25 @@ func Run(ctx context.Context, version string, args []string, stdout, stderr io.W
 // read back; the log's path is printed when it did.
 func (a *app) execute(ctx context.Context, argv []string) int {
 	start := a.now()
+	a.argv = argv
 	cmd := a.root()
 	cmd.SetArgs(argv)
-	a.argv = argv
 	err := cmd.ExecuteContext(ctx)
 	code, msg := a.exitCode(ctx, err)
-	if msg != nil {
-		fmt.Fprintf(a.stderr, "proteus: %v\n", msg)
+	if a.log != nil {
+		switch {
+		case code == exitIncomplete:
+			a.log.Warnf(runlog.TagRun, "the answer is incomplete: it has holes or unresolved entries")
+		case msg != nil:
+			if _, signal := errors.AsType[signalCause](context.Cause(ctx)); signal {
+				a.log.Errorf(runlog.TagRun, "interrupted: %v", err)
+			} else {
+				a.log.Errorf(runlog.TagRun, "%v", msg)
+			}
+		}
+		a.log.Infof(runlog.TagRun, "exit %d after %s", code, a.now().Sub(start).Round(time.Millisecond))
 	}
-	if a.log == nil {
-		return code
-	}
-	switch {
-	case code == exitIncomplete:
-		a.log.Warnf(runlog.TagRun, "the answer is incomplete: it has holes or unresolved entries")
-	case msg != nil:
-		a.log.Errorf(runlog.TagRun, "%v", msg)
-	}
-	a.log.Infof(runlog.TagRun, "exit %d after %s", code, a.now().Sub(start).Round(time.Millisecond))
-	if code != exitOK {
-		fmt.Fprintf(a.stderr, "log: %s\n", a.log.Path())
-	}
+	a.report(code, msg)
 	_ = a.log.Close()
 	return code
 }

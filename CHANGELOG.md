@@ -189,6 +189,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Exit codes are the same in every command, and machine output ends stderr with one
+  JSON line.** An unknown command or help topic exits 2 at every level. Ctrl-C exits 130
+  and SIGTERM 143, with the run log closed. With `--output json`, the last stderr line
+  of a non-zero exit is `{"format":1,"exit":N,"error":…,"log":…}`, also for errors in
+  the command line itself.
 - **Simulations answer with holes instead of failing, in one JSON shape.** A device
   without a snapshot makes `simulate policy`, `nat` and `routing` exit 3 with a hole,
   not 1 or 2. `results` is an array for every simulation, each stage has the same keys,
