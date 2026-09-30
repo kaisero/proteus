@@ -1,0 +1,328 @@
+# To do
+
+Every item names its **component** (the package or area it changes) and one **tag**:
+
+| Tag | Meaning |
+|---|---|
+| `feature` | New behaviour for a user. |
+| `test` | A check against a real device or a missing test; no behaviour change expected. |
+| `qa` | Behaviour that works but is weaker than it should be; a quality gap. |
+| `bug` | Behaviour that is wrong today. |
+| `research` | A question to answer before any code is written. |
+| `perf` | Memory or time. |
+
+"Source" points to where the item was deferred: a spec section, a decision, or a plan.
+
+## Index
+
+| # | Tag | Component | Title |
+|---|---|---|---|
+| 1 | test | resolve, simulate/routing | Verify a route into another logical router (next-lr) |
+| 2 | test | resolve, simulate/routing | Verify a discard route |
+| 3 | test | resolve | Verify a secondary and a DHCP address |
+| 4 | test | fetch, estate | Verify an HA pair |
+| 5 | test | simulate/routing | Verify a path across several vsys |
+| 6 | test | resolve, fetch | Verify the legacy (non-Advanced-Routing) RIB shape |
+| 7 | feature | simulate/routing | Follow a route into another logical router |
+| 8 | feature | simulate/routing | Drop at a discard route |
+| 9 | feature | simulate/routing | Gap check: security policy on every hop of a path |
+| 10 | feature | simulate/routing, simulate | Simulate policy-based forwarding |
+| 11 | done | simulate/nat, simulate/routing, simulate/securitypolicy | ~~Simulate NAT~~ (branch nat-simulation, spec §18) |
+| 12 | feature | inventory, simulate/routing, simulate | Bridge a known hop outside the inventory (`links:`) |
+| 13 | feature | simulate/routing | Chain a path through a tunnel |
+| 14 | feature | simulate/routing | IPv6 paths |
+| 15 | feature | simulate/routing | Failover simulation from the RIB alternates |
+| 16 | qa | simulate/routing | Check PBF when the start vsys is unknown |
+| 17 | qa | simulate/routing | Hidden firewalls: read zone modes from the configuration |
+| 18 | done | simulate/nat | ~~NAT detection: service, nat64 and nptv6~~ (the NAT engine decides them) |
+| 19 | feature | fetch, estate, simulate/routing | Active/active HA pairs |
+| 20 | feature | inventory, fetch | Skip the RIB for a device with a full BGP table |
+| 21 | feature | simulate, estate, cmd | Estate simulation for policy (M5) |
+| 22 | feature | simulate/securitypolicy, index | Evaluate application and user |
+| 23 | qa | simulate/securitypolicy, index | Derived zones on overlay networks |
+| 24 | feature | resolve, card, simulate/securitypolicy | Table of predefined services |
+| 25 | feature | card, cmd | NAT and PBF rules in `lookup` |
+| 26 | feature | search, drift, cmd | `--compare` across devices and time |
+| 27 | feature | cmd | MCP server |
+| 28 | research | resolve | Panorama pushed rules on a managed firewall |
+| 29 | research | config, fetch, internal/digest | A digest for PAN-OS 12.2, possibly from the device |
+| 30 | research | index | URL matching beyond the documentation |
+| 31 | research | schema | Design of the public `schema` package |
+| 32 | perf | config | Memory of large configurations |
+| 33 | test | simulate/nat | Verify the dataplane with a dynamic destination whose FQDN resolves to nothing |
+| 34 | feature | simulate/nat, fetch | Use the device's FQDN cache for dynamic destination NAT |
+| 35 | test | simulate/nat | Verify persistent DIPP needs no global setting, and a service object's source port |
+
+---
+
+## Device checks
+
+The routing simulation reads these shapes without having seen them on a device, so
+its parsers take the cautious result: an unknown route type stops the path as
+unresolved, and an HA state that is not a confirmed pair is not followed. Each check
+needs configuration that fw01 and fw02 do not have. The tool is read-only
+(AGENTS.md R2), so an administrator adds it on the device first.
+
+After each check: run `scripts/device-probe.sh --routing <device> <router>
+<destination>...` for the new routes, update spec §17.2 ("Still unverified") and §14
+item 7, and delete the fetched data and API keys from the scratch directory.
+
+### 1. Verify a route into another logical router (next-lr)
+
+- **Tag:** test · **Component:** resolve, simulate/routing · **Source:** spec §17.2, §14 item 7, R16
+- **On fw01:** in logical router `lte`, add a static route 10.77.0.0/16 with next hop
+  "next LR" `default`. Commit.
+- **Check:** `panos-analyst fetch fw01`, then read the stored `fib.xml` and `rib.xml`
+  for 10.77.0.0/16: its `nh_type`, `interface` and `nexthop` in the FIB, and its
+  next-hop fields in the RIB. Save both as fixtures. Then item 7.
+
+### 2. Verify a discard route
+
+- **Tag:** test · **Component:** resolve, simulate/routing · **Source:** spec §17.2, §14 item 7, R7
+- **On fw01:** in logical router `default`, add a static route 10.66.0.0/16 with next
+  hop "discard". Commit.
+- **Check:** fetch, then read the FIB entry for 10.66.0.0/16 (`nh_type`, `interface`,
+  `flags`) and its RIB entry. Save as a fixture. Then item 8.
+
+### 3. Verify a secondary and a DHCP address
+
+- **Tag:** test · **Component:** resolve · **Source:** spec §17.2
+- **On fw01:** add a second IPv4 address to ethernet1/4 (198.18.19.1/24 today), for
+  example 198.18.29.1/24. Commit. A DHCP client interface, where one exists, gives
+  the `<dyn-addr>` shape.
+- **Check:** fetch, then read that interface's `<addr>` and `<dyn-addr>` in
+  `interfaces.xml`. The parser reads `<member>` children; confirm or correct it.
+- **Then:** `simulate routing 198.18.10.5 198.18.29.20` must reach ethernet1/4 and be
+  delivered. Replace the synthetic test in `resolve/routing_test.go` with a fixture.
+
+### 4. Verify an HA pair
+
+- **Tag:** test · **Component:** fetch, estate · **Source:** spec R18, §17.2
+- **Needs:** an active-passive pair.
+- **Check:** fetch the passive member; read `ha.xml` for the mode, local and peer
+  state, serials and the peer's management address. `resolve.ReadHAState` uses
+  element names that are not verified (`group/mode`, `local-info/state`,
+  `local-info/serial-num`, `peer-info/state`, `peer-info/serial-num`,
+  `peer-info/mgmt-ip`).
+- **Then:** `fetch` must say "fetched from the active peer". With both members in
+  the inventory, `simulate routing` must treat them as one firewall. Replace the
+  synthetic tests in `fetch/active_test.go` and `estate/network_test.go`.
+
+### 5. Verify a path across several vsys
+
+- **Tag:** test · **Component:** simulate/routing · **Source:** spec R16
+- **Needs:** a firewall with multi-vsys enabled and external zones.
+- **Check:** the vsys numbers in `interfaces.xml`, and a path from vsys1 into vsys2
+  through the external zones. Replace the synthetic
+  `testdata/config/firewall-intervsys.xml` test with real data. Also check a shared
+  gateway.
+
+### 6. Verify the legacy (non-Advanced-Routing) RIB shape
+
+- **Tag:** test · **Component:** resolve, fetch · **Source:** spec §17.2
+- **Needs:** a firewall with Advanced Routing off.
+- **Check:** `<show><routing><route/></routing></show>`. `resolve.ReadRIBRoutes`
+  refuses anything but the Advanced Routing JSON today. Write the second parser from
+  a fixture. Also confirm the legacy FIB shape still matches `ReadFIBRoutes`.
+
+## Routing simulation
+
+### 7. Follow a route into another logical router
+
+- **Tag:** feature · **Component:** simulate/routing · **Source:** spec R16; needs item 1
+- The lookup stage knows `nh_type` 0 and 3 only. Add the next-lr type: a second
+  `route` row in the same box, then the lookup continues in the other router. Loop
+  detection keys on device, vsys and router already.
+
+### 8. Drop at a discard route
+
+- **Tag:** feature · **Component:** simulate/routing · **Source:** spec R7; needs item 2
+- End the path "dropped on fw01: route 10.66.0.0/16 discards" (Exact) instead of
+  stopping it as unresolved.
+
+### 9. Gap check: security policy on every hop of a path
+
+- **Tag:** feature · **Component:** simulate/routing (new command, e.g. `simulate path-policy`) · **Source:** spec R14
+- Run `simulate policy` on each hop with that hop's `flow` (device, vsys, zones,
+  pre-NAT addresses) and report the firewalls without an allowing rule. The JSON hop
+  already carries the input.
+
+### 10. Simulate policy-based forwarding
+
+- **Tag:** feature · **Component:** simulate/routing, simulate · **Source:** spec §17.6, R10
+- Replace the `pbf` detection stage: when a rule matches, follow its egress
+  interface or next hop. Covers path monitoring, symmetric return, and that a rule
+  naming an application does not apply to a session's first packet. Also closes part
+  of item 23.
+
+### 11. Simulate NAT
+
+- **Tag:** feature · **Component:** simulate, simulate/routing, card · **Source:** spec §13, §17.6, R10, K10
+- Translate the flow at the `nat` stage and fill `Hop.PostNAT`; later hops then see
+  the translated addresses, and the route lookup uses the post-NAT destination.
+  Model translated addresses (README known limit). Brings NAT rules to `lookup`
+  (item 25) and to the policy simulation's destination zone.
+
+### 12. Bridge a known hop outside the inventory (`links:`)
+
+- **Tag:** feature · **Component:** inventory, simulate/routing, simulate · **Source:** spec §17.6, R6
+- An inventory section such as `198.19.0.1 -> fw02 ethernet1/1` lets a path cross a
+  router that the tool cannot fetch. Needs its own seam (`Network.Links()`), not
+  per-device data.
+
+### 13. Chain a path through a tunnel
+
+- **Tag:** feature · **Component:** simulate/routing · **Source:** spec §17.6
+- Match the IKE gateway's peer address to an inventory interface and continue on the
+  peer with the inner flow. Today the path ends "leaves by tunnel.1".
+
+### 14. IPv6 paths
+
+- **Tag:** feature · **Component:** simulate/routing · **Source:** spec R9
+- The FIB and interface state already carry IPv6 (`afi both`); the topology skips it
+  and the command refuses IPv6 addresses. Fetch the RIB with `afi both` too.
+
+### 15. Failover simulation from the RIB alternates
+
+- **Tag:** feature · **Component:** simulate/routing · **Source:** spec R3
+- `--rib` lists the alternates as information. Trace the path that the next-best
+  route would give when the active one fails.
+
+### 16. Check PBF when the start vsys is unknown
+
+- **Tag:** qa · **Component:** simulate/routing · **Source:** implementation of Task 9
+- With `--device` and no source, the hop's vsys is known only after the lookup, so the
+  `pbf` stage reports "not evaluated". Take the vsys of the egress interface, or check
+  every vsys of the device, so PBF is not skipped.
+
+### 17. Hidden firewalls: read zone modes from the configuration
+
+- **Tag:** qa · **Component:** simulate/routing · **Source:** plan Task 8, R19
+- `Path.Hidden` names off-path devices with interfaces that have a zone and no router,
+  from interface state. The plan also asked to read virtual-wire and layer2 zone modes
+  from the configuration (schema-backed), and to cover devices on the path.
+
+### 18. NAT detection: service, nat64 and nptv6
+
+- **Tag:** qa · **Component:** simulate/routing · **Source:** implementation of Task 9
+- A NAT rule's `service` is always taken as "could match", and nat64 and nptv6 rules
+  are skipped. Match the service when the flow has a port; flag nat64 and nptv6 once
+  IPv6 paths exist (item 14).
+
+### 19. Active/active HA pairs
+
+- **Tag:** feature · **Component:** fetch, estate, simulate/routing · **Source:** spec R18, §17.6
+- Today `fetch` notes the mode and fetches the device asked. Model floating addresses
+  and the session owner and setup device.
+
+### 20. Skip the RIB for a device with a full BGP table
+
+- **Tag:** feature · **Component:** inventory, fetch · **Source:** spec §17.6, R3
+- An internet edge firewall returns megabytes on every fetch. An inventory switch per
+  device leaves the `rib` document out.
+
+## Security policy simulation
+
+### 21. Estate simulation for policy (M5)
+
+- **Tag:** feature · **Component:** simulate, estate, cmd · **Source:** spec §12 M5, S4, S14
+- Run `simulate policy` across the selected devices: relevance ordering, hidden
+  rows that are not relevant, the summary, `EstateResult`. Today the command asks for
+  one device and one vsys.
+
+### 22. Evaluate application and user
+
+- **Tag:** feature · **Component:** simulate/securitypolicy, index · **Source:** spec §11.6, README known limits
+- The `first-match` stage reports application (and user) as not evaluated.
+  `--application` and `--user` are accepted and not used.
+
+### 23. Derived zones on overlay networks
+
+- **Tag:** qa · **Component:** simulate/securitypolicy, index · **Source:** spec §14 item 5
+- Zones derived from the forwarding table agreed with fw01 on 3 of 7 probe flows
+  (given zones: 7 of 7). The misses are traffic arriving on a tunnel zone and
+  destinations sent by PBF. Needs the arrival interface and PBF (item 10).
+
+## Lookup, search and comparison
+
+### 24. Table of predefined services
+
+- **Tag:** feature · **Component:** resolve, card, simulate/securitypolicy · **Source:** spec §14 item 6, K6
+- A table of PAN-OS predefined services and their ports (`service-http`,
+  `service-https`, …), so `lookup --expand` shows their ports and the service stage
+  evaluates them. Hand-written data: needs an explicit exception to AGENTS.md R1.
+
+### 25. NAT and PBF rules in `lookup`
+
+- **Tag:** feature · **Component:** card, cmd · **Source:** spec K10
+- `lookup` shows security rules and the objects they name. NAT rules were deferred
+  to NAT simulation (item 11); PBF rules can follow with it.
+
+### 26. `--compare` across devices and time
+
+- **Tag:** feature · **Component:** search, drift, cmd · **Source:** spec §10, C9
+- A `Comparison` that groups findings by name across a selector, and `--compare` on
+  questions, so a diff shows how answers changed, not only the configuration.
+
+### 27. MCP server
+
+- **Tag:** feature · **Component:** cmd (new binary) · **Source:** spec S11, §12 "Later"
+- Expose the questions to an agent over MCP. The packages and the JSON envelope are
+  already shaped for it.
+
+## Core and schema
+
+### 28. Panorama pushed rules on a managed firewall
+
+- **Tag:** research · **Component:** resolve · **Source:** spec §5.3, §14 item 1
+- Confirm where a Panorama-managed firewall's running configuration keeps pushed
+  pre- and post-rules. Needs one managed firewall's export. Decides how much of
+  `resolve/rules.go` survives.
+
+### 29. A digest for PAN-OS 12.2, possibly from the device
+
+- **Tag:** research · **Component:** config, fetch, internal/digest · **Source:** spec §14 item 3, S13
+- fw02 (12.2.2) loads with the 11.2 digest and a version-gap warning. Ship a 12.2
+  digest, and decide whether `fetch` should pull a device's own `schema.xml` to
+  generate one.
+
+### 30. URL matching beyond the documentation
+
+- **Tag:** research · **Component:** index · **Source:** spec §14 item 2
+- Custom URL category matching follows the documentation. `test url` reports PAN-DB
+  categories only, so no device check exists yet. Find one.
+
+### 31. Design of the public `schema` package
+
+- **Tag:** research · **Component:** schema · **Source:** README project structure ("design not settled")
+- Decide what the public package that queries the schema itself offers.
+
+### 32. Memory of large configurations
+
+- **Tag:** perf · **Component:** config · **Source:** spec §14 item 4
+- The parsed element tree peaks near ten times the file size. An estate of large
+  exports makes this a real limit.
+
+## NAT follow-ups
+
+### 33. Verify the dataplane with a dynamic destination whose FQDN resolves to nothing
+
+- **Tag:** test · **Component:** simulate/nat · **Source:** spec §18 F17, D8
+- `test nat-policy-match` answers no rule for such a flow on fw01, not the next
+  matching rule. Send real traffic to a `t-dnat-fqdn`-like rule and read the traffic
+  log: is the session dropped, or does a later rule apply?
+
+### 34. Use the device's FQDN cache for dynamic destination NAT
+
+- **Tag:** feature · **Component:** simulate/nat, fetch · **Source:** spec §18 N2, §18.6
+- `<show><dns-proxy><fqdn><all/></fqdn></dns-proxy></show>` lists what the firewall
+  resolved. Fetch it as a document and prefer it to this machine's DNS, so the
+  translation is the device's own.
+
+### 35. Verify persistent DIPP needs no global setting, and a service object's source port
+
+- **Tag:** test · **Component:** simulate/nat · **Source:** spec §18 F7; plan Task 4
+- F7 notes that per-rule persistent DIPP may need the global persistent-DIPP
+  setting. The engine also ignores a service object's source port. Check both on a
+  device.
+
