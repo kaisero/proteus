@@ -19,6 +19,7 @@ import (
 // searchOptions are search's flags.
 type searchOptions struct {
 	sel                     selection
+	term                    string
 	exact, within, contains bool
 	direct                  bool
 	kinds, fields, show     []string
@@ -35,7 +36,10 @@ func (a *app) searchCmd() *cobra.Command {
 			"The term's type sets the match: an address is covered, a prefix or range overlaps,\n" +
 			"a port is covered, a URL matches by PAN-OS tokens, anything else is exact.",
 		Args: args(cobra.ExactArgs(1)),
-		RunE: func(c *cobra.Command, argv []string) error { return a.runSearch(c.Context(), argv[0], o) },
+		RunE: func(c *cobra.Command, argv []string) error {
+			o.term = argv[0]
+			return a.emitRun(a.runSearch(c.Context(), o))
+		},
 	}
 	o.sel.bind(cmd, true)
 	f := cmd.Flags()
@@ -74,6 +78,7 @@ func (o searchOptions) query(term string) (search.Query, error) {
 // searchAnswer is a search over the selected targets: findings per target, in
 // target order.
 type searchAnswer struct {
+	o        searchOptions
 	q        search.Query
 	ts       []estate.Target
 	byTarget [][]search.Finding
@@ -82,43 +87,82 @@ type searchAnswer struct {
 	notes    []note
 }
 
-func (a *app) runSearch(ctx context.Context, term string, o searchOptions) error {
-	q, err := o.query(term)
+func (a *app) runSearch(ctx context.Context, o searchOptions) (answer, error) {
+	q, err := o.query(o.term)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	s, err := a.settings(o.sel.file == "")
 	if err != nil {
-		return err
+		return nil, err
 	}
 	ts, holes, err := a.targets(ctx, o.sel, s, a.stderr)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	ans, err := a.searchTargets(q, ts, holes)
+	ans, err := a.searchTargets(ctx, q, ts, holes)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	if a.format == formatJSON {
-		err = a.printSearchJSON(ans, o)
-	} else {
-		a.printSearchText(ans)
+	ans.o = o
+	return ans, nil
+}
+
+func (s searchAnswer) Command() string { return "search" }
+
+func (s searchAnswer) Input() any {
+	return searchInput{
+		Term: s.q.Term, Mode: modeName(s.q), Kinds: s.o.kinds, Fields: s.o.fields, Show: s.o.show,
+		Direct: s.o.direct, Selection: s.o.sel.input(),
 	}
-	if err != nil {
-		return err
+}
+
+func (s searchAnswer) Results() any {
+	results := []searchResult{}
+	for i, t := range s.ts {
+		for _, f := range s.byTarget[i] {
+			results = append(results, searchResult{target: targetOf(t), Finding: f, Scope: f.Scope.String()})
+		}
 	}
-	return finish(ans.holes, ans.un)
+	return results
+}
+
+func (s searchAnswer) Qualifiers() qualifiers {
+	return qualifiers{Holes: s.holes, Unresolved: s.un, Notes: s.notes}
+}
+
+func (s searchAnswer) Text(t *textOut) error {
+	fmt.Fprintf(t, "search %s (%s)\n\n", s.q.Term, modeName(s.q))
+	with, without := 0, 0
+	for i, tg := range s.ts {
+		if len(s.byTarget[i]) == 0 {
+			without++
+			continue
+		}
+		with++
+		fmt.Fprintln(t, header(tg, t.now))
+		printNotes(t, tg)
+		for _, f := range s.byTarget[i] {
+			fmt.Fprintf(t, "  %-10s %-20s %-24s %s\n", f.Stage, f.Kind, f.Name, detail(f))
+		}
+	}
+	printQualifiers(t, s.Qualifiers())
+	fmt.Fprintf(t, "%d with results, %d without, %d holes\n", with, without, len(s.holes))
+	return t.err
 }
 
 // searchTargets runs the query on each target. A target whose index cannot be built
 // becomes a hole.
-func (a *app) searchTargets(q search.Query, ts []estate.Target, holes []estate.Hole) (searchAnswer, error) {
+func (a *app) searchTargets(ctx context.Context, q search.Query, ts []estate.Target, holes []estate.Hole) (searchAnswer, error) {
 	users, err := a.userSnapshot()
 	if err != nil {
 		return searchAnswer{}, err
 	}
 	ans := searchAnswer{q: q, ts: ts, byTarget: make([][]search.Finding, len(ts)), holes: holes}
 	for i, t := range ts {
+		if err := ctx.Err(); err != nil {
+			return searchAnswer{}, err
+		}
 		q.Providers = index.Providers{Users: users}
 		if t.Snapshot != nil {
 			if z, err := t.Snapshot.Zones(); err == nil {
@@ -153,41 +197,6 @@ type searchResult struct {
 	target
 	search.Finding
 	Scope string `json:"scope"`
-}
-
-func (a *app) printSearchJSON(ans searchAnswer, o searchOptions) error {
-	results := []searchResult{}
-	for i, t := range ans.ts {
-		for _, f := range ans.byTarget[i] {
-			results = append(results, searchResult{target: targetOf(t), Finding: f, Scope: f.Scope.String()})
-		}
-	}
-	in := searchInput{
-		Term: ans.q.Term, Mode: modeName(ans.q), Kinds: o.kinds, Fields: o.fields, Show: o.show, Direct: o.direct,
-		Selection: o.sel.input(),
-	}
-	return writeJSON(a.stdout, envelope{
-		Command: "search", Input: in, Results: results, Holes: ans.holes, Unresolved: ans.un, Notes: ans.notes,
-	})
-}
-
-func (a *app) printSearchText(ans searchAnswer) {
-	fmt.Fprintf(a.stdout, "search %s (%s)\n\n", ans.q.Term, modeName(ans.q))
-	with, without := 0, 0
-	for i, t := range ans.ts {
-		if len(ans.byTarget[i]) == 0 {
-			without++
-			continue
-		}
-		with++
-		fmt.Fprintln(a.stdout, header(t, a.now()))
-		printNotes(a.stdout, t)
-		for _, f := range ans.byTarget[i] {
-			fmt.Fprintf(a.stdout, "  %-10s %-20s %-24s %s\n", f.Stage, f.Kind, f.Name, detail(f))
-		}
-	}
-	printQualifiers(a.stdout, qualifiers{Holes: ans.holes, Unresolved: ans.un, Notes: ans.notes})
-	fmt.Fprintf(a.stdout, "%d with results, %d without, %d holes\n", with, without, len(ans.holes))
 }
 
 // portTerm is a port, bare or with its protocol: 443, tcp/443.

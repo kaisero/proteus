@@ -123,9 +123,9 @@ func TestLookupExitCodes(t *testing.T) {
 		t.Errorf("--kind tag:\n%s", out)
 	}
 	c.want(2, "lookup", "dc-mgmt", "--kind", "rule", "--file", lookupFile)
-	_, errOut, code = c.run("lookup", "nothing-by-this-name", "--file", lookupFile)
-	if code != 1 || !strings.Contains(errOut, `no element named "nothing-by-this-name"`) {
-		t.Errorf("not found: exit %d\n%s", code, errOut)
+	// A name found nowhere is an empty answer, exit 0 (spec §4.2).
+	if out := c.want(0, "lookup", "nothing-by-this-name", "--file", lookupFile); !strings.Contains(out, `no element named "nothing-by-this-name"`) {
+		t.Errorf("not found: %s", out)
 	}
 	c.want(3, "lookup", "nothing", "--file", "../../testdata/config/firewall-version-12.2.xml")
 	c.want(2, "lookup")
@@ -173,8 +173,15 @@ func TestLookupAcrossTheEstate(t *testing.T) {
 			t.Errorf("applications = %v", s.Rows[0].Items)
 		}
 	}
-	if out := c.want(1, "lookup", "nothing", "--device", "fw01", "--output", "json"); out != "" {
-		t.Errorf("not found prints no envelope: %s", out)
+	// A name found nowhere is an empty answer, exit 0, like a search that finds
+	// nothing (spec §4.2).
+	var empty struct{ Results []any }
+	out = c.want(0, "lookup", "nothing", "--device", "fw01", "--output", "json")
+	if err := json.Unmarshal([]byte(out), &empty); err != nil || empty.Results == nil || len(empty.Results) != 0 {
+		t.Errorf("not found is results: [], got %v %s", err, out)
+	}
+	if out := c.want(0, "lookup", "nothing", "--device", "fw01"); !strings.Contains(out, `no element named "nothing"`) {
+		t.Errorf("the text must say the name was not found:\n%s", out)
 	}
 }
 

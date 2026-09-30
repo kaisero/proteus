@@ -87,8 +87,6 @@ func (a *app) emit(ans answer) error {
 
 // emitRun is how every RunE ends: an error when there is no answer, else the
 // answer's rendering and status.
-//
-//nolint:unused // wired up as commands move onto answer/emit in later tasks
 func (a *app) emitRun(ans answer, err error) error {
 	if err != nil {
 		return err

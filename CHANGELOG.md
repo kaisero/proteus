@@ -189,6 +189,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **A lookup name found nowhere exits 0, like a search with no results.**
+  `proteus lookup <name>` used to exit 1 and print an error when the name matched
+  nothing in the selection. It now prints the same message but as part of a
+  complete, empty answer.
 - **Settings say where they came from, and a bad one exits 2.** The run log records
   each setting with its source (flag, `PROTEUS_*` variable, inventory or default). A
   bad `output`, `log_level`, `max_snapshot_age` or `color` value now names its source

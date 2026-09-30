@@ -24,6 +24,7 @@ const (
 // lookupOptions are lookup's flags.
 type lookupOptions struct {
 	sel          selection
+	name         string
 	kind         string
 	expand, full bool
 }
@@ -40,7 +41,10 @@ func (a *app) lookupCmd() *cobra.Command {
 			"picks one. --expand shows each name's value and every group's members; --full\n" +
 			"lifts the five-item limit on lists.",
 		Args: args(cobra.ExactArgs(1)),
-		RunE: func(c *cobra.Command, argv []string) error { return a.runLookup(c.Context(), argv[0], o) },
+		RunE: func(c *cobra.Command, argv []string) error {
+			o.name = argv[0]
+			return a.emitRun(a.runLookup(c.Context(), o))
+		},
 	}
 	o.sel.bind(cmd, true)
 	f := cmd.Flags()
@@ -52,7 +56,9 @@ func (a *app) lookupCmd() *cobra.Command {
 
 // lookupAnswer is the cards found per target, in target order.
 type lookupAnswer struct {
+	o        lookupOptions
 	name     string
+	found    int
 	ts       []estate.Target
 	byTarget [][]card.Card
 	holes    []estate.Hole
@@ -60,37 +66,77 @@ type lookupAnswer struct {
 	notes    []note
 }
 
-func (a *app) runLookup(ctx context.Context, name string, o lookupOptions) error {
+func (a *app) runLookup(ctx context.Context, o lookupOptions) (answer, error) {
 	s, err := a.settings(o.sel.file == "")
 	if err != nil {
-		return err
+		return nil, err
 	}
 	ts, holes, err := a.targets(ctx, o.sel, s, a.stderr)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	ans, err := a.lookupTargets(name, o.kind, ts, holes)
+	ans, err := a.lookupTargets(ctx, o.name, o.kind, ts, holes)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	if a.format == formatJSON {
-		err = a.printLookupJSON(ans, o)
-	} else {
-		a.printLookupText(ans, o)
+	ans.o = o
+	return ans, nil
+}
+
+func (l lookupAnswer) Command() string { return "lookup" }
+
+func (l lookupAnswer) Input() any {
+	return lookupInput{Name: l.name, Kind: l.o.kind, Expand: l.o.expand, Full: l.o.full, Selection: l.o.sel.input()}
+}
+
+func (l lookupAnswer) Results() any {
+	results := []lookupResult{}
+	for i, t := range l.ts {
+		for _, cd := range l.byTarget[i] {
+			results = append(results, lookupResult{target: targetOf(t), Scope: cd.Scope.String(), Card: cd})
+		}
 	}
-	if err != nil {
-		return err
+	return results
+}
+
+func (l lookupAnswer) Qualifiers() qualifiers {
+	return qualifiers{Holes: l.holes, Unresolved: l.un, Notes: l.notes}
+}
+
+func (l lookupAnswer) Text(t *textOut) error {
+	r := renderer{w: t, expand: l.o.expand, full: l.o.full}
+	with, without := 0, 0
+	for i, tg := range l.ts {
+		if len(l.byTarget[i]) == 0 {
+			without++
+			continue
+		}
+		with++
+		fmt.Fprintln(t, header(tg, t.now))
+		printNotes(t, tg)
+		for _, cd := range l.byTarget[i] {
+			r.card(cd)
+			fmt.Fprintln(t)
+		}
 	}
-	return finish(ans.holes, ans.un)
+	if l.found == 0 {
+		fmt.Fprintf(t, "no element named %q in the selection\n\n", l.name)
+	}
+	printQualifiers(t, l.Qualifiers())
+	fmt.Fprintf(t, "%d with it, %d without, %d holes\n", with, without, len(l.holes))
+	return t.err
 }
 
 // lookupTargets finds the element on each target. A name that means different kinds
 // on different targets is a usage error: the user has to pick one.
-func (a *app) lookupTargets(name, kind string, ts []estate.Target, holes []estate.Hole) (lookupAnswer, error) {
+func (a *app) lookupTargets(ctx context.Context, name, kind string, ts []estate.Target, holes []estate.Hole) (lookupAnswer, error) {
 	ans := lookupAnswer{name: name, ts: ts, byTarget: make([][]card.Card, len(ts)), holes: holes}
 	kinds := map[string][]string{} // kind -> where it was found
 	found := 0
 	for i, t := range ts {
+		if err := ctx.Err(); err != nil {
+			return lookupAnswer{}, err
+		}
 		idx, err := index.For(t.Config, t.Scope)
 		if err != nil {
 			ans.holes = append(ans.holes, estate.Hole{Device: t.Device, Vsys: t.Vsys, Reason: err.Error()})
@@ -117,9 +163,7 @@ func (a *app) lookupTargets(name, kind string, ts []estate.Target, holes []estat
 		return lookupAnswer{}, usageErr("%q names more than one kind; pick one with --kind:\n%s", name, strings.Join(lines, "\n"))
 	}
 	ans.un, ans.notes = targetQualifiers(ts)
-	if found == 0 && len(ans.holes)+len(ans.un) == 0 {
-		return lookupAnswer{}, fmt.Errorf("no element named %q in the selection", name)
-	}
+	ans.found = found
 	return ans, nil
 }
 
@@ -128,39 +172,6 @@ type lookupResult struct {
 	target
 	Scope string    `json:"scope"`
 	Card  card.Card `json:"card"`
-}
-
-func (a *app) printLookupJSON(ans lookupAnswer, o lookupOptions) error {
-	results := []lookupResult{}
-	for i, t := range ans.ts {
-		for _, cd := range ans.byTarget[i] {
-			results = append(results, lookupResult{target: targetOf(t), Scope: cd.Scope.String(), Card: cd})
-		}
-	}
-	in := lookupInput{Name: ans.name, Kind: o.kind, Expand: o.expand, Full: o.full, Selection: o.sel.input()}
-	return writeJSON(a.stdout, envelope{
-		Command: "lookup", Input: in, Results: results, Holes: ans.holes, Unresolved: ans.un, Notes: ans.notes,
-	})
-}
-
-func (a *app) printLookupText(ans lookupAnswer, o lookupOptions) {
-	r := renderer{w: a.stdout, expand: o.expand, full: o.full}
-	with, without := 0, 0
-	for i, t := range ans.ts {
-		if len(ans.byTarget[i]) == 0 {
-			without++
-			continue
-		}
-		with++
-		fmt.Fprintln(a.stdout, header(t, a.now()))
-		printNotes(a.stdout, t)
-		for _, cd := range ans.byTarget[i] {
-			r.card(cd)
-			fmt.Fprintln(a.stdout)
-		}
-	}
-	printQualifiers(a.stdout, qualifiers{Holes: ans.holes, Unresolved: ans.un, Notes: ans.notes})
-	fmt.Fprintf(a.stdout, "%d with it, %d without, %d holes\n", with, without, len(ans.holes))
 }
 
 // renderer writes a card as text. Three columns: the section title, the row
