@@ -149,12 +149,15 @@ func TestASignalDuringACommandEndsTheRunLog(t *testing.T) {
 	if code != 130 {
 		t.Fatalf("exit %d, want 130\nstdout:\n%s\nstderr:\n%s", code, out.String(), errOut.String())
 	}
-	if !strings.HasSuffix(strings.TrimRight(errOut.String(), "\n"), "log: "+a.log.Path()) {
-		t.Errorf("text mode stderr must end with the log line, got %q", errOut.String())
+	if got := errOut.String(); got != "proteus: interrupted\nlog: "+a.log.Path()+"\n" {
+		t.Errorf("stderr must show only proteus: interrupted, then the log line, got %q", got)
 	}
 	logContent, err := os.ReadFile(a.log.Path())
 	if err != nil {
 		t.Fatal(err)
+	}
+	if !strings.Contains(string(logContent), "interrupted: context canceled") {
+		t.Errorf("run log must name what the signal interrupted:\n%s", logContent)
 	}
 	if !strings.Contains(string(logContent), "exit 130") {
 		t.Errorf("run log must record exit 130:\n%s", logContent)

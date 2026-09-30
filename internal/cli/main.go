@@ -75,7 +75,7 @@ func (a *app) execute(ctx context.Context, argv []string) int {
 		case code == exitIncomplete:
 			a.log.Warnf(runlog.TagRun, "the answer is incomplete: it has holes or unresolved entries")
 		case msg != nil:
-			if _, signal := errors.AsType[signalCause](context.Cause(ctx)); signal {
+			if _, signal := errors.AsType[signalCause](msg); signal {
 				a.log.Errorf(runlog.TagRun, "interrupted: %v", err)
 			} else {
 				a.log.Errorf(runlog.TagRun, "%v", msg)
