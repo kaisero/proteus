@@ -11,8 +11,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Colour shows what needs attention.** On a terminal, holes, failures and denies are
   red, unresolved and partial results yellow, allows and successes green, and target
-  headers bold. `--color never`, `NO_COLOR` or a pipe turns it off; JSON and YAML are
-  never coloured. Columns stay aligned whatever the names' length.
+  headers bold. `--color auto|always|never`, `PROTEUS_COLOR` or the inventory's
+  `color:` chooses it; `auto` turns it off for `NO_COLOR` or a pipe, and JSON and YAML
+  are never coloured. Columns stay aligned whatever the names' length.
 - **Fetch shows its stages and speaks JSON.** `fetch --why` lists each device's stages
   (resolve, login, ha, documents, store) and what each did; on a terminal each stage
   shows as it ends. `fetch` and `inventory init` answer in JSON and YAML like every
@@ -21,9 +22,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Read any answer as YAML.** `--output yaml` prints the same envelope as
   `--output json`, with the same keys, in YAML that YAML 1.1 and 1.2 readers both read
   back unchanged.
-- **Choose colour with `--color`.** `--color auto|always|never`, `PROTEUS_COLOR` or the
-  inventory's `color:` sets it; `auto` is the default. Colour output itself arrives in a
-  later change.
 - **See which NAT rule a packet hits.** `proteus simulate nat <source>
   <destination> --device <name>` names the NAT rule a packet hits on one firewall,
   shows the packet before and after translation, and what security policy then
@@ -208,18 +206,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   JSON line.** An unknown command or help topic exits 2 at every level. Ctrl-C exits 130
   and SIGTERM 143, with the run log closed. With `--output json`, the last stderr line
   of a non-zero exit is `{"format":1,"exit":N,"error":…,"log":…}`, also for errors in
-  the command line itself.
+  the command line itself. `fetch` of a name not in the inventory or of a selection
+  that matches no device, `inventory init` on an existing file, and `simulate nat`
+  without `--device` exit 2.
 - **Simulations answer with holes instead of failing, in one JSON shape.** A device
   without a snapshot makes `simulate policy`, `nat` and `routing` exit 3 with a hole,
   not 1 or 2. `results` is an array for every simulation, each stage has the same keys,
   and notes the text shows are in the JSON `notes` too.
 - **A missing snapshot is a hole everywhere, and a name found nowhere is an empty
   answer.** `snapshot list` for a device with no snapshot exits 3 with a hole
-  instead of 1, and a name the inventory does not have exits 2. A lookup name
-  found nowhere exits 0, like a search with no results: `proteus lookup <name>`
-  used to exit 1 and print an error when the name matched nothing in the
-  selection; it now prints the same message but as part of a complete, empty
-  answer. `results` is `[]`, never `null`.
+  instead of 1, and a name the inventory does not have exits 2. A lookup name found
+  nowhere exits 0 with `results` `[]`, like a search with no results, instead of 1.
 - **Settings say where they came from, and a bad one exits 2.** The run log records
   each setting with its source (flag, `PROTEUS_*` variable, inventory or default). A
   bad `output`, `log_level`, `max_snapshot_age` or `color` value now names its source
