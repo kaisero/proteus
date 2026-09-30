@@ -1,19 +1,9 @@
 // Package cli is the proteus command line: it fetches PAN-OS firewalls into a
 // snapshot store and answers questions about them. cmd/proteus only calls Run.
-// Spec: docs/specs/2026-09-27-panos-analyst-scope.md §15.
 //
-// Usage:
-//
-//	proteus fetch <device>... | --label k=v | --all
-//	proteus inventory init
-//	proteus snapshot list <device>
-//	proteus snapshot show [selectors]
-//	proteus snapshot diff [selectors] [--from <time>] [--to <time>]
-//	proteus search <term> [selectors] [--exact|--within|--contains] [filters]
-//	proteus simulate policy <source> <destination> [selectors] [flow flags]
-//
-// Exit codes: 0 answered completely, 1 error, 2 usage, 3 answered with holes or
-// unresolved entries (spec §15 C11).
+// The commands, flags, output formats and exit codes are documented in
+// docs/cli-reference.md. The contract every command keeps is
+// docs/specs/2026-09-30-cli-consistency.md.
 package cli
 
 import (

@@ -9,13 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **See which NAT rule a packet hits.** `panos-analyst simulate nat <source>
+- **See which NAT rule a packet hits.** `proteus simulate nat <source>
   <destination> --device <name>` names the NAT rule a packet hits on one firewall,
   shows the packet before and after translation, and what security policy then
   matches: the addresses and port before NAT, the zones after it. `--why` lists
   every rule above the match and what excluded it; rules it cannot decide, such as
   one naming a service when no port is given, are named with the reason.
-- **See which firewalls a packet crosses.** `panos-analyst simulate routing <source>
+- **See which firewalls a packet crosses.** `proteus simulate routing <source>
   <destination>` follows the fetched firewalls' forwarding tables from the firewall
   the source enters to the one that delivers it, and draws a box per firewall with
   the zones in and out, the interfaces and the route. NAT on the way is applied: a
@@ -28,7 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   inventory entry names the passive member of an active-passive pair, `fetch` reads
   the active peer instead and says so; `ha_peer` sets the peer's host when the
   address the device reports is not reachable.
-- **Look up the whole rule or object behind a name.** `panos-analyst lookup <name>`
+- **Look up the whole rule or object behind a name.** `proteus lookup <name>`
   prints a security rule laid out like the firewall's rule editor, or an object with
   its value, members and the groups holding it. `--expand` puts each name's value in
   parentheses and opens groups as a tree, and `--full` shows lists longer than five
@@ -37,7 +37,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   derives the zones and a destination NAT applies, the destination zone is the one
   the translated address is routed to, as the firewall matches it. A zone you give
   still wins, with a note when NAT would give another.
-- **A simulation says how certain its answer is.** `panos-analyst simulate
+- **A simulation says how certain its answer is.** `proteus simulate
   policy` runs named stages that narrow the candidate rules by source and
   destination (an address, or an FQDN resolved through DNS), zone, port and URL
   category. Each stage declares whether its output is exact, may over-match, is
@@ -46,24 +46,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   configuration cannot judge, such as `application-default` or a PAN-DB category,
   are kept and named rather than dropped.
 - **Every run writes a log you can read back.** Each command writes one file under
-  `~/.local/state/panos-analyst/log` with its settings, the snapshot each device
+  `~/.local/state/proteus/log` with its settings, the snapshot each device
   resolved to, every API call and what each search or simulation stage kept.
   `--log-level debug` records every detail, `--verbose` echoes it to the terminal,
   passwords and API keys never reach it, and a run that ends badly prints where its
   log is.
-- **Fetch a firewall into a snapshot store.** `panos-analyst inventory init` writes
-  an inventory, `panos-analyst fetch` logs in with a username and password, and stores
+- **Fetch a firewall into a snapshot store.** `proteus inventory init` writes
+  an inventory, `proteus fetch` logs in with a username and password, and stores
   the running configuration, interfaces, forwarding table and system info as a
   timestamped snapshot, up to eight devices at once, so every analysis can be
   repeated against exactly what the device said. TLS certificate verification is off by default for self-signed lab
   devices, and the inventory says so and shows how to turn it on.
-- **Search every device for a value or a name in one command.** `panos-analyst
+- **Search every device for a value or a name in one command.** `proteus
   search 10.124.0.1` finds the objects holding it, the objects named by it, the
   groups holding those, every reference to them and the rules that write it
   directly, per device and vsys, across the whole inventory. `--exact`, `--within`
   and `--contains` change how it matches; `--kind`, `--field`, `--show` and
   `--direct` narrow it.
-- **See what changed between two snapshots.** `panos-analyst snapshot diff` lists
+- **See what changed between two snapshots.** `proteus snapshot diff` lists
   the objects and rules added, removed or changed per vsys since the previous
   fetch, or between any two points in time.
 - **Choose devices, vsys and a point in time for every question.** `--device`,
