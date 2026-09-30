@@ -111,7 +111,7 @@ func TestRoutingJSON(t *testing.T) {
 	var env struct {
 		Format  int
 		Command string
-		Results struct {
+		Results []struct {
 			Outcome  string
 			Fidelity struct{ Level string }
 			Hops     []struct {
@@ -129,7 +129,10 @@ func TestRoutingJSON(t *testing.T) {
 	if err := json.Unmarshal([]byte(out), &env); err != nil {
 		t.Fatalf("%v\n%s", err, out)
 	}
-	r := env.Results
+	if len(env.Results) != 1 {
+		t.Fatalf("results = %+v", env.Results)
+	}
+	r := env.Results[0]
 	if env.Format != 1 || env.Command != "simulate routing" || r.Outcome != "left-estate" || r.Fidelity.Level != "undermatch" ||
 		len(r.Hops) != 2 || r.Hops[1].Device != "fw02" || r.Hops[0].Flow.FromZone != "server" || r.Hops[0].Flow.ToZone != "transport" ||
 		r.Hops[0].Flow.Source.Addrs[0] != "198.18.10.5" || r.Hops[1].Vsys != "vsys1" {
@@ -144,5 +147,15 @@ func TestRoutingWithAHole(t *testing.T) {
 	out := c.want(3, "simulate", "routing", "198.18.10.5", "8.8.8.8")
 	if !strings.Contains(out, "unresolved: fw01: fw03 cannot be read") {
 		t.Errorf("hole:\n%s", out)
+	}
+}
+
+func TestRoutingWithoutSnapshotsIsAHole(t *testing.T) {
+	t.Parallel()
+	c := newCLI(t)
+	c.inventory(inventoryFor(lab(t).Start(t), labFW02(t).Start(t)))
+	out := c.want(3, "simulate", "routing", "198.18.10.5", "8.8.8.8", "--output", "json")
+	if !strings.Contains(out, `"results": []`) || strings.Count(out, `"device": "fw0`) < 2 {
+		t.Errorf("both devices must be holes and results empty:\n%s", out)
 	}
 }

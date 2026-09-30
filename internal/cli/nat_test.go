@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 )
 
 // natLab is fw01 with its NAT test rules: its captured interfaces and forwarding
@@ -122,7 +123,7 @@ func TestSimulateNATJSON(t *testing.T) {
 	out := c.want(0, "simulate", "nat", "198.18.1.10", "198.18.250.10", "--device", "fw01", "--router", "default", "--from-zone", "transport", "--port", "8443", "--output", "json")
 	var env struct {
 		Command string
-		Results struct {
+		Results []struct {
 			Rule struct{ Name string }
 			Flow struct {
 				Destination struct{ Addrs []string }
@@ -138,7 +139,10 @@ func TestSimulateNATJSON(t *testing.T) {
 	if err := json.Unmarshal([]byte(out), &env); err != nil {
 		t.Fatalf("%v\n%s", err, out)
 	}
-	r := env.Results
+	if len(env.Results) != 1 {
+		t.Fatalf("results = %+v", env.Results)
+	}
+	r := env.Results[0]
 	if env.Command != "simulate nat" || r.Rule.Name != "t-dnat-port" || r.Flow.Destination.Addrs[0] != "198.18.10.100" || r.Flow.Port != 443 ||
 		r.PostNAT.Out.Zone != "server" || r.Fidelity.Level != "exact" || len(r.Stages) != 6 {
 		t.Errorf("json = %+v", env)
@@ -175,4 +179,33 @@ func TestSimulateNATDroppedBeforeNAT(t *testing.T) {
 		t.Errorf("dropped:\n%s", out)
 	}
 	c.want(2, "simulate", "routing", "198.18.1.10", "198.18.250.10", "--port", "x")
+}
+
+// A device without a snapshot is a hole, not a usage error (spec §4.2).
+func TestNATWithoutASnapshotIsAHole(t *testing.T) {
+	t.Parallel()
+	d := lab(t)
+	c := newCLI(t)
+	c.inventory(inventoryFor(d.Start(t)))
+	out := c.want(3, "simulate", "nat", "198.18.1.10", "198.18.250.10", "--device", "fw01", "--output", "json")
+	var env struct {
+		Results []any
+		Holes   []struct{ Device string }
+	}
+	if err := json.Unmarshal([]byte(out), &env); err != nil || len(env.Results) != 0 || len(env.Holes) != 1 || env.Holes[0].Device != "fw01" {
+		t.Errorf("%v %s", err, out)
+	}
+	c.want(2, "simulate", "nat", "198.18.1.10", "198.18.250.10", "--device", "fw09")
+}
+
+// Notes the text shows reach the JSON too.
+func TestNATNotesReachTheEnvelope(t *testing.T) {
+	t.Parallel()
+	c := natLab(t)
+	c.clock = c.clock.Add(48 * time.Hour) // past the 24h age limit
+	out := c.want(0, "simulate", "nat", "198.18.1.10", "198.18.250.10", "--device", "fw01",
+		"--router", "default", "--from-zone", "transport", "--port", "8443", "--output", "json")
+	if !strings.Contains(out, `"notes": [`) || !strings.Contains(out, "past the 24h0m0s limit") {
+		t.Errorf("the stale-snapshot note must be in notes:\n%s", out)
+	}
 }

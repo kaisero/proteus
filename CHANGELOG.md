@@ -189,6 +189,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Simulations answer with holes instead of failing, in one JSON shape.** A device
+  without a snapshot makes `simulate policy`, `nat` and `routing` exit 3 with a hole,
+  not 1 or 2. `results` is an array for every simulation, each stage has the same keys,
+  and notes the text shows are in the JSON `notes` too.
 - **A missing snapshot is a hole everywhere, and a name found nowhere is an empty
   answer.** `snapshot list` for a device with no snapshot exits 3 with a hole
   instead of 1, and a name the inventory does not have exits 2. A lookup name

@@ -5,6 +5,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/okaiser/proteus/internal/estate"
 	"github.com/okaiser/proteus/internal/runlog"
 	"github.com/okaiser/proteus/internal/simulate"
 	"github.com/okaiser/proteus/internal/simulate/routing"
@@ -12,6 +13,8 @@ import (
 
 // routingOptions are simulate routing's flags.
 type routingOptions struct {
+	sim                      simulate.Simulation
+	src, dst                 string
 	device, router, at, port string
 	rib, why, noDNS          bool
 }
@@ -20,6 +23,7 @@ type routingOptions struct {
 // no selectors but --device, which names the start (R13).
 func (a *app) routingCmd(sim simulate.Simulation) *cobra.Command {
 	var o routingOptions
+	o.sim = sim
 	cmd := &cobra.Command{
 		Use:   "routing <source> <destination> | <destination> --device <name>",
 		Short: sim.Describe(),
@@ -34,13 +38,13 @@ func (a *app) routingCmd(sim simulate.Simulation) *cobra.Command {
 			"machine's DNS unless --no-dns.",
 		Args: args(cobra.RangeArgs(1, 2)),
 		RunE: func(c *cobra.Command, argv []string) error {
-			src, dst := "", argv[len(argv)-1]
+			o.dst = argv[len(argv)-1]
 			if len(argv) == 2 {
-				src = argv[0]
+				o.src = argv[0]
 			} else if o.device == "" {
 				return usageErr("give a source, or a start device with --device")
 			}
-			return a.runRouting(c.Context(), sim, src, dst, o)
+			return a.emitRun(a.runRouting(c.Context(), o))
 		},
 	}
 	f := cmd.Flags()
@@ -54,21 +58,46 @@ func (a *app) routingCmd(sim simulate.Simulation) *cobra.Command {
 	return cmd
 }
 
-func (a *app) runRouting(ctx context.Context, sim simulate.Simulation, src, dst string, o routingOptions) error {
+// routingResult is simulate routing's result element.
+type routingResult struct {
+	routing.Path
+	Fidelity simulate.Fidelity `json:"fidelity"`
+	Stages   []stageJSON       `json:"stages"`
+}
+
+// routingAnswer is simulate routing's answer: one result when the path could be
+// simulated, none when its start device was a hole.
+type routingAnswer struct {
+	o     routingOptions
+	flow  simulate.Flow
+	run   simulate.Run
+	path  routing.Path
+	ok    bool
+	holes []estate.Hole
+	un    []unresolved
+	notes []note
+}
+
+func (a *app) runRouting(ctx context.Context, o routingOptions) (answer, error) {
 	s, err := a.settings(true)
 	if err != nil {
-		return err
+		return nil, err
+	}
+	if o.device != "" {
+		if _, err := s.inv.Select([]string{o.device}, nil); err != nil {
+			return nil, usageErr("%w", err)
+		}
 	}
 	flow, err := parseFlow(flowFlags{protocol: "tcp", port: o.port})
 	if err != nil {
-		return err
+		return nil, err
 	}
-	if err := a.endpoints(ctx, &flow, src, dst, o.noDNS); err != nil {
-		return err
+	if err := a.endpoints(ctx, &flow, o.src, o.dst, o.noDNS); err != nil {
+		return nil, err
 	}
 	es, err := a.openEstate(s, o.at)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	env := es.env(a)
 	env.Resolve = nil // routing resolves only the endpoints, above
@@ -77,26 +106,46 @@ func (a *app) runRouting(ctx context.Context, sim simulate.Simulation, src, dst 
 		params["rib"] = "true"
 	}
 	a.log.Infof(runlog.TagStep, "routing %s -> %s, start %q", flow.Source, flow.Destination, o.device)
-	run, _, err := runEstate(ctx, sim, env, simulate.Input{Flow: flow, Params: params})
+	run, holes, err := runEstate(ctx, o.sim, env, simulate.Input{Flow: flow, Params: params})
 	if err != nil {
-		return err
+		return nil, err
 	}
-	path, _ := run.Output.(routing.Path)
-	a.log.Infof(runlog.TagStep, "routing: %s, fidelity %s", path.Outcome, run.Fidelity)
-	un := dedupeUnresolved(runUnresolved(run, run.Device, "", false))
-	if a.format == formatJSON {
-		in := routingInput{Flow: flow, Device: o.device, Router: o.router, RIB: o.rib, At: o.at}
-		res := struct {
-			routing.Path
-			Fidelity simulate.Fidelity `json:"fidelity"`
-			Stages   []simulate.Stage  `json:"stages"`
-		}{path, run.Fidelity, run.Stages}
-		if err := writeJSON(a.stdout, envelope{Command: "simulate routing", Input: in, Results: res, Unresolved: un}); err != nil {
-			return err
-		}
-		return qualifiers{Unresolved: un}.status()
+	ans := routingAnswer{o: o, flow: flow, holes: holes}
+	if len(holes) > 0 {
+		return ans, nil
 	}
-	renderPath(a.stdout, run, path, a.now(), o.why)
-	printQualifiers(a.stdout, qualifiers{Unresolved: un})
-	return qualifiers{Unresolved: un}.status()
+	ans.run, ans.ok = run, true
+	ans.path, _ = run.Output.(routing.Path)
+	a.log.Infof(runlog.TagStep, "routing: %s, fidelity %s", ans.path.Outcome, run.Fidelity)
+	ans.un = dedupeUnresolved(runUnresolved(run, run.Device, "", false))
+	for _, h := range ans.path.Hops {
+		ans.notes = append(ans.notes, runNotes(h.Device, h.Notes)...)
+	}
+	ans.notes = append(ans.notes, runNotes(run.Device, run.Notes)...)
+	return ans, nil
+}
+
+func (r routingAnswer) Command() string { return "simulate routing" }
+
+func (r routingAnswer) Input() any {
+	return routingInput{Flow: r.flow, Device: r.o.device, Router: r.o.router, RIB: r.o.rib, At: r.o.at}
+}
+
+func (r routingAnswer) Results() any {
+	if !r.ok {
+		return []routingResult{}
+	}
+	return []routingResult{{Path: r.path, Fidelity: r.run.Fidelity, Stages: simStages(r.run.Stages)}}
+}
+
+func (r routingAnswer) Qualifiers() qualifiers {
+	return qualifiers{Holes: r.holes, Unresolved: r.un, Notes: r.notes}
+}
+
+func (r routingAnswer) Text(t *textOut) error {
+	if r.ok {
+		renderPath(t, r.run, r.path, t.now, r.o.why)
+	}
+	printQualifiers(t, r.Qualifiers())
+	return t.err
 }

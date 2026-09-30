@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -17,6 +18,8 @@ import (
 
 // natOptions are simulate nat's flags.
 type natOptions struct {
+	sim                                  simulate.Simulation
+	src, dst                             string
 	device, router, fromZone, fromIf, at string
 	fl                                   flowFlags
 }
@@ -25,6 +28,7 @@ type natOptions struct {
 // ingress; the zones and interfaces come from the stored tables.
 func (a *app) natCmd(sim simulate.Simulation) *cobra.Command {
 	var o natOptions
+	o.sim = sim
 	cmd := &cobra.Command{
 		Use:   "nat <source> <destination> --device <name>",
 		Short: sim.Describe(),
@@ -37,7 +41,10 @@ func (a *app) natCmd(sim simulate.Simulation) *cobra.Command {
 			"any. --why lists every rule above the match and what excluded it.\n\n" +
 			"Stages: place, pbf, lookup, match, translate, post-lookup",
 		Args: args(cobra.ExactArgs(2)),
-		RunE: func(c *cobra.Command, argv []string) error { return a.runNAT(c.Context(), sim, argv[0], argv[1], o) },
+		RunE: func(c *cobra.Command, argv []string) error {
+			o.src, o.dst = argv[0], argv[1]
+			return a.emitRun(a.runNAT(c.Context(), o))
+		},
 	}
 	f := cmd.Flags()
 	f.StringVar(&o.device, "device", "", "the firewall to simulate on")
@@ -55,24 +62,49 @@ func (a *app) natCmd(sim simulate.Simulation) *cobra.Command {
 	return cmd
 }
 
-func (a *app) runNAT(ctx context.Context, sim simulate.Simulation, src, dst string, o natOptions) error {
+// natResult is simulate nat's result element.
+type natResult struct {
+	nat.Result
+	Fidelity simulate.Fidelity `json:"fidelity"`
+	Stages   []stageJSON       `json:"stages"`
+}
+
+// natAnswer is simulate nat's answer: one result when the device could be read,
+// none when it was a hole.
+type natAnswer struct {
+	o       natOptions
+	flow    simulate.Flow
+	run     simulate.Run
+	res     nat.Result
+	takenAt time.Time
+	ok      bool // the simulation ran; false when its device was a hole
+	holes   []estate.Hole
+	un      []unresolved
+	notes   []note
+}
+
+func (a *app) runNAT(ctx context.Context, o natOptions) (answer, error) {
 	flow, err := parseFlow(o.fl)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	s, err := a.settings(true)
 	if err != nil {
-		return err
+		return nil, err
 	}
+	if _, err := s.inv.Select([]string{o.device}, nil); err != nil {
+		return nil, usageErr("%w", err)
+	}
+	src := o.src
 	if src == "-" {
 		src = "" // any source
 	}
-	if err := a.endpoints(ctx, &flow, src, dst, o.fl.noDNS); err != nil {
-		return err
+	if err := a.endpoints(ctx, &flow, src, o.dst, o.fl.noDNS); err != nil {
+		return nil, err
 	}
 	es, err := a.openEstate(s, o.at)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	env := es.env(a)
 	if o.fl.noDNS {
@@ -80,29 +112,61 @@ func (a *app) runNAT(ctx context.Context, sim simulate.Simulation, src, dst stri
 	}
 	params := map[string]string{"device": o.device, "router": o.router, "from-zone": o.fromZone, "from-interface": o.fromIf}
 	a.log.Infof(runlog.TagStep, "nat %s -> %s on %s", flow.Source, flow.Destination, o.device)
-	run, _, err := runEstate(ctx, sim, env, simulate.Input{Flow: flow, Params: params})
+	run, holes, err := runEstate(ctx, o.sim, env, simulate.Input{Flow: flow, Params: params})
 	if err != nil {
-		return err
+		return nil, err
 	}
-	res, _ := run.Output.(nat.Result)
+	ans := natAnswer{o: o, flow: flow, holes: holes}
+	if len(holes) > 0 {
+		return ans, nil
+	}
+	ans.run, ans.ok = run, true
+	ans.res, _ = run.Output.(nat.Result)
 	a.log.Infof(runlog.TagStep, "nat: fidelity %s", run.Fidelity)
-	un := dedupeUnresolved(runUnresolved(run, run.Device, run.Vsys, true))
-	if a.format == formatJSON {
-		in := natInput{Flow: flow, Device: o.device, Router: o.router, FromZone: o.fromZone, FromInterface: o.fromIf, At: o.at}
-		out := struct {
-			nat.Result
-			Fidelity simulate.Fidelity `json:"fidelity"`
-			Stages   []simulate.Stage  `json:"stages"`
-		}{res, run.Fidelity, run.Stages}
-		if err := writeJSON(a.stdout, envelope{Command: "simulate nat", Input: in, Results: out, Unresolved: un}); err != nil {
-			return err
-		}
-		return qualifiers{Unresolved: un}.status()
-	}
+	ans.un = dedupeUnresolved(runUnresolved(run, run.Device, run.Vsys, true))
 	d, _ := es.network.Device(run.Device)
-	renderNAT(a.stdout, run, res, d.TakenAt, a.now(), o.fl.why)
-	printQualifiers(a.stdout, qualifiers{Unresolved: un})
-	return qualifiers{Unresolved: un}.status()
+	ans.takenAt = d.TakenAt
+	ans.notes = runNotes(run.Device, append(append([]string{}, run.Notes...), d.Notes...))
+	return ans, nil
+}
+
+func (n natAnswer) Command() string { return "simulate nat" }
+
+func (n natAnswer) Input() any {
+	return natInput{Flow: n.flow, Device: n.o.device, Router: n.o.router, FromZone: n.o.fromZone, FromInterface: n.o.fromIf, At: n.o.at}
+}
+
+func (n natAnswer) Results() any {
+	if !n.ok {
+		return []natResult{}
+	}
+	return []natResult{{Result: n.res, Fidelity: n.run.Fidelity, Stages: simStages(n.run.Stages)}}
+}
+
+func (n natAnswer) Qualifiers() qualifiers {
+	return qualifiers{Holes: n.holes, Unresolved: n.un, Notes: n.notes}
+}
+
+func (n natAnswer) Text(t *textOut) error {
+	if n.ok {
+		renderNAT(t, n.run, n.res, n.takenAt, t.now, n.o.fl.why)
+	}
+	printQualifiers(t, n.Qualifiers())
+	return t.err
+}
+
+// runNotes turns a run's note strings into envelope notes for one device, without
+// duplicates.
+func runNotes(device string, texts []string) []note {
+	seen := map[string]bool{}
+	var out []note
+	for _, s := range texts {
+		if !seen[s] {
+			seen[s] = true
+			out = append(out, note{Device: device, Note: s})
+		}
+	}
+	return out
 }
 
 // endpoints resolves a flow's source, when one is given, and its destination. An
@@ -157,8 +221,6 @@ func (e fetchedEstate) env(a *app) *simulate.Env {
 // runEstate runs a simulation. A choice only the user can make, such as which of two
 // firewalls a source enters, is a usage error. Data the simulation could not read is
 // returned as holes with no error, so the command answers with them.
-//
-//nolint:unparam // runNAT and runRouting discard the holes until they answer with them (task 11)
 func runEstate(ctx context.Context, sim simulate.Simulation, env *simulate.Env, in simulate.Input) (simulate.Run, []estate.Hole, error) {
 	run, err := sim.Run(ctx, env, in)
 	if u, ok := errors.AsType[*simulate.UnavailableError](err); ok {
