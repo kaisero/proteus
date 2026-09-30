@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"net/netip"
@@ -51,9 +52,17 @@ func (a *app) simulateCmds() []*cobra.Command {
 	return out
 }
 
+// policyOptions are simulate policy's flags and arguments.
+type policyOptions struct {
+	sim      simulate.Simulation
+	sel      selection
+	fl       flowFlags
+	src, dst string
+}
+
 func (a *app) simulateCmd(sim simulate.Simulation) *cobra.Command {
-	var sel selection
-	var fl flowFlags
+	var o policyOptions
+	o.sim = sim
 	cmd := &cobra.Command{
 		Use:   sim.Kind() + " <source> <destination>",
 		Short: sim.Describe(),
@@ -63,94 +72,116 @@ func (a *app) simulateCmd(sim simulate.Simulation) *cobra.Command {
 			"Stages: " + strings.Join(sim.Stages(), ", "),
 		Args: args(cobra.ExactArgs(2)),
 		RunE: func(c *cobra.Command, argv []string) error {
-			return a.runSimulation(c.Context(), sim, sel, fl, argv[0], argv[1])
+			o.src, o.dst = argv[0], argv[1]
+			return a.emitRun(a.runSimulation(c.Context(), o))
 		},
 	}
-	sel.bind(cmd, true)
+	o.sel.bind(cmd, true)
 	f := cmd.Flags()
-	f.StringVar(&fl.protocol, "protocol", "tcp", "tcp, udp, sctp, icmp or a protocol number")
-	f.StringVar(&fl.port, "port", "", "destination port: 443 or tcp/443")
-	f.IntVar(&fl.sourcePort, "source-port", 0, "source port")
-	f.StringVar(&fl.fromZone, "from-zone", "", "source zone; derived when absent")
-	f.StringVar(&fl.toZone, "to-zone", "", "destination zone; derived when absent")
+	f.StringVar(&o.fl.protocol, "protocol", "tcp", "tcp, udp, sctp, icmp or a protocol number")
+	f.StringVar(&o.fl.port, "port", "", "destination port: 443 or tcp/443")
+	f.IntVar(&o.fl.sourcePort, "source-port", 0, "source port")
+	f.StringVar(&o.fl.fromZone, "from-zone", "", "source zone; derived when absent")
+	f.StringVar(&o.fl.toZone, "to-zone", "", "destination zone; derived when absent")
 	cmd.MarkFlagsRequiredTogether("from-zone", "to-zone")
-	f.StringVar(&fl.url, "url", "", "URL, matched against URL categories")
-	f.StringVar(&fl.application, "application", "", "application (not evaluated yet)")
-	f.StringVar(&fl.user, "user", "", "source user (not evaluated yet)")
-	f.BoolVar(&fl.why, "why", false, "show every stage: its fidelity, what it kept, and why")
-	f.BoolVar(&fl.noDNS, "no-dns", false, "do not resolve an FQDN endpoint")
+	f.StringVar(&o.fl.url, "url", "", "URL, matched against URL categories")
+	f.StringVar(&o.fl.application, "application", "", "application (not evaluated yet)")
+	f.StringVar(&o.fl.user, "user", "", "source user (not evaluated yet)")
+	f.BoolVar(&o.fl.why, "why", false, "show every stage: its fidelity, what it kept, and why")
+	f.BoolVar(&o.fl.noDNS, "no-dns", false, "do not resolve an FQDN endpoint")
 	return cmd
 }
 
-func (a *app) runSimulation(ctx context.Context, sim simulate.Simulation, sel selection, fl flowFlags, src, dst string) error {
-	flow, err := parseFlow(fl)
+// policyAnswer is simulate policy's answer: one result when a target could be read,
+// none when the selection resolved to nothing but holes.
+type policyAnswer struct {
+	o       policyOptions
+	flow    simulate.Flow
+	run     simulate.Run
+	target  *estate.Target // nil when no target could be read
+	verdict securitypolicy.Verdict
+	holes   []estate.Hole
+	un      []unresolved
+	notes   []note
+}
+
+func (a *app) runSimulation(ctx context.Context, o policyOptions) (answer, error) {
+	flow, err := parseFlow(o.fl)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	s, err := a.settings(sel.file == "")
+	s, err := a.settings(o.sel.file == "")
 	if err != nil {
-		return err
+		return nil, err
 	}
 	// An FQDN that resolves to no address is simulated: FQDN objects still match,
 	// and the answer says it may miss rules.
-	if flow.Source, err = a.endpoint(ctx, src, fl.noDNS); err != nil {
-		return err
+	if flow.Source, err = a.endpoint(ctx, o.src, o.fl.noDNS); err != nil {
+		return nil, err
 	}
-	if flow.Destination, err = a.endpoint(ctx, dst, fl.noDNS); err != nil {
-		return err
+	if flow.Destination, err = a.endpoint(ctx, o.dst, o.fl.noDNS); err != nil {
+		return nil, err
 	}
-	t, holes, err := a.oneTarget(ctx, sel, s)
+	ans := policyAnswer{o: o, flow: flow}
+	ts, holes, err := a.targets(ctx, o.sel, s, a.stderr)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	env, err := a.policyEnv(t, s, fl.noDNS)
+	ans.holes = holes
+	switch {
+	case len(ts) == 0 && len(holes) > 0:
+		return ans, nil // the holes say what is missing
+	case len(ts) == 0:
+		return nil, errors.New("the selection has no device and vsys to simulate on")
+	case len(ts) > 1:
+		return nil, usageErr("the selection has %d device and vsys pairs; estate simulation arrives in M5, so select one device and one vsys", len(ts))
+	}
+	t := ts[0]
+	env, err := a.policyEnv(t, s, o.fl.noDNS)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	a.log.Infof(runlog.TagStep, "%s %s -> %s on %s/%s", sim.Kind(), flow.Source, flow.Destination, t.Device, t.Vsys)
-	run, err := sim.Run(ctx, env, simulate.Input{Flow: flow, Device: t.Device, Vsys: t.Vsys})
+	a.log.Infof(runlog.TagStep, "%s %s -> %s on %s/%s", o.sim.Kind(), flow.Source, flow.Destination, t.Device, t.Vsys)
+	run, err := o.sim.Run(ctx, env, simulate.Input{Flow: flow, Device: t.Device, Vsys: t.Vsys})
 	if err != nil {
-		return err
+		return nil, err
 	}
-	a.log.Infof(runlog.TagStep, "%s: fidelity %s", sim.Kind(), run.Fidelity)
-	un, notes := targetQualifiers([]estate.Target{t})
-	un = dedupeUnresolved(append(un, runUnresolved(run, t.Device, t.Vsys, true)...))
-	verdict, _ := run.Output.(securitypolicy.Verdict)
-	if a.format == formatJSON {
-		if err := writeJSON(a.stdout, envelope{
-			Command: "simulate " + sim.Kind(), Input: policyInput{Flow: flow, Selection: sel.input()},
-			Results: runJSON(run, t, verdict), Holes: holes, Unresolved: un, Notes: notes,
-		}); err != nil {
-			return err
-		}
-		return finish(holes, un)
-	}
-	a.printRun(run, t, verdict, flow, fl.why)
-	printQualifiers(a.stdout, qualifiers{Holes: holes, Unresolved: un, Notes: notes})
-	if verdict.Rule == nil {
-		fmt.Fprintln(a.stdout, "no enabled rule matches")
-	} else {
-		fmt.Fprintf(a.stdout, "first match: %s (%s)\n", verdict.Rule.Name, verdict.Rule.Action)
-	}
-	return finish(holes, un)
+	a.log.Infof(runlog.TagStep, "%s: fidelity %s", o.sim.Kind(), run.Fidelity)
+	ans.run, ans.target = run, &t
+	ans.verdict, _ = run.Output.(securitypolicy.Verdict)
+	ans.un, ans.notes = targetQualifiers([]estate.Target{t})
+	ans.un = dedupeUnresolved(append(ans.un, runUnresolved(run, t.Device, t.Vsys, true)...))
+	return ans, nil
 }
 
-// oneTarget opens the selection and requires exactly one device and vsys: a policy
-// simulation runs on one rulebase.
-func (a *app) oneTarget(ctx context.Context, sel selection, s settings) (estate.Target, []estate.Hole, error) {
-	ts, holes, err := a.targets(ctx, sel, s, a.stderr)
-	if err != nil {
-		return estate.Target{}, nil, err
+func (p policyAnswer) Command() string { return "simulate " + p.o.sim.Kind() }
+func (p policyAnswer) Input() any      { return policyInput{Flow: p.flow, Selection: p.o.sel.input()} }
+
+func (p policyAnswer) Results() any {
+	if p.target == nil {
+		return []policyResult{}
 	}
-	switch len(ts) {
-	case 1:
-		return ts[0], holes, nil
-	case 0:
-		printQualifiers(a.stdout, qualifiers{Holes: holes})
-		return estate.Target{}, nil, fmt.Errorf("the selection has no device and vsys to simulate on")
+	return []policyResult{runJSON(p.run, *p.target, p.verdict)}
+}
+
+func (p policyAnswer) Qualifiers() qualifiers {
+	return qualifiers{Holes: p.holes, Unresolved: p.un, Notes: p.notes}
+}
+
+func (p policyAnswer) Text(t *textOut) error {
+	if p.target == nil {
+		printQualifiers(t, p.Qualifiers())
+		fmt.Fprintln(t, "no device and vsys to simulate on")
+		return t.err
 	}
-	return estate.Target{}, nil, usageErr(
-		"the selection has %d device and vsys pairs; estate simulation arrives in M5, so select one device and one vsys", len(ts))
+	printRun(t, p.run, *p.target, p.verdict, p.flow, p.o.fl.why)
+	printQualifiers(t, p.Qualifiers())
+	if p.verdict.Rule == nil {
+		fmt.Fprintln(t, "no enabled rule matches")
+	} else {
+		fmt.Fprintf(t, "first match: %s (%s)\n", p.verdict.Rule.Name, p.verdict.Rule.Action)
+	}
+	return t.err
 }
 
 // policyEnv is the simulation environment for one target: its configuration, the
@@ -249,42 +280,42 @@ func lookupDNS(ctx context.Context, name string) ([]netip.Addr, error) {
 	return net.DefaultResolver.LookupNetIP(ctx, "ip", name)
 }
 
-func (a *app) printRun(run simulate.Run, t estate.Target, v securitypolicy.Verdict, flow simulate.Flow, why bool) {
-	fmt.Fprintf(a.stdout, "%s -> %s %s", flow.Source, flow.Destination, flow.Protocol)
+func printRun(w *textOut, run simulate.Run, t estate.Target, v securitypolicy.Verdict, flow simulate.Flow, why bool) {
+	fmt.Fprintf(w, "%s -> %s %s", flow.Source, flow.Destination, flow.Protocol)
 	if flow.DestPort != 0 {
-		fmt.Fprintf(a.stdout, "/%d", flow.DestPort)
+		fmt.Fprintf(w, "/%d", flow.DestPort)
 	}
 	if flow.URL != "" {
-		fmt.Fprintf(a.stdout, " %s", flow.URL)
+		fmt.Fprintf(w, " %s", flow.URL)
 	}
-	fmt.Fprintf(a.stdout, "\n%s\n", header(t, a.now()))
-	printNotes(a.stdout, t)
+	fmt.Fprintf(w, "\n%s\n", header(t, w.now))
+	printNotes(w, t)
 	for _, ep := range []simulate.Endpoint{flow.Source, flow.Destination} {
 		if ep.Name != "" {
-			fmt.Fprintf(a.stdout, "  dns        %s -> %v\n", ep.Name, ep.Addrs)
+			fmt.Fprintf(w, "  dns        %s -> %v\n", ep.Name, ep.Addrs)
 		}
 	}
 	zones := "not evaluated"
 	if v.Zones.Source != "not evaluated" && (len(v.Zones.From) > 0 || len(v.Zones.To) > 0) {
 		zones = fmt.Sprintf("from %s, to %s (%s)", orAny(v.Zones.From), orAny(v.Zones.To), v.Zones.Source)
 	}
-	fmt.Fprintf(a.stdout, "  zones      %s\n", zones)
+	fmt.Fprintf(w, "  zones      %s\n", zones)
 	switch {
 	case !v.Relevance.Known:
-		fmt.Fprintf(a.stdout, "  relevance  unknown: %s\n", v.Relevance.Reason)
+		fmt.Fprintf(w, "  relevance  unknown: %s\n", v.Relevance.Reason)
 	case v.Relevance.Relevant:
-		fmt.Fprintf(a.stdout, "  relevant   %s\n", v.Relevance.Reason)
+		fmt.Fprintf(w, "  relevant   %s\n", v.Relevance.Reason)
 	default:
-		fmt.Fprintf(a.stdout, "  relevance  not relevant: %s\n", v.Relevance.Reason)
+		fmt.Fprintf(w, "  relevance  not relevant: %s\n", v.Relevance.Reason)
 	}
-	fmt.Fprintf(a.stdout, "  fidelity   %s\n", run.Fidelity)
+	fmt.Fprintf(w, "  fidelity   %s\n", run.Fidelity)
 	if why {
 		for _, st := range run.Stages {
-			fmt.Fprintf(a.stdout, "  %-20s %-10s %5d  %s\n", st.Slug, st.Fidelity.Level(), st.State.Candidates, st.Detail)
+			fmt.Fprintf(w, "  %-20s %-10s %5d  %s\n", st.Slug, st.Fidelity.Level(), st.State.Candidates, st.Detail)
 		}
 	}
 	for _, r := range v.Candidates {
-		fmt.Fprintf(a.stdout, "  %3d. %-26s %-6s [%-11s %s]\n", r.Position, r.Name, r.Action, r.Layer, r.Scope)
+		fmt.Fprintf(w, "  %3d. %-26s %-6s [%-11s %s]\n", r.Position, r.Name, r.Action, r.Layer, r.Scope)
 	}
 }
 
@@ -308,16 +339,6 @@ func toRuleJSON(r resolve.Rule) ruleJSON {
 	return ruleJSON{r.Position, r.Name, r.Action, r.Layer.String(), r.Scope.String()}
 }
 
-type stageJSON struct {
-	Slug       string             `json:"slug"`
-	Name       string             `json:"name"`
-	Fidelity   simulate.Fidelity  `json:"fidelity"`
-	Candidates uint64             `json:"candidates"`
-	Detail     string             `json:"detail,omitempty"`
-	ElapsedMS  float64            `json:"elapsed_ms"`
-	Unresolved []index.Unresolved `json:"unresolved,omitempty"`
-}
-
 // policyResult is one device and vsys's simulate policy answer in the JSON envelope.
 type policyResult struct {
 	Candidates []ruleJSON                    `json:"candidates"`
@@ -331,13 +352,6 @@ type policyResult struct {
 }
 
 func runJSON(run simulate.Run, t estate.Target, v securitypolicy.Verdict) policyResult {
-	stages := make([]stageJSON, len(run.Stages))
-	for i, st := range run.Stages {
-		stages[i] = stageJSON{
-			Slug: st.Slug, Name: st.Name, Fidelity: st.Fidelity, Candidates: st.State.Candidates,
-			Detail: st.Detail, ElapsedMS: float64(st.Elapsed.Microseconds()) / 1000, Unresolved: st.Unresolved,
-		}
-	}
 	var first *ruleJSON
 	if v.Rule != nil {
 		r := toRuleJSON(*v.Rule)
@@ -348,7 +362,7 @@ func runJSON(run simulate.Run, t estate.Target, v securitypolicy.Verdict) policy
 		cands[i] = toRuleJSON(r)
 	}
 	return policyResult{
-		Kind: run.Kind, Target: targetOf(t), Fidelity: run.Fidelity, Stages: stages,
+		Kind: run.Kind, Target: targetOf(t), Fidelity: run.Fidelity, Stages: simStages(run.Stages),
 		FirstMatch: first, Candidates: cands, Zones: v.Zones, Relevance: v.Relevance,
 	}
 }

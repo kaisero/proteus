@@ -80,7 +80,7 @@ func (a *app) runNAT(ctx context.Context, sim simulate.Simulation, src, dst stri
 	}
 	params := map[string]string{"device": o.device, "router": o.router, "from-zone": o.fromZone, "from-interface": o.fromIf}
 	a.log.Infof(runlog.TagStep, "nat %s -> %s on %s", flow.Source, flow.Destination, o.device)
-	run, err := runEstate(ctx, sim, env, simulate.Input{Flow: flow, Params: params})
+	run, _, err := runEstate(ctx, sim, env, simulate.Input{Flow: flow, Params: params})
 	if err != nil {
 		return err
 	}
@@ -97,12 +97,12 @@ func (a *app) runNAT(ctx context.Context, sim simulate.Simulation, src, dst stri
 		if err := writeJSON(a.stdout, envelope{Command: "simulate nat", Input: in, Results: out, Unresolved: un}); err != nil {
 			return err
 		}
-		return finish(nil, un)
+		return qualifiers{Unresolved: un}.status()
 	}
 	d, _ := es.network.Device(run.Device)
 	renderNAT(a.stdout, run, res, d.TakenAt, a.now(), o.fl.why)
 	printQualifiers(a.stdout, qualifiers{Unresolved: un})
-	return finish(nil, un)
+	return qualifiers{Unresolved: un}.status()
 }
 
 // endpoints resolves a flow's source, when one is given, and its destination. An
@@ -155,13 +155,23 @@ func (e fetchedEstate) env(a *app) *simulate.Env {
 }
 
 // runEstate runs a simulation. A choice only the user can make, such as which of two
-// firewalls a source enters, is a usage error.
-func runEstate(ctx context.Context, sim simulate.Simulation, env *simulate.Env, in simulate.Input) (simulate.Run, error) {
+// firewalls a source enters, is a usage error. Data the simulation could not read is
+// returned as holes with no error, so the command answers with them.
+//
+//nolint:unparam // runNAT and runRouting discard the holes until they answer with them (task 11)
+func runEstate(ctx context.Context, sim simulate.Simulation, env *simulate.Env, in simulate.Input) (simulate.Run, []estate.Hole, error) {
 	run, err := sim.Run(ctx, env, in)
-	if choice, ok := errors.AsType[*simulate.ChoiceError](err); ok {
-		return run, usageErr("%w", choice)
+	if u, ok := errors.AsType[*simulate.UnavailableError](err); ok {
+		holes := make([]estate.Hole, len(u.Missing))
+		for i, m := range u.Missing {
+			holes[i] = estate.Hole{Device: m.Device, Reason: m.Reason}
+		}
+		return run, holes, nil
 	}
-	return run, err
+	if choice, ok := errors.AsType[*simulate.ChoiceError](err); ok {
+		return run, nil, usageErr("%w", choice)
+	}
+	return run, nil, err
 }
 
 // runUnresolved collects what makes a run's answer incomplete: its stages'

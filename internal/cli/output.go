@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/okaiser/proteus/internal/estate"
+	"github.com/okaiser/proteus/internal/index"
+	"github.com/okaiser/proteus/internal/simulate"
 )
 
 // formatVersion is the JSON envelope's format. A change that breaks a consumer
@@ -75,6 +77,34 @@ func targetQualifiers(ts []estate.Target) ([]unresolved, []note) {
 	return un, notes
 }
 
+// stageJSON is one stage of any staged operation in the JSON envelope (spec §3.4).
+// Simulations set Fidelity and Candidates; fetch sets Status.
+type stageJSON struct {
+	Slug       string             `json:"slug"`
+	Name       string             `json:"name"`
+	Status     string             `json:"status,omitempty"`
+	Fidelity   *simulate.Fidelity `json:"fidelity,omitempty"`
+	Candidates *uint64            `json:"candidates,omitempty"`
+	Detail     string             `json:"detail,omitempty"`
+	Notes      []string           `json:"notes,omitempty"`
+	Unresolved []index.Unresolved `json:"unresolved,omitempty"`
+	ElapsedMS  float64            `json:"elapsed_ms"`
+}
+
+// simStages is a simulation's stages. Candidates keeps its meaning: the count after
+// the stage, carried forward when a stage does not narrow it.
+func simStages(stages []simulate.Stage) []stageJSON {
+	out := make([]stageJSON, len(stages))
+	for i, st := range stages {
+		fid, cand := st.Fidelity, st.State.Candidates
+		out[i] = stageJSON{
+			Slug: st.Slug, Name: st.Name, Fidelity: &fid, Candidates: &cand, Detail: st.Detail,
+			Unresolved: st.Unresolved, ElapsedMS: float64(st.Elapsed.Microseconds()) / 1000,
+		}
+	}
+	return out
+}
+
 // normalize turns nil slices into empty ones, so every key prints [] rather than
 // null (spec U5). writeJSON and writeYAML both call it.
 func normalize(e envelope) envelope {
@@ -96,13 +126,4 @@ func writeJSON(w io.Writer, e envelope) error {
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
 	return enc.Encode(normalize(e))
-}
-
-// finish returns the exit status an answer earns: incomplete when anything was a
-// hole or unresolved.
-func finish(holes []estate.Hole, un []unresolved) error {
-	if len(holes) > 0 || len(un) > 0 {
-		return errIncomplete
-	}
-	return nil
 }

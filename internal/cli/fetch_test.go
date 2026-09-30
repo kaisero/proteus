@@ -449,7 +449,7 @@ func TestSimulatePolicy(t *testing.T) {
 	c.want(2, "simulate", "policy", "host", "2.2.2.2", "--file", file)
 	c.want(2, "simulate", "policy", "1.1.1.1", "2.2.2.2", "--file", file, "--port", "https")
 	c.want(2, "simulate", "policy", "1.1.1.1", "2.2.2.2", "--file", file, "--source-port", "70000")
-	c.want(1, "simulate", "policy", "1.1.1.1", "2.2.2.2", "--file", file, "--vsys", "vsys9")
+	c.want(3, "simulate", "policy", "1.1.1.1", "2.2.2.2", "--file", file, "--vsys", "vsys9")
 	out = c.want(0, "simulate", "policy", "10.1.0.5", "10.2.0.5", "--file", file, "--from-zone", "dmz", "--to-zone", "inside")
 	c.want(2, "simulate", "policy", "10.1.0.5", "10.2.0.5", "--file", file, "--from-zone", "dmz")
 	if !strings.Contains(out, "no enabled rule matches") {
@@ -458,14 +458,14 @@ func TestSimulatePolicy(t *testing.T) {
 	out = c.want(0, "simulate", "policy", "198.18.10.100", "198.18.1.5", "--file", "../../testdata/config/firewall-lab.xml",
 		"--vsys", "vsys1", "--port", "tcp/443", "--output", "json")
 	var env struct {
-		Results struct {
+		Results []struct {
 			FirstMatch *struct{ Name string } `json:"first_match"`
 			Fidelity   struct{ Level string }
 			Stages     []struct{ Slug string }
 		}
 	}
-	if err := json.Unmarshal([]byte(out), &env); err != nil || env.Results.FirstMatch == nil ||
-		env.Results.FirstMatch.Name != "dc-to-home" || len(env.Results.Stages) != 8 || env.Results.Fidelity.Level == "" {
+	if err := json.Unmarshal([]byte(out), &env); err != nil || len(env.Results) != 1 || env.Results[0].FirstMatch == nil ||
+		env.Results[0].FirstMatch.Name != "dc-to-home" || len(env.Results[0].Stages) != 8 || env.Results[0].Fidelity.Level == "" {
 		t.Errorf("json: %v %s", err, out)
 	}
 }

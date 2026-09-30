@@ -77,7 +77,7 @@ func (a *app) runRouting(ctx context.Context, sim simulate.Simulation, src, dst 
 		params["rib"] = "true"
 	}
 	a.log.Infof(runlog.TagStep, "routing %s -> %s, start %q", flow.Source, flow.Destination, o.device)
-	run, err := runEstate(ctx, sim, env, simulate.Input{Flow: flow, Params: params})
+	run, _, err := runEstate(ctx, sim, env, simulate.Input{Flow: flow, Params: params})
 	if err != nil {
 		return err
 	}
@@ -94,9 +94,9 @@ func (a *app) runRouting(ctx context.Context, sim simulate.Simulation, src, dst 
 		if err := writeJSON(a.stdout, envelope{Command: "simulate routing", Input: in, Results: res, Unresolved: un}); err != nil {
 			return err
 		}
-		return finish(nil, un)
+		return qualifiers{Unresolved: un}.status()
 	}
 	renderPath(a.stdout, run, path, a.now(), o.why)
 	printQualifiers(a.stdout, qualifiers{Unresolved: un})
-	return finish(nil, un)
+	return qualifiers{Unresolved: un}.status()
 }
