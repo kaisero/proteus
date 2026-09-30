@@ -144,7 +144,7 @@ func (a *app) searchTargets(q search.Query, ts []estate.Target, holes []estate.H
 			a.log.Debugf(runlog.TagFind, "%s/%s: %s %s %s %s", t.Device, t.Vsys, f.Stage, f.Kind, f.Name, detail(f))
 		}
 	}
-	ans.un, ans.notes = qualifiers(ts)
+	ans.un, ans.notes = targetQualifiers(ts)
 	return ans, nil
 }
 
@@ -181,12 +181,12 @@ func (a *app) printSearchText(ans searchAnswer) {
 		}
 		with++
 		fmt.Fprintln(a.stdout, header(t, a.now()))
-		printNotes(a, t)
+		printNotes(a.stdout, t)
 		for _, f := range ans.byTarget[i] {
 			fmt.Fprintf(a.stdout, "  %-10s %-20s %-24s %s\n", f.Stage, f.Kind, f.Name, detail(f))
 		}
 	}
-	printQualifiers(a, ans.holes, ans.un, ans.notes)
+	printQualifiers(a.stdout, qualifiers{Holes: ans.holes, Unresolved: ans.un, Notes: ans.notes})
 	fmt.Fprintf(a.stdout, "%d with results, %d without, %d holes\n", with, without, len(ans.holes))
 }
 
@@ -260,30 +260,6 @@ func source(t estate.Target, now time.Time) string {
 		return t.Config.Path()
 	}
 	return fmt.Sprintf("snapshot %s (%s)", t.Snapshot.ID, ago(now.Sub(t.Snapshot.Meta.TakenAt)))
-}
-
-// printNotes prints a target's notes under its header. A version gap is left for
-// printQualifiers, because it makes the answer incomplete rather than qualifying it.
-func printNotes(a *app, t estate.Target) {
-	for _, n := range t.Notes {
-		if n != t.Report.VersionGap {
-			fmt.Fprintf(a.stdout, "  note: %s\n", n)
-		}
-	}
-}
-
-// printQualifiers prints holes, unresolved entries and notes after an answer.
-func printQualifiers(a *app, holes []estate.Hole, un []unresolved, notes []note) {
-	for _, h := range holes {
-		fmt.Fprintf(a.stdout, "hole: %s: %s\n", where(h.Device, h.Vsys), h.Reason)
-	}
-	for _, u := range un {
-		fmt.Fprintf(a.stdout, "unresolved: %s: %s\n", where(u.Device, u.Vsys), u.Reason)
-	}
-	if len(holes)+len(un) > 0 {
-		fmt.Fprintln(a.stdout)
-	}
-	_ = notes // notes print under each target's header
 }
 
 func where(device, vsys string) string {

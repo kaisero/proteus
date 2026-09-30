@@ -57,9 +57,10 @@ func targetOf(t estate.Target) target {
 	return out
 }
 
-// qualifiers splits each target's notes: a version gap can make an answer miss
-// rules, so it is unresolved; a stale snapshot or a failed fresh fetch is a note.
-func qualifiers(ts []estate.Target) ([]unresolved, []note) {
+// targetQualifiers splits each target's notes: a version gap can make an answer
+// miss rules, so it is unresolved; a stale snapshot or a failed fresh fetch is a
+// note.
+func targetQualifiers(ts []estate.Target) ([]unresolved, []note) {
 	var un []unresolved
 	var notes []note
 	for _, t := range ts {
@@ -74,8 +75,11 @@ func qualifiers(ts []estate.Target) ([]unresolved, []note) {
 	return un, notes
 }
 
-func writeJSON(w io.Writer, e envelope) error {
+// normalize turns nil slices into empty ones, so every key prints [] rather than
+// null (spec U5). writeJSON and writeYAML both call it.
+func normalize(e envelope) envelope {
 	e.Format = formatVersion
+	e.Results = emptySlice(e.Results)
 	if e.Holes == nil {
 		e.Holes = []estate.Hole{}
 	}
@@ -85,9 +89,13 @@ func writeJSON(w io.Writer, e envelope) error {
 	if e.Notes == nil {
 		e.Notes = []note{}
 	}
+	return e
+}
+
+func writeJSON(w io.Writer, e envelope) error {
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
-	return enc.Encode(e)
+	return enc.Encode(normalize(e))
 }
 
 // finish returns the exit status an answer earns: incomplete when anything was a

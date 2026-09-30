@@ -120,7 +120,7 @@ func (a *app) runSnapshotShow(ctx context.Context, sel selection) error {
 		}
 		rows = append(rows, r)
 	}
-	un, notes := qualifiers(ts)
+	un, notes := targetQualifiers(ts)
 	if a.format == formatJSON {
 		if err := writeJSON(a.stdout, envelope{
 			Command: "snapshot show", Input: sel.input(), Results: rows, Holes: holes, Unresolved: un, Notes: notes,
@@ -129,7 +129,7 @@ func (a *app) runSnapshotShow(ctx context.Context, sel selection) error {
 		}
 	} else {
 		a.printSnapshotShow(ts, rows)
-		printQualifiers(a, holes, un, notes)
+		printQualifiers(a.stdout, qualifiers{Holes: holes, Unresolved: un, Notes: notes})
 	}
 	return finish(holes, un)
 }
@@ -141,7 +141,7 @@ func (a *app) printSnapshotShow(ts []estate.Target, rows []showRow) {
 		if r.Device != last {
 			last = r.Device
 			fmt.Fprintf(a.stdout, "%s   %s\n", r.Device, source(ts[i], a.now()))
-			printNotes(a, ts[i])
+			printNotes(a.stdout, ts[i])
 			if r.Host != "" {
 				fmt.Fprintf(a.stdout, "  %s, %s, serial %s\n", r.Host, r.Model, r.Serial)
 			}
@@ -240,7 +240,7 @@ func (a *app) runSnapshotDiff(sel selection, from, to string) error {
 		}
 	} else {
 		a.printDiff(results, notes)
-		printQualifiers(a, holes, nil, nil)
+		printQualifiers(a.stdout, qualifiers{Holes: holes})
 	}
 	return finish(holes, nil)
 }

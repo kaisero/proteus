@@ -97,6 +97,6 @@ func (a *app) runRouting(ctx context.Context, sim simulate.Simulation, src, dst 
 		return finish(nil, un)
 	}
 	renderPath(a.stdout, run, path, a.now(), o.why)
-	printQualifiers(a, nil, un, nil)
+	printQualifiers(a.stdout, qualifiers{Unresolved: un})
 	return finish(nil, un)
 }

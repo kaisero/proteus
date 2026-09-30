@@ -113,7 +113,7 @@ func (a *app) runSimulation(ctx context.Context, sim simulate.Simulation, sel se
 		return err
 	}
 	a.log.Infof(runlog.TagStep, "%s: fidelity %s", sim.Kind(), run.Fidelity)
-	un, notes := qualifiers([]estate.Target{t})
+	un, notes := targetQualifiers([]estate.Target{t})
 	un = dedupeUnresolved(append(un, runUnresolved(run, t.Device, t.Vsys, true)...))
 	verdict, _ := run.Output.(securitypolicy.Verdict)
 	if a.format == formatJSON {
@@ -126,7 +126,7 @@ func (a *app) runSimulation(ctx context.Context, sim simulate.Simulation, sel se
 		return finish(holes, un)
 	}
 	a.printRun(run, t, verdict, flow, fl.why)
-	printQualifiers(a, holes, un, notes)
+	printQualifiers(a.stdout, qualifiers{Holes: holes, Unresolved: un, Notes: notes})
 	if verdict.Rule == nil {
 		fmt.Fprintln(a.stdout, "no enabled rule matches")
 	} else {
@@ -146,7 +146,7 @@ func (a *app) oneTarget(ctx context.Context, sel selection, s settings) (estate.
 	case 1:
 		return ts[0], holes, nil
 	case 0:
-		printQualifiers(a, holes, nil, nil)
+		printQualifiers(a.stdout, qualifiers{Holes: holes})
 		return estate.Target{}, nil, fmt.Errorf("the selection has no device and vsys to simulate on")
 	}
 	return estate.Target{}, nil, usageErr(
@@ -258,7 +258,7 @@ func (a *app) printRun(run simulate.Run, t estate.Target, v securitypolicy.Verdi
 		fmt.Fprintf(a.stdout, " %s", flow.URL)
 	}
 	fmt.Fprintf(a.stdout, "\n%s\n", header(t, a.now()))
-	printNotes(a, t)
+	printNotes(a.stdout, t)
 	for _, ep := range []simulate.Endpoint{flow.Source, flow.Destination} {
 		if ep.Name != "" {
 			fmt.Fprintf(a.stdout, "  dns        %s -> %v\n", ep.Name, ep.Addrs)

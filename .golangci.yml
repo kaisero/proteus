@@ -31,6 +31,9 @@ linters:
     gosec:
       excludes:
         - G304 # file path from a variable — the whole library reads schema and config paths the caller supplies
+    misspell:
+      ignore-rules:
+        - statuser # an answer that sets its own status (Stringer-style naming), not a typo
   exclusions:
     generated: lax
     rules:

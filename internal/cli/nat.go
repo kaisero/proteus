@@ -101,7 +101,7 @@ func (a *app) runNAT(ctx context.Context, sim simulate.Simulation, src, dst stri
 	}
 	d, _ := es.network.Device(run.Device)
 	renderNAT(a.stdout, run, res, d.TakenAt, a.now(), o.fl.why)
-	printQualifiers(a, nil, un, nil)
+	printQualifiers(a.stdout, qualifiers{Unresolved: un})
 	return finish(nil, un)
 }
 

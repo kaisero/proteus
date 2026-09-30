@@ -116,7 +116,7 @@ func (a *app) lookupTargets(name, kind string, ts []estate.Target, holes []estat
 		}
 		return lookupAnswer{}, usageErr("%q names more than one kind; pick one with --kind:\n%s", name, strings.Join(lines, "\n"))
 	}
-	ans.un, ans.notes = qualifiers(ts)
+	ans.un, ans.notes = targetQualifiers(ts)
 	if found == 0 && len(ans.holes)+len(ans.un) == 0 {
 		return lookupAnswer{}, fmt.Errorf("no element named %q in the selection", name)
 	}
@@ -153,13 +153,13 @@ func (a *app) printLookupText(ans lookupAnswer, o lookupOptions) {
 		}
 		with++
 		fmt.Fprintln(a.stdout, header(t, a.now()))
-		printNotes(a, t)
+		printNotes(a.stdout, t)
 		for _, cd := range ans.byTarget[i] {
 			r.card(cd)
 			fmt.Fprintln(a.stdout)
 		}
 	}
-	printQualifiers(a, ans.holes, ans.un, ans.notes)
+	printQualifiers(a.stdout, qualifiers{Holes: ans.holes, Unresolved: ans.un, Notes: ans.notes})
 	fmt.Fprintf(a.stdout, "%d with it, %d without, %d holes\n", with, without, len(ans.holes))
 }
 
