@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -11,11 +12,6 @@ import (
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 )
-
-// planStep is the last step of docs/plans/2026-09-30-cli-consistency.md that has
-// landed. Every check below is unconditional now that step 11 has landed; this
-// number is kept as a record of where the contract test stands in the plan.
-const planStep = 11
 
 // fixture builds a fresh CLI for one run. complete is false for the "no snapshot"
 // fixture: the same inventory, never fetched.
@@ -112,7 +108,6 @@ var usageRows = [][]string{
 
 func TestContract(t *testing.T) {
 	t.Parallel()
-	t.Logf("contract test at plan step %d", planStep)
 	formats := []string{"text", "json", "yaml"}
 	for _, row := range contractRows() {
 		for _, complete := range []bool{true, false} {
@@ -121,6 +116,7 @@ func TestContract(t *testing.T) {
 			if complete {
 				want = row.complete
 			}
+			answered := want == exitOK || want == exitIncomplete || row.answers
 			outputs := map[string]string{}
 			for _, f := range formats {
 				t.Run(row.name+"/"+fixtureName+"/"+f, func(t *testing.T) {
@@ -136,13 +132,13 @@ func TestContract(t *testing.T) {
 					if code != want {
 						t.Fatalf("exit %d, want %d\nstdout:\n%s\nstderr:\n%s", code, want, out, errOut)
 					}
-					checkStreams(t, f, code, out, errOut)
+					checkStreams(t, f, code, answered, out, errOut)
 					checkLog(t, c.logFile(), code, row.answers)
 					outputs[f] = out
 				})
 			}
 			t.Run(row.name+"/"+fixtureName+"/yaml-equals-json", func(t *testing.T) {
-				if outputs["json"] == "" && outputs["yaml"] == "" {
+				if !answered {
 					return // no answer in either format, such as a usage error
 				}
 				sameAnswer(t, outputs["json"], outputs["yaml"])
@@ -160,15 +156,19 @@ func TestContract(t *testing.T) {
 				if out != "" && !strings.HasPrefix(args[0], "help") {
 					t.Errorf("stdout must be empty on a usage error:\n%s", out)
 				}
-				checkStreams(t, f, code, "", errOut)
+				checkStreams(t, f, code, false, "", errOut)
 			})
 		}
 	}
 }
 
-// checkStreams is spec §3.5 and §4.4.
-func checkStreams(t *testing.T, format string, code int, out, errOut string) {
+// checkStreams is spec §3.5 and §4.4. answered says an answer is expected, so a
+// machine format must print one.
+func checkStreams(t *testing.T, format string, code int, answered bool, out, errOut string) {
 	t.Helper()
+	if answered && format != "text" && out == "" {
+		t.Fatalf("%s stdout is empty, but the exit %d has an answer\nstderr:\n%s", format, code, errOut)
+	}
 	switch format {
 	case "json":
 		if out != "" {
@@ -284,4 +284,25 @@ func TestContractCoversEveryCommand(t *testing.T) {
 		}
 	}
 	walk(newApp(nil, nil, func(string) string { return "" }, nil).root())
+}
+
+// Help, completion and a bare group run no command, so an invalid output setting
+// does not fail them and they write no run log (spec §4.7).
+func TestHelpAndCompletionIgnoreSettings(t *testing.T) {
+	t.Parallel()
+	for _, args := range [][]string{
+		{"help"}, {"help", "snapshot"}, {"completion", "bash"}, {"__complete", "snapshot", ""}, {"snapshot"},
+	} {
+		t.Run(strings.Join(args, "_"), func(t *testing.T) {
+			c := newCLI(t)
+			c.env["HOME"] = c.dir
+			c.env["PROTEUS_OUTPUT"] = "xml"
+			if out, errOut, code := c.runRaw(args...); code != exitOK {
+				t.Fatalf("exit %d, want 0\nstdout:\n%s\nstderr:\n%s", code, out, errOut)
+			}
+			if entries, err := os.ReadDir(c.env["PROTEUS_LOG_DIR"]); err == nil && len(entries) > 0 {
+				t.Errorf("the log dir holds %d files, want none", len(entries))
+			}
+		})
+	}
 }
