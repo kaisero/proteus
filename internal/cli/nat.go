@@ -126,7 +126,7 @@ func (a *app) runNAT(ctx context.Context, o natOptions) (answer, error) {
 	ans.un = dedupeUnresolved(runUnresolved(run, run.Device, run.Vsys, true))
 	d, _ := es.network.Device(run.Device)
 	ans.takenAt = d.TakenAt
-	ans.notes = runNotes(run.Device, append(append([]string{}, run.Notes...), d.Notes...))
+	ans.notes = runNotes(run.Device, append(append(append([]string{}, run.Notes...), d.Notes...), ans.res.Notes...))
 	return ans, nil
 }
 

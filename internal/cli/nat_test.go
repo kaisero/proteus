@@ -1,7 +1,9 @@
 package cli
 
 import (
+	"context"
 	"encoding/json"
+	"net/netip"
 	"strings"
 	"testing"
 	"time"
@@ -207,5 +209,34 @@ func TestNATNotesReachTheEnvelope(t *testing.T) {
 		"--router", "default", "--from-zone", "transport", "--port", "8443", "--output", "json")
 	if !strings.Contains(out, `"notes": [`) || !strings.Contains(out, "past the 24h0m0s limit") {
 		t.Errorf("the stale-snapshot note must be in notes:\n%s", out)
+	}
+}
+
+// A NAT result's own notes (here, a destination FQDN resolved by this machine's
+// DNS) reach the envelope's top-level notes too, not only the device's, and not
+// only nested inside results[0].notes (nat.Result already carries its own
+// notes there; the check must be about the envelope's own array).
+func TestNATResultNotesReachTheEnvelope(t *testing.T) {
+	t.Parallel()
+	c := natLab(t)
+	c.lookup = func(context.Context, string) ([]netip.Addr, error) {
+		return []netip.Addr{netip.MustParseAddr("8.8.8.8")}, nil
+	}
+	out := c.want(0, "simulate", "nat", "198.18.1.10", "198.18.250.30", "--device", "fw01",
+		"--router", "default", "--from-zone", "transport", "--output", "json")
+	var env struct {
+		Notes []struct{ Device, Note string }
+	}
+	if err := json.Unmarshal([]byte(out), &env); err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	found := false
+	for _, n := range env.Notes {
+		if n.Device == "fw01" && strings.Contains(n.Note, "resolved by this machine's DNS") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("the translation note must be in the envelope's own notes:\n%s", out)
 	}
 }

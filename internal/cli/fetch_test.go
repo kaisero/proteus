@@ -190,6 +190,9 @@ type cli struct {
 	cfgPath string
 	// peerHost is passed to every app the harness builds.
 	peerHost func(string) string
+	// lookup, when set, is passed to every app the harness builds, in place of
+	// the real DNS resolver.
+	lookup func(context.Context, string) ([]netip.Addr, error)
 }
 
 func newCLI(t *testing.T) *cli {
@@ -223,6 +226,9 @@ func (c *cli) runRaw(args ...string) (string, string, int) {
 	c.clock = c.clock.Add(time.Minute)
 	a := newApp(&out, &errOut, func(k string) string { return c.env[k] }, func() time.Time { return now })
 	a.peerHost = c.peerHost
+	if c.lookup != nil {
+		a.lookup = c.lookup
+	}
 	code := a.execute(context.Background(), args)
 	return out.String(), errOut.String(), code
 }

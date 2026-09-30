@@ -121,7 +121,7 @@ func (a *app) runRouting(ctx context.Context, o routingOptions) (answer, error) 
 	for _, h := range ans.path.Hops {
 		ans.notes = append(ans.notes, runNotes(h.Device, h.Notes)...)
 	}
-	ans.notes = append(ans.notes, runNotes(run.Device, run.Notes)...)
+	ans.notes = append(ans.notes, runNotes(run.Device, ans.path.Notes)...)
 	return ans, nil
 }
 

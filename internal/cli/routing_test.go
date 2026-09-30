@@ -1,7 +1,9 @@
 package cli
 
 import (
+	"context"
 	"encoding/json"
+	"net/netip"
 	"strings"
 	"testing"
 
@@ -157,5 +159,51 @@ func TestRoutingWithoutSnapshotsIsAHole(t *testing.T) {
 	out := c.want(3, "simulate", "routing", "198.18.10.5", "8.8.8.8", "--output", "json")
 	if !strings.Contains(out, `"results": []`) || strings.Count(out, `"device": "fw0`) < 2 {
 		t.Errorf("both devices must be holes and results empty:\n%s", out)
+	}
+}
+
+// The FQDN note the text shows (an endpoint resolving to several addresses)
+// reaches the envelope's top-level notes too — not only nested inside
+// results[0].notes, where routing.Path already carries the same text.
+func TestRoutingNotesReachTheEnvelope(t *testing.T) {
+	t.Parallel()
+	c := routingLab(t, false)
+	c.lookup = func(context.Context, string) ([]netip.Addr, error) {
+		return []netip.Addr{netip.MustParseAddr("8.8.8.8"), netip.MustParseAddr("8.8.4.4")}, nil
+	}
+	out := c.want(0, "simulate", "routing", "198.18.10.5", "dns.example", "--output", "json")
+	var env struct {
+		Notes []struct{ Device, Note string }
+	}
+	if err := json.Unmarshal([]byte(out), &env); err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	found := false
+	for _, n := range env.Notes {
+		if strings.Contains(n.Note, "dns.example resolved to 2 addresses") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("the FQDN note must be in the envelope's own notes:\n%s", out)
+	}
+}
+
+// A start device absent from the inventory is a usage error, not a hole.
+func TestRoutingDeviceNotInInventoryIsUsage(t *testing.T) {
+	t.Parallel()
+	c := routingLab(t, false)
+	c.want(2, "simulate", "routing", "8.8.8.8", "--device", "fw09")
+}
+
+// A start device in the inventory but never fetched is a hole, with results
+// empty.
+func TestRoutingStartWithoutASnapshotIsAHole(t *testing.T) {
+	t.Parallel()
+	c := newCLI(t)
+	c.inventory(inventoryFor(lab(t).Start(t)))
+	out := c.want(3, "simulate", "routing", "8.8.8.8", "--device", "fw01", "--output", "json")
+	if !strings.Contains(out, `"results": []`) {
+		t.Errorf("a hole must give empty results:\n%s", out)
 	}
 }
