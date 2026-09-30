@@ -5,7 +5,6 @@ import (
 	"os"
 	"slices"
 	"strings"
-	"time"
 
 	"github.com/okaiser/proteus/internal/resolve"
 	"github.com/okaiser/proteus/internal/runlog"
@@ -164,7 +163,7 @@ func (n *Network) read(node string) (simulate.DeviceData, error) {
 		d.Notes = append(d.Notes, fmt.Sprintf("%s was passive; its snapshot comes from the active peer %s", member, sn.Meta.FetchedFrom))
 	}
 	if age := n.w.Now.Sub(sn.Meta.TakenAt); n.w.MaxAge > 0 && age > n.w.MaxAge {
-		d.Notes = append(d.Notes, fmt.Sprintf("snapshot %s is %s old, past the %s limit", sn.ID, age.Round(time.Minute), n.w.MaxAge))
+		d.Notes = append(d.Notes, StaleNote(sn.ID, age, n.w.MaxAge))
 	}
 	n.w.Log.Infof(runlog.TagSnap, "%s: routing data from %s@%s", node, member, sn.ID)
 	return d, nil

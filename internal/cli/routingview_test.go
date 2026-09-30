@@ -124,7 +124,7 @@ func TestRenderRIBAndWhy(t *testing.T) {
 		"┌─ fw02 ─ vsys1 ─ router default ─ snapshot 2h ────────────────────┐\n",
 		"  192.168.0.1   leaves the estate (not in the inventory)\n",
 		"may be incomplete: fw02's snapshot has no routing table; fetch it again; the path leaves the estate at 192.168.0.1",
-		"  hop2/next      undermatch the path leaves the estate at 192.168.0.1\n",
+		"  hop2/next   undermatch the path leaves the estate at 192.168.0.1\n",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("missing %q in:\n%s", want, got)

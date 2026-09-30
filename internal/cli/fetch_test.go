@@ -885,3 +885,15 @@ func TestFetchAnEmptySelectionIsAUsageError(t *testing.T) {
 		t.Errorf("exit %d, stderr %q", code, errOut)
 	}
 }
+
+// A failed device's error colours where it failed, not the whole line (spec §9.3).
+func TestFailedDeviceColoursItsPrefix(t *testing.T) {
+	t.Parallel()
+	p := palette{on: true}
+	if got, want := failedDevice(p, "fw01/login: refused"), p.bad("fw01/login")+": refused"; got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+	if got := failedDevice(p, "gone"); got != p.bad("gone") {
+		t.Errorf("an error without a prefix is coloured whole, got %q", got)
+	}
+}

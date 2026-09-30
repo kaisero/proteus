@@ -190,8 +190,11 @@ func (s snapshotShowAnswer) Qualifiers() qualifiers {
 // Text prints one block per device and one line per vsys.
 func (s snapshotShowAnswer) Text(t *textOut) error {
 	last := ""
+	var vsys table // one per device, written before the next device's header
 	for i, r := range s.rows {
 		if r.Device != last {
+			_ = vsys.write(t, "  ", 4)
+			vsys = table{}
 			last = r.Device
 			fmt.Fprintf(t, "%s   %s\n", t.pal.head(r.Device), source(s.ts[i], t.now))
 			printNotes(t, s.ts[i])
@@ -211,8 +214,9 @@ func (s snapshotShowAnswer) Text(t *textOut) error {
 			}
 			_ = tb.write(t, "  ", 1)
 		}
-		fmt.Fprintf(t, "  %-8s PAN-OS %s, security rules: %d\n", r.Vsys, r.Version, r.Rules)
+		vsys.row(plain(r.Vsys), plain(fmt.Sprintf("PAN-OS %s, security rules: %d", r.Version, r.Rules)))
 	}
+	_ = vsys.write(t, "  ", 4)
 	printQualifiers(t, s.Qualifiers())
 	return t.err
 }

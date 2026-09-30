@@ -1,8 +1,8 @@
-‹warn›fw01: TLS certificate verification OFF (insecure_tls: true)‹/›
+‹head›fw01‹/›: TLS certificate verification ‹warn›OFF‹/› (insecure_tls: true)
   config      2993 bytes
   system-info 216 bytes
   interfaces  7786 bytes
   fib         7295 bytes
   rib         15939 bytes
   ha          163 bytes
-  ‹ok›stored fw01@2026-09-28T10-00-00Z (PA-VM, PAN-OS 11.2.5, serial 007900000000001)‹/›
+  ‹ok›stored‹/› fw01@2026-09-28T10-00-00Z (PA-VM, PAN-OS 11.2.5, serial 007900000000001)

@@ -14,11 +14,11 @@ simulate nat 198.18.1.10 -> 198.18.250.10 tcp/8443 on fw01            fidelity: 
 
 security policy matches: 198.18.1.10 -> 198.18.250.10, port 8443, zones transport -> server
 
-  not t-no-nat               from zone client ≠ transport
-  not t-disabled             disabled
-  place          exact      given: zone transport
-  pbf            exact      no PBF rule could take the packet
-  lookup         exact      198.18.250.10 leaves by ethernet1/1 (zone transport)
-  match          exact      rule t-dnat-port
-  translate      exact      destination -> 198.18.10.100
-  post-lookup    exact      198.18.10.100 leaves by ethernet1/2 (zone server)
+  not t-no-nat   from zone client ≠ transport
+  not t-disabled disabled
+  place       ‹ok›exact‹/› given: zone transport
+  pbf         ‹ok›exact‹/› no PBF rule could take the packet
+  lookup      ‹ok›exact‹/› 198.18.250.10 leaves by ethernet1/1 (zone transport)
+  match       ‹ok›exact‹/› rule t-dnat-port
+  translate   ‹ok›exact‹/› destination -> 198.18.10.100
+  post-lookup ‹ok›exact‹/› 198.18.10.100 leaves by ethernet1/2 (zone server)

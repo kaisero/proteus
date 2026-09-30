@@ -91,13 +91,24 @@ func renderNAT(t *textOut, run simulate.Run, r nat.Result, takenAt, now time.Tim
 	}
 	if why {
 		fmt.Fprintln(t)
+		var excluded table
 		for _, e := range r.Excluded {
-			fmt.Fprintf(t, "  not %-22s %s\n", e.Rule, e.Field)
+			excluded.row(plain("not"), plain(e.Rule), plain(e.Field))
 		}
-		for _, st := range run.Stages {
-			fmt.Fprintf(t, "  %-14s %-10s %s\n", st.Slug, st.Fidelity.Level(), st.Detail)
-		}
+		_ = excluded.write(t, "  ", 1)
+		printFidelityStages(t, run.Stages)
 	}
+}
+
+// printFidelityStages is a simulation's --why stage table: slug, fidelity styled by
+// level, detail.
+func printFidelityStages(t *textOut, stages []simulate.Stage) {
+	var tb table
+	for _, st := range stages {
+		lvl := st.Fidelity.Level()
+		tb.row(plain(st.Slug), cell{text: lvl, style: fidelityStyle(t.pal, lvl)}, plain(st.Detail))
+	}
+	_ = tb.write(t, "  ", 1)
 }
 
 // natIngress is the ingress the place stage settled on, from the match's input.

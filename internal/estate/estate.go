@@ -67,8 +67,7 @@ func Open(st *store.Store, devices, vsys []string, w When) ([]Target, []Hole) {
 			d, sn.ID, sn.Meta.TakenAt.Format(time.RFC3339), cfg.Version(), cfg.DigestVersion())
 		var notes []string
 		if age := w.Now.Sub(sn.Meta.TakenAt); w.MaxAge > 0 && age > w.MaxAge {
-			notes = append(notes, fmt.Sprintf("snapshot %s is %s old, past the %s limit",
-				sn.ID, age.Round(time.Minute), w.MaxAge))
+			notes = append(notes, StaleNote(sn.ID, age, w.MaxAge))
 		}
 		ts, hs := scopes(d, &sn, cfg, rep, vsys, notes)
 		for _, h := range hs {
@@ -136,6 +135,11 @@ func scopes(device string, sn *store.Snapshot, cfg *config.Config, rep config.Re
 		holes = append(holes, Hole{Device: device, Vsys: v, Reason: fmt.Sprintf("no vsys %s; it has %v", v, have)})
 	}
 	return out, holes
+}
+
+// StaleNote is the note on a target whose snapshot is older than the limit.
+func StaleNote(id string, age, limit time.Duration) string {
+	return fmt.Sprintf("snapshot %s is %s old, past the %s limit", id, age.Round(time.Minute), limit)
 }
 
 // ParseAt reads a --at time: a snapshot id (2026-09-28T07-15-37Z), an RFC 3339 time,

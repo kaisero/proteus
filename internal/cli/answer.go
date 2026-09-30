@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"reflect"
+	"strings"
 	"time"
 
 	"github.com/okaiser/proteus/internal/estate"
@@ -119,9 +120,18 @@ func printQualifiers(t *textOut, q qualifiers) {
 func printNotes(t *textOut, tg estate.Target) {
 	for _, n := range tg.Notes {
 		if n != tg.Report.VersionGap {
-			fmt.Fprintf(t, "  %s\n", t.pal.dim("note: "+n))
+			fmt.Fprintf(t, "  %s\n", noteStyle(t.pal, n)("note: "+n))
 		}
 	}
+}
+
+// noteStyle is a note's palette role (spec §9.2): warn for a stale snapshot, dim for
+// any other. A stale note is recognised by the wording of estate.StaleNote.
+func noteStyle(p palette, n string) func(string) string {
+	if strings.HasPrefix(n, "snapshot ") && strings.Contains(n, " old, past the ") && strings.HasSuffix(n, " limit") {
+		return p.warn
+	}
+	return p.dim
 }
 
 // emptySlice turns a nil slice into an empty one of the same type, so JSON prints []

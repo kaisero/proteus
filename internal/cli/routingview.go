@@ -21,7 +21,7 @@ const minBox = 56
 func renderPath(t *textOut, run simulate.Run, p routing.Path, now time.Time, why bool) {
 	fmt.Fprintf(t, "simulate routing %s -> %s            fidelity: %s\n\n", sourceText(p), p.Destination, styledLevel(t.pal, run.Fidelity.Level()))
 	for _, n := range p.Notes {
-		fmt.Fprintf(t, "  note: %s\n", n)
+		fmt.Fprintf(t, "  %s\n", noteStyle(t.pal, n)("note: "+n))
 	}
 	if len(p.Notes) > 0 {
 		fmt.Fprintln(t)
@@ -85,9 +85,7 @@ func renderPath(t *textOut, run simulate.Run, p routing.Path, now time.Time, why
 	}
 	if why {
 		fmt.Fprintln(t)
-		for _, st := range run.Stages {
-			fmt.Fprintf(t, "  %-14s %-10s %s\n", st.Slug, st.Fidelity.Level(), st.Detail)
-		}
+		printFidelityStages(t, run.Stages)
 	}
 }
 

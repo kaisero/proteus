@@ -167,9 +167,9 @@ func TestGoldenJSON(t *testing.T) {
 	})
 }
 
-// colourFamilies are the commands that get a coloured golden twin, one per family
-// (spec §11.2): search, lookup, simulate-policy-why, snapshot-diff, simulate-nat,
-// simulate-routing, fetch.
+// colourFamilies are the table rows below that get a coloured golden twin (spec
+// §11.2). The other families with one (fetch, snapshot-diff, simulate-nat,
+// simulate-routing) get theirs in the store and simulate subtests.
 var colourFamilies = map[string]bool{"search": true, "lookup": true, "simulate-policy-why": true}
 
 // Every command's text output, so a change of layout shows up as a reviewed diff.

@@ -50,8 +50,8 @@ security policy matches: 198.18.1.10 -> 198.18.250.10, port 8443, zones transpor
 	out = c.want(0, "simulate", "nat", "198.18.1.10", "198.18.250.10", "--device", "fw01", "--router", "default", "--port", "8443", "--why")
 	for _, w := range []string{
 		"may be incomplete: inferred\n  place        routed: 198.18.1.10 by the return route on ethernet1/1\n",
-		"  not t-no-nat               from zone client ≠ transport\n", "  not t-disabled             disabled\n",
-		"  post-lookup    exact      198.18.10.100 leaves by ethernet1/2 (zone server)\n",
+		"  not t-no-nat   from zone client ≠ transport\n", "  not t-disabled disabled\n",
+		"  post-lookup exact    198.18.10.100 leaves by ethernet1/2 (zone server)\n",
 	} {
 		if !strings.Contains(out, w) {
 			t.Errorf("missing %q in:\n%s", w, out)

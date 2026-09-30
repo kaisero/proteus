@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"strings"
 	"sync"
 
 	"github.com/spf13/cobra"
@@ -325,15 +326,15 @@ func (f fetchAnswer) Text(t *textOut) error {
 		switch {
 		case r.TLSVerification == nil:
 		case *r.TLSVerification:
-			fmt.Fprintf(t, "%s: TLS certificate verification on\n", r.Device)
+			fmt.Fprintf(t, "%s: TLS certificate verification on\n", t.pal.head(r.Device))
 		default:
-			fmt.Fprintf(t, "%s\n", t.pal.warn(fmt.Sprintf("%s: TLS certificate verification OFF (insecure_tls: true)", r.Device)))
+			fmt.Fprintf(t, "%s: TLS certificate verification %s (insecure_tls: true)\n", t.pal.head(r.Device), t.pal.warn("OFF"))
 		}
 		if r.FetchedFrom != "" {
 			fmt.Fprintf(t, "  %s is the passive HA peer; fetched from the active peer %s\n", r.Device, r.FetchedFrom)
 		}
 		for _, n := range r.Notes {
-			fmt.Fprintf(t, "  %s\n", t.pal.dim("note: "+n))
+			fmt.Fprintf(t, "  %s\n", noteStyle(t.pal, n)("note: "+n))
 		}
 		var tb table
 		for _, d := range r.Documents {
@@ -345,17 +346,27 @@ func (f fetchAnswer) Text(t *textOut) error {
 		}
 		_ = tb.write(t, "  ", 1)
 		if r.Stored {
-			fmt.Fprintf(t, "  %s\n", t.pal.ok(fmt.Sprintf("stored %s@%s (%s, PAN-OS %s, serial %s)",
-				r.Device, r.Snapshot, r.System.Model, r.System.SWVersion, r.System.Serial)))
+			fmt.Fprintf(t, "  %s %s@%s (%s, PAN-OS %s, serial %s)\n", t.pal.ok("stored"),
+				r.Device, r.Snapshot, r.System.Model, r.System.SWVersion, r.System.Serial)
 		}
 		if r.Error != "" {
-			fmt.Fprintf(t, "%s\n", t.pal.bad(r.Error))
+			fmt.Fprintf(t, "%s\n", failedDevice(t.pal, r.Error))
 		}
 		if f.o.why {
 			printTaskStages(t, r.Stages)
 		}
 	}
 	return t.err
+}
+
+// failedDevice styles the token of a device's error that says where it failed: the
+// "<device>/<slug>" prefix before the first colon, or the whole error without one.
+func failedDevice(p palette, err string) string {
+	where, rest, ok := strings.Cut(err, ":")
+	if !ok {
+		return p.bad(err)
+	}
+	return p.bad(where) + ":" + rest
 }
 
 // printTaskStages is the --why stage table of a staged task; the status cell is
