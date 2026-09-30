@@ -13,9 +13,9 @@ import (
 )
 
 // planStep is the last step of docs/plans/2026-09-30-cli-consistency.md that has
-// landed. A row or check that waits for a later step is skipped until then; each
-// step raises this number. When it reaches 11, nothing is skipped.
-const planStep = 9
+// landed. Every check below is unconditional now that step 11 has landed; this
+// number is kept as a record of where the contract test stands in the plan.
+const planStep = 11
 
 // fixture builds a fresh CLI for one run. complete is false for the "no snapshot"
 // fixture: the same inventory, never fetched.
@@ -79,25 +79,24 @@ type contractRow struct {
 	complete int  // expected exit with the fixture fetched
 	empty    int  // expected exit with nothing fetched
 	answers  bool // an answer exists even on exit 1 (fetch)
-	until    int  // the plan step that makes the row pass
 }
 
 // contractRows is spec §11.1. A leaf command with no row fails TestContractCoversEveryCommand.
 func contractRows() []contractRow {
 	return []contractRow{
-		{name: "fetch", fixture: labFixture(0), args: []string{"fetch", "fw01"}, answers: true, until: 0},
-		{name: "fetch-broken-doc", fixture: brokenDocFixture, args: []string{"fetch", "fw01"}, complete: 3, empty: 3, answers: true, until: 0},
-		{name: "inventory-init", fixture: emptyFixture, args: []string{"inventory", "init"}, raw: true, until: 0},
-		{name: "inventory-init-exists", fixture: labFixture(0), args: []string{"inventory", "init"}, complete: 2, empty: 2, until: 0},
-		{name: "snapshot-list", fixture: labFixture(1), args: []string{"snapshot", "list", "fw01"}, empty: 3, until: 0},
-		{name: "snapshot-show", fixture: labFixture(1), args: []string{"snapshot", "show"}, empty: 3, until: 0},
-		{name: "snapshot-diff", fixture: labFixture(2), args: []string{"snapshot", "diff"}, empty: 3, until: 0},
+		{name: "fetch", fixture: labFixture(0), args: []string{"fetch", "fw01"}, answers: true},
+		{name: "fetch-broken-doc", fixture: brokenDocFixture, args: []string{"fetch", "fw01"}, complete: 3, empty: 3, answers: true},
+		{name: "inventory-init", fixture: emptyFixture, args: []string{"inventory", "init"}, raw: true},
+		{name: "inventory-init-exists", fixture: labFixture(0), args: []string{"inventory", "init"}, complete: 2, empty: 2},
+		{name: "snapshot-list", fixture: labFixture(1), args: []string{"snapshot", "list", "fw01"}, empty: 3},
+		{name: "snapshot-show", fixture: labFixture(1), args: []string{"snapshot", "show"}, empty: 3},
+		{name: "snapshot-diff", fixture: labFixture(2), args: []string{"snapshot", "diff"}, empty: 3},
 		{name: "search", fixture: labFixture(1), args: []string{"search", "198.18.10.100"}, empty: 3},
 		{name: "lookup", fixture: labFixture(1), args: []string{"lookup", "dc01"}, empty: 3},
-		{name: "lookup-missing", fixture: labFixture(1), args: []string{"lookup", "no-such-name"}, empty: 3, until: 0},
-		{name: "simulate-policy", fixture: labFixture(1), args: []string{"simulate", "policy", "198.18.1.10", "198.18.10.100", "--device", "fw01", "--vsys", "vsys1"}, empty: 3, until: 0},
-		{name: "simulate-nat", fixture: natFixture, args: []string{"simulate", "nat", "198.18.1.10", "198.18.250.10", "--device", "fw01", "--router", "default", "--from-zone", "transport", "--port", "8443"}, empty: 3, until: 5},
-		{name: "simulate-routing", fixture: routingFixture, args: []string{"simulate", "routing", "198.18.10.5", "8.8.8.8"}, empty: 3, until: 5},
+		{name: "lookup-missing", fixture: labFixture(1), args: []string{"lookup", "no-such-name"}, empty: 3},
+		{name: "simulate-policy", fixture: labFixture(1), args: []string{"simulate", "policy", "198.18.1.10", "198.18.10.100", "--device", "fw01", "--vsys", "vsys1"}, empty: 3},
+		{name: "simulate-nat", fixture: natFixture, args: []string{"simulate", "nat", "198.18.1.10", "198.18.250.10", "--device", "fw01", "--router", "default", "--from-zone", "transport", "--port", "8443"}, empty: 3},
+		{name: "simulate-routing", fixture: routingFixture, args: []string{"simulate", "routing", "198.18.10.5", "8.8.8.8"}, empty: 3},
 	}
 }
 
@@ -113,10 +112,8 @@ var usageRows = [][]string{
 
 func TestContract(t *testing.T) {
 	t.Parallel()
-	formats := []string{"text", "json"}
-	if planStep >= 7 {
-		formats = append(formats, "yaml")
-	}
+	t.Logf("contract test at plan step %d", planStep)
+	formats := []string{"text", "json", "yaml"}
 	for _, row := range contractRows() {
 		for _, complete := range []bool{true, false} {
 			fixtureName := map[bool]string{true: "complete", false: "empty"}[complete]
@@ -127,9 +124,6 @@ func TestContract(t *testing.T) {
 			outputs := map[string]string{}
 			for _, f := range formats {
 				t.Run(row.name+"/"+fixtureName+"/"+f, func(t *testing.T) {
-					if row.until > planStep {
-						t.Skipf("waits for plan step %d", row.until)
-					}
 					c := row.fixture(t, complete)
 					args := append(append([]string{}, row.args...), "--output", f)
 					var out, errOut string
@@ -147,25 +141,17 @@ func TestContract(t *testing.T) {
 					outputs[f] = out
 				})
 			}
-			if planStep >= 7 {
-				t.Run(row.name+"/"+fixtureName+"/yaml-equals-json", func(t *testing.T) {
-					if row.until > planStep {
-						t.Skipf("waits for plan step %d", row.until)
-					}
-					if outputs["json"] == "" && outputs["yaml"] == "" {
-						return // no answer in either format, such as a usage error
-					}
-					sameAnswer(t, outputs["json"], outputs["yaml"])
-				})
-			}
+			t.Run(row.name+"/"+fixtureName+"/yaml-equals-json", func(t *testing.T) {
+				if outputs["json"] == "" && outputs["yaml"] == "" {
+					return // no answer in either format, such as a usage error
+				}
+				sameAnswer(t, outputs["json"], outputs["yaml"])
+			})
 		}
 	}
 	for _, args := range usageRows {
 		for _, f := range formats {
 			t.Run("usage/"+strings.Join(args, "_")+"/"+f, func(t *testing.T) {
-				if planStep < 6 {
-					t.Skip("waits for plan step 6")
-				}
 				c := newCLI(t)
 				out, errOut, code := c.run(append(append([]string{}, args...), "--output", f)...)
 				if code != exitUsage {
@@ -213,7 +199,7 @@ func checkStreams(t *testing.T, format string, code int, out, errOut string) {
 			}
 		}
 	}
-	if format != "text" && code != exitOK && planStep >= 6 {
+	if format != "text" && code != exitOK {
 		lines := strings.Split(strings.TrimRight(errOut, "\n"), "\n")
 		var last struct {
 			Format int `json:"format"`
@@ -236,9 +222,6 @@ func checkLog(t *testing.T, log string, code int, answers bool) {
 	}
 	if n := strings.Count(log, "[RUN] exit "); n != 1 {
 		t.Errorf("%d exit lines in the run log, want 1", n)
-	}
-	if planStep < 4 {
-		return
 	}
 	want := 0
 	if code == exitOK || code == exitIncomplete || answers {

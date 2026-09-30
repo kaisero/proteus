@@ -140,11 +140,13 @@ func (s searchAnswer) Text(t *textOut) error {
 			continue
 		}
 		with++
-		fmt.Fprintln(t, header(tg, t.now))
+		fmt.Fprintln(t, t.pal.head(header(tg, t.now)))
 		printNotes(t, tg)
+		var tb table
 		for _, f := range s.byTarget[i] {
-			fmt.Fprintf(t, "  %-10s %-20s %-24s %s\n", f.Stage, f.Kind, f.Name, detail(f))
+			tb.row(plain(string(f.Stage)), plain(f.Kind), plain(f.Name), plain(detail(f)))
 		}
+		_ = tb.write(t, "  ", 1)
 	}
 	printQualifiers(t, s.Qualifiers())
 	fmt.Fprintf(t, "%d with results, %d without, %d holes\n", with, without, len(s.holes))

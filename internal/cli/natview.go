@@ -2,7 +2,6 @@ package cli
 
 import (
 	"fmt"
-	"io"
 	"strconv"
 	"strings"
 	"time"
@@ -14,10 +13,10 @@ import (
 // renderNAT draws a NAT answer (spec §18 N9): one box as in routing, the packet
 // before and after, and what security policy matches — pre-NAT addresses and port,
 // post-NAT zones (§18 F5, F6, verified on fw01).
-func renderNAT(w io.Writer, run simulate.Run, r nat.Result, takenAt, now time.Time, why bool) {
+func renderNAT(t *textOut, run simulate.Run, r nat.Result, takenAt, now time.Time, why bool) {
 	f := run.Input.Flow
-	fmt.Fprintf(w, "simulate nat %s -> %s %s on %s            fidelity: %s\n\n",
-		endpointText(f.Source), f.Destination, portSpec(f.Protocol, f.DestPort), run.Device, run.Fidelity.Level())
+	fmt.Fprintf(t, "simulate nat %s -> %s %s on %s            fidelity: %s\n\n",
+		endpointText(f.Source), f.Destination, portSpec(f.Protocol, f.DestPort), run.Device, styledLevel(t.pal, run.Fidelity.Level()))
 
 	pre := r.PreNAT
 	out := pre.Out
@@ -53,7 +52,7 @@ func renderNAT(w io.Writer, run simulate.Run, r nat.Result, takenAt, now time.Ti
 	case r.Rule == nil:
 		rows = append(rows, [2]string{"rule", "none: the packet leaves untranslated"})
 	default:
-		name := r.Rule.Name
+		name := t.pal.accent(r.Rule.Name)
 		if r.Rule.Origin != "" {
 			name += " (implicit rule of the bi-directional " + r.Rule.Origin + ")"
 		}
@@ -72,31 +71,31 @@ func renderNAT(w io.Writer, run simulate.Run, r nat.Result, takenAt, now time.Ti
 		rows = append(rows, [2]string{"note", n})
 	}
 	b := newBox(title, rows)
-	b.draw(w, max(minBox, b.width), false)
+	b.draw(t, max(minBox, b.width), false)
 
 	a := r.Flow
-	fmt.Fprintln(w)
-	fmt.Fprintf(w, "  before   %s -> %s:%s  %s\n", endpointText(f.Source), f.Destination, portNumber(f.DestPort), f.Protocol)
-	fmt.Fprintf(w, "  after    %s -> %s:%s  %s\n\n", afterSource(f, a, r.Source), a.Destination, portNumber(a.DestPort), a.Protocol)
+	fmt.Fprintln(t)
+	fmt.Fprintf(t, "  before   %s -> %s:%s  %s\n", endpointText(f.Source), f.Destination, portNumber(f.DestPort), f.Protocol)
+	fmt.Fprintf(t, "  after    %s -> %s:%s  %s\n\n", afterSource(f, a, r.Source), a.Destination, portNumber(a.DestPort), a.Protocol)
 	if r.Dropped == "" {
-		fmt.Fprintf(w, "security policy matches: %s -> %s, port %s, zones %s -> %s\n",
+		fmt.Fprintf(t, "security policy matches: %s -> %s, port %s, zones %s -> %s\n",
 			endpointText(f.Source), f.Destination, portNumber(f.DestPort), zoneText(in.Zone), zoneText(out.Zone))
 	}
 	if run.Fidelity.Level() != "exact" {
-		fmt.Fprintf(w, "may be incomplete: %s\n", run.Fidelity.Level())
+		fmt.Fprintf(t, "may be incomplete: %s\n", run.Fidelity.Level())
 		for _, st := range run.Stages {
 			if st.Fidelity.Level() != "exact" {
-				fmt.Fprintf(w, "  %-12s %s\n", st.Slug, st.Detail)
+				fmt.Fprintf(t, "  %-12s %s\n", st.Slug, st.Detail)
 			}
 		}
 	}
 	if why {
-		fmt.Fprintln(w)
+		fmt.Fprintln(t)
 		for _, e := range r.Excluded {
-			fmt.Fprintf(w, "  not %-22s %s\n", e.Rule, e.Field)
+			fmt.Fprintf(t, "  not %-22s %s\n", e.Rule, e.Field)
 		}
 		for _, st := range run.Stages {
-			fmt.Fprintf(w, "  %-14s %-10s %s\n", st.Slug, st.Fidelity.Level(), st.Detail)
+			fmt.Fprintf(t, "  %-14s %-10s %s\n", st.Slug, st.Fidelity.Level(), st.Detail)
 		}
 	}
 }

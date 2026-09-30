@@ -1,10 +1,10 @@
 fw01   snapshot 2026-09-28T10-01-00Z (2m)
   127.0.0.1:PORT, PA-VM, serial 007900000000001
-  config           3252 bytes
-  system-info       216 bytes
-  interfaces       7786 bytes
-  fib              7295 bytes
-  rib             15939 bytes
-  ha                163 bytes
+  config      3252 bytes
+  system-info 216 bytes
+  interfaces  7786 bytes
+  fib         7295 bytes
+  rib         15939 bytes
+  ha          163 bytes
   vsys1    PAN-OS 11.2.5, security rules: 6
   vsys2    PAN-OS 11.2.5, security rules: 3

@@ -43,7 +43,17 @@ func (a *app) progress() func(kind string, r task.Record) {
 	if a.format != formatText || !a.stderrTTY || a.verbose {
 		return nil
 	}
+	pal := palette{on: useColor(a.color, a.format, a.getenv, a.stderrTTY)}
 	return func(kind string, r task.Record) {
-		fmt.Fprintf(a.stderr, "%s  %-10s %-8s %s\n", kind, r.Slug, r.Status, r.Elapsed.Round(time.Millisecond))
+		st := string(r.Status)
+		switch r.Status {
+		case task.OK:
+			st = pal.ok(st)
+		case task.Failed:
+			st = pal.bad(st)
+		default:
+			st = pal.warn(st)
+		}
+		fmt.Fprintf(a.stderr, "%s  %-10s %s  %s\n", kind, r.Slug, st, pal.dim(r.Elapsed.Round(time.Millisecond).String()))
 	}
 }

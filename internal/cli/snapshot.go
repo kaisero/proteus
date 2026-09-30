@@ -98,13 +98,19 @@ func (l snapshotListAnswer) Results() any           { return l.rows }
 func (l snapshotListAnswer) Qualifiers() qualifiers { return qualifiers{Holes: l.holes} }
 
 func (l snapshotListAnswer) Text(t *textOut) error {
+	var tb table
 	for _, r := range l.rows {
-		mark := " "
+		mark := plain(" ")
 		if r.Latest {
-			mark = "*"
+			mark = cell{"*", t.pal.ok}
 		}
-		fmt.Fprintf(t, "%s %s  PAN-OS %-8s %d documents, %d failed\n", mark, r.ID, r.SWVersion, r.Documents, r.Failed)
+		failed := plain(fmt.Sprintf("%d failed", r.Failed))
+		if r.Failed > 0 {
+			failed.style = t.pal.bad
+		}
+		tb.row(mark, plain(r.ID), plain("PAN-OS "+r.SWVersion), plain(fmt.Sprintf("%d documents,", r.Documents)), failed)
 	}
+	_ = tb.write(t, "", 1)
 	printQualifiers(t, l.Qualifiers())
 	return t.err
 }
@@ -187,7 +193,7 @@ func (s snapshotShowAnswer) Text(t *textOut) error {
 	for i, r := range s.rows {
 		if r.Device != last {
 			last = r.Device
-			fmt.Fprintf(t, "%s   %s\n", r.Device, source(s.ts[i], t.now))
+			fmt.Fprintf(t, "%s   %s\n", t.pal.head(r.Device), source(s.ts[i], t.now))
 			printNotes(t, s.ts[i])
 			if r.Host != "" {
 				fmt.Fprintf(t, "  %s, %s, serial %s\n", r.Host, r.Model, r.Serial)
@@ -195,13 +201,15 @@ func (s snapshotShowAnswer) Text(t *textOut) error {
 			if r.From != "" {
 				fmt.Fprintf(t, "  fetched from the active HA peer %s\n", r.From)
 			}
+			var tb table
 			for _, d := range r.Document {
 				if d.Error != "" {
-					fmt.Fprintf(t, "  %-12s FAILED  %s\n", d.Name, d.Error)
+					tb.row(plain(d.Name), cell{"FAILED", t.pal.bad}, plain(d.Error))
 				} else {
-					fmt.Fprintf(t, "  %-12s %8d bytes\n", d.Name, d.Bytes)
+					tb.row(plain(d.Name), plain(fmt.Sprintf("%d bytes", d.Bytes)))
 				}
 			}
+			_ = tb.write(t, "  ", 1)
 		}
 		fmt.Fprintf(t, "  %-8s PAN-OS %s, security rules: %d\n", r.Vsys, r.Version, r.Rules)
 	}
@@ -305,10 +313,10 @@ func (d snapshotDiffAnswer) Text(t *textOut) error {
 	for _, r := range d.results {
 		if r.Device != last {
 			last = r.Device
-			fmt.Fprintf(t, "%s   %s -> %s\n", r.Device, r.From, r.To)
+			fmt.Fprintf(t, "%s   %s -> %s\n", t.pal.head(r.Device), r.From, r.To)
 			for _, n := range d.notes {
 				if n.Device == r.Device {
-					fmt.Fprintf(t, "  note: %s\n", n.Note)
+					fmt.Fprintf(t, "  %s\n", t.pal.dim("note: "+n.Note))
 				}
 			}
 		}
@@ -317,19 +325,35 @@ func (d snapshotDiffAnswer) Text(t *textOut) error {
 			continue
 		}
 		fmt.Fprintf(t, "  %s\n", r.Scope)
+		var tb table
 		for _, c := range r.Changes {
-			detail := c.New
+			op := cell{text: string(c.Op)}
 			switch c.Op {
+			case drift.Added:
+				op.style = t.pal.ok
 			case drift.Removed:
-				detail = c.Old
+				op.style = t.pal.bad
 			case drift.Changed:
-				detail = c.Old + " -> " + c.New
+				op.style = t.pal.warn
 			}
-			fmt.Fprintf(t, "    %-8s %-20s %-24s %s\n", c.Op, c.Kind, c.Name, detail)
+			tb.row(op, plain(c.Kind), plain(c.Name), plain(changeDetail(c)))
 		}
+		_ = tb.write(t, "    ", 1)
 	}
 	printQualifiers(t, qualifiers{Holes: d.holes})
 	return t.err
+}
+
+// changeDetail is a diff row's last column: the new value, the old one for a
+// removal, or both for a change.
+func changeDetail(c drift.Change) string {
+	switch c.Op {
+	case drift.Removed:
+		return c.Old
+	case drift.Changed:
+		return c.Old + " -> " + c.New
+	}
+	return c.New
 }
 
 // pair picks the two snapshots of a device to compare.

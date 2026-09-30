@@ -323,8 +323,8 @@ func TestSearchAcrossTheEstate(t *testing.T) {
 	c.want(0, "fetch", "fw01")
 	out := c.want(3, "search", "198.18.10.100")
 	for _, want := range []string{
-		"search 198.18.10.100 (covers)", "fw01 / vsys1   snapshot", "object     address              dc01",
-		"reference  security rule        dc-to-home", "hole: fw02:", "1 with results, 1 without, 1 holes",
+		"search 198.18.10.100 (covers)", "fw01 / vsys1   snapshot", "object    address       dc01",
+		"reference security rule dc-to-home", "hole: fw02:", "1 with results, 1 without, 1 holes",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("missing %q in:\n%s", want, out)
@@ -418,8 +418,8 @@ func TestSnapshotDiff(t *testing.T) {
 	c.want(0, "fetch", "fw01")
 	out := c.want(0, "snapshot", "diff")
 	for _, want := range []string{
-		"changed  address              net-home                 198.18.1.0/24 -> 198.18.2.0/24",
-		"added    security rule        new-rule", "vsys:vsys2 no changes",
+		"changed address       net-home   198.18.1.0/24 -> 198.18.2.0/24",
+		"added   security rule new-rule", "vsys:vsys2 no changes",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("missing %q in:\n%s", want, out)
@@ -450,7 +450,7 @@ func TestSimulatePolicy(t *testing.T) {
 	out := c.want(0, "simulate", "policy", "10.1.0.5", "10.2.0.5", "--file", file, "--vsys", "vsys1", "--why")
 	for _, want := range []string{
 		"zones      from inside, to dmz (configuration)", "fidelity   inferred; not evaluated: service, application",
-		"derive-zones         inferred", "first-match          overmatch", "first match: from-inside (allow)",
+		"derive-zones        inferred", "first-match         overmatch", "first match: from-inside (allow)",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("missing %q in:\n%s", want, out)

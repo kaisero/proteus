@@ -5,7 +5,6 @@ import (
 	"io"
 	"strings"
 	"time"
-	"unicode/utf8"
 
 	"github.com/okaiser/proteus/internal/resolve"
 	"github.com/okaiser/proteus/internal/simulate"
@@ -19,26 +18,26 @@ const minBox = 56
 // renderPath draws a path as one box per hop (spec §17.3, R8): the zone pair first,
 // because that is where a rule goes; a link line between boxes; the end; then the
 // firewalls on the path and what makes the answer uncertain.
-func renderPath(w io.Writer, run simulate.Run, p routing.Path, now time.Time, why bool) {
-	fmt.Fprintf(w, "simulate routing %s -> %s            fidelity: %s\n\n", sourceText(p), p.Destination, run.Fidelity.Level())
+func renderPath(t *textOut, run simulate.Run, p routing.Path, now time.Time, why bool) {
+	fmt.Fprintf(t, "simulate routing %s -> %s            fidelity: %s\n\n", sourceText(p), p.Destination, styledLevel(t.pal, run.Fidelity.Level()))
 	for _, n := range p.Notes {
-		fmt.Fprintf(w, "  note: %s\n", n)
+		fmt.Fprintf(t, "  note: %s\n", n)
 	}
 	if len(p.Notes) > 0 {
-		fmt.Fprintln(w)
+		fmt.Fprintln(t)
 	}
 	if len(p.Hops) > 0 {
 		first := p.Hops[0]
 		switch {
 		case p.Placed == topology.PlacedRouted:
-			fmt.Fprintf(w, "  %s   placed by route %s on %s (inferred)\n", p.Source, p.PlacedVia, first.Device)
+			fmt.Fprintf(t, "  %s   placed by route %s on %s (inferred)\n", p.Source, p.PlacedVia, first.Device)
 		case len(p.Source.Addrs) == 0:
-			fmt.Fprintf(w, "  start on %s, router %s\n", first.Device, first.Lookups[0].Router)
+			fmt.Fprintf(t, "  start on %s, router %s\n", first.Device, first.Lookups[0].Router)
 		default:
-			fmt.Fprintf(w, "  %s\n", p.Source)
+			fmt.Fprintf(t, "  %s\n", p.Source)
 		}
 		if first.In.Addr.IsValid() {
-			fmt.Fprintf(w, "     │ %s\n", first.In.Link())
+			fmt.Fprintf(t, "     │ %s\n", first.In.Link())
 		}
 	}
 	boxes := make([]hopBox, len(p.Hops))
@@ -49,7 +48,7 @@ func renderPath(w io.Writer, run simulate.Run, p routing.Path, now time.Time, wh
 	}
 	for i, h := range p.Hops {
 		last := i == len(p.Hops)-1
-		boxes[i].draw(w, width, !last || continues(p))
+		boxes[i].draw(t, width, !last || continues(p))
 		switch {
 		case !last:
 			next := p.Hops[i+1]
@@ -62,32 +61,32 @@ func renderPath(w io.Writer, run simulate.Run, p routing.Path, now time.Time, wh
 			} else if h.Device == next.Device {
 				link += fmt.Sprintf(" %s -> %s", h.Vsys, next.Vsys)
 			}
-			fmt.Fprintln(w, link)
+			fmt.Fprintln(t, link)
 		case continues(p) && h.Out.Addr.IsValid() && p.Outcome != routing.LeftByInterface:
-			fmt.Fprintf(w, "     │ %s\n", h.Out.Link())
+			fmt.Fprintf(t, "     │ %s\n", h.Out.Link())
 		case continues(p):
-			fmt.Fprintf(w, "     │ %s\n", h.Out.Interface)
+			fmt.Fprintf(t, "     │ %s\n", h.Out.Interface)
 		}
 	}
-	fmt.Fprintf(w, "  %s\n\n", p.End)
+	fmt.Fprintf(t, "  %s\n\n", p.End)
 
 	var fws []string
 	for _, h := range p.Hops {
 		fws = append(fws, fmt.Sprintf("%s (%s -> %s)", h.Device, zoneText(h.Flow.FromZone), zoneText(h.Flow.ToZone)))
 	}
 	if len(fws) > 0 {
-		fmt.Fprintf(w, "firewalls on the path: %s\n", strings.Join(fws, ", "))
+		fmt.Fprintf(t, "firewalls on the path: %s\n", strings.Join(fws, ", "))
 	}
 	if len(p.Hidden) > 0 {
-		fmt.Fprintf(w, "may be on the path, not detected: %s\n", strings.Join(p.Hidden, ", "))
+		fmt.Fprintf(t, "may be on the path, not detected: %s\n", strings.Join(p.Hidden, ", "))
 	}
 	if run.Fidelity.Level() != "exact" {
-		fmt.Fprintf(w, "may be incomplete: %s\n", incompleteText(run.Fidelity))
+		fmt.Fprintf(t, "may be incomplete: %s\n", incompleteText(run.Fidelity))
 	}
 	if why {
-		fmt.Fprintln(w)
+		fmt.Fprintln(t)
 		for _, st := range run.Stages {
-			fmt.Fprintf(w, "  %-14s %-10s %s\n", st.Slug, st.Fidelity.Level(), st.Detail)
+			fmt.Fprintf(t, "  %-14s %-10s %s\n", st.Slug, st.Fidelity.Level(), st.Detail)
 		}
 	}
 }
@@ -178,11 +177,11 @@ func newHopBox(h routing.Hop, now time.Time) hopBox {
 // newBox lays out a box's title and labelled rows; the routing and NAT renderers
 // share it.
 func newBox(title string, rows [][2]string) hopBox {
-	b := hopBox{title: title, width: utf8.RuneCountInString(title) + 3}
+	b := hopBox{title: title, width: visibleWidth(title) + 3}
 	for _, r := range rows {
 		l := fmt.Sprintf("│  %-8s%s", r[0], r[1])
 		b.lines = append(b.lines, l)
-		b.width = max(b.width, utf8.RuneCountInString(l)+2)
+		b.width = max(b.width, visibleWidth(l)+2)
 	}
 	return b
 }
@@ -190,9 +189,9 @@ func newBox(title string, rows [][2]string) hopBox {
 // draw writes the box at the given width; an open box has a line out of its
 // bottom.
 func (b hopBox) draw(w io.Writer, width int, open bool) {
-	fmt.Fprintln(w, "  "+b.title+" "+strings.Repeat("─", width-utf8.RuneCountInString(b.title)-2)+"┐")
+	fmt.Fprintln(w, "  "+b.title+" "+strings.Repeat("─", width-visibleWidth(b.title)-2)+"┐")
 	for _, l := range b.lines {
-		fmt.Fprintln(w, "  "+l+strings.Repeat(" ", width-utf8.RuneCountInString(l)-1)+"│")
+		fmt.Fprintln(w, "  "+l+strings.Repeat(" ", width-visibleWidth(l)-1)+"│")
 	}
 	if open {
 		fmt.Fprintln(w, "  └──┬"+strings.Repeat("─", width-5)+"┘")

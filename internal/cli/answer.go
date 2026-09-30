@@ -102,24 +102,24 @@ func (a *app) emitRun(ans answer, err error) error {
 
 // printQualifiers prints holes and unresolved entries after an answer. Notes print
 // under each target's header instead (printNotes).
-func printQualifiers(w io.Writer, q qualifiers) {
+func printQualifiers(t *textOut, q qualifiers) {
 	for _, h := range q.Holes {
-		fmt.Fprintf(w, "hole: %s: %s\n", where(h.Device, h.Vsys), h.Reason)
+		fmt.Fprintf(t, "%s %s: %s\n", t.pal.bad("hole:"), where(h.Device, h.Vsys), h.Reason)
 	}
 	for _, u := range q.Unresolved {
-		fmt.Fprintf(w, "unresolved: %s: %s\n", where(u.Device, u.Vsys), u.Reason)
+		fmt.Fprintf(t, "%s %s: %s\n", t.pal.warn("unresolved:"), where(u.Device, u.Vsys), u.Reason)
 	}
 	if len(q.Holes)+len(q.Unresolved) > 0 {
-		fmt.Fprintln(w)
+		fmt.Fprintln(t)
 	}
 }
 
 // printNotes prints a target's notes under its header. A version gap is left for
 // printQualifiers, because it makes the answer incomplete rather than qualifying it.
-func printNotes(w io.Writer, t estate.Target) {
-	for _, n := range t.Notes {
-		if n != t.Report.VersionGap {
-			fmt.Fprintf(w, "  note: %s\n", n)
+func printNotes(t *textOut, tg estate.Target) {
+	for _, n := range tg.Notes {
+		if n != tg.Report.VersionGap {
+			fmt.Fprintf(t, "  %s\n", t.pal.dim("note: "+n))
 		}
 	}
 }

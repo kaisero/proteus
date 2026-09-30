@@ -39,6 +39,19 @@ func goldenText(t *testing.T, name, out string) {
 	goldenFile(t, name+".txt", elapsedText.ReplaceAllString(out, "T"))
 }
 
+// sgrTags makes coloured output reviewable: each SGR sequence becomes a tag named
+// after its palette role.
+var sgrTags = strings.NewReplacer(
+	"\x1b[31m", "‹bad›", "\x1b[33m", "‹warn›", "\x1b[32m", "‹ok›",
+	"\x1b[1m", "‹head›", "\x1b[2m", "‹dim›", "\x1b[36m", "‹accent›", "\x1b[0m", "‹/›",
+)
+
+// goldenColour compares --color always text output, with SGR sequences as tags.
+func goldenColour(t *testing.T, name, out string) {
+	t.Helper()
+	goldenFile(t, name+".color.txt", sgrTags.Replace(elapsedText.ReplaceAllString(out, "T")))
+}
+
 // goldenFile compares out with testdata/golden/<file>. The JSON envelope and the text
 // layout are contracts: a change must show up here as a reviewed diff. Run go test
 // ./internal/cli -run TestGolden -update to rewrite the files, then read the diff.
@@ -154,6 +167,11 @@ func TestGoldenJSON(t *testing.T) {
 	})
 }
 
+// colourFamilies are the commands that get a coloured golden twin, one per family
+// (spec §11.2): search, lookup, simulate-policy-why, snapshot-diff, simulate-nat,
+// simulate-routing, fetch.
+var colourFamilies = map[string]bool{"search": true, "lookup": true, "simulate-policy-why": true}
+
 // Every command's text output, so a change of layout shows up as a reviewed diff.
 func TestGoldenText(t *testing.T) {
 	t.Parallel()
@@ -171,6 +189,9 @@ func TestGoldenText(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			goldenText(t, tc.name, newCLI(t).want(tc.code, tc.args...))
+			if colourFamilies[tc.name] {
+				goldenColour(t, tc.name, newCLI(t).want(tc.code, append(tc.args, "--color", "always")...))
+			}
 		})
 	}
 
@@ -188,16 +209,29 @@ func TestGoldenText(t *testing.T) {
 		fresh := newCLI(t)
 		fresh.inventory(inventoryFor(lab(t).Start(t)))
 		goldenText(t, "fetch-why", fresh.want(0, "fetch", "fw01", "--why"))
+
+		// Coloured twins of fetch and snapshot diff, on a fresh fixture, as the
+		// plain ones are above.
+		cc := newCLI(t)
+		cd := lab(t)
+		cc.inventory(inventoryFor(cd.Start(t)))
+		goldenColour(t, "fetch", cc.want(0, "fetch", "fw01", "--color", "always"))
+		cd.Config = read(t, fixture("firewall-lab-changed.xml"))
+		cc.want(0, "fetch", "fw01", "--color", "always")
+		goldenColour(t, "snapshot-diff", cc.want(0, "snapshot", "diff", "--vsys", "vsys1", "--color", "always"))
 	})
 
 	t.Run("simulate-nat", func(t *testing.T) {
 		t.Parallel()
 		goldenText(t, "simulate-nat", natLab(t).want(0, "simulate", "nat", "198.18.1.10", "198.18.250.10",
 			"--device", "fw01", "--router", "default", "--from-zone", "transport", "--port", "8443", "--why"))
+		goldenColour(t, "simulate-nat", natLab(t).want(0, "simulate", "nat", "198.18.1.10", "198.18.250.10",
+			"--device", "fw01", "--router", "default", "--from-zone", "transport", "--port", "8443", "--why", "--color", "always"))
 	})
 
 	t.Run("simulate-routing", func(t *testing.T) {
 		t.Parallel()
 		goldenText(t, "simulate-routing", routingLab(t, false).want(0, "simulate", "routing", "198.18.10.5", "8.8.8.8", "--why"))
+		goldenColour(t, "simulate-routing", routingLab(t, false).want(0, "simulate", "routing", "198.18.10.5", "8.8.8.8", "--why", "--color", "always"))
 	})
 }

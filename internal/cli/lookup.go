@@ -112,7 +112,7 @@ func (l lookupAnswer) Text(t *textOut) error {
 			continue
 		}
 		with++
-		fmt.Fprintln(t, header(tg, t.now))
+		fmt.Fprintln(t, t.pal.head(header(tg, t.now)))
 		printNotes(t, tg)
 		for _, cd := range l.byTarget[i] {
 			r.card(cd)

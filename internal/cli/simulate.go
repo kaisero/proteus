@@ -174,7 +174,7 @@ func (p policyAnswer) Text(t *textOut) error {
 	if p.verdict.Rule == nil {
 		fmt.Fprintln(t, "no enabled rule matches")
 	} else {
-		fmt.Fprintf(t, "first match: %s (%s)\n", p.verdict.Rule.Name, p.verdict.Rule.Action)
+		fmt.Fprintf(t, "first match: %s (%s)\n", t.pal.accent(p.verdict.Rule.Name), p.verdict.Rule.Action)
 	}
 	return t.err
 }
@@ -283,7 +283,7 @@ func printRun(w *textOut, run simulate.Run, t estate.Target, v securitypolicy.Ve
 	if flow.URL != "" {
 		fmt.Fprintf(w, " %s", flow.URL)
 	}
-	fmt.Fprintf(w, "\n%s\n", header(t, w.now))
+	fmt.Fprintf(w, "\n%s\n", w.pal.head(header(t, w.now)))
 	printNotes(w, t)
 	for _, ep := range []simulate.Endpoint{flow.Source, flow.Destination} {
 		if ep.Name != "" {
@@ -305,13 +305,46 @@ func printRun(w *textOut, run simulate.Run, t estate.Target, v securitypolicy.Ve
 	}
 	fmt.Fprintf(w, "  fidelity   %s\n", run.Fidelity)
 	if why {
+		var stages table
 		for _, st := range run.Stages {
-			fmt.Fprintf(w, "  %-20s %-10s %5d  %s\n", st.Slug, st.Fidelity.Level(), st.State.Candidates, st.Detail)
+			lvl := st.Fidelity.Level()
+			stages.row(plain(st.Slug), cell{text: lvl, style: fidelityStyle(w.pal, lvl)},
+				plain(fmt.Sprintf("%d", st.State.Candidates)), plain(st.Detail))
 		}
+		_ = stages.write(w, "  ", 1)
 	}
+	var tb table
 	for _, r := range v.Candidates {
-		fmt.Fprintf(w, "  %3d. %-26s %-6s [%-11s %s]\n", r.Position, r.Name, r.Action, r.Layer, r.Scope)
+		action := cell{text: r.Action, style: w.pal.bad}
+		if r.Action == "allow" {
+			action.style = w.pal.ok
+		}
+		tb.row(plain(fmt.Sprintf("%d.", r.Position)), plain(r.Name), action, plain(fmt.Sprintf("[%s %s]", r.Layer, r.Scope)))
 	}
+	_ = tb.write(w, "  ", 1)
+}
+
+// fidelityStyle is the palette role for a fidelity level: exact is ok, overmatch
+// is warn, undermatch is bad. Inferred and undeclared print plain (nil).
+func fidelityStyle(pal palette, level string) func(string) string {
+	switch level {
+	case "exact":
+		return pal.ok
+	case "overmatch":
+		return pal.warn
+	case "undermatch":
+		return pal.bad
+	}
+	return nil
+}
+
+// styledLevel is a fidelity level styled by fidelityStyle, or the level itself
+// when no role applies.
+func styledLevel(pal palette, level string) string {
+	if f := fidelityStyle(pal, level); f != nil {
+		return f(level)
+	}
+	return level
 }
 
 func orAny(zs []string) string {

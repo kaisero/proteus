@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Colour shows what needs attention.** On a terminal, holes, failures and denies are
+  red, unresolved and partial results yellow, allows and successes green, and target
+  headers bold. `--color never`, `NO_COLOR` or a pipe turns it off; JSON and YAML are
+  never coloured. Columns stay aligned whatever the names' length.
 - **Fetch shows its stages and speaks JSON.** `fetch --why` lists each device's stages
   (resolve, login, ha, documents, store) and what each did; on a terminal each stage
   shows as it ends. `fetch` and `inventory init` answer in JSON and YAML like every

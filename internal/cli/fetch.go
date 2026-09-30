@@ -317,27 +317,29 @@ func (f fetchAnswer) Text(t *textOut) error {
 		case *r.TLSVerification:
 			fmt.Fprintf(t, "%s: TLS certificate verification on\n", r.Device)
 		default:
-			fmt.Fprintf(t, "%s: TLS certificate verification OFF (insecure_tls: true)\n", r.Device)
+			fmt.Fprintf(t, "%s\n", t.pal.warn(fmt.Sprintf("%s: TLS certificate verification OFF (insecure_tls: true)", r.Device)))
 		}
 		if r.FetchedFrom != "" {
 			fmt.Fprintf(t, "  %s is the passive HA peer; fetched from the active peer %s\n", r.Device, r.FetchedFrom)
 		}
 		for _, n := range r.Notes {
-			fmt.Fprintf(t, "  note: %s\n", n)
+			fmt.Fprintf(t, "  %s\n", t.pal.dim("note: "+n))
 		}
+		var tb table
 		for _, d := range r.Documents {
 			if d.Error != "" {
-				fmt.Fprintf(t, "  %-12s FAILED  %s\n", d.Name, d.Error)
+				tb.row(plain(d.Name), cell{"FAILED", t.pal.bad}, plain(d.Error))
 			} else {
-				fmt.Fprintf(t, "  %-12s %8d bytes\n", d.Name, d.Bytes)
+				tb.row(plain(d.Name), plain(fmt.Sprintf("%d bytes", d.Bytes)))
 			}
 		}
+		_ = tb.write(t, "  ", 1)
 		if r.Stored {
-			fmt.Fprintf(t, "  stored %s@%s (%s, PAN-OS %s, serial %s)\n",
-				r.Device, r.Snapshot, r.System.Model, r.System.SWVersion, r.System.Serial)
+			fmt.Fprintf(t, "  %s\n", t.pal.ok(fmt.Sprintf("stored %s@%s (%s, PAN-OS %s, serial %s)",
+				r.Device, r.Snapshot, r.System.Model, r.System.SWVersion, r.System.Serial)))
 		}
 		if r.Error != "" {
-			fmt.Fprintf(t, "%s\n", r.Error)
+			fmt.Fprintf(t, "%s\n", t.pal.bad(r.Error))
 		}
 		if f.o.why {
 			printTaskStages(t, r.Stages)
@@ -346,11 +348,23 @@ func (f fetchAnswer) Text(t *textOut) error {
 	return t.err
 }
 
-// printTaskStages is the --why stage table of a staged task.
+// printTaskStages is the --why stage table of a staged task; the status cell is
+// styled by outcome: ok, partial/skipped warn, failed bad.
 func printTaskStages(t *textOut, stages []stageJSON) {
+	var tb table
 	for _, st := range stages {
-		fmt.Fprintf(t, "  %-10s %-8s %s\n", st.Slug, st.Status, st.Detail)
+		status := cell{text: st.Status}
+		switch task.Status(st.Status) {
+		case task.OK:
+			status.style = t.pal.ok
+		case task.Partial, task.Skipped:
+			status.style = t.pal.warn
+		case task.Failed:
+			status.style = t.pal.bad
+		}
+		tb.row(plain(st.Slug), status, plain(st.Detail))
 	}
+	_ = tb.write(t, "  ", 1)
 }
 
 func (a *app) inventoryInitCmd() *cobra.Command {

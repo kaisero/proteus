@@ -46,6 +46,7 @@ func TestProgressOnlyOnATerminalInText(t *testing.T) {
 	var errOut bytes.Buffer
 	a := newApp(&bytes.Buffer{}, &errOut, func(string) string { return "" }, time.Now)
 	a.format = formatText
+	a.color = colorNever // this test is about when progress fires, not its colour
 	if a.progress() != nil {
 		t.Error("no progress when stderr is not a terminal")
 	}
@@ -65,7 +66,7 @@ func TestProgressOnlyOnATerminalInText(t *testing.T) {
 		t.Fatal("progress on a terminal in text mode")
 	}
 	p("fw01", task.Record{Slug: "login", Status: task.OK, Elapsed: 1500 * time.Microsecond})
-	if got, want := errOut.String(), "fw01  login      ok       2ms\n"; got != want {
+	if got, want := errOut.String(), "fw01  login      ok  2ms\n"; got != want {
 		t.Errorf("progress line %q, want %q", got, want)
 	}
 }
