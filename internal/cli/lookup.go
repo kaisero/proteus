@@ -156,22 +156,11 @@ func (a *app) printLookupText(ans lookupAnswer, o lookupOptions) {
 		printNotes(a, t)
 		for _, cd := range ans.byTarget[i] {
 			r.card(cd)
-			if cd.Kind != card.KindRule {
-				fmt.Fprintf(a.stdout, "  where it is used: proteus search %s %s\n", ans.name, selectorOf(t))
-			}
 			fmt.Fprintln(a.stdout)
 		}
 	}
 	printQualifiers(a, ans.holes, ans.un, ans.notes)
 	fmt.Fprintf(a.stdout, "%d with it, %d without, %d holes\n", with, without, len(ans.holes))
-}
-
-// selectorOf is the selector that names the same configuration again.
-func selectorOf(t estate.Target) string {
-	if t.Snapshot == nil {
-		return "--file " + t.Config.Path()
-	}
-	return "--device " + t.Device + " --vsys " + t.Vsys
 }
 
 // renderer writes a card as text. Three columns: the section title, the row

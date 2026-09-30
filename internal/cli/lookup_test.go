@@ -41,9 +41,6 @@ func TestLookupASimpleRule(t *testing.T) {
 			t.Errorf("--expand: missing %q in:\n%s", want, out)
 		}
 	}
-	if strings.Contains(out, "where it is used") {
-		t.Error("a rule card has no pointer to search")
-	}
 }
 
 func TestLookupALargeRule(t *testing.T) {
@@ -98,11 +95,13 @@ func TestLookupAnObject(t *testing.T) {
 	for _, want := range []string{
 		"address        net-vienna                   vsys:vsys1\n", "tags         branch\n",
 		"description  Vienna office\n", "value        10.20.0.0/16\n", "held by      branch-networks\n",
-		"where it is used: proteus search net-vienna --file " + lookupFile,
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("missing %q in:\n%s", want, out)
 		}
+	}
+	if strings.Contains(out, "where it is used") {
+		t.Errorf("an object card has no pointer to search:\n%s", out)
 	}
 	// An object card shows a group's members as a tree without --expand.
 	if out := c.want(0, "lookup", "branch-networks", "--file", lookupFile); !strings.Contains(out, "               west-branches\n                 net-salzburg\n") {
@@ -142,7 +141,6 @@ func TestLookupAcrossTheEstate(t *testing.T) {
 	out := c.want(3, "lookup", "net-vienna")
 	for _, want := range []string{
 		"fw02 / vsys1   snapshot", "address        net-vienna",
-		"where it is used: proteus search net-vienna --device fw02 --vsys vsys1",
 		"hole: fw03:", "1 with it, 2 without, 1 holes",
 	} {
 		if !strings.Contains(out, want) {

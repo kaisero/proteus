@@ -46,7 +46,6 @@ address        net-vienna                   vsys:vsys1
 
   value        10.20.0.0/16
   held by      branch-networks
-  where it is used: proteus search net-vienna --file testdata/config/firewall-lookup.xml
 
 1 with it, 0 without, 0 holes
 ```
