@@ -50,11 +50,12 @@ func (a *app) report(code int, msg error) {
 		fmt.Fprintf(a.stderr, "%s\n", b)
 		return
 	}
+	pal := palette{on: useColor(a.effectiveColor(), formatText, a.getenv, a.stderrTTY)}
 	if msg != nil {
-		fmt.Fprintf(a.stderr, "proteus: %v\n", msg)
+		fmt.Fprintf(a.stderr, "%s %v\n", pal.bad("proteus:"), msg)
 	}
 	if logPath != "" {
-		fmt.Fprintf(a.stderr, "log: %s\n", logPath)
+		fmt.Fprintf(a.stderr, "%s\n", pal.dim("log: "+logPath))
 	}
 }
 

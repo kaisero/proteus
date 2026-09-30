@@ -48,6 +48,7 @@ type statuser interface {
 type textOut struct {
 	w   io.Writer
 	now time.Time
+	pal palette
 	err error
 }
 
@@ -77,7 +78,7 @@ func (a *app) emit(ans answer) error {
 			Holes: q.Holes, Unresolved: q.Unresolved, Notes: q.Notes,
 		})
 	default:
-		err = ans.Text(&textOut{w: a.stdout, now: a.now()})
+		err = ans.Text(&textOut{w: a.stdout, now: a.now(), pal: palette{on: useColor(a.color, a.format, a.getenv, a.stdoutTTY)}})
 	}
 	if err != nil {
 		return err

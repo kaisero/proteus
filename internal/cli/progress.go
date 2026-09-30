@@ -24,6 +24,9 @@ func (l *lockedWriter) Write(p []byte) (int, error) {
 }
 
 // isTerminal reports whether w is a character device, such as a terminal.
+// /dev/null is also a character device, so it counts too. This is harmless: with
+// output going to /dev/null, progress lines and colour codes are discarded either
+// way.
 func isTerminal(w io.Writer) bool {
 	f, ok := w.(*os.File)
 	if !ok {
