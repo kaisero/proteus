@@ -138,7 +138,9 @@ neither `simulate` nor `estate`. `store` does not import `fetch`. `search` and
 `estate`, `store`, `fetch`, `search` or `drift`. `internal/simulate/securitypolicy` imports
 none of `estate`, `store` or `fetch`. `internal/simulate/routing` imports none of `estate`,
 `store`, `fetch`, `search` or `drift`, and no I/O package: every device's data
-reaches it through `simulate.Network`. What the simulations share lives in the
+reaches it through `simulate.Network`. `internal/task` runs staged operations for
+the command line; it imports no I/O package and no package of this module except
+`internal/runlog`. `fetch` may import it. What the simulations share lives in the
 leaf packages `internal/simulate/topology` (interfaces, forwarding tables, placement) and
 `internal/simulate/rulebase` (rulebase matching, PBF), which import no simulation and no I/O
 package. `internal/simulate/nat` is also the NAT engine: `routing` and `securitypolicy` may

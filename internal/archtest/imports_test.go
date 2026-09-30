@@ -54,6 +54,7 @@ var rules = []rule{
 	{from: "internal/simulate/securitypolicy", forbid: mod("internal/estate", "internal/store", "internal/fetch")},
 	{from: "internal/simulate/routing", forbid: append(mod("internal/estate", "internal/store", "internal/fetch", "internal/search", "internal/drift", "internal/simulate/securitypolicy"), ioPackages...)},
 	{from: "internal/simulate/nat", forbid: append(mod("internal/estate", "internal/store", "internal/fetch", "internal/search", "internal/drift", "internal/simulate/routing", "internal/simulate/securitypolicy"), ioPackages...)},
+	{from: "internal/task", forbid: ioPackages, allowIn: []string{"internal/runlog"}},
 }
 
 // violations reports every rule a graph breaks. graph maps a package of this
