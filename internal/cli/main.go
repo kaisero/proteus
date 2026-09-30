@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"net/netip"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -62,6 +63,10 @@ func exitCode(err error, stderr io.Writer) int {
 			fmt.Fprintf(stderr, "proteus: %v\n", e.err)
 		}
 		return e.code
+	}
+	if strings.HasPrefix(err.Error(), "unknown command ") {
+		fmt.Fprintf(stderr, "proteus: %v\n", err)
+		return exitUsage
 	}
 	fmt.Fprintf(stderr, "proteus: %v\n", err)
 	return exitError
@@ -182,16 +187,65 @@ func (a *app) root() *cobra.Command {
 		return nil
 	}
 
-	inv := &cobra.Command{Use: "inventory", Short: "Manage the device inventory"}
-	inv.AddCommand(a.inventoryInitCmd())
-	snap := &cobra.Command{Use: "snapshot", Short: "List, show and compare stored snapshots"}
-	snap.AddCommand(a.snapshotListCmd(), a.snapshotShowCmd(), a.snapshotDiffCmd())
-	sim := &cobra.Command{Use: "simulate", Short: "Simulate what a device would do"}
-	sim.AddCommand(a.simulateCmds()...)
+	inv := group("inventory", "Manage the device inventory", a.inventoryInitCmd())
+	snap := group("snapshot", "List, show and compare stored snapshots",
+		a.snapshotListCmd(), a.snapshotShowCmd(), a.snapshotDiffCmd())
+	sim := group("simulate", "Simulate what a device would do", a.simulateCmds()...)
 
 	cmd.AddCommand(a.fetchCmd(), inv, snap, a.searchCmd(), a.lookupCmd(), sim)
+	cmd.SetHelpCommand(helpCmd(cmd))
 	a.registerCompletions(cmd)
 	return cmd
+}
+
+// group is a command that only holds subcommands. An argument that names none of
+// them is an unknown command, exit 2; Cobra checks that only on the root. A bare
+// group prints its help.
+func group(use, short string, subs ...*cobra.Command) *cobra.Command {
+	c := &cobra.Command{
+		Use: use, Short: short, Args: args(cobra.NoArgs),
+		RunE: func(c *cobra.Command, _ []string) error { return c.Help() },
+	}
+	c.AddCommand(subs...)
+	return c
+}
+
+// helpCmd replaces Cobra's help command, which prints "Unknown help topic" and exits
+// 0 for a topic that does not exist. Its ValidArgsFunction matches Cobra's own
+// default help command (InitDefaultHelpCmd), so `help <TAB>` still completes.
+func helpCmd(root *cobra.Command) *cobra.Command {
+	return &cobra.Command{
+		Use:   "help [command]",
+		Short: "Help about any command",
+		Long: `Help provides help for any command in the application.
+Simply type ` + root.DisplayName() + ` help [path to command] for full details.`,
+		RunE: func(_ *cobra.Command, argv []string) error {
+			target, rest, err := root.Find(argv)
+			if err != nil || len(rest) > 0 {
+				return usageErr("unknown help topic %q", strings.Join(argv, " "))
+			}
+			return target.Help()
+		},
+		// ValidArgsFunction matches Cobra's own default help command
+		// (InitDefaultHelpCmd): find the command named by the args given so far
+		// and offer its available, non-hidden subcommand names.
+		ValidArgsFunction: func(c *cobra.Command, argv []string, toComplete string) ([]cobra.Completion, cobra.ShellCompDirective) {
+			var completions []cobra.Completion
+			cmd, _, e := c.Root().Find(argv)
+			if e != nil {
+				return nil, cobra.ShellCompDirectiveNoFileComp
+			}
+			if cmd == nil {
+				cmd = c.Root()
+			}
+			for _, subCmd := range cmd.Commands() {
+				if subCmd.IsAvailableCommand() && strings.HasPrefix(subCmd.Name(), toComplete) {
+					completions = append(completions, cobra.CompletionWithDesc(subCmd.Name(), subCmd.Short))
+				}
+			}
+			return completions, cobra.ShellCompDirectiveNoFileComp
+		},
+	}
 }
 
 // skipsHook is true for commands that only print: help, shell completion, and the
