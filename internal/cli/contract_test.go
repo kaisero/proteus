@@ -15,7 +15,7 @@ import (
 // planStep is the last step of docs/plans/2026-09-30-cli-consistency.md that has
 // landed. A row or check that waits for a later step is skipped until then; each
 // step raises this number. When it reaches 11, nothing is skipped.
-const planStep = 2
+const planStep = 3
 
 // fixture builds a fresh CLI for one run. complete is false for the "no snapshot"
 // fixture: the same inventory, never fetched.

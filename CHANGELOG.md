@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Choose colour with `--color`.** `--color auto|always|never`, `PROTEUS_COLOR` or the
+  inventory's `color:` sets it; `auto` is the default. Colour output itself arrives in a
+  later change.
 - **See which NAT rule a packet hits.** `proteus simulate nat <source>
   <destination> --device <name>` names the NAT rule a packet hits on one firewall,
   shows the packet before and after translation, and what security policy then
@@ -186,6 +189,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Settings say where they came from, and a bad one exits 2.** The run log records
+  each setting with its source (flag, `PROTEUS_*` variable, inventory or default). A
+  bad `output`, `log_level`, `max_snapshot_age` or `color` value now names its source
+  and exits 2, from the inventory too, instead of failing the whole inventory load.
 - **The project and its command are now `proteus`.** Run `proteus` instead of
   `panos-analyst`; settings variables are `PROTEUS_*` instead of `PANOS_*`, and the
   inventory, snapshots and run logs now live in `proteus` directories, so move
