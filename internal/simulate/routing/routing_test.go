@@ -414,3 +414,31 @@ func TestECMPMemberWithoutAnAddress(t *testing.T) {
 		t.Errorf("ecmp = %+v", p.Hops[0].ECMP)
 	}
 }
+
+// unreadableNetwork has devices and no data for any of them.
+type unreadableNetwork []string
+
+func (n unreadableNetwork) Devices() []string { return n }
+func (n unreadableNetwork) Device(name string) (simulate.DeviceData, error) {
+	return simulate.DeviceData{}, &simulate.UnavailableError{Missing: []simulate.Missing{{Device: name, Reason: "no snapshot"}}}
+}
+
+// When every device in the inventory is unreadable, the source cannot be placed
+// on any of them; that is missing data, not a question for the user.
+func TestAnUnreadableEstateIsUnavailableNotAQuestion(t *testing.T) {
+	t.Parallel()
+	_, _, err := simulateOn(t, unreadableNetwork{"fw1", "fw2"}, flow("10.0.0.1", "8.8.8.8"), nil)
+	u, ok := errors.AsType[*simulate.UnavailableError](err)
+	if !ok || len(u.Missing) != 2 {
+		t.Fatalf("err = %v, want an UnavailableError for both devices", err)
+	}
+}
+
+// Naming an unreadable device with --device is also missing data, not a choice.
+func TestAnUnreadableGivenDeviceIsUnavailable(t *testing.T) {
+	t.Parallel()
+	_, _, err := simulateOn(t, unreadableNetwork{"fw1"}, flow("", "8.8.8.8"), map[string]string{"device": "fw1"})
+	if _, ok := errors.AsType[*simulate.UnavailableError](err); !ok {
+		t.Errorf("err = %v, want an UnavailableError", err)
+	}
+}

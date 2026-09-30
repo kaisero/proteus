@@ -21,3 +21,15 @@ func TestPortMatchAndChoice(t *testing.T) {
 		t.Error("choice")
 	}
 }
+
+func TestUnavailableErrorReadsAsItsReason(t *testing.T) {
+	t.Parallel()
+	one := &UnavailableError{Missing: []Missing{{Device: "fw1", Reason: "no snapshot"}}}
+	if one.Error() != "no snapshot" {
+		t.Errorf("one: %q", one.Error())
+	}
+	two := &UnavailableError{Missing: []Missing{{"fw1", "a"}, {"fw2", "b"}}}
+	if two.Error() != "fw1: a; fw2: b" {
+		t.Errorf("two: %q", two.Error())
+	}
+}

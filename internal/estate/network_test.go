@@ -1,12 +1,14 @@
 package estate
 
 import (
+	"errors"
 	"maps"
 	"os"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/okaiser/proteus/internal/simulate"
 	"github.com/okaiser/proteus/internal/store"
 )
 
@@ -175,5 +177,24 @@ func TestNetworkNotesUnreadableOptionalDocuments(t *testing.T) {
 	}
 	if d.RIB != nil {
 		t.Errorf("an unreadable routing table holds no routes, got %d", len(d.RIB))
+	}
+}
+
+// A device in the inventory with no snapshot is missing data, not the user's
+// mistake; a name the inventory does not have is the user's mistake, not missing
+// data.
+func TestAnUnreadableDeviceIsUnavailable(t *testing.T) {
+	t.Parallel()
+	st := networkStore(t)
+	n := NewNetwork(st, []string{"fw1"}, When{Now: time.Now()})
+	_, err := n.Device("fw1")
+	u, ok := errors.AsType[*simulate.UnavailableError](err)
+	if !ok || len(u.Missing) != 1 || u.Missing[0].Device != "fw1" {
+		t.Errorf("err = %v, want an UnavailableError for fw1", err)
+	}
+	if _, err := n.Device("fw9"); err == nil {
+		t.Fatal("fw9 is not in the inventory")
+	} else if _, ok := errors.AsType[*simulate.UnavailableError](err); ok {
+		t.Error("a name not in the inventory is the user's mistake, not missing data")
 	}
 }

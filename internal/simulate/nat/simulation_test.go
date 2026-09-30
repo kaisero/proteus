@@ -27,6 +27,14 @@ func (n fw01) Device(name string) (simulate.DeviceData, error) {
 	return n.data, nil
 }
 
+// unreadable has devices and no data for any of them.
+type unreadable []string
+
+func (n unreadable) Devices() []string { return n }
+func (n unreadable) Device(name string) (simulate.DeviceData, error) {
+	return simulate.DeviceData{}, &simulate.UnavailableError{Missing: []simulate.Missing{{Device: name, Reason: "no snapshot"}}}
+}
+
 func fw01Env(t *testing.T, file string) *simulate.Env {
 	t.Helper()
 	fib, err := os.ReadFile("../../../testdata/opdata/fw01-advanced-routing-fib.xml")
@@ -173,5 +181,19 @@ func TestSimulatePBFAndChoices(t *testing.T) {
 	s := Simulation{}
 	if s.Kind() != "nat" || s.Describe() == "" || len(s.Stages()) != 6 || vsysName("", "") != "vsys1" || vsysName("vsys2") != "vsys2" || orUnknown("") != "unknown" {
 		t.Error("describe")
+	}
+}
+
+// An unreadable device in the inventory is missing data, not a question for the
+// user.
+func TestAnUnreadableDeviceIsUnavailable(t *testing.T) {
+	t.Parallel()
+	env := &simulate.Env{Network: unreadable{"fw1"}}
+	_, err := Simulation{}.Run(context.Background(), env, simulate.Input{
+		Params: map[string]string{"device": "fw1"},
+		Flow:   simulate.Flow{Destination: simulate.Addr(netip.MustParseAddr("8.8.8.8"))},
+	})
+	if _, ok := errors.AsType[*simulate.UnavailableError](err); !ok {
+		t.Errorf("err = %v, want UnavailableError", err)
 	}
 }

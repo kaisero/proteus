@@ -117,6 +117,7 @@ func (n *Network) Device(name string) (simulate.DeviceData, error) {
 	}
 	d, err := n.read(node)
 	if err != nil {
+		err = &simulate.UnavailableError{Missing: []simulate.Missing{{Device: node, Reason: err.Error()}}}
 		n.errs[node] = err
 		n.w.Log.Warnf(runlog.TagSnap, "%s: hole: %v", node, err)
 		return simulate.DeviceData{}, err

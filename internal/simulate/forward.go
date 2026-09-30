@@ -62,3 +62,29 @@ func (e *ChoiceError) Error() string {
 	}
 	return e.Question + ": " + strings.Join(e.Options, ", ")
 }
+
+// UnavailableError says a simulation could not read data it needs, such as a device
+// with no usable snapshot. It is not the user's to fix on the command line; the
+// command layer reports one hole per Missing entry.
+type UnavailableError struct {
+	Missing []Missing
+}
+
+// Missing is one device a simulation could not read, and why.
+type Missing struct {
+	Device string
+	Reason string
+}
+
+// Error is the reason alone for one device, so a message that embeds it reads as
+// before; "device: reason; device: reason" for several.
+func (e *UnavailableError) Error() string {
+	if len(e.Missing) == 1 {
+		return e.Missing[0].Reason
+	}
+	parts := make([]string, len(e.Missing))
+	for i, m := range e.Missing {
+		parts[i] = m.Device + ": " + m.Reason
+	}
+	return strings.Join(parts, "; ")
+}

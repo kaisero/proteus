@@ -117,6 +117,11 @@ func place(_ context.Context, s *state) (simulate.Outcome, error) {
 		}
 		pl, err := s.topo.Place(s.src)
 		if errors.Is(err, topology.ErrUnplaced) {
+			if len(s.holes) > 0 {
+				// Devices that could not be read may be where the source is; the
+				// answer is missing data, not a question for the user.
+				return out, s.unavailable()
+			}
 			return out, &simulate.ChoiceError{Question: fmt.Sprintf("only default routes reach %s, so its first firewall is unknown; name it with --device", s.src), Options: s.topo.Nodes()}
 		}
 		if len(pl.Ties) > 0 {
@@ -145,6 +150,9 @@ func place(_ context.Context, s *state) (simulate.Outcome, error) {
 // placeGiven starts on a named device, in its only router or the one named.
 func (s *state) placeGiven(dev string) error {
 	d, err := s.env.Network.Device(dev)
+	if u, ok := errors.AsType[*simulate.UnavailableError](err); ok {
+		return u
+	}
 	if err != nil {
 		return &simulate.ChoiceError{Question: fmt.Sprintf("cannot start on %s: %v", dev, err), Options: s.topo.Nodes()}
 	}
@@ -154,6 +162,15 @@ func (s *state) placeGiven(dev string) error {
 	}
 	s.port, s.router = port, port.Router
 	return nil
+}
+
+// unavailable is the run's unreadable devices as one error.
+func (s *state) unavailable() *simulate.UnavailableError {
+	u := &simulate.UnavailableError{}
+	for _, h := range s.holes {
+		u.Missing = append(u.Missing, simulate.Missing{Device: h.Value, Reason: h.Reason})
+	}
+	return u
 }
 
 // Next-hop types the lookup knows (spec §17.2, verified on fw01 and fw02).

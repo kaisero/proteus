@@ -65,6 +65,9 @@ func (Simulation) Run(ctx context.Context, env *simulate.Env, in simulate.Input)
 		return run, &simulate.ChoiceError{Question: "the source must be an IPv4 address; IPv6 is not simulated yet"}
 	}
 	d, err := env.Network.Device(in.Params["device"])
+	if u, ok := errors.AsType[*simulate.UnavailableError](err); ok {
+		return run, u // the device is in the inventory; its data is missing
+	}
 	if err != nil {
 		return run, &simulate.ChoiceError{Question: fmt.Sprintf("cannot read %s: %v", in.Params["device"], err)}
 	}
