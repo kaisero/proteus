@@ -8,6 +8,7 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -212,13 +213,38 @@ func (c *cli) inventory(doc string) {
 
 // run returns stdout, stderr and the exit code. Each run moves the clock a minute.
 func (c *cli) run(args ...string) (string, string, int) {
+	return c.runRaw(append(args, "--config", c.cfgPath)...)
+}
+
+// runRaw runs the arguments as given, without the harness's --config.
+func (c *cli) runRaw(args ...string) (string, string, int) {
 	var out, errOut bytes.Buffer
 	now := c.clock
 	c.clock = c.clock.Add(time.Minute)
 	a := newApp(&out, &errOut, func(k string) string { return c.env[k] }, func() time.Time { return now })
 	a.peerHost = c.peerHost
-	code := a.execute(context.Background(), append(args, "--config", c.cfgPath))
+	code := a.execute(context.Background(), args)
 	return out.String(), errOut.String(), code
+}
+
+// logFile is the newest run log the harness's commands wrote.
+func (c *cli) logFile() string {
+	c.t.Helper()
+	dir := c.env["PROTEUS_LOG_DIR"]
+	entries, err := os.ReadDir(dir)
+	if err != nil || len(entries) == 0 {
+		return ""
+	}
+	names := make([]string, 0, len(entries))
+	for _, e := range entries {
+		names = append(names, e.Name())
+	}
+	slices.Sort(names) // the names embed a sortable UTC timestamp
+	b, err := os.ReadFile(filepath.Join(dir, names[len(names)-1]))
+	if err != nil {
+		c.t.Fatal(err)
+	}
+	return string(b)
 }
 
 func (c *cli) want(code int, args ...string) string {

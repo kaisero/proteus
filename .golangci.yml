@@ -40,6 +40,13 @@ linters:
           - gosec
           - errcheck
           - unparam
+      # contract_test.go's row/format subtests share one row's "outputs" map and
+      # "want" exit code, read back once every format has run; running them in
+      # parallel would race on that map, so they stay sequential on purpose.
+      - path: internal/cli/contract_test\.go
+        linters:
+          - paralleltest
+          - tparallel
 
 formatters:
   enable:
