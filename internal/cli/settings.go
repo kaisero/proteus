@@ -241,9 +241,10 @@ func (sel *selection) bind(cmd *cobra.Command, withFresh bool) {
 }
 
 // targets opens what a question runs against: one file, or the selected devices'
-// snapshots. A --fresh fetch that fails leaves the previous snapshot in use and adds
-// a note to that device's targets.
-func (a *app) targets(ctx context.Context, sel selection, s settings, progress io.Writer) ([]estate.Target, []estate.Hole, error) {
+// snapshots. What a --fresh fetch found becomes notes on that device's targets: TLS
+// verification off, a failed document, or a failed fetch that leaves the previous
+// snapshot in use.
+func (a *app) targets(ctx context.Context, sel selection, s settings) ([]estate.Target, []estate.Hole, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, nil, err
 	}
@@ -271,20 +272,27 @@ func (a *app) targets(ctx context.Context, sel selection, s settings, progress i
 	if err != nil {
 		return nil, nil, err
 	}
-	failed := map[string]string{}
+	fresh := map[string][]string{}
 	if sel.fresh {
-		errs, _ := a.fetcher(s.inv, st).each(ctx, progress, names)
-		for i, e := range errs {
-			if e != nil {
-				failed[names[i]] = e.Error()
+		for _, r := range a.fetcher(s.inv, st).each(ctx, names) {
+			var ns []string
+			if r.TLSVerification != nil && !*r.TLSVerification {
+				ns = append(ns, "TLS certificate verification is off (insecure_tls)")
 			}
+			for _, d := range r.Documents {
+				if d.Error != "" {
+					ns = append(ns, "fresh fetch: "+d.Name+" failed: "+d.Error)
+				}
+			}
+			if r.Error != "" {
+				ns = append(ns, "fresh fetch failed, answering from the previous snapshot: "+r.Error)
+			}
+			fresh[r.Device] = ns
 		}
 	}
 	ts, holes := estate.Open(st, names, sel.vsys, when)
 	for i := range ts {
-		if msg, ok := failed[ts[i].Device]; ok {
-			ts[i].Notes = append(ts[i].Notes, "fresh fetch failed, answering from the previous snapshot: "+msg)
-		}
+		ts[i].Notes = append(ts[i].Notes, fresh[ts[i].Device]...)
 	}
 	return ts, holes, nil
 }

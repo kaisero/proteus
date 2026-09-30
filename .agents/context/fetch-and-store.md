@@ -43,13 +43,17 @@ this to fall back from the Advanced Routing command to the legacy one. On an
 Advanced Routing device the legacy route command answers success with a deprecation
 text, so the Advanced Routing command must come first (verified on fw02).
 
-`Run` logs in, then fetches every document. A failed document is recorded in
-`Result.Outcomes` and the rest continue (spec S10). Only a failed login fails the
-whole run. `RunActive` (spec §17 R18) reads the HA state first: a passive member of
-an active-passive pair is fetched from its active peer (`ha_peer` or the reported
-management address, through `ActiveOptions.PeerHost`) once the peer confirms the
-pair by serial; any doubt fetches the device asked and adds `Result.Notes`.
-`Result.FetchedFrom` and `Meta.FetchedFrom` name the peer that answered.
+`Steps()` are a device's fetch as `internal/task` steps on a `State` (`NewState`):
+`login`, `ha`, `documents`. The CLI runs them with `task.Run`, between its own
+`resolve` and `store` steps, with the device's name as the task's kind, so every
+error starts `<device>/<step>: `. A failed document is recorded in
+`Result.Outcomes` and the rest continue (spec S10); the `documents` step is then
+`partial`. Only a failed login fails the device. The `ha` step (spec §17 R18) reads
+the HA state: a passive member of an active-passive pair is fetched from its active
+peer (`ha_peer` or the reported management address, through
+`ActiveOptions.PeerHost`) once the peer confirms the pair by serial; any doubt
+fetches the device asked and adds `Result.Notes`. `Result.FetchedFrom` and
+`Meta.FetchedFrom` name the peer that answered.
 
 ### Store
 
@@ -85,6 +89,7 @@ type Client struct{ ... }
 type Document struct{ ... }
 type Outcome struct{ ... }
 type Result struct{ ... }
+type State struct{ ... }
 type System struct{ ... }
 
 func (c *Client) ExportConfig(ctx context.Context) ([]byte, error)
@@ -93,10 +98,10 @@ func (c *Client) Op(ctx context.Context, cmd string) ([]byte, error)
 func (e *APIError) Error() string
 func (r Result) OK(name string) bool
 func NewClient(t inventory.Target, log *runlog.Logger) *Client
+func NewState(t inventory.Target, docs []Document, opts ActiveOptions, log *runlog.Logger) State
 func OpDocument(name string, cmds ...string) Document
 func ParseSystemInfo(b []byte) (System, error)
-func Run(ctx context.Context, t inventory.Target, docs []Document, log *runlog.Logger) (Result, error)
-func RunActive(ctx context.Context, t inventory.Target, docs []Document, opts ActiveOptions, log *runlog.Logger) (Result, error)
+func Steps() []task.Step[State]
 ```
 <!-- /GENERATED:api -->
 

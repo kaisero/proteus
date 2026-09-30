@@ -88,11 +88,11 @@ var Documents = []Document{RunningConfig, SystemInfo, Interfaces, RoutingFIB, Ro
 
 // System is what a snapshot records from show system info.
 type System struct {
-	Hostname  string `xml:"result>system>hostname"`
-	Model     string `xml:"result>system>model"`
-	Serial    string `xml:"result>system>serial"`
-	SWVersion string `xml:"result>system>sw-version"`
-	MultiVsys string `xml:"result>system>multi-vsys"`
+	Hostname  string `xml:"result>system>hostname" json:"hostname,omitempty"`
+	Model     string `xml:"result>system>model" json:"model,omitempty"`
+	Serial    string `xml:"result>system>serial" json:"serial,omitempty"`
+	SWVersion string `xml:"result>system>sw-version" json:"sw_version,omitempty"`
+	MultiVsys string `xml:"result>system>multi-vsys" json:"multi_vsys,omitempty"`
 }
 
 // ParseSystemInfo reads the response to show system info.

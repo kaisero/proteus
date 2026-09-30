@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Fetch shows its stages and speaks JSON.** `fetch --why` lists each device's stages
+  (resolve, login, ha, documents, store) and what each did; on a terminal each stage
+  shows as it ends. `fetch` and `inventory init` answer in JSON and YAML like every
+  other command. A failed device is reported once, and Ctrl-C still reports every
+  device named.
 - **Read any answer as YAML.** `--output yaml` prints the same envelope as
   `--output json`, with the same keys, in YAML that YAML 1.1 and 1.2 readers both read
   back unchanged.

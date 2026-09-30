@@ -39,18 +39,18 @@ func pair(t *testing.T, passiveHA, activeHA string) (string, ActiveOptions) {
 
 func hostname(r Result) string { return r.System.Hostname }
 
-func TestRunActiveFollowsAConfirmedPeer(t *testing.T) {
+func TestHAStepFollowsAConfirmedPeer(t *testing.T) {
 	t.Parallel()
 	host, opts := pair(t,
 		ha("Active-Passive", "passive", "A", "active", "B", "192.0.2.2/24"),
 		ha("Active-Passive", "active", "B", "passive", "A", "192.0.2.1"))
-	res, err := RunActive(context.Background(), target(host), []Document{SystemInfo}, opts, nil)
+	res, err := run(context.Background(), target(host), []Document{SystemInfo}, opts, nil)
 	if err != nil || hostname(res) != "active" || res.FetchedFrom == "" || res.Host != host {
 		t.Errorf("res = %+v, err %v", res, err)
 	}
 }
 
-func TestRunActiveStaysWhenInDoubt(t *testing.T) {
+func TestHAStepStaysWhenInDoubt(t *testing.T) {
 	t.Parallel()
 	for name, tc := range map[string]struct{ passive, active, note string }{
 		"peer not active": {ha("active-passive", "passive", "A", "suspended", "B", "192.0.2.2"), "", `peer is "suspended"`},
@@ -64,7 +64,7 @@ func TestRunActiveStaysWhenInDoubt(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			host, opts := pair(t, tc.passive, tc.active)
-			res, err := RunActive(context.Background(), target(host), []Document{SystemInfo}, opts, nil)
+			res, err := run(context.Background(), target(host), []Document{SystemInfo}, opts, nil)
 			if err != nil || hostname(res) != "passive" || res.FetchedFrom != "" ||
 				len(res.Notes) != 1 || !strings.Contains(res.Notes[0], tc.note) {
 				t.Errorf("res = %+v, err %v", res, err)
@@ -73,51 +73,51 @@ func TestRunActiveStaysWhenInDoubt(t *testing.T) {
 	}
 }
 
-func TestRunActiveWithoutHA(t *testing.T) {
+func TestHAStepWithoutHA(t *testing.T) {
 	t.Parallel()
 	d := member("alone")
 	d.Ops[haStateCmd] = fakepanos.Success("<enabled>no</enabled>")
-	res, err := RunActive(context.Background(), target(d.Start(t)), []Document{SystemInfo}, ActiveOptions{}, nil)
+	res, err := run(context.Background(), target(d.Start(t)), []Document{SystemInfo}, ActiveOptions{}, nil)
 	if err != nil || hostname(res) != "alone" || len(res.Notes) != 0 {
 		t.Errorf("res = %+v, err %v", res, err)
 	}
 	// A device that refuses the HA command is fetched as it is.
 	d = member("old")
-	res, err = RunActive(context.Background(), target(d.Start(t)), []Document{SystemInfo}, ActiveOptions{}, nil)
+	res, err = run(context.Background(), target(d.Start(t)), []Document{SystemInfo}, ActiveOptions{}, nil)
 	if err != nil || hostname(res) != "old" {
 		t.Errorf("res = %+v, err %v", res, err)
 	}
 	// An active member is fetched as it is, without a note.
 	d = member("active")
 	d.Ops[haStateCmd] = ha("active-passive", "active", "B", "passive", "A", "192.0.2.1")
-	if res, _ := RunActive(context.Background(), target(d.Start(t)), []Document{SystemInfo}, ActiveOptions{}, nil); len(res.Notes) != 0 {
+	if res, _ := run(context.Background(), target(d.Start(t)), []Document{SystemInfo}, ActiveOptions{}, nil); len(res.Notes) != 0 {
 		t.Errorf("notes = %v", res.Notes)
 	}
 }
 
-func TestRunActivePeerUnreachable(t *testing.T) {
+func TestHAStepPeerUnreachable(t *testing.T) {
 	t.Parallel()
 	d := member("passive")
 	d.Ops[haStateCmd] = ha("active-passive", "passive", "A", "active", "B", "192.0.2.2")
-	_, err := RunActive(context.Background(), target(d.Start(t)), []Document{SystemInfo},
+	_, err := run(context.Background(), target(d.Start(t)), []Document{SystemInfo},
 		ActiveOptions{PeerHost: func(string) string { return "127.0.0.1:1" }}, nil)
 	if err == nil || !strings.Contains(err.Error(), "ha_peer") {
 		t.Errorf("err = %v", err)
 	}
-	if _, err := RunActive(context.Background(), target("127.0.0.1:1"), nil, ActiveOptions{}, nil); err == nil {
+	if _, err := run(context.Background(), target("127.0.0.1:1"), nil, ActiveOptions{}, nil); err == nil {
 		t.Error("a device that cannot be logged in to fails")
 	}
 }
 
 // ha_peer in the inventory wins over the reported address.
-func TestRunActiveUsesTheInventoryPeer(t *testing.T) {
+func TestHAStepUsesTheInventoryPeer(t *testing.T) {
 	t.Parallel()
 	p, a := member("passive"), member("active")
 	p.Ops[haStateCmd] = ha("active-passive", "passive", "A", "active", "B", "192.0.2.2")
 	a.Ops[haStateCmd] = ha("active-passive", "active", "B", "passive", "A", "192.0.2.1")
 	tg := target(p.Start(t))
 	tg.HAPeer = a.Start(t)
-	res, err := RunActive(context.Background(), tg, []Document{SystemInfo},
+	res, err := run(context.Background(), tg, []Document{SystemInfo},
 		ActiveOptions{PeerHost: func(string) string { t.Error("PeerHost must not be asked"); return "" }}, nil)
 	if err != nil || hostname(res) != "active" || res.FetchedFrom != tg.HAPeer {
 		t.Errorf("res = %+v, err %v", res, err)

@@ -123,7 +123,7 @@ func (a *app) runSimulation(ctx context.Context, o policyOptions) (answer, error
 		return nil, err
 	}
 	ans := policyAnswer{o: o, flow: flow}
-	ts, holes, err := a.targets(ctx, o.sel, s, a.stderr)
+	ts, holes, err := a.targets(ctx, o.sel, s)
 	if err != nil {
 		return nil, err
 	}
@@ -380,4 +380,9 @@ func dedupeUnresolved(in []unresolved) []unresolved {
 		}
 	}
 	return out
+}
+
+// bindWhy registers --why with the one help text every command shares.
+func bindWhy(cmd *cobra.Command, v *bool) {
+	cmd.Flags().BoolVar(v, "why", false, "show every stage: what it decided and why")
 }

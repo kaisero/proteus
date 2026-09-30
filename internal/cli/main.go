@@ -57,6 +57,7 @@ var errIncomplete = &exitErr{code: exitIncomplete}
 func Run(ctx context.Context, version string, args []string, stdout, stderr io.Writer, getenv func(string) string) int {
 	a := newApp(stdout, stderr, getenv, time.Now)
 	a.version = version
+	a.stdoutTTY, a.stderrTTY = isTerminal(stdout), isTerminal(stderr)
 	return a.execute(ctx, args)
 }
 
@@ -66,6 +67,7 @@ func Run(ctx context.Context, version string, args []string, stdout, stderr io.W
 func (a *app) execute(ctx context.Context, argv []string) int {
 	start := a.now()
 	a.argv = argv
+	a.stderr = &lockedWriter{w: a.stderr}
 	cmd := a.root()
 	cmd.SetArgs(argv)
 	err := cmd.ExecuteContext(ctx)
@@ -92,9 +94,11 @@ func (a *app) execute(ctx context.Context, argv []string) int {
 // environment and the clock, and the persistent flags.
 type app struct {
 	stdout, stderr io.Writer
-	getenv         func(string) string
-	now            func() time.Time
-	version        string
+	// stdoutTTY and stderrTTY say whether each is a terminal; Run sets them.
+	stdoutTTY, stderrTTY bool
+	getenv               func(string) string
+	now                  func() time.Time
+	version              string
 
 	configFlag, storeFlag, outputFlag, maxAgeFlag string
 	logLevelFlag, logDirFlag                      string

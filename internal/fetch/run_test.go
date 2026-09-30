@@ -8,8 +8,18 @@ import (
 	"time"
 
 	"github.com/okaiser/proteus/internal/fakepanos"
+	"github.com/okaiser/proteus/internal/inventory"
 	"github.com/okaiser/proteus/internal/runlog"
+	"github.com/okaiser/proteus/internal/task"
 )
+
+// run is a device's fetch the way the command line runs it: the fetch steps in
+// order, with the device's name as the task's kind.
+func run(ctx context.Context, t inventory.Target, docs []Document, opts ActiveOptions, log *runlog.Logger) (Result, error) {
+	s := NewState(t, docs, opts, log)
+	_, err := task.Run(ctx, t.Name, &s, Steps(), task.Options{Log: log})
+	return s.Result, err
+}
 
 func fullDevice(t *testing.T) *fakepanos.Device {
 	t.Helper()
@@ -33,7 +43,7 @@ func fullDevice(t *testing.T) *fakepanos.Device {
 func TestRunFetchesEveryDocument(t *testing.T) {
 	t.Parallel()
 	d := fullDevice(t)
-	res, err := Run(context.Background(), target(d.Start(t)), Documents, nil)
+	res, err := run(context.Background(), target(d.Start(t)), Documents, ActiveOptions{}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -55,7 +65,7 @@ func TestRunContinuesPastAFailedDocument(t *testing.T) {
 	t.Parallel()
 	d := fullDevice(t)
 	delete(d.Ops, "<show><interface>all</interface></show>")
-	res, err := Run(context.Background(), target(d.Start(t)), Documents, nil)
+	res, err := run(context.Background(), target(d.Start(t)), Documents, ActiveOptions{}, nil)
 	if err != nil {
 		t.Fatalf("one failed document must not fail the run: %v", err)
 	}
@@ -73,7 +83,7 @@ func TestRunFailsWhenLoginFails(t *testing.T) {
 	d := fullDevice(t)
 	tg := target(d.Start(t))
 	tg.Password = "wrong"
-	_, err := Run(context.Background(), tg, Documents, nil)
+	_, err := run(context.Background(), tg, Documents, ActiveOptions{}, nil)
 	if err == nil || strings.Contains(err.Error(), "wrong") {
 		t.Errorf("want a login error that does not quote the password, got %v", err)
 	}
@@ -89,7 +99,7 @@ func TestRunLogsCallsWithoutSecrets(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Run(context.Background(), target(d.Start(t)), Documents, l); err != nil {
+	if _, err := run(context.Background(), target(d.Start(t)), Documents, ActiveOptions{}, l); err != nil {
 		t.Fatal(err)
 	}
 	_ = l.Close()
@@ -126,7 +136,7 @@ func TestAFailedDocumentIsWarnedAboutOnce(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Run(context.Background(), target(d.Start(t)), Documents, l); err != nil {
+	if _, err := run(context.Background(), target(d.Start(t)), Documents, ActiveOptions{}, l); err != nil {
 		t.Fatal(err)
 	}
 	_ = l.Close()
@@ -154,11 +164,22 @@ func TestACancelledRunEndsPromptly(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
 	start := time.Now()
-	res, err := Run(ctx, target(d.Start(t)), Documents, nil)
+	res, err := run(ctx, target(d.Start(t)), Documents, ActiveOptions{}, nil)
 	if elapsed := time.Since(start); elapsed > 10*time.Second {
 		t.Fatalf("the run took %s after its context ended", elapsed)
 	}
 	if err == nil && res.OK(RunningConfig.Name) {
 		t.Error("the stalled export cannot have succeeded")
+	}
+}
+
+// The device name appears once in a login error: the task's kind adds it.
+func TestALoginErrorNamesTheDeviceOnce(t *testing.T) {
+	t.Parallel()
+	d := fullDevice(t)
+	d.Password = "other"
+	_, err := run(context.Background(), target(d.Start(t)), Documents, ActiveOptions{}, nil)
+	if err == nil || strings.Count(err.Error(), target("").Name) != 1 || !strings.HasPrefix(err.Error(), target("").Name+"/login: ") {
+		t.Errorf("err = %v", err)
 	}
 }

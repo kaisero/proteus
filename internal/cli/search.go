@@ -96,7 +96,7 @@ func (a *app) runSearch(ctx context.Context, o searchOptions) (answer, error) {
 	if err != nil {
 		return nil, err
 	}
-	ts, holes, err := a.targets(ctx, o.sel, s, a.stderr)
+	ts, holes, err := a.targets(ctx, o.sel, s)
 	if err != nil {
 		return nil, err
 	}

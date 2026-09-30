@@ -103,7 +103,7 @@ func TestGoldenJSON(t *testing.T) {
 		d := lab(t)
 		c := newCLI(t)
 		c.inventory(inventoryFor(d.Start(t)))
-		c.want(0, "fetch", "fw01")
+		golden(t, "fetch", c.want(0, "fetch", "fw01", "--output", "json"))
 		d.Config = read(t, fixture("firewall-lab-changed.xml"))
 		c.want(0, "fetch", "fw01")
 		golden(t, "snapshot-list", c.want(0, "snapshot", "list", "fw01", "--output", "json"))
@@ -112,6 +112,19 @@ func TestGoldenJSON(t *testing.T) {
 		goldenFile(t, "snapshot-list.yaml", c.want(0, "snapshot", "list", "fw01", "--output", "yaml"))
 		goldenFile(t, "snapshot-show.yaml", c.want(0, "snapshot", "show", "--output", "yaml"))
 		goldenFile(t, "snapshot-diff.yaml", c.want(0, "snapshot", "diff", "--vsys", "vsys1", "--output", "yaml"))
+	})
+
+	t.Run("fetch-yaml", func(t *testing.T) {
+		t.Parallel()
+		c := newCLI(t)
+		c.inventory(inventoryFor(lab(t).Start(t)))
+		goldenFile(t, "fetch.yaml", c.want(0, "fetch", "fw01", "--output", "yaml"))
+	})
+
+	t.Run("inventory-init", func(t *testing.T) {
+		t.Parallel()
+		c := newCLI(t)
+		golden(t, "inventory-init", c.want(0, "inventory", "init", "--output", "json"))
 	})
 
 	t.Run("empty-store", func(t *testing.T) {
@@ -172,6 +185,9 @@ func TestGoldenText(t *testing.T) {
 		goldenText(t, "snapshot-list", c.want(0, "snapshot", "list", "fw01"))
 		goldenText(t, "snapshot-show", c.want(0, "snapshot", "show"))
 		goldenText(t, "snapshot-diff", c.want(0, "snapshot", "diff", "--vsys", "vsys1"))
+		fresh := newCLI(t)
+		fresh.inventory(inventoryFor(lab(t).Start(t)))
+		goldenText(t, "fetch-why", fresh.want(0, "fetch", "fw01", "--why"))
 	})
 
 	t.Run("simulate-nat", func(t *testing.T) {

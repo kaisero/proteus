@@ -1,68 +1,85 @@
 package cli
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
-	"io"
+	"io/fs"
 	"sync"
 
 	"github.com/spf13/cobra"
 
+	"github.com/okaiser/proteus/internal/estate"
 	"github.com/okaiser/proteus/internal/fetch"
 	"github.com/okaiser/proteus/internal/inventory"
 	"github.com/okaiser/proteus/internal/runlog"
 	"github.com/okaiser/proteus/internal/store"
+	"github.com/okaiser/proteus/internal/task"
 )
 
 // fetchConcurrency bounds how many devices are fetched at once. It is a constant
-// because spec §15 C14 adds no settings beyond four; it becomes one when someone
+// because spec §15 C14 adds no settings beyond its list; it becomes one when someone
 // needs it.
 const fetchConcurrency = 8
 
+// fetchOptions are fetch's flags and arguments.
+type fetchOptions struct {
+	names  []string
+	labels []string
+	all    bool
+	why    bool
+}
+
 func (a *app) fetchCmd() *cobra.Command {
-	var all bool
-	var labels []string
+	var o fetchOptions
 	cmd := &cobra.Command{
 		Use:   "fetch [device...]",
 		Short: "Fetch devices into the store",
 		Long: "Fetch logs in to each device, reads its configuration and operational state, and\n" +
-			"stores them as a snapshot. Name devices, select them with --label, or pass --all.",
+			"stores them as a snapshot. Name devices, select them with --label, or pass --all.\n\n" +
+			"Stages per device: resolve, login, ha, documents, store",
 		ValidArgsFunction: a.completeDevices,
 		RunE: func(c *cobra.Command, names []string) error {
-			kinds := 0
-			for _, given := range []bool{len(names) > 0, len(labels) > 0, all} {
-				if given {
-					kinds++
-				}
-			}
-			if kinds != 1 {
-				return usageErr("name devices, select them with --label, or pass --all; exactly one of those")
-			}
-			s, err := a.settings(true)
-			if err != nil {
-				return err
-			}
-			if all || len(labels) > 0 {
-				if names, err = s.inv.Select(nil, labels); err != nil {
-					return usageErr("%w", err)
-				}
-			}
-			st, err := a.openStore(s.storeRoot)
-			if err != nil {
-				return err
-			}
-			return a.fetcher(s.inv, st).devices(c.Context(), a.stdout, names)
+			o.names = names
+			return a.emitRun(a.runFetch(c.Context(), o))
 		},
 	}
-	cmd.Flags().BoolVar(&all, "all", false, "fetch every device in the inventory")
-	cmd.Flags().StringArrayVar(&labels, "label", nil, "fetch devices with this key=value label (repeatable; all must hold)")
+	cmd.Flags().BoolVar(&o.all, "all", false, "fetch every device in the inventory")
+	cmd.Flags().StringArrayVar(&o.labels, "label", nil, "fetch devices with this key=value label (repeatable; all must hold)")
+	bindWhy(cmd, &o.why)
 	return cmd
 }
 
-// fetcher fetches devices into one store. It holds what every device's fetch
-// shares, so its methods take only what changes per call.
+func (a *app) runFetch(ctx context.Context, o fetchOptions) (answer, error) {
+	kinds := 0
+	for _, given := range []bool{len(o.names) > 0, len(o.labels) > 0, o.all} {
+		if given {
+			kinds++
+		}
+	}
+	if kinds != 1 {
+		return nil, usageErr("name devices, select them with --label, or pass --all; exactly one of those")
+	}
+	s, err := a.settings(true)
+	if err != nil {
+		return nil, err
+	}
+	names := o.names
+	if len(names) > 0 {
+		if _, err := s.inv.Select(names, nil); err != nil {
+			return nil, usageErr("%w", err)
+		}
+	} else if names, err = s.inv.Select(nil, o.labels); err != nil {
+		return nil, usageErr("%w", err)
+	}
+	st, err := a.openStore(s.storeRoot)
+	if err != nil {
+		return nil, err
+	}
+	return fetchAnswer{o: o, results: a.fetcher(s.inv, st).each(ctx, names)}, nil
+}
+
+// fetcher fetches devices into one store.
 type fetcher struct {
 	inv    *inventory.Inventory
 	st     *store.Store
@@ -71,112 +88,269 @@ type fetcher struct {
 	// peerHost maps an HA peer's reported management address to a host; nil uses
 	// the address.
 	peerHost func(mgmtIP string) string
+	onStep   func(kind string, r task.Record) // progress; nil for none
 }
 
 func (a *app) fetcher(inv *inventory.Inventory, st *store.Store) fetcher {
-	return fetcher{inv: inv, st: st, getenv: a.getenv, log: a.log, peerHost: a.peerHost}
+	return fetcher{inv: inv, st: st, getenv: a.getenv, log: a.log, peerHost: a.peerHost, onStep: a.progress()}
 }
 
-// devices fetches the named devices, up to fetchConcurrency at once, and prints
-// each device's report in the order the devices were named. A device that fails is
-// reported and the rest still run (spec S10). Some failures exit 3; all of them
-// exit 1.
-func (f fetcher) devices(ctx context.Context, out io.Writer, names []string) error {
-	errs, stored := f.each(ctx, out, names)
-	var joined []error
-	anyStored := false
-	for i, name := range names {
-		anyStored = anyStored || stored[i]
-		if errs[i] != nil {
-			joined = append(joined, fmt.Errorf("%s: %w", name, errs[i]))
-		}
-	}
-	switch {
-	case len(joined) == 0:
-		return nil
-	case !anyStored:
-		return errors.Join(joined...)
-	default:
-		return errIncomplete
+// deviceFetch is one device's fetch as the command line runs it: the fetch package's
+// state plus the steps around it.
+type deviceFetch struct {
+	fetch.State
+	name     string
+	resolved bool
+	snap     store.Snapshot
+}
+
+// lift runs a fetch package step on a deviceFetch's embedded state.
+func lift(st task.Step[fetch.State]) task.Step[deviceFetch] {
+	return task.Step[deviceFetch]{
+		Name: st.Name, Slug: st.Slug,
+		Do: func(ctx context.Context, d *deviceFetch) (task.Result, error) { return st.Do(ctx, &d.State) },
 	}
 }
 
-// each fetches the devices in parallel and returns, per device and in order, its
-// error and whether a snapshot was stored. Each device's report is printed whole,
-// so reports never interleave.
-func (f fetcher) each(ctx context.Context, out io.Writer, names []string) ([]error, []bool) {
-	reports := make([]bytes.Buffer, len(names))
-	errs := make([]error, len(names))
-	stored := make([]bool, len(names))
-	sem := make(chan struct{}, fetchConcurrency)
-	var wg sync.WaitGroup
-	for i, name := range names {
-		wg.Go(func() {
-			sem <- struct{}{}
-			defer func() { <-sem }()
-			stored[i], errs[i] = f.one(ctx, &reports[i], name)
-			if errs[i] != nil {
-				fmt.Fprintf(&reports[i], "%s: %v\n", name, errs[i])
-			}
-		})
+func (f fetcher) steps() []task.Step[deviceFetch] {
+	out := []task.Step[deviceFetch]{{Name: "resolve the inventory entry", Slug: "resolve", Do: f.resolve}}
+	for _, st := range fetch.Steps() {
+		out = append(out, lift(st))
 	}
-	wg.Wait()
-	for i := range reports {
-		_, _ = out.Write(reports[i].Bytes())
-	}
-	return errs, stored
+	return append(out, task.Step[deviceFetch]{Name: "store the snapshot", Slug: "store", Do: f.store})
 }
 
-// one fetches one device and stores its snapshot. It reports whether a snapshot was
-// stored, and every document that failed.
-func (f fetcher) one(ctx context.Context, out io.Writer, name string) (bool, error) {
-	t, err := f.inv.Resolve(name, f.getenv)
+func (f fetcher) resolve(_ context.Context, d *deviceFetch) (task.Result, error) {
+	t, err := f.inv.Resolve(d.name, f.getenv)
 	if err != nil {
-		return false, err
+		return task.Result{}, err
 	}
+	d.State = fetch.NewState(t, fetch.Documents, fetch.ActiveOptions{PeerHost: f.peerHost}, f.log)
+	d.resolved = true
 	verification := "on"
 	if t.InsecureTLS {
 		verification = "off"
-		fmt.Fprintf(out, "%s: TLS certificate verification OFF (insecure_tls: true)\n", name)
-	} else {
-		fmt.Fprintf(out, "%s: TLS certificate verification on\n", name)
 	}
-	f.log.Infof(runlog.TagAPI, "%s: fetching %s, TLS verification %s", name, t.Host, verification)
-	res, err := fetch.RunActive(ctx, t, fetch.Documents, fetch.ActiveOptions{PeerHost: f.peerHost}, f.log)
-	if err != nil {
-		return false, err
-	}
+	f.log.Infof(runlog.TagAPI, "%s: fetching %s, TLS verification %s", d.name, t.Host, verification)
+	return task.Result{Detail: t.Host + ", TLS verification " + verification}, nil
+}
+
+func (f fetcher) store(_ context.Context, d *deviceFetch) (task.Result, error) {
+	res := d.Result
 	meta := store.Meta{
-		Device: t.Name, Host: t.Host,
+		Device: d.Target.Name, Host: d.Target.Host,
 		Hostname: res.System.Hostname, Model: res.System.Model,
 		Serial: res.System.Serial, SWVersion: res.System.SWVersion,
 		FetchedFrom: res.FetchedFrom, Notes: res.Notes,
 	}
-	if res.FetchedFrom != "" {
-		fmt.Fprintf(out, "  %s is the passive HA peer; fetched from the active peer %s\n", name, res.FetchedFrom)
-	}
-	for _, n := range res.Notes {
-		fmt.Fprintf(out, "  note: %s\n", n)
-	}
-	var docErrs []error
 	for _, o := range res.Outcomes {
+		dm := store.DocumentMeta{Name: o.Name}
 		if o.Err != nil {
-			meta.Documents = append(meta.Documents, store.DocumentMeta{Name: o.Name, Error: o.Err.Error()})
-			docErrs = append(docErrs, fmt.Errorf("%s: %w", o.Name, o.Err))
-			fmt.Fprintf(out, "  %-12s FAILED  %v\n", o.Name, o.Err)
-			continue
+			dm.Error = o.Err.Error()
 		}
-		meta.Documents = append(meta.Documents, store.DocumentMeta{Name: o.Name})
-		fmt.Fprintf(out, "  %-12s %8d bytes\n", o.Name, o.Bytes)
+		meta.Documents = append(meta.Documents, dm)
 	}
-	sn, err := f.st.Write(meta, res.Docs, t.SnapshotKeep)
+	sn, err := f.st.Write(meta, res.Docs, d.Target.SnapshotKeep)
 	if err != nil {
-		return false, err
+		return task.Result{}, err
 	}
-	fmt.Fprintf(out, "  stored %s@%s (%s, PAN-OS %s, serial %s)\n",
-		sn.Device, sn.ID, res.System.Model, res.System.SWVersion, res.System.Serial)
-	f.log.Infof(runlog.TagSnap, "%s: stored %s", name, sn.ID)
-	return true, errors.Join(docErrs...)
+	d.snap = sn
+	f.log.Infof(runlog.TagSnap, "%s: stored %s", d.name, sn.ID)
+	r := task.Result{Detail: sn.Device + "@" + sn.ID}
+	if _, ok := res.Docs[store.ConfigDoc]; !ok {
+		r.Status, r.Detail = task.Partial, r.Detail+"; no configuration, so latest did not move"
+	}
+	return r, nil
+}
+
+// each fetches the devices, up to fetchConcurrency at once, and returns one result per
+// name in the order named. Once ctx is done it starts no more devices; those not
+// started are in the results with an error, so none drops silently.
+func (f fetcher) each(ctx context.Context, names []string) []fetchResult {
+	results := make([]fetchResult, len(names))
+	for i, n := range names {
+		results[i] = fetchResult{Device: n, Documents: []documentJSON{}, Stages: []stageJSON{}, Error: n + ": not started: interrupted"}
+	}
+	sem := make(chan struct{}, fetchConcurrency)
+	var wg sync.WaitGroup
+	for i, name := range names {
+		select {
+		case sem <- struct{}{}:
+		case <-ctx.Done():
+		}
+		if ctx.Err() != nil {
+			break
+		}
+		wg.Go(func() {
+			defer func() { <-sem }()
+			results[i] = f.one(ctx, name)
+		})
+	}
+	wg.Wait()
+	return results
+}
+
+// one fetches one device as a staged task whose kind is the device's name, so every
+// error it returns starts with the name, once.
+func (f fetcher) one(ctx context.Context, name string) fetchResult {
+	d := &deviceFetch{name: name}
+	recs, err := task.Run(ctx, name, d, f.steps(), task.Options{Log: f.log, OnStep: f.onStep})
+	r := fetchResult{
+		Device: name, Host: d.Target.Host, FetchedFrom: d.Result.FetchedFrom, System: d.Result.System,
+		Notes: d.Result.Notes, Documents: []documentJSON{}, Stages: taskStages(recs),
+	}
+	if d.resolved {
+		on := !d.Target.InsecureTLS
+		r.TLSVerification = &on
+	}
+	for _, o := range d.Result.Outcomes {
+		doc := documentJSON{Name: o.Name, Bytes: o.Bytes}
+		if o.Err != nil {
+			doc.Bytes, doc.Error = 0, o.Err.Error()
+		}
+		r.Documents = append(r.Documents, doc)
+	}
+	if d.snap.ID != "" {
+		r.Stored, r.Snapshot = true, d.snap.ID
+	}
+	if err != nil {
+		r.Error = err.Error()
+	}
+	return r
+}
+
+// taskStages is a staged task's records in the JSON stage shape.
+func taskStages(recs []task.Record) []stageJSON {
+	out := make([]stageJSON, len(recs))
+	for i, r := range recs {
+		out[i] = stageJSON{
+			Slug: r.Slug, Name: r.Name, Status: string(r.Status), Detail: r.Detail, Notes: r.Notes,
+			ElapsedMS: float64(r.Elapsed.Microseconds()) / 1000,
+		}
+	}
+	return out
+}
+
+// fetchResult is one device in fetch's answer (spec §6.4).
+type fetchResult struct {
+	Device          string         `json:"device"`
+	Host            string         `json:"host,omitempty"`
+	FetchedFrom     string         `json:"fetched_from,omitempty"`
+	TLSVerification *bool          `json:"tls_verification,omitempty"` // absent when resolve failed
+	Stored          bool           `json:"stored"`
+	Snapshot        string         `json:"snapshot,omitempty"`
+	System          fetch.System   `json:"system"`
+	Documents       []documentJSON `json:"documents"`
+	Stages          []stageJSON    `json:"stages"`
+	Notes           []string       `json:"notes,omitempty"`
+	Error           string         `json:"error,omitempty"`
+}
+
+// documentJSON is one document of a device's fetch.
+type documentJSON struct {
+	Name  string `json:"name"`
+	Bytes int    `json:"bytes,omitempty"`
+	Error string `json:"error,omitempty"`
+}
+
+// fetchInput is fetch's input block.
+type fetchInput struct {
+	Devices []string `json:"devices,omitempty"`
+	Labels  []string `json:"labels,omitempty"`
+	All     bool     `json:"all,omitempty"`
+}
+
+// fetchAnswer is fetch's answer: one result per device named.
+type fetchAnswer struct {
+	o       fetchOptions
+	results []fetchResult
+}
+
+func (f fetchAnswer) Command() string { return "fetch" }
+func (f fetchAnswer) Input() any {
+	return fetchInput{Devices: f.o.names, Labels: f.o.labels, All: f.o.all}
+}
+func (f fetchAnswer) Results() any { return f.results }
+
+// Qualifiers holds one hole per device that failed.
+func (f fetchAnswer) Qualifiers() qualifiers {
+	var q qualifiers
+	for _, r := range f.results {
+		if r.Error != "" {
+			q.Holes = append(q.Holes, estate.Hole{Device: r.Device, Reason: r.Error})
+		}
+	}
+	return q
+}
+
+// Status is C11: every device stored every document → complete; a failure with at
+// least one device stored → incomplete; no device stored → an error (spec §6.4).
+func (f fetchAnswer) Status() error {
+	stored, failed := 0, 0
+	for _, r := range f.results {
+		if r.Stored {
+			stored++
+		}
+		bad := r.Error != ""
+		for _, d := range r.Documents {
+			bad = bad || d.Error != ""
+		}
+		if bad {
+			failed++
+		}
+	}
+	switch {
+	case stored == 0:
+		return &exitErr{code: exitError, err: errors.New("no device was fetched")}
+	case failed > 0:
+		return errIncomplete
+	}
+	return nil
+}
+
+// Text prints one block per device, in the order named. It prints no hole lines:
+// each failed device's block already shows its error.
+func (f fetchAnswer) Text(t *textOut) error {
+	for _, r := range f.results {
+		switch {
+		case r.TLSVerification == nil:
+		case *r.TLSVerification:
+			fmt.Fprintf(t, "%s: TLS certificate verification on\n", r.Device)
+		default:
+			fmt.Fprintf(t, "%s: TLS certificate verification OFF (insecure_tls: true)\n", r.Device)
+		}
+		if r.FetchedFrom != "" {
+			fmt.Fprintf(t, "  %s is the passive HA peer; fetched from the active peer %s\n", r.Device, r.FetchedFrom)
+		}
+		for _, n := range r.Notes {
+			fmt.Fprintf(t, "  note: %s\n", n)
+		}
+		for _, d := range r.Documents {
+			if d.Error != "" {
+				fmt.Fprintf(t, "  %-12s FAILED  %s\n", d.Name, d.Error)
+			} else {
+				fmt.Fprintf(t, "  %-12s %8d bytes\n", d.Name, d.Bytes)
+			}
+		}
+		if r.Stored {
+			fmt.Fprintf(t, "  stored %s@%s (%s, PAN-OS %s, serial %s)\n",
+				r.Device, r.Snapshot, r.System.Model, r.System.SWVersion, r.System.Serial)
+		}
+		if r.Error != "" {
+			fmt.Fprintf(t, "%s\n", r.Error)
+		}
+		if f.o.why {
+			printTaskStages(t, r.Stages)
+		}
+	}
+	return t.err
+}
+
+// printTaskStages is the --why stage table of a staged task.
+func printTaskStages(t *textOut, stages []stageJSON) {
+	for _, st := range stages {
+		fmt.Fprintf(t, "  %-10s %-8s %s\n", st.Slug, st.Status, st.Detail)
+	}
 }
 
 func (a *app) inventoryInitCmd() *cobra.Command {
@@ -185,13 +359,41 @@ func (a *app) inventoryInitCmd() *cobra.Command {
 		Short: "Write an inventory template",
 		Args:  args(cobra.NoArgs),
 		RunE: func(*cobra.Command, []string) error {
-			path := a.invPath
-			if err := inventory.WriteTemplate(path); err != nil {
-				return err
-			}
-			fmt.Fprintf(a.stdout, "wrote %s (mode 0600)\n"+
-				"set the hosts and credentials, then run: proteus fetch --all\n", path)
-			return nil
+			return a.emitRun(a.runInventoryInit())
 		},
 	}
+}
+
+// initResult is inventory init's one result: the file it wrote.
+type initResult struct {
+	Path string `json:"path"`
+	Mode string `json:"mode"`
+}
+
+// initInput is inventory init's input block: the path it was asked to write.
+type initInput struct {
+	Path string `json:"path"`
+}
+
+// initAnswer is inventory init's answer.
+type initAnswer struct{ path string }
+
+func (a *app) runInventoryInit() (answer, error) {
+	if err := inventory.WriteTemplate(a.invPath); err != nil {
+		if errors.Is(err, fs.ErrExist) {
+			return nil, usageErr("%s exists; name another file with --config, or move it", a.invPath)
+		}
+		return nil, err
+	}
+	return initAnswer{path: a.invPath}, nil
+}
+
+func (i initAnswer) Command() string        { return "inventory init" }
+func (i initAnswer) Input() any             { return initInput{Path: i.path} }
+func (i initAnswer) Results() any           { return []initResult{{Path: i.path, Mode: "0600"}} }
+func (i initAnswer) Qualifiers() qualifiers { return qualifiers{} }
+
+func (i initAnswer) Text(t *textOut) error {
+	fmt.Fprintf(t, "wrote %s (mode 0600)\nset the hosts and credentials, then run: proteus fetch --all\n", i.path)
+	return t.err
 }

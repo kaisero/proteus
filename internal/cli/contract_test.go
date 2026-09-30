@@ -15,7 +15,7 @@ import (
 // planStep is the last step of docs/plans/2026-09-30-cli-consistency.md that has
 // landed. A row or check that waits for a later step is skipped until then; each
 // step raises this number. When it reaches 11, nothing is skipped.
-const planStep = 7
+const planStep = 9
 
 // fixture builds a fresh CLI for one run. complete is false for the "no snapshot"
 // fixture: the same inventory, never fetched.
@@ -85,10 +85,10 @@ type contractRow struct {
 // contractRows is spec §11.1. A leaf command with no row fails TestContractCoversEveryCommand.
 func contractRows() []contractRow {
 	return []contractRow{
-		{name: "fetch", fixture: labFixture(0), args: []string{"fetch", "fw01"}, answers: true, until: 9},
-		{name: "fetch-broken-doc", fixture: brokenDocFixture, args: []string{"fetch", "fw01"}, complete: 3, empty: 3, answers: true, until: 9},
-		{name: "inventory-init", fixture: emptyFixture, args: []string{"inventory", "init"}, raw: true, until: 9},
-		{name: "inventory-init-exists", fixture: labFixture(0), args: []string{"inventory", "init"}, complete: 2, empty: 2, until: 9},
+		{name: "fetch", fixture: labFixture(0), args: []string{"fetch", "fw01"}, answers: true, until: 0},
+		{name: "fetch-broken-doc", fixture: brokenDocFixture, args: []string{"fetch", "fw01"}, complete: 3, empty: 3, answers: true, until: 0},
+		{name: "inventory-init", fixture: emptyFixture, args: []string{"inventory", "init"}, raw: true, until: 0},
+		{name: "inventory-init-exists", fixture: labFixture(0), args: []string{"inventory", "init"}, complete: 2, empty: 2, until: 0},
 		{name: "snapshot-list", fixture: labFixture(1), args: []string{"snapshot", "list", "fw01"}, empty: 3, until: 0},
 		{name: "snapshot-show", fixture: labFixture(1), args: []string{"snapshot", "show"}, empty: 3, until: 0},
 		{name: "snapshot-diff", fixture: labFixture(2), args: []string{"snapshot", "diff"}, empty: 3, until: 0},
@@ -151,6 +151,9 @@ func TestContract(t *testing.T) {
 				t.Run(row.name+"/"+fixtureName+"/yaml-equals-json", func(t *testing.T) {
 					if row.until > planStep {
 						t.Skipf("waits for plan step %d", row.until)
+					}
+					if outputs["json"] == "" && outputs["yaml"] == "" {
+						return // no answer in either format, such as a usage error
 					}
 					sameAnswer(t, outputs["json"], outputs["yaml"])
 				})

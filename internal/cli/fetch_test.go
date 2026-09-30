@@ -85,9 +85,12 @@ func TestFetchThenAnswerFromLatest(t *testing.T) {
 	t.Parallel()
 	inv, st := setup(t, lab(t).Start(t))
 	var out bytes.Buffer
-	if err := (fetcher{inv: inv, st: st, getenv: getenv}).devices(context.Background(), &out, []string{"fw01"}); err != nil {
-		t.Fatalf("fetch: %v\n%s", err, out.String())
+	res := (fetcher{inv: inv, st: st, getenv: getenv}).each(context.Background(), []string{"fw01"})
+	if len(res) != 1 || !res[0].Stored || res[0].Error != "" {
+		t.Fatalf("fetch: %+v", res)
 	}
+	ans := fetchAnswer{results: res}
+	_ = ans.Text(&textOut{w: &out})
 	if !strings.Contains(out.String(), "TLS certificate verification OFF") {
 		t.Errorf("the run must say that verification is off:\n%s", out.String())
 	}
@@ -115,19 +118,26 @@ func TestFetchThenAnswerFromLatest(t *testing.T) {
 	}
 }
 
+// fetchText fetches the devices and returns fetch's text answer and exit status.
+func fetchText(ctx context.Context, f fetcher, names ...string) (string, error) {
+	var out bytes.Buffer
+	ans := fetchAnswer{results: f.each(ctx, names)}
+	_ = ans.Text(&textOut{w: &out})
+	return out.String(), ans.Status()
+}
+
 // Spec §15 C11: a device stored with a missing document is a partial failure.
 func TestFetchReportsAFailedDocument(t *testing.T) {
 	t.Parallel()
 	d := lab(t)
 	delete(d.Ops, "<show><interface>all</interface></show>")
 	inv, st := setup(t, d.Start(t))
-	var out bytes.Buffer
-	err := (fetcher{inv: inv, st: st, getenv: getenv}).devices(context.Background(), &out, []string{"fw01"})
+	out, err := fetchText(context.Background(), fetcher{inv: inv, st: st, getenv: getenv}, "fw01")
 	if !errors.Is(err, errIncomplete) {
 		t.Errorf("a stored device with a missing document exits 3, got %v", err)
 	}
-	if !strings.Contains(out.String(), "interfaces") || !strings.Contains(out.String(), "FAILED") {
-		t.Errorf("the failed document must be named:\n%s", out.String())
+	if !strings.Contains(out, "interfaces") || !strings.Contains(out, "FAILED") {
+		t.Errorf("the failed document must be named:\n%s", out)
 	}
 	if _, err := st.Latest("fw01"); err != nil {
 		t.Error("the configuration arrived, so latest must still move")
@@ -139,15 +149,14 @@ func TestFetchReportsAFailedDocument(t *testing.T) {
 func TestFetchContinuesPastAFailedDevice(t *testing.T) {
 	t.Parallel()
 	inv, st := setup(t, lab(t).Start(t))
-	var out bytes.Buffer
-	err := (fetcher{inv: inv, st: st, getenv: getenv}).devices(context.Background(), &out, []string{"nope", "fw01"})
-	if !errors.Is(err, errIncomplete) || !strings.Contains(out.String(), "nope:") {
-		t.Errorf("got %v\n%s", err, out.String())
+	out, err := fetchText(context.Background(), fetcher{inv: inv, st: st, getenv: getenv}, "nope", "fw01")
+	if !errors.Is(err, errIncomplete) || !strings.Contains(out, "nope/resolve:") {
+		t.Errorf("got %v\n%s", err, out)
 	}
 	if _, err := st.Latest("fw01"); err != nil {
 		t.Error("fw01 must still be fetched after the failure")
 	}
-	if err := (fetcher{inv: inv, st: st, getenv: getenv}).devices(context.Background(), &out, []string{"nope"}); err == nil || errors.Is(err, errIncomplete) {
+	if _, err := fetchText(context.Background(), fetcher{inv: inv, st: st, getenv: getenv}, "nope"); err == nil || errors.Is(err, errIncomplete) {
 		t.Errorf("nothing stored is an error, got %v", err)
 	}
 }
@@ -160,10 +169,9 @@ func TestVerificationOnIsSaid(t *testing.T) {
 		t.Fatal(err)
 	}
 	st, _ := store.Open(t.TempDir())
-	var out bytes.Buffer
-	_ = (fetcher{inv: inv, st: st, getenv: getenv}).devices(context.Background(), &out, []string{"fw01"})
-	if !strings.Contains(out.String(), "TLS certificate verification on") {
-		t.Errorf("the run must say verification is on:\n%s", out.String())
+	out, _ := fetchText(context.Background(), fetcher{inv: inv, st: st, getenv: getenv}, "fw01")
+	if !strings.Contains(out, "TLS certificate verification on") {
+		t.Errorf("the run must say verification is on:\n%s", out)
 	}
 }
 
@@ -270,7 +278,7 @@ func TestHousekeeping(t *testing.T) {
 	if out := c.want(0, "inventory", "init"); !strings.Contains(out, "wrote") {
 		t.Errorf("init: %s", out)
 	}
-	c.want(1, "inventory", "init")
+	c.want(2, "inventory", "init")
 	c.inventory(inventoryFor(lab(t).Start(t)))
 	c.want(2, "fetch")
 	c.want(2, "fetch", "fw01", "--all")
@@ -758,16 +766,75 @@ func TestACancelledFanOutEndsPromptly(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	var out bytes.Buffer
 	start := time.Now()
-	err = (fetcher{inv: inv, st: st, getenv: getenv}).devices(ctx, &out, []string{"fw01", "fw02"})
+	out, err := fetchText(ctx, fetcher{inv: inv, st: st, getenv: getenv}, "fw01", "fw02")
 	if elapsed := time.Since(start); elapsed > 20*time.Second {
 		t.Fatalf("the fan-out took %s after its context ended", elapsed)
 	}
 	if !errors.Is(err, errIncomplete) {
-		t.Errorf("one device stored and one cancelled is an incomplete fetch, got %v\n%s", err, out.String())
+		t.Errorf("one device stored and one cancelled is an incomplete fetch, got %v\n%s", err, out)
 	}
 	if _, err := st.Latest("fw01"); err != nil {
 		t.Errorf("the device that answered must be stored: %v", err)
+	}
+}
+
+// A failed login is in the answer once and on stderr not at all (spec §4.5).
+func TestAFailedFetchPrintsOnce(t *testing.T) {
+	t.Parallel()
+	c := newCLI(t)
+	c.inventory(inventoryFor("127.0.0.1:1"))
+	out, errOut, code := c.run("fetch", "fw01")
+	if code != exitError || strings.Count(out, "fw01/login") != 1 || strings.Contains(errOut, "fw01/login") ||
+		!strings.Contains(errOut, "no device was fetched") || strings.Contains(out, "fw01: fw01") {
+		t.Errorf("exit %d\nstdout:\n%s\nstderr:\n%s", code, out, errOut)
+	}
+}
+
+func TestFetchAnUnknownNameIsAUsageError(t *testing.T) {
+	t.Parallel()
+	c := newCLI(t)
+	c.inventory(inventoryFor(lab(t).Start(t)))
+	c.want(2, "fetch", "fw09")
+}
+
+// --fresh keeps what the fetch found, as target notes (spec §6.3).
+func TestFreshFetchFindingsAreNotes(t *testing.T) {
+	t.Parallel()
+	d := lab(t)
+	c := newCLI(t)
+	c.inventory(inventoryFor(d.Start(t)))
+	c.want(0, "fetch", "fw01")
+	delete(d.Ops, "<show><interface>all</interface></show>")
+	out := c.want(0, "search", "198.18.10.100", "--fresh", "--output", "json")
+	for _, want := range []string{"TLS certificate verification is off (insecure_tls)", "fresh fetch: interfaces failed"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing note %q:\n%s", want, out)
+		}
+	}
+}
+
+func TestFetchWhyShowsTheStages(t *testing.T) {
+	t.Parallel()
+	c := newCLI(t)
+	c.inventory(inventoryFor(lab(t).Start(t)))
+	out := c.want(0, "fetch", "fw01", "--why")
+	for _, slug := range []string{"resolve", "login", "ha", "documents", "store"} {
+		if !strings.Contains(out, "  "+slug+" ") {
+			t.Errorf("missing stage %s:\n%s", slug, out)
+		}
+	}
+}
+
+// Once the context is done no device starts, and each one named is still in the
+// answer, so none drops silently.
+func TestAnInterruptedFetchListsEveryDevice(t *testing.T) {
+	t.Parallel()
+	inv, st := setup(t, lab(t).Start(t))
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	res := (fetcher{inv: inv, st: st, getenv: getenv}).each(ctx, []string{"fw01"})
+	if len(res) != 1 || res[0].Stored || res[0].Error != "fw01: not started: interrupted" {
+		t.Errorf("results = %+v", res)
 	}
 }
