@@ -104,6 +104,7 @@ type Flow struct{ ... }
 type Forward struct{ ... }
 type Input struct{ ... }
 type Match struct{ ... }
+type Missing struct{ ... }
 type Network interface{ ... }
 type Outcome struct{ ... }
 type Port struct{ ... }
@@ -113,8 +114,10 @@ type Stage struct{ ... }
 type StageState struct{ ... }
 type Step[S any] struct{ ... }
 type Target struct{ ... }
+type UnavailableError struct{ ... }
 
 func (e *ChoiceError) Error() string
+func (e *UnavailableError) Error() string
 func (e Endpoint) String() string
 func (f Fidelity) Declared() bool
 func (f Fidelity) Level() string
