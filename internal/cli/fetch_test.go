@@ -549,21 +549,26 @@ func TestSimulateDerivesZonesFromTheStore(t *testing.T) {
 func TestExitCode(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
-		name   string
-		err    error
-		want   int
-		stderr string
+		name string
+		err  error
+		want int
+		msg  string
 	}{
 		{"complete", nil, 0, ""},
-		{"an error", errors.New("boom"), 1, "proteus: boom\n"},
-		{"a usage error", usageErr("bad flag"), 2, "proteus: bad flag\n"},
+		{"an error", errors.New("boom"), 1, "boom"},
+		{"a usage error", usageErr("bad flag"), 2, "bad flag"},
 		{"an incomplete answer says nothing more", errIncomplete, 3, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			var errOut bytes.Buffer
-			if got := exitCode(tc.err, &errOut); got != tc.want || errOut.String() != tc.stderr {
-				t.Errorf("exitCode(%v) = %d, stderr %q; want %d, %q", tc.err, got, errOut.String(), tc.want, tc.stderr)
+			a := newApp(&bytes.Buffer{}, &bytes.Buffer{}, func(string) string { return "" }, time.Now)
+			got, msg := a.exitCode(context.Background(), tc.err)
+			var gotMsg string
+			if msg != nil {
+				gotMsg = msg.Error()
+			}
+			if got != tc.want || gotMsg != tc.msg {
+				t.Errorf("exitCode(%v) = %d, %q; want %d, %q", tc.err, got, gotMsg, tc.want, tc.msg)
 			}
 		})
 	}

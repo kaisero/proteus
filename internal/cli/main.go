@@ -52,24 +52,23 @@ func usageErr(format string, args ...any) error {
 // errIncomplete is returned after an answer with holes or unresolved entries.
 var errIncomplete = &exitErr{code: exitIncomplete}
 
-// exitCode maps a command's error to the process exit code, printing it when there
-// is something to say.
-func exitCode(err error, stderr io.Writer) int {
+// exitCode maps a command's error to the exit code and the message to print; a nil
+// message prints nothing. A signal wins over the error it caused, but a command that
+// finished as the signal arrived still exits 0.
+func (a *app) exitCode(ctx context.Context, err error) (int, error) {
 	if err == nil {
-		return exitOK
+		return exitOK, nil
+	}
+	if c, ok := errors.AsType[signalCause](context.Cause(ctx)); ok {
+		return c.code(), c
 	}
 	if e, ok := errors.AsType[*exitErr](err); ok {
-		if e.err != nil {
-			fmt.Fprintf(stderr, "proteus: %v\n", e.err)
-		}
-		return e.code
+		return e.code, e.err
 	}
 	if strings.HasPrefix(err.Error(), "unknown command ") {
-		fmt.Fprintf(stderr, "proteus: %v\n", err)
-		return exitUsage
+		return exitUsage, err
 	}
-	fmt.Fprintf(stderr, "proteus: %v\n", err)
-	return exitError
+	return exitError, err
 }
 
 // Run executes one command line and returns the process exit code. version is
@@ -89,15 +88,18 @@ func (a *app) execute(ctx context.Context, argv []string) int {
 	cmd.SetArgs(argv)
 	a.argv = argv
 	err := cmd.ExecuteContext(ctx)
-	code := exitCode(err, a.stderr)
+	code, msg := a.exitCode(ctx, err)
+	if msg != nil {
+		fmt.Fprintf(a.stderr, "proteus: %v\n", msg)
+	}
 	if a.log == nil {
 		return code
 	}
 	switch {
 	case code == exitIncomplete:
 		a.log.Warnf(runlog.TagRun, "the answer is incomplete: it has holes or unresolved entries")
-	case err != nil:
-		a.log.Errorf(runlog.TagRun, "%v", err)
+	case msg != nil:
+		a.log.Errorf(runlog.TagRun, "%v", msg)
 	}
 	a.log.Infof(runlog.TagRun, "exit %d after %s", code, a.now().Sub(start).Round(time.Millisecond))
 	if code != exitOK {

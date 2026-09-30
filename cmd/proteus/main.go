@@ -5,7 +5,6 @@ package main
 import (
 	"context"
 	"os"
-	"os/signal"
 	"runtime/debug"
 
 	"github.com/okaiser/proteus/internal/cli"
@@ -15,7 +14,7 @@ import (
 var version = "dev"
 
 func main() {
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	ctx, stop := cli.WithSignals(context.Background())
 	info, ok := debug.ReadBuildInfo()
 	code := cli.Run(ctx, versionOf(version, info, ok), os.Args[1:], os.Stdout, os.Stderr, os.Getenv)
 	stop()

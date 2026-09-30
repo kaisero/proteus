@@ -244,6 +244,9 @@ func (sel *selection) bind(cmd *cobra.Command, withFresh bool) {
 // snapshots. A --fresh fetch that fails leaves the previous snapshot in use and adds
 // a note to that device's targets.
 func (a *app) targets(ctx context.Context, sel selection, s settings, progress io.Writer) ([]estate.Target, []estate.Hole, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, nil, err
+	}
 	if sel.file != "" {
 		return estate.OpenFile(sel.file, sel.vsys, a.log)
 	}
