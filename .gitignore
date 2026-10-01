@@ -20,3 +20,7 @@ config.yaml
 
 # MkDocs build output.
 /site/
+
+# Build output: the CLI binary and compiled test binaries.
+/proteus
+*.test
