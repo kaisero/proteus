@@ -56,8 +56,8 @@ How to read it:
 
 ## An object
 
-An object shows its value, its members and the groups that hold it. It ends with
-the `search` command that shows where the object is used:
+An object shows its value, its members and the groups that hold it. To see where
+the object is used, run `proteus search <name>`:
 
 ```
 $ proteus lookup net-vienna --file testdata/config/firewall-lookup.xml
@@ -68,7 +68,6 @@ address        net-vienna                   vsys:vsys1
 
   value        10.20.0.0/16
   held by      branch-networks
-  where it is used: proteus search net-vienna --file testdata/config/firewall-lookup.xml
 
 1 with it, 0 without, 0 holes
 ```

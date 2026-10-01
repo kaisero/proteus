@@ -146,7 +146,7 @@ Or from two HTTP bodies, with no JSON to assemble:
 snap, err := index.NewZoneSnapshot(time.Now(), "fw01", interfacesBody, fibBody)
 ```
 
-With `panos-explore`, point `PANOS_ZONES` at the file.
+`proteus` reads the zone snapshot a fetch stored; nothing needs to point at it.
 
 ## Without a snapshot
 
