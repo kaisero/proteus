@@ -204,7 +204,7 @@ func (t *Topology) Owners(a netip.Addr) []simulate.Port
 func (t *Topology) Peers(out simulate.Port, nh netip.Addr) []simulate.Port
 func (t *Topology) Place(src netip.Addr) (Placement, error)
 func (t *Topology) Routers(node string) []string
-func (t *Topology) Start(node, router string, src netip.Addr) (simulate.Port, bool, error)
+func (t *Topology) Start(node, router string, src netip.Addr) (simulate.Port, netip.Prefix, bool, error)
 func NewTopology(devs []simulate.DeviceData) *Topology
 ```
 <!-- /GENERATED:api -->
