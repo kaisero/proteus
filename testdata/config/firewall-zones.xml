@@ -76,6 +76,7 @@
                   <source><member>any</member></source>
                   <destination><member>any</member></destination>
                   <application><member>any</member></application>
+                  <service><member>any</member></service>
                   <action>allow</action>
                 </entry>
                 <entry name="from-loop">
@@ -84,6 +85,7 @@
                   <source><member>any</member></source>
                   <destination><member>any</member></destination>
                   <application><member>any</member></application>
+                  <service><member>any</member></service>
                   <action>allow</action>
                 </entry>
               </rules>

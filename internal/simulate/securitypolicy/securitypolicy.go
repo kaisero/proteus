@@ -11,6 +11,7 @@ import (
 	"context"
 	"fmt"
 	"net/netip"
+	"slices"
 
 	"github.com/RoaringBitmap/roaring/v2"
 
@@ -51,6 +52,10 @@ type Verdict struct {
 	// Default is the default rule that decides when no rule matches, empty when
 	// none decides; DefaultAction is its action, and DefaultSource where the action
 	// came from: built-in, local or pushed.
+	// Undecided says why no rule or default rule decides the flow, empty when one
+	// does (spec §4.7). Rule or Default may still be set: the first certain match,
+	// behind candidates in doubt.
+	Undecided     string         `json:"undecided,omitempty"`
 	Default       string         `json:"default"`
 	DefaultAction string         `json:"default_action"`
 	DefaultSource string         `json:"default_source"`
@@ -60,6 +65,39 @@ type Verdict struct {
 	Doubts    []Doubt        `json:"doubts"`
 	Zones     ZoneDerivation `json:"zones"`
 	Relevance Relevance      `json:"relevance"`
+}
+
+// Outcome is what a decided flow meets: it passes, or it stops.
+type Outcome string
+
+// The outcomes of a security check (spec §4.7).
+const (
+	Pass      Outcome = "pass"
+	Stop      Outcome = "stop"
+	Undecided Outcome = "undecided"
+)
+
+// Decision is the verdict's outcome and why. allow passes; deny, drop and the
+// reset actions stop (spec §4.6, PAN-OS admin guide, "Security Policy Actions").
+// Any other action, or no deciding rule, is undecided.
+func (v Verdict) Decision() (Outcome, string) {
+	if v.Undecided != "" {
+		return Undecided, v.Undecided
+	}
+	what, action := fmt.Sprintf("default rule %s (%s), %s", v.Default, v.DefaultAction, v.DefaultSource), v.DefaultAction
+	switch {
+	case v.Rule != nil:
+		what, action = fmt.Sprintf("rule %s (%s)", v.Rule.Name, v.Rule.Action), v.Rule.Action
+	case v.Default == "":
+		return Undecided, "no rule decides"
+	}
+	switch {
+	case action == "allow":
+		return Pass, what
+	case slices.Contains(validActions, action):
+		return Stop, what
+	}
+	return Undecided, what + " is not a security rule action"
 }
 
 // ZoneDerivation says which zones were used and where they came from.

@@ -27,14 +27,14 @@
   "results": [
     {
       "candidates": [],
+      "doubts": [],
+      "verdict": "stop",
+      "reason": "default rule interzone-default (deny), built-in",
       "default": "interzone-default",
       "default_action": "deny",
       "default_source": "built-in",
       "fidelity": {
-        "level": "overmatch",
-        "not_evaluated": [
-          "application"
-        ]
+        "level": "exact"
       },
       "first_match": null,
       "kind": "policy",
@@ -118,10 +118,7 @@
           "slug": "first-match",
           "name": "Take the first match",
           "fidelity": {
-            "level": "overmatch",
-            "not_evaluated": [
-              "application"
-            ]
+            "level": "exact"
           },
           "candidates": 0,
           "detail": "no enabled rule matches; default rule interzone-default (deny), built-in",

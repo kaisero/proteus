@@ -3,7 +3,8 @@
        fw02 rulebase: a port rule, an address rule, two application rules with
        application-default, then the rules that decide. Rules 7 to 13 are between
        dmz and wan: each sets one field no stage evaluates, or one that is not a
-       matching field. -->
+       matching field. Rule 14, labor to dmz, is in doubt and shares the action of
+       interzone-default. -->
   <shared/>
   <devices>
     <entry name="localhost.localdomain">
@@ -155,6 +156,15 @@
                   <service><member>any</member></service>
                   <tag><member>audit</member></tag>
                   <action>allow</action>
+                </entry>
+                <entry name="labor-app">
+                  <from><member>labor</member></from>
+                  <to><member>dmz</member></to>
+                  <source><member>any</member></source>
+                  <destination><member>any</member></destination>
+                  <application><member>dropbox</member></application>
+                  <service><member>any</member></service>
+                  <action>deny</action>
                 </entry>
               </rules>
             </security>

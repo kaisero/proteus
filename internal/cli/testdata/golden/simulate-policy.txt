@@ -2,6 +2,6 @@
 file / vsys1   ../../testdata/config/firewall-zones.xml
   zones      from inside, to dmz (configuration)
   relevance  unknown: no stored forwarding table
-  fidelity   inferred: kept rules whose service is application-default, predefined or absent: from-inside; not evaluated: application
+  fidelity   inferred
   1. from-inside allow [local vsys:vsys1]
 first match: from-inside (allow)

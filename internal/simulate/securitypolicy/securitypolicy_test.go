@@ -95,7 +95,7 @@ func TestGivenZones(t *testing.T) {
 	if stage(r, "derive-zones").Fidelity.Level() != "exact" || v.Zones.Source != "given" {
 		t.Errorf("given zones are exact: %s %s", stage(r, "derive-zones").Fidelity, v.Zones.Source)
 	}
-	if got := r.Fidelity.String(); got != "overmatch; not evaluated: service, application" {
+	if got := r.Fidelity.String(); got != "overmatch; not evaluated: service" {
 		t.Errorf("overall = %s", got)
 	}
 	var prev uint64 = 1 << 62
@@ -198,7 +198,7 @@ func TestServicesByPort(t *testing.T) {
 		t.Errorf("match-service = %s", svc)
 	}
 	_, v = run(t, e, simulate.Flow{Source: ep("10.0.0.1"), Destination: ep("10.5.0.1"), DestPort: 9999})
-	if strings.Contains(ruleNames(v), "custom-port") || first(v) != "app-default" {
+	if strings.Contains(ruleNames(v), "custom-port") || head(v) != "app-default" {
 		t.Errorf("a port no service holds drops custom-port: %s", ruleNames(v))
 	}
 	r, _ = run(t, e, simulate.Flow{Source: ep("10.0.0.1"), Destination: ep("10.5.0.1"), Protocol: "icmp", DestPort: 8})
@@ -211,14 +211,14 @@ func TestURLCategories(t *testing.T) {
 	t.Parallel()
 	e := env(t, "firewall-simulate.xml", false)
 	r, v := run(t, e, simulate.Flow{Source: ep("10.0.0.1"), Destination: ep("10.6.0.1"), URL: "shop.example.com/cart"})
-	if first(v) != "shop" || !strings.Contains(ruleNames(v), "social") {
+	if head(v) != "shop" || !strings.Contains(ruleNames(v), "social") {
 		t.Errorf("custom category matches, PAN-DB category kept: %s", ruleNames(v))
 	}
 	if f := stage(r, "match-url").Fidelity; f.Level() != "overmatch" || !strings.Contains(f.String(), "social") {
 		t.Errorf("match-url = %s", f)
 	}
 	_, v = run(t, e, simulate.Flow{Source: ep("10.0.0.1"), Destination: ep("10.6.0.1"), URL: "other.example.org"})
-	if strings.Contains(ruleNames(v), "shop") || first(v) != "social" {
+	if strings.Contains(ruleNames(v), "shop") || head(v) != "social" {
 		t.Errorf("another URL drops shop: %s", ruleNames(v))
 	}
 	r, _ = run(t, e, simulate.Flow{Source: ep("10.0.0.1"), Destination: ep("10.6.0.1")})
@@ -231,14 +231,25 @@ func TestURLCategories(t *testing.T) {
 	}
 }
 
-func TestAnUnrecognisedValueIsUnderMatch(t *testing.T) {
+// A version gap lowers the address stages to inferred and stays a note; it is not
+// an unresolved entry (spec E25).
+func TestAVersionGapIsInferred(t *testing.T) {
 	t.Parallel()
-	r, v := run(t, env(t, "firewall-version-12.2.xml", false), simulate.Flow{Source: ep("198.18.10.100"), Destination: ep("198.18.1.5")})
-	if r.Fidelity.Level() != "undermatch" || !strings.Contains(r.Fidelity.String(), "12.2.0") {
-		t.Errorf("a version gap is undermatch: %s", r.Fidelity)
+	r, v := run(t, env(t, "firewall-version-12.2.xml", false), simulate.Flow{Source: ep("198.18.10.100"), Destination: ep("198.18.1.5"), DestPort: 443})
+	for _, slug := range []string{"resolve-source", "resolve-destination", "match-service"} {
+		if st := stage(r, slug); st.Fidelity.Level() != "inferred" || len(st.Unresolved) != 0 {
+			t.Errorf("%s: %s, unresolved %v", slug, st.Fidelity, st.Unresolved)
+		}
 	}
-	if first(v) != "dc-to-home" {
-		t.Errorf("first match = %s", first(v))
+	if len(r.Notes) != 1 || !strings.Contains(r.Notes[0], "12.2.0") {
+		t.Errorf("notes = %v", r.Notes)
+	}
+	if head(v) != "dc-to-home" {
+		t.Errorf("candidates = %s", ruleNames(v))
+	}
+	r, _ = run(t, env(t, "firewall-version-12.2.xml", false), simulate.Flow{Source: ep("198.18.10.100"), Destination: ep("198.18.1.5"), URL: "shop.example.com"})
+	if st := stage(r, "match-url"); st.Fidelity.Level() != "inferred" || len(st.Unresolved) != 0 {
+		t.Errorf("match-url: %s, unresolved %v", st.Fidelity, st.Unresolved)
 	}
 }
 
@@ -273,6 +284,14 @@ func TestALoadFailureNamesTheDevice(t *testing.T) {
 	}
 }
 
+// head is the first candidate, whether or not it decides.
+func head(v Verdict) string {
+	if len(v.Candidates) == 0 {
+		return "none"
+	}
+	return v.Candidates[0].Name
+}
+
 func ruleNames(v Verdict) string {
 	var out []string
 	for _, r := range v.Candidates {
@@ -291,7 +310,7 @@ func TestAbsentFields(t *testing.T) {
 		t.Errorf("a rule without a category matches a URL: %s", ruleNames(v))
 	}
 	r, v := run(t, env(t, "firewall-lab.xml", false), simulate.Flow{Source: ep("198.18.10.100"), Destination: ep("198.18.1.5"), DestPort: 443})
-	if first(v) != "dc-to-home" || !strings.Contains(stage(r, "match-service").Fidelity.String(), "absent") {
+	if head(v) != "dc-to-home" || !strings.Contains(stage(r, "match-service").Fidelity.String(), "absent") {
 		t.Errorf("a rule without a service stays: %s; %s", ruleNames(v), stage(r, "match-service").Fidelity)
 	}
 }

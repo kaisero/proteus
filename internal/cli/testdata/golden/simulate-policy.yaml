@@ -21,15 +21,14 @@ results:
         action: allow
         layer: local
         scope: vsys:vsys1
+    doubts: []
+    verdict: pass
+    reason: rule from-inside (allow)
     default: ""
     default_action: ""
     default_source: ""
     fidelity:
       level: inferred
-      reasons:
-        - 'kept rules whose service is application-default, predefined or absent: from-inside'
-      not_evaluated:
-        - application
     first_match:
       position: 1
       name: from-inside
@@ -66,9 +65,7 @@ results:
       - slug: match-service
         name: Match the service
         fidelity:
-          level: overmatch
-          reasons:
-            - 'kept rules whose service is application-default, predefined or absent: from-inside'
+          level: exact
         candidates: 1
         detail: tcp/443
         elapsed_ms: 0
@@ -96,9 +93,7 @@ results:
       - slug: first-match
         name: Take the first match
         fidelity:
-          level: overmatch
-          not_evaluated:
-            - application
+          level: exact
         candidates: 1
         detail: from-inside (allow), position 1
         elapsed_ms: 0

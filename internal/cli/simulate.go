@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -144,8 +145,8 @@ func (a *app) runSimulation(ctx context.Context, o policyOptions) (answer, error
 	a.log.Infof(runlog.TagStep, "%s: fidelity %s", o.sim.Kind(), run.Fidelity)
 	ans.run, ans.target = run, &t
 	ans.verdict, _ = run.Output.(securitypolicy.Verdict)
-	ans.un, ans.notes = targetQualifiers([]estate.Target{t})
-	ans.un = dedupeUnresolved(append(ans.un, runUnresolved(run, t.Device, t.Vsys, true)...))
+	ans.notes = policyNotes(t)
+	ans.un = dedupeUnresolved(runUnresolved(run, t.Device, t.Vsys, true))
 	return ans, nil
 }
 
@@ -171,15 +172,34 @@ func (p policyAnswer) Text(t *textOut) error {
 	}
 	printRun(t, p.run, *p.target, p.verdict, p.flow, p.o.fl.why)
 	printQualifiers(t, p.Qualifiers())
+	// Behind candidates in doubt, the first match is only the first certain one.
+	lead := "first match:"
+	if p.verdict.Undecided != "" {
+		lead = "first certain match:"
+	}
 	switch v := p.verdict; {
 	case v.Rule != nil:
-		fmt.Fprintf(t, "first match: %s (%s)\n", t.pal.accent(v.Rule.Name), v.Rule.Action)
+		fmt.Fprintf(t, "%s %s (%s)\n", lead, t.pal.accent(v.Rule.Name), v.Rule.Action)
 	case v.Default != "":
-		fmt.Fprintf(t, "first match: %s (%s), default rule (%s)\n", t.pal.accent(v.Default), v.DefaultAction, v.DefaultSource)
-	default:
+		fmt.Fprintf(t, "%s %s (%s), default rule (%s)\n", lead, t.pal.accent(v.Default), v.DefaultAction, v.DefaultSource)
+	case len(v.Candidates) == 0:
 		fmt.Fprintln(t, "no enabled rule matches")
 	}
+	if v := p.verdict; v.Undecided != "" {
+		fmt.Fprintf(t, "%s %s\n", t.pal.warn("undecided:"), v.Undecided)
+	}
 	return t.err
+}
+
+// policyNotes are a target's notes. A version gap is one of them, not an
+// unresolved entry: the security check lowers its fidelity to inferred instead
+// (spec E25).
+func policyNotes(t estate.Target) []note {
+	var out []note
+	for _, n := range t.Notes {
+		out = append(out, note{Device: t.Device, Vsys: t.Vsys, Note: n})
+	}
+	return out
 }
 
 // policyEnv is the simulation environment for one target: its configuration, the
@@ -288,6 +308,9 @@ func printRun(w *textOut, run simulate.Run, t estate.Target, v securitypolicy.Ve
 	}
 	fmt.Fprintf(w, "\n%s\n", w.pal.head(header(t, w.now)))
 	printNotes(w, t)
+	if g := t.Report.VersionGap; g != "" && slices.Contains(t.Notes, g) {
+		fmt.Fprintf(w, "  %s\n", noteStyle(w.pal, g)("note: "+g))
+	}
 	for _, ep := range []simulate.Endpoint{flow.Source, flow.Destination} {
 		if ep.Name != "" {
 			fmt.Fprintf(w, "  dns        %s -> %v\n", ep.Name, ep.Addrs)
@@ -323,6 +346,22 @@ func printRun(w *textOut, run simulate.Run, t estate.Target, v securitypolicy.Ve
 			action.style = w.pal.ok
 		}
 		tb.row(plain(fmt.Sprintf("%d.", r.Position)), plain(r.Name), action, plain(fmt.Sprintf("[%s %s]", r.Layer, r.Scope)))
+		if !why {
+			continue
+		}
+		for _, d := range v.Doubts {
+			if d.Position == r.Position {
+				tb.row(plain(""), cell{text: "doubt: " + d.Reason, style: w.pal.warn})
+			}
+		}
+	}
+	// The default rules follow the last candidate in evaluation order (spec §4.6).
+	if why && v.Default != "" {
+		action := cell{text: v.DefaultAction, style: w.pal.bad}
+		if v.DefaultAction == "allow" {
+			action.style = w.pal.ok
+		}
+		tb.row(plain("-"), plain(v.Default), action, plain(fmt.Sprintf("[default %s]", v.DefaultSource)))
 	}
 	_ = tb.write(w, "  ", 1)
 }
@@ -373,6 +412,11 @@ func toRuleJSON(r resolve.Rule) ruleJSON {
 // policyResult is one device and vsys's simulate policy answer in the JSON envelope.
 type policyResult struct {
 	Candidates []ruleJSON `json:"candidates"`
+	// Doubts names the candidates that set a matching field no stage evaluates.
+	Doubts []securitypolicy.Doubt `json:"doubts"`
+	// Verdict is pass, stop or undecided, and Reason why (spec §4.7).
+	Verdict string `json:"verdict"`
+	Reason  string `json:"reason"`
 	// Default is the default rule that decides when no rule matches, empty when
 	// none does; DefaultSource says where its action came from.
 	Default       string                        `json:"default"`
@@ -397,7 +441,13 @@ func runJSON(run simulate.Run, t estate.Target, v securitypolicy.Verdict) policy
 	for i, r := range v.Candidates {
 		cands[i] = toRuleJSON(r)
 	}
+	outcome, reason := v.Decision()
+	doubts := v.Doubts
+	if doubts == nil {
+		doubts = []securitypolicy.Doubt{}
+	}
 	return policyResult{
+		Doubts: doubts, Verdict: string(outcome), Reason: reason,
 		Kind: run.Kind, Target: targetOf(t), Fidelity: run.Fidelity, Stages: simStages(run.Stages),
 		FirstMatch: first, Candidates: cands, Zones: v.Zones, Relevance: v.Relevance,
 		Default: v.Default, DefaultAction: v.DefaultAction, DefaultSource: v.DefaultSource,

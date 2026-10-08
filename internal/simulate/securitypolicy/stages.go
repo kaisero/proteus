@@ -104,10 +104,10 @@ func (s *state) side(f index.Field, ep simulate.Endpoint, negated func(resolve.R
 	default:
 		out.Fidelity = simulate.Exact
 	}
-	for _, u := range dedupe(out.Unresolved) {
+	out.Unresolved = s.withoutGap(&out.Fidelity, dedupe(out.Unresolved))
+	for _, u := range out.Unresolved {
 		out.Fidelity = simulate.Weakest(out.Fidelity, simulate.UnderMatch(u.Reason))
 	}
-	out.Unresolved = dedupe(out.Unresolved)
 	out.Detail = fmt.Sprintf("%s: %d hits, %d negated rules", ep, len(hits), neg.GetCardinality())
 	if !opaque.IsEmpty() {
 		out.Detail += fmt.Sprintf(", %d kept naming addresses the configuration does not hold", opaque.GetCardinality())
@@ -351,11 +351,12 @@ func matchService(_ context.Context, s *state) (simulate.Outcome, error) {
 	kept := s.unevaluable("service", "application-default")
 	b.Or(kept)
 	s.cand.And(b)
-	out := simulate.Outcome{Fidelity: simulate.Exact, Detail: term, Candidates: s.cand, Unresolved: rep.Unresolved}
+	out := simulate.Outcome{Fidelity: simulate.Exact, Detail: term, Candidates: s.cand}
+	out.Unresolved = s.withoutGap(&out.Fidelity, rep.Unresolved)
 	if still := roaring.And(kept, s.cand); !still.IsEmpty() {
-		out.Fidelity = simulate.OverMatchBecause("kept rules whose service is application-default, predefined or absent: " + names(s.rules, still))
+		out.Fidelity = simulate.Weakest(out.Fidelity, simulate.OverMatchBecause("kept rules whose service is application-default, predefined or absent: "+names(s.rules, still)))
 	}
-	for _, u := range rep.Unresolved {
+	for _, u := range out.Unresolved {
 		out.Fidelity = simulate.Weakest(out.Fidelity, simulate.UnderMatch(u.Reason))
 	}
 	out.Debug = []string{"left: " + names(s.rules, s.cand)}
@@ -378,14 +379,15 @@ func matchURL(_ context.Context, s *state) (simulate.Outcome, error) {
 	// A rule without a category matches every URL, as "any" does.
 	b.Or(s.withoutField("category"))
 	s.cand.And(b)
-	out := simulate.Outcome{Fidelity: simulate.Exact, Detail: url, Candidates: s.cand, Unresolved: rep.Unresolved}
+	out := simulate.Outcome{Fidelity: simulate.Exact, Detail: url, Candidates: s.cand}
+	out.Unresolved = s.withoutGap(&out.Fidelity, rep.Unresolved)
 	for _, h := range rep.Hits {
 		out.Debug = append(out.Debug, fmt.Sprintf("%s (%s) via %s", h.Name, h.Kind, h.Via))
 	}
 	if still := roaring.And(kept, s.cand); !still.IsEmpty() {
-		out.Fidelity = simulate.OverMatchBecause("kept rules naming a category the configuration does not define, such as a PAN-DB category: " + names(s.rules, still))
+		out.Fidelity = simulate.Weakest(out.Fidelity, simulate.OverMatchBecause("kept rules naming a category the configuration does not define, such as a PAN-DB category: "+names(s.rules, still)))
 	}
-	for _, u := range rep.Unresolved {
+	for _, u := range out.Unresolved {
 		out.Fidelity = simulate.Weakest(out.Fidelity, simulate.UnderMatch(u.Reason))
 	}
 	out.Debug = append(out.Debug, "left: "+names(s.rules, s.cand))
@@ -459,33 +461,93 @@ func order(_ context.Context, s *state) (simulate.Outcome, error) {
 	return simulate.Outcome{Fidelity: simulate.Exact, Detail: fmt.Sprintf("%d in order", len(s.verdict.Candidates))}, nil
 }
 
-// firstMatch takes the lowest position. Application is never evaluated, so the
-// device may still decline this rule and take a later one.
+// firstMatch decides the flow (spec §4.7, E20). The first candidate without a
+// doubt decides; with none, a default rule does. Earlier candidates in doubt leave
+// it undecided, unless they all carry the deciding action: whichever of them the
+// device takes, the flow meets that action, and the answer is an overmatch.
 //
-// With no candidate left, a default rule decides. The default rules are the tail of
-// the evaluation order, so they belong to this stage rather than to one of their
-// own: a separate stage would only ever narrow nothing.
+// The default rules are the tail of the evaluation order, so they belong to this
+// stage rather than to one of their own: a separate stage would only ever narrow
+// nothing.
 func firstMatch(_ context.Context, s *state) (simulate.Outcome, error) {
-	skipped := []string{"application"}
-	if s.in.Flow.User != "" {
-		skipped = append(skipped, "user")
+	cands := s.verdict.Candidates
+	doubted := map[int]Doubt{} // the first doubt of each candidate, by position
+	for _, d := range s.verdict.Doubts {
+		if _, ok := doubted[d.Position]; !ok {
+			doubted[d.Position] = d
+		}
 	}
-	out := simulate.Outcome{Fidelity: simulate.NotEvaluated(skipped...)}
-	if len(s.verdict.Candidates) == 0 {
+	at := slices.IndexFunc(cands, func(r resolve.Rule) bool { _, ok := doubted[r.Position]; return !ok })
+	upto, before := cands, cands
+	if at >= 0 {
+		upto, before = cands[:at+1], cands[:at]
+	}
+	out := simulate.Outcome{Fidelity: simulate.Exact}
+	if skipped := notEvaluated(upto); len(skipped) > 0 {
+		out.Fidelity = simulate.NotEvaluated(skipped...)
+	}
+	var action string
+	switch {
+	case at >= 0:
+		r := cands[at]
+		s.verdict.Rule = &r
+		action = r.Action
+		out.Detail = fmt.Sprintf("%s (%s), position %d", r.Name, r.Action, r.Position)
+	default:
+		lead := "no enabled rule matches"
+		if len(cands) > 0 {
+			lead = "every candidate is in doubt"
+		}
 		d, err := s.defaultRule()
 		if err != "" {
-			out.Detail = "no enabled rule matches; " + err
+			out.Detail = lead + "; " + err
+			s.verdict.Undecided = err
 			out.Fidelity = simulate.Weakest(out.Fidelity, simulate.UnderMatch(err))
 			return out, nil
 		}
 		s.verdict.Default, s.verdict.DefaultAction, s.verdict.DefaultSource = d.Name, d.Action, d.Source
-		out.Detail = fmt.Sprintf("no enabled rule matches; default rule %s (%s), %s", d.Name, d.Action, d.Source)
-		return out, nil
+		action = d.Action
+		out.Detail = fmt.Sprintf("%s; default rule %s (%s), %s", lead, d.Name, d.Action, d.Source)
 	}
-	r := s.verdict.Candidates[0]
-	s.verdict.Rule = &r
-	out.Detail = fmt.Sprintf("%s (%s), position %d", r.Name, r.Action, r.Position)
+	for _, r := range before {
+		if r.Action != action {
+			d := doubted[r.Position]
+			why := fmt.Sprintf("%s (%s) at position %d may match first: %s", r.Name, r.Action, r.Position, d.Reason)
+			s.verdict.Undecided = why
+			out.Detail += "; undecided: " + why
+			out.Fidelity = simulate.Weakest(out.Fidelity, simulate.UnderMatch(why))
+			return out, nil
+		}
+	}
+	if len(before) > 0 {
+		out.Fidelity = simulate.Weakest(out.Fidelity, simulate.OverMatchBecause(
+			"earlier candidates in doubt share the action "+action+": "+listNames(before)))
+	}
 	return out, nil
+}
+
+// notEvaluated names the matching dimensions no stage evaluates that a candidate
+// at or before the decision sets: only those can change which rule decides.
+func notEvaluated(upto []resolve.Rule) []string {
+	var out []string
+	for _, c := range []struct{ field, dim string }{{"application", "application"}, {"source-user", "user"}} {
+		for _, r := range upto {
+			if len(notAny(r.Fields[c.field])) > 0 {
+				out = append(out, c.dim)
+				break
+			}
+		}
+	}
+	return out
+}
+
+// listNames lists rules by name.
+func listNames(rs []resolve.Rule) string {
+	out := make([]string, len(rs))
+	for i, r := range rs {
+		out[i] = r.Name
+	}
+	return strings.Join(out, ", ")
 }
 
 // builtInDefaults are the actions of the default security rules when the
@@ -551,6 +613,24 @@ func (s *state) defaultRule() (resolve.DefaultRule, string) {
 		return resolve.DefaultRule{}, fmt.Sprintf("%s has the action %q, which is not a security rule action", name, d.Action)
 	}
 	return d, ""
+}
+
+// withoutGap drops the version gap from a lookup's unresolved entries and lowers
+// the fidelity to inferred instead (spec E25): the configuration was read with
+// the nearest older schema, so an answer may miss what the newer version added,
+// as routing's version gap does. The gap stays in the run's notes. Every lookup
+// reports it, with no kind; any other entry stays unresolved.
+func (s *state) withoutGap(f *simulate.Fidelity, us []index.Unresolved) []index.Unresolved {
+	gap := s.target.Index.VersionGap()
+	var out []index.Unresolved
+	for _, u := range us {
+		if gap != "" && u.Reason == gap && u.Kind == "" {
+			*f = simulate.Weakest(*f, simulate.Inferred)
+			continue
+		}
+		out = append(out, u)
+	}
+	return out
 }
 
 // names lists the rules in a set, for the log.

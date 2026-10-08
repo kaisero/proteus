@@ -449,8 +449,8 @@ func TestSimulatePolicy(t *testing.T) {
 	file := "../../testdata/config/firewall-zones.xml"
 	out := c.want(0, "simulate", "policy", "10.1.0.5", "10.2.0.5", "--file", file, "--vsys", "vsys1", "--why")
 	for _, want := range []string{
-		"zones      from inside, to dmz (configuration)", "fidelity   inferred; not evaluated: service, application",
-		"derive-zones        inferred", "first-match         overmatch", "first match: from-inside (allow)",
+		"zones      from inside, to dmz (configuration)", "fidelity   inferred; not evaluated: service",
+		"derive-zones        inferred", "first-match         exact", "first match: from-inside (allow)",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("missing %q in:\n%s", want, out)
@@ -469,7 +469,7 @@ func TestSimulatePolicy(t *testing.T) {
 	if !strings.Contains(out, "first match: interzone-default (deny), default rule (built-in)") {
 		t.Errorf("no match, the default rule decides:\n%s", out)
 	}
-	out = c.want(0, "simulate", "policy", "198.18.10.100", "198.18.1.5", "--file", "../../testdata/config/firewall-lab.xml",
+	out = c.want(0, "simulate", "policy", "10.1.0.5", "10.2.0.5", "--file", file,
 		"--vsys", "vsys1", "--port", "tcp/443", "--output", "json")
 	var env struct {
 		Results []struct {
@@ -479,8 +479,41 @@ func TestSimulatePolicy(t *testing.T) {
 		}
 	}
 	if err := json.Unmarshal([]byte(out), &env); err != nil || len(env.Results) != 1 || env.Results[0].FirstMatch == nil ||
-		env.Results[0].FirstMatch.Name != "dc-to-home" || len(env.Results[0].Stages) != 8 || env.Results[0].Fidelity.Level == "" {
+		env.Results[0].FirstMatch.Name != "from-inside" || len(env.Results[0].Stages) != 8 || env.Results[0].Fidelity.Level == "" {
 		t.Errorf("json: %v %s", err, out)
+	}
+}
+
+// A version gap is a note, not an unresolved entry, so a decided flow exits 0
+// (spec E25).
+func TestSimulatePolicyVersionGap(t *testing.T) {
+	t.Parallel()
+	src, err := os.ReadFile("../../testdata/config/firewall-doubt.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	file := filepath.Join(t.TempDir(), "doubt-12.2.xml")
+	doc := strings.Replace(string(src), `version="11.2.0" urldb="paloaltonetworks" detail-version="11.2.5"`,
+		`version="12.2.0" urldb="paloaltonetworks" detail-version="12.2.3"`, 1)
+	if err := os.WriteFile(file, []byte(doc), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c := newCLI(t)
+	args := []string{"simulate", "policy", "198.18.1.68", "192.0.2.1", "--port", "udp/443", "--from-zone", "home", "--to-zone", "wan", "--file", file}
+	out := c.want(0, args...)
+	if !strings.Contains(out, "note: ") || !strings.Contains(out, "12.2.0") || strings.Contains(out, "unresolved:") ||
+		!strings.Contains(out, "fidelity   inferred") || !strings.Contains(out, "first match: block-udp-443 (deny)") {
+		t.Errorf("text:\n%s", out)
+	}
+	out = c.want(0, append(args, "--output", "json")...)
+	var env struct {
+		Unresolved []any
+		Notes      []struct{ Note string }
+		Results    []struct{ Verdict, Reason string }
+	}
+	if err := json.Unmarshal([]byte(out), &env); err != nil || len(env.Unresolved) != 0 || len(env.Notes) != 1 ||
+		!strings.Contains(env.Notes[0].Note, "12.2.0") || env.Results[0].Verdict != "stop" {
+		t.Errorf("json: %v\n%s", err, out)
 	}
 }
 

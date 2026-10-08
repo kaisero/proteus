@@ -91,9 +91,9 @@ func contractRows() []contractRow {
 		{name: "lookup", fixture: labFixture(1), args: []string{"lookup", "dc01"}, empty: 3},
 		{name: "lookup-missing", fixture: labFixture(1), args: []string{"lookup", "no-such-name"}, empty: 3},
 		{name: "simulate-policy", fixture: labFixture(1), args: []string{"simulate", "policy", "198.18.1.10", "198.18.10.100", "--device", "fw01", "--vsys", "vsys1"}, complete: 3, empty: 3},
-		// The lab snapshot's rules name no zones, so zones from its forwarding table
-		// match no rule; read from the file, a rule matches and the answer is complete.
-		{name: "simulate-policy-match", fixture: labFixture(1), args: []string{"simulate", "policy", "198.18.10.100", "198.18.1.5", "--file", "../../testdata/config/firewall-lab.xml", "--vsys", "vsys1", "--port", "tcp/443"}},
+		// The lab snapshot's rules name no zones and no service, so none decides a
+		// flow there; a rule of the zones fixture does, and the answer is complete.
+		{name: "simulate-policy-match", fixture: labFixture(1), args: []string{"simulate", "policy", "10.1.0.5", "10.2.0.5", "--file", "../../testdata/config/firewall-zones.xml", "--vsys", "vsys1", "--port", "tcp/443"}},
 		{name: "simulate-nat", fixture: natFixture, args: []string{"simulate", "nat", "198.18.1.10", "198.18.250.10", "--device", "fw01", "--router", "default", "--from-zone", "transport", "--port", "8443"}, empty: 3},
 		{name: "simulate-routing", fixture: routingFixture, args: []string{"simulate", "routing", "198.18.10.5", "8.8.8.8"}, empty: 3},
 	}

@@ -2,5 +2,5 @@
 file / vsys1   ../../testdata/config/firewall-zones.xml
   zones      from dmz, to inside (given)
   relevance  unknown: no stored forwarding table
-  fidelity   overmatch; not evaluated: application
+  fidelity   exact
 first match: interzone-default (deny), default rule (built-in)

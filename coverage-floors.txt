@@ -18,14 +18,14 @@ github.com/okaiser/proteus/internal/index  97.3
 github.com/okaiser/proteus/internal/inventory  96.2
 github.com/okaiser/proteus/internal/fetch  100.0
 github.com/okaiser/proteus/internal/store  88.2
-github.com/okaiser/proteus/internal/cli      94.8
+github.com/okaiser/proteus/internal/cli      95.3
 github.com/okaiser/proteus/internal/estate  100.0
 github.com/okaiser/proteus/internal/search  99.3
 github.com/okaiser/proteus/internal/card  94.4
 github.com/okaiser/proteus/internal/drift  100.0
 github.com/okaiser/proteus/internal/runlog  93.0
 github.com/okaiser/proteus/internal/simulate  100.0
-github.com/okaiser/proteus/internal/simulate/securitypolicy  98.3
+github.com/okaiser/proteus/internal/simulate/securitypolicy  98.8
 github.com/okaiser/proteus/internal/simulate/routing  100.0
 github.com/okaiser/proteus/internal/simulate/topology  100.0
 github.com/okaiser/proteus/internal/simulate/rulebase  100.0

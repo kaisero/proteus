@@ -140,6 +140,7 @@ func Weakest(fs ...Fidelity) Fidelity
 <!-- GENERATED:api ./internal/simulate/securitypolicy -->
 ```go
 type Doubt struct{ ... }
+type Outcome string
 type Relevance struct{ ... }
 type Simulation struct{}
 type Verdict struct{ ... }
@@ -149,6 +150,7 @@ func (Simulation) Describe() string
 func (Simulation) Kind() string
 func (Simulation) Run(ctx context.Context, env *simulate.Env, in simulate.Input) (simulate.Run, error)
 func (Simulation) Stages() []string
+func (v Verdict) Decision() (Outcome, string)
 ```
 <!-- /GENERATED:api -->
 
