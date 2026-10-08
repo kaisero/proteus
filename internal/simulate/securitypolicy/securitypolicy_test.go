@@ -354,19 +354,31 @@ func TestRuleTypeWithoutKnownZones(t *testing.T) {
 		reason string
 	}{
 		{
+			// intra-inside does not read its to zone; inter-inside does not name out.
 			"derived inside to out",
 			simulate.Flow{Source: ep("10.1.0.5"), Destination: ep("10.3.0.5")},
-			"intra-inside,inter-inside", "the zones are derived",
+			"intra-inside", "the zones are derived, so rule-type could not compare from and to for: intra-inside",
 		},
 		{
 			"derived inside to inside",
 			simulate.Flow{Source: ep("10.1.0.5"), Destination: ep("10.1.0.6")},
-			"intra-inside,inter-inside", "the zones are derived",
+			"intra-inside,inter-inside", "the zones are derived, so rule-type could not compare from and to for: intra-inside, inter-inside",
 		},
 		{
-			"given but undefined",
+			// No rule names dmz as its from zone, whatever its type.
+			"derived dmz to inside",
+			simulate.Flow{Source: ep("10.2.0.5"), Destination: ep("10.1.0.5")},
+			"", "",
+		},
+		{
+			"given but undefined from",
 			simulate.Flow{Source: ep("10.1.0.5"), Destination: ep("10.2.0.5"), FromZone: "nowhere", ToZone: "dmz"},
-			"intra-inside,inter-inside", "a given zone is not defined",
+			"", "",
+		},
+		{
+			"given but undefined to",
+			simulate.Flow{Source: ep("10.1.0.5"), Destination: ep("10.2.0.5"), FromZone: "inside", ToZone: "nowhere"},
+			"intra-inside", "a given zone is not defined in the vsys, so rule-type could not compare from and to for: intra-inside",
 		},
 	} {
 		r, v := run(t, e, c.flow)
@@ -375,7 +387,8 @@ func TestRuleTypeWithoutKnownZones(t *testing.T) {
 		}
 		f := stage(r, "derive-zones").Fidelity
 		// Derived zones are inferred, which is weaker than overmatch; the reason stays.
-		if f.Level() == "exact" || !strings.Contains(f.String(), c.reason) || !strings.Contains(f.String(), "intra-inside, inter-inside") {
+		if f.Level() == "exact" && c.reason != "" || !strings.Contains(f.String(), c.reason) ||
+			c.reason == "" && strings.Contains(f.String(), "rule-type") {
 			t.Errorf("%s: derive-zones = %s", c.name, f)
 		}
 	}
@@ -424,6 +437,7 @@ func TestDefaultRuleDecides(t *testing.T) {
 		{"local overrides", entry(inter, "allow"), "", "inside", "interzone-default (allow), local"},
 		{"local without action keeps the built-in", entry(inter, ""), "", "inside", "interzone-default (deny), local"},
 		{"pushed overrides", "", entry(intra, "reset-both"), "dmz", "intrazone-default (reset-both), pushed"},
+		{"pushed without action keeps the built-in", "", entry(inter, ""), "inside", "interzone-default (deny), pushed"},
 		{"local and pushed agree", entry(intra, "drop"), entry(intra, "drop"), "dmz", "intrazone-default (drop), local"},
 		{"local and pushed disagree", entry(intra, "drop"), entry(intra, "allow"), "dmz", "local and pushed default rules disagree; precedence not verified"},
 		{"not an action", entry(inter, "maybe"), "", "inside", `interzone-default has the action "maybe", which is not a security rule action`},
@@ -458,5 +472,28 @@ func TestDefaultRuleNeedsKnownZones(t *testing.T) {
 		if v.Default != "" || fm.Level() != "undermatch" || !strings.Contains(fm.String(), "the default rule depends on the zones") {
 			t.Errorf("%+v: default %q, first-match %s", f, v.Default, fm)
 		}
+	}
+}
+
+// A configuration without the index's vsys has unknown default rules: the
+// built-in action would be a guess.
+func TestDefaultRuleWithoutTheVsys(t *testing.T) {
+	t.Parallel()
+	cfg, _, err := config.Load("../../../testdata/config/firewall-ruletype.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, _, err := config.Load("../../../testdata/config/firewall-zones.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	idx, err := index.For(cfg, config.Scope{Sort: config.ScopeVsys, Name: "vsys2"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := &state{known: true, target: simulate.Target{Config: other, Index: idx}}
+	s.in.Flow.FromZone, s.in.Flow.ToZone = "inside", "dmz"
+	if d, why := s.defaultRule(); d.Name != "" || why != "the configuration has no vsys:vsys2, so its default rules are not known" {
+		t.Errorf("got %+v, %q", d, why)
 	}
 }

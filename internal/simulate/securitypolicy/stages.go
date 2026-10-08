@@ -122,9 +122,9 @@ func deriveZones(_ context.Context, s *state) (simulate.Outcome, error) {
 		if s.known {
 			s.cand.And(s.byRuleType(fb, tb, f.FromZone == f.ToZone))
 		} else {
-			kept := s.keepTyped(func() { s.cand.And(fb); s.cand.And(tb) })
+			kept := s.narrowZones(fb, tb)
 			if !kept.IsEmpty() {
-				out.Fidelity = simulate.OverMatchBecause("a given zone is not defined in the vsys, so rule-type was not applied to: " + names(s.rules, kept))
+				out.Fidelity = simulate.OverMatchBecause("a given zone is not defined in the vsys, so rule-type could not compare from and to for: " + names(s.rules, kept))
 			}
 		}
 		// A given zone wins; the engine only says when it derives another (§18 N10).
@@ -163,16 +163,9 @@ func deriveZones(_ context.Context, s *state) (simulate.Outcome, error) {
 		out.Fidelity = simulate.Weakest(out.Fidelity, simulate.OverMatchBecause("the NAT rule is not certain: "+strings.Join(nz.doubts, "; ")))
 	}
 	z.From, z.To = from, to
-	// Derived zones are never single and known, so rule-type cannot be applied: a
-	// rule with another type stays a candidate whatever its zones say.
-	kept := s.keepTyped(func() {
-		if fromB != nil {
-			s.cand.And(fromB)
-		}
-		if toB != nil {
-			s.cand.And(toB)
-		}
-	})
+	// Derived zones are never single and known, so whether from equals to is open:
+	// an intrazone or interzone rule whose zones fit stays a candidate.
+	kept := s.narrowZones(fromB, toB)
 	if fromB != nil {
 		details = append(details, "from "+strings.Join(from, ", "))
 	}
@@ -180,7 +173,7 @@ func deriveZones(_ context.Context, s *state) (simulate.Outcome, error) {
 		details = append(details, "to "+strings.Join(to, ", "))
 	}
 	if !kept.IsEmpty() {
-		out.Fidelity = simulate.Weakest(out.Fidelity, simulate.OverMatchBecause("the zones are derived, so rule-type was not applied to: "+names(s.rules, kept)))
+		out.Fidelity = simulate.Weakest(out.Fidelity, simulate.OverMatchBecause("the zones are derived, so rule-type could not compare from and to for: "+names(s.rules, kept)))
 	}
 	switch {
 	case fromB == nil && toB == nil:
@@ -234,20 +227,33 @@ func (s *state) byRuleType(from, to *roaring.Bitmap, same bool) *roaring.Bitmap 
 	return out
 }
 
-// keepTyped runs a narrowing that reads every rule as universal, then puts back the
-// candidates whose rule-type is not universal: without single and known zones
-// their type cannot be decided, so they stay (spec S12, over-match is the safe
-// direction). It returns them: each is a candidate the zones may not match.
-func (s *state) keepTyped(narrow func()) *roaring.Bitmap {
-	typed := roaring.New()
+// narrowZones narrows by zone when zone equality is not known. Every rule must
+// name the from zone. Universal and interzone rules must name the to zone too: an
+// interzone match is a universal match between different zones. An intrazone rule
+// does not read its to zone, so it stays when its from zone matches (byRuleType
+// cites the source). Whether from equals to is open, so an intrazone or interzone
+// rule left is a candidate the zones may not match (spec S12, over-match is the
+// safe direction); narrowZones returns them. A nil bitmap does not narrow.
+func (s *state) narrowZones(from, to *roaring.Bitmap) *roaring.Bitmap {
+	if from != nil {
+		s.cand.And(from)
+	}
+	intra, typed := roaring.New(), roaring.New()
 	for i, r := range s.rules {
-		if r.RuleType != "" && r.RuleType != "universal" {
+		switch r.RuleType {
+		case "intrazone":
+			intra.Add(uint32(i))
+			typed.Add(uint32(i))
+		case "interzone":
 			typed.Add(uint32(i))
 		}
 	}
+	if to != nil {
+		intra.And(s.cand)
+		s.cand.And(to)
+		s.cand.Or(intra)
+	}
 	typed.And(s.cand)
-	narrow()
-	s.cand.Or(typed)
 	return typed
 }
 
@@ -490,10 +496,12 @@ func (s *state) defaultRule() (resolve.DefaultRule, string) {
 	}
 	d := resolve.DefaultRule{Name: name, Action: builtInDefaults[name], Source: "built-in"}
 	var stored []resolve.DefaultRule
+	found := false
 	for _, tg := range resolve.Targets(s.target.Config) {
 		if tg.Scope() != s.target.Index.Scope() {
 			continue
 		}
+		found = true
 		for _, e := range tg.DefaultRules() {
 			if e.Name == name {
 				// An entry without an action keeps the built-in one (spec §4.6).
@@ -503,6 +511,11 @@ func (s *state) defaultRule() (resolve.DefaultRule, string) {
 				stored = append(stored, e)
 			}
 		}
+	}
+	if !found {
+		// Without the vsys its overrides are unknown; the built-in action would be
+		// a guess.
+		return resolve.DefaultRule{}, fmt.Sprintf("the configuration has no %s, so its default rules are not known", s.target.Index.Scope())
 	}
 	// Precedence between a local and a pushed override is not verified on a
 	// device (spec E24): one source decides alone; two must agree, and then the
