@@ -1,6 +1,6 @@
 # commands
 
-Validated against e37ee52 on 2026-09-30 · Purpose: the proteus command, what each subcommand is for, and which one to reach for.
+Validated against 9e7d9b7 on 2026-10-08 · Purpose: the proteus command, what each subcommand is for, and which one to reach for.
 
 ## Purpose & responsibilities
 
@@ -23,7 +23,7 @@ snapshot show                               per device and vsys: snapshot, age, 
 snapshot diff [--from] [--to]               objects and rules added, removed, changed
 search <term>                               every place a value or name appears
 lookup <name>                               the whole rule or object behind a name
-simulate policy <src> <dst>              the rules one flow could hit, and the first match
+simulate policy <src> <dst>                 does the estate allow the flow along its path (--file: one configuration)
 simulate routing <src> <dst>                the firewalls a packet crosses, hop by hop
 simulate nat <src> <dst> --device <fw>      the NAT rule and the translated packet
 ```
@@ -31,8 +31,9 @@ simulate nat <src> <dst> --device <fw>      the NAT rule and the translated pack
 - **Two question verbs.** `search` answers "where does this appear" in five stages:
   objects by value, objects by name, groups, references, literals. Rules whose field
   is `any` are not in it; `simulate` answers "what would this traffic hit".
-- **Selectors** on every question: `--device`, `--label k=v` (AND), `--vsys`,
-  `--at <time>`, `--fresh`, `--file <config.xml>`. No selector means every device.
+- **Selectors** on `search`, `lookup` and `snapshot`: `--device`, `--label k=v`
+  (AND), `--vsys`, `--at <time>`, `--fresh`, `--file <config.xml>`. No selector means
+  every device. The `simulate` commands take their own subsets (below).
 - **Search modes:** the term's type sets the match (address covers, prefix overlaps,
   port covers, URL by tokens, else exact); `--exact`, `--within`, `--contains`
   override. Filters: `--kind`, `--field`, `--show objects,groups,refs,literals`,
@@ -44,11 +45,25 @@ simulate nat <src> <dst> --device <fw>      the NAT rule and the translated pack
   shows values in parentheses and groups as trees (three levels); lists stop at five
   items unless `--full`. See [questions](questions.md).
 - **`simulate <kind>`** has one subcommand per kind registered in
-  `estate.Simulations`; `policy` is the first. It runs on one device and vsys
-  (M5 fans out), takes an address or FQDN per side, `--port`, `--url`, zones given
-  or derived, and prints each stage with `--why`. Its text ends with
-  `first match: <rule> (<action>)`, which `scripts/device-probe.sh` reads. See
-  [simulator](simulator.md).
+  `estate.Simulations`, each from its own builder in `kindCommands`
+  (`TestEveryKindHasACommand`). See [simulator](simulator.md).
+- **`simulate policy <src> <dst>`** (`policypath.go`) has two modes (spec
+  2026-10-07 §3). **Path mode**, the default: routing's path from the start
+  (`--device` names it, `--router` picks its router), the security check on every
+  hop with the hop's flow and zones (`pathpolicy.Run`), one verdict `allowed`,
+  `denied` or `undecided` with the hop that set it. Text: verdict line, routing
+  boxes with a `policy` row (and `doubt` rows), `--why` per hop. Exit 3 when
+  undecided. `--vsys`, `--label`, `--from-zone`, `--to-zone`, several `--device`,
+  `--router` without `--device`, `--each` (fan-out, M5b) exit 2; `--fresh` and
+  `--all-devices` are not registered. An FQDN traces its first IPv4 address; with
+  `--no-dns` or no address, exit 2. The loader opens the snapshot each routing hop
+  used (HA: the active member). **`--file`**: one configuration, `--vsys`, zones
+  given (both) or derived, no NAT; `--device`, `--label`, `--at`, `--router` exit 2.
+  Its text ends with `first match: <rule> (<action>)` or `first certain match:` and
+  `undecided:`. Both modes share one JSON security block (`securityJSON`).
+  `scripts/device-probe.sh <config> <vsys>` reads the `--file` text;
+  `--path <flows-file>` compares each decided hop with the hop device's
+  `test security-policy-match`.
 - **`simulate nat <src> <dst> --device <fw>`** (own command via `kindCommands`):
   `--router`, `--port`, `--protocol`, `--from-zone` or `--from-interface`, `--why`,
   `--no-dns` (resolves no FQDN at all, also a translated destination's). A source
@@ -115,7 +130,8 @@ None. `cmd/proteus` is `main` only; the commands live in `internal/cli` behind
 - **An incomplete answer exits 3.** A hole or an unresolved entry is printed and
   sets the exit code; a script must be able to refuse to act on it.
 - **A version gap is unresolved, a stale snapshot is a note.** The first can make
-  an answer miss rules; the second only qualifies it.
+  an answer miss rules; the second only qualifies it. `simulate policy` is the
+  exception (E25): the gap is a note and the check is `inferred`.
 
 ## See also
 

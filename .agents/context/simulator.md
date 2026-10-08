@@ -1,6 +1,6 @@
 # simulator
 
-Validated against 54cfdf9 on 2026-09-29 · Purpose: how a simulation runs as stages, how certain its answer is, and how to trace one after the fact.
+Validated against 9e7d9b7 on 2026-10-08 · Purpose: how a simulation runs as stages, how certain its answer is, and how to trace one after the fact.
 
 ## Purpose & responsibilities
 
@@ -9,10 +9,9 @@ declaring its fidelity. It is a leaf (R12). `internal/simulate/securitypolicy` a
 rule one flow hits on one device; `internal/simulate/routing` (spec §17) which firewalls a
 packet crosses; `internal/simulate/nat` (spec §18) the NAT rule and the translated packet on
 one firewall; `internal/simulate/pathpolicy` whether a flow passes every firewall on its
-path. `internal/simulate/nat` is also the NAT engine routing and securitypolicy
+path (the default mode of `simulate policy`). `internal/simulate/nat` is also the NAT engine routing and securitypolicy
 call; `internal/simulate/topology` and `internal/simulate/rulebase` are leaf packages they share. `estate.Simulations` is the registry; the command makes one
-`simulate <kind>` subcommand per entry, from `kindCommands` when a kind needs its own
-flags (routing). `runlog` records each stage.
+`simulate <kind>` subcommand per entry, each from its own builder in `kindCommands`. `runlog` records each stage.
 
 ## How it works
 
@@ -42,12 +41,26 @@ Eight stages, each ANDing into the running candidate set:
 | `derive-zones` | exact when given; inferred when derived (forwarding table or configuration); not evaluated when no zone was found |
 | `match-service` | exact; overmatch naming rules kept for `application-default`, a predefined service or no service; not evaluated without `--port` |
 | `match-url` | exact; overmatch naming rules kept for a category the configuration does not define; not evaluated without `--url` when a candidate names a category |
-| `drop-disabled`, `order` | exact |
-| `first-match` | not evaluated: application (and user when given) |
+| `drop-disabled` | exact |
+| `order` | exact; sets `Verdict.Doubts` per candidate (spec 2026-10-07 §4.7) |
+| `first-match` | exact; overmatch when earlier doubtful candidates share the action; undermatch (undecided) when one has another action, or no rule and the zones are not single and known; not evaluated: application or user only when a candidate up to the decision names one |
+
+`derive-zones` also applies `rule-type` when both zones are given and defined in the
+vsys; otherwise typed rules stay with an overmatch reason. The decision (§4.7): the
+first candidate without doubt decides; with none, the default rule
+(`intrazone-default`/`interzone-default`; local, then pushed override, else the
+built-in action; local and pushed that disagree are undecided). Doubts come from
+`doubt.go` (`ruleFields` classifies every schema child of the rule entry, guarded by
+a test): application, user, HIP, schedule, `application-default`, predefined or
+absent service, a URL category without `--url` or not defined, and an EDL, region or
+dynamic group as source or destination (`index.View.Opaque`, E23). Any stage at
+undermatch leaves the flow undecided. A version gap is a note and `inferred` (E25),
+not unresolved. `Verdict.Decision()` gives `Pass`, `Stop` or `Undecided`.
 
 Negated rules are inverted in the resolve stages. A rule without a category matches
 any URL. Relevance (S14) comes from the zone locator: a route more specific than a
-default covering either endpoint.
+default covering either endpoint. With `--file` there is no network, so relevance is
+unknown and the post-NAT zone is not checked.
 
 ### routing
 
@@ -104,10 +117,14 @@ its tests share with the CLI's.
 ## Build / run pointers
 
 - `go test ./internal/simulate/... ./runlog`
+- `./bin/proteus simulate policy <src> <dst> --why` (path mode; needs fetched devices)
 - `./bin/proteus simulate policy <src> <dst> --file <cfg> --why`
 - `./bin/proteus simulate routing <src> <dst> --why` (needs fetched devices)
 - `./bin/proteus simulate nat <src> <dst> --device <fw> --port <p> --why`
 - `scripts/device-probe.sh --nat <device> <router> <src,dst,port>...` against the device
+- `scripts/device-probe.sh --path <flows-file>` compares each decided path hop with
+  the hop device's `test security-policy-match` (`PANOS_HOST_<NAME>`,
+  `PANOS_API_KEY_<NAME>`)
 - `--log-level debug`, then `grep '\[STEP\]'` in the run log: the rules each stage left.
 
 ## Public API
