@@ -197,23 +197,23 @@ func TestStart(t *testing.T) {
 	t.Parallel()
 	topo := lab()
 	var ce *simulate.ChoiceError
-	if _, _, err := topo.Start("fw01", "", ip("8.8.8.8")); !errors.As(err, &ce) || !strings.Contains(err.Error(), "default, lte") {
+	if _, _, _, err := topo.Start("fw01", "", ip("8.8.8.8")); !errors.As(err, &ce) || !strings.Contains(err.Error(), "default, lte") {
 		t.Errorf("several routers: %v", err)
 	}
-	if _, _, err := topo.Start("fw01", "x", netip.Addr{}); !errors.As(err, &ce) {
+	if _, _, _, err := topo.Start("fw01", "x", netip.Addr{}); !errors.As(err, &ce) {
 		t.Errorf("no such router: %v", err)
 	}
-	if p, connected, err := topo.Start("fw02", "", ip("198.18.100.7")); err != nil || !connected || p.Interface != "vlan.100" {
-		t.Errorf("connected: %+v %v %v", p, connected, err)
+	if p, via, connected, err := topo.Start("fw02", "", ip("198.18.100.7")); err != nil || !connected || p.Interface != "vlan.100" || via.IsValid() {
+		t.Errorf("connected: %+v %v %v %v", p, via, connected, err)
 	}
-	if p, connected, _ := topo.Start("fw02", "", ip("198.18.10.9")); connected || p.Interface != "vlan.32" {
-		t.Errorf("return route: %+v", p)
+	if p, via, connected, _ := topo.Start("fw02", "", ip("198.18.10.9")); connected || p.Interface != "vlan.32" || via != netip.MustParsePrefix("198.18.0.0/15") {
+		t.Errorf("return route: %+v %v", p, via)
 	}
-	if p, _, _ := topo.Start("fw01", "lte", ip("10.9.9.9")); p.Interface != "" || p.Router != "lte" {
-		t.Errorf("no route back: %+v", p)
+	if p, via, _, _ := topo.Start("fw01", "lte", ip("10.9.9.9")); p.Interface != "" || p.Router != "lte" || via.IsValid() {
+		t.Errorf("no route back: %+v %v", p, via)
 	}
-	if p, _, _ := topo.Start("fw01", "default", netip.Addr{}); p.Interface != "" || p.Device != "fw01" {
-		t.Errorf("no source: %+v", p)
+	if p, via, _, _ := topo.Start("fw01", "default", netip.Addr{}); p.Interface != "" || p.Device != "fw01" || via.IsValid() {
+		t.Errorf("no source: %+v %v", p, via)
 	}
 }
 

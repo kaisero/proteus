@@ -44,6 +44,7 @@ func pbf(_ context.Context, s *state) (simulate.Outcome, error) {
 	if m.Found {
 		if m.Note != "" {
 			h.Notes = append(h.Notes, m.Note)
+			h.PBF = append(h.PBF, m.Rule.Name)
 			out.Fidelity, out.Detail = simulate.Weakest(out.Fidelity, simulate.Inferred), m.Note
 		} else {
 			out.Detail = "pbf rule " + m.Rule.Name + " leaves the packet to routing"

@@ -107,7 +107,7 @@ func place(_ context.Context, s *state) (simulate.Outcome, error) {
 			}
 		}
 	}
-	port, connected, err := s.topo.Start(s.data.Name, router, src)
+	port, _, connected, err := s.topo.Start(s.data.Name, router, src)
 	if err != nil {
 		return simulate.Outcome{}, err
 	}
