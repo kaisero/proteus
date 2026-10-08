@@ -243,3 +243,13 @@ func TestLoadNeedsAnIndex(t *testing.T) {
 		t.Errorf("%v", m)
 	}
 }
+
+// A routing end's reason is routing's end line without its column padding.
+func TestARoutingEndReadsAsASentence(t *testing.T) {
+	t.Parallel()
+	r := Result{Path: routing.Path{Outcome: routing.LeftEstate, End: "192.168.0.1   leaves the estate (not in the inventory)"}, Hops: hops("pass")}
+	fold(&r, simulate.Exact)
+	if r.At == nil || r.At.Reason != "192.168.0.1 leaves the estate (not in the inventory)" {
+		t.Errorf("point: %+v", r.At)
+	}
+}

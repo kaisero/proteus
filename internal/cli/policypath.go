@@ -181,7 +181,7 @@ func (a *app) runPolicyPath(ctx context.Context, o policyOptions) (answer, error
 	}
 	start := dev
 	if start == "" {
-		start = "placed by the source"
+		start = "placed by the source " + flow.Source.String()
 	}
 	a.log.Infof(runlog.TagStep, "policy path %s -> %s, start %s", flow.Source, flow.Destination, start)
 	res, stages, err := pathpolicy.Run(ctx, env, simulate.Input{Flow: flow, Params: map[string]string{"device": dev, "router": o.router}})
@@ -250,7 +250,7 @@ func pathUnresolved(res pathpolicy.Result, stages []simulate.Stage) []unresolved
 		}
 	}
 	if at := res.At; res.Verdict == pathpolicy.VerdictUndecided && at.Check == "routing" {
-		h := res.Hops[at.Hop-1].Routing
+		h, _ := pointHop(res)
 		un = append(un, unresolved{Device: h.Device, Vsys: h.Vsys, Reason: at.Reason})
 	}
 	var device string
@@ -426,21 +426,38 @@ func verdictLine(pal palette, r pathpolicy.Result) string {
 	if r.At == nil {
 		return pal.ok(string(r.Verdict))
 	}
-	h := r.Hops[r.At.Hop-1]
+	h, ok := pointHop(r)
 	at := fmt.Sprintf("%s at hop %d: ", r.Verdict, r.At.Hop)
 	switch {
+	case !ok:
+		return pal.warn(at + r.At.Reason)
 	case r.Verdict == pathpolicy.VerdictUndecided:
-		return pal.warn(at + fmt.Sprintf("%s / %s, %s", h.Routing.Device, h.Routing.Vsys, r.At.Reason))
+		return pal.warn(at + fmt.Sprintf("%s / %s, %s", h.Device, h.Vsys, r.At.Reason))
 	case r.At.Check == "routing":
-		return pal.bad(at + fmt.Sprintf("no route to %s on %s", r.Path.Destination, h.Routing.Device))
+		// The address the hop looked up: after a destination NAT, the
+		// translated one.
+		dst := h.Flow.Destination
+		if h.PostNAT != nil {
+			dst = h.PostNAT.Destination
+		}
+		return pal.bad(at + fmt.Sprintf("no route to %s on %s", dst, h.Device))
 	}
 	var action string
-	for _, c := range h.Checks {
+	for _, c := range r.Hops[r.At.Hop-1].Checks {
 		if c.Name == r.At.Check {
 			action = checkAction(c)
 		}
 	}
-	return pal.bad(at + fmt.Sprintf("%s / %s, rule %s (%s)", h.Routing.Device, h.Routing.Vsys, r.At.Rule, action))
+	return pal.bad(at + fmt.Sprintf("%s / %s, rule %s (%s)", h.Device, h.Vsys, r.At.Rule, action))
+}
+
+// pointHop is the routing hop the verdict's point names; false for a path
+// without that hop.
+func pointHop(r pathpolicy.Result) (routing.Hop, bool) {
+	if r.At == nil || r.At.Hop < 1 || r.At.Hop > len(r.Hops) {
+		return routing.Hop{}, false
+	}
+	return r.Hops[r.At.Hop-1].Routing, true
 }
 
 // checkAction is the action of the rule, or default rule, that decided a

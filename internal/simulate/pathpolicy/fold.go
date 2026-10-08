@@ -56,7 +56,9 @@ func fold(r *Result, routingFid simulate.Fidelity) {
 		}
 	}
 	if r.At == nil {
-		end := &Point{Hop: len(r.Hops), Check: checkRouting, Reason: r.Path.End}
+		// The end line pads its columns for the text; a reason reads as a
+		// sentence.
+		end := &Point{Hop: len(r.Hops), Check: checkRouting, Reason: strings.Join(strings.Fields(r.Path.End), " ")}
 		switch r.Path.Outcome {
 		case routing.Delivered, routing.Local:
 			r.Verdict = VerdictAllowed

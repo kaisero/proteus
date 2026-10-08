@@ -267,19 +267,22 @@ func storeLoader(st *store.Store, when estate.When, net *estate.Network, users i
 	type key struct{ member, snapshot, vsys string }
 	cache := map[key]simulate.Target{}
 	return func(dev, vsys string) (simulate.Target, error) {
-		k, w := key{member: dev, vsys: vsys}, when
+		k := key{member: dev, vsys: vsys}
 		if d, err := net.Device(dev); err == nil {
 			k.member, k.snapshot = d.Member, d.SnapshotID
-			// A snapshot id is its time, so the newest snapshot at or before it
-			// is that snapshot.
-			if at, err := estate.ParseAt(d.SnapshotID); err == nil {
-				w.At = at
-			}
 		}
 		if t, ok := cache[k]; ok {
 			return t, nil
 		}
-		ts, holes := estate.Open(st, []string{k.member}, []string{vsys}, w)
+		var ts []estate.Target
+		var holes []estate.Hole
+		if k.snapshot != "" {
+			// Exactly the snapshot routing read: one without a configuration is
+			// a hole, not an older snapshot.
+			ts, holes = estate.OpenSnapshot(st, k.member, k.snapshot, []string{vsys}, when)
+		} else {
+			ts, holes = estate.Open(st, []string{k.member}, []string{vsys}, when)
+		}
 		if len(ts) == 0 {
 			var why []string
 			for _, h := range holes {

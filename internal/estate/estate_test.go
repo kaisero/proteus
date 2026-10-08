@@ -153,3 +153,29 @@ func TestVsysFilterHoldsForEveryVsys(t *testing.T) {
 		t.Errorf("targets = %s, want only file/vsys1", got)
 	}
 }
+
+// OpenSnapshot reads exactly the snapshot named: an older one, a missing id, or
+// one without a configuration is never replaced by another.
+func TestOpenSnapshot(t *testing.T) {
+	t.Parallel()
+	st := storeWith(t)
+	ids, err := st.List("fw01")
+	if err != nil || len(ids) != 2 {
+		t.Fatalf("%v %v", ids, err)
+	}
+	ts, holes := OpenSnapshot(st, "fw01", ids[1], nil, When{Now: t0})
+	if got := names(ts); got != "fw01/vsys1,fw01/vsys2" || len(holes) != 0 || ts[0].Snapshot.ID != ids[1] {
+		t.Errorf("older snapshot: %s %v", got, holes)
+	}
+	if _, holes := OpenSnapshot(st, "fw01", "2020-01-01T00-00-00Z", nil, When{Now: t0}); len(holes) != 1 {
+		t.Errorf("missing id: %v", holes)
+	}
+	st = st.WithClock(func() time.Time { return t0.Add(2 * time.Hour) })
+	sn, err := st.Write(store.Meta{Device: "fw01"}, map[string][]byte{store.FIBDoc: []byte("<x/>")}, 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ts, holes := OpenSnapshot(st, "fw01", sn.ID, nil, When{Now: t0}); len(ts) != 0 || len(holes) != 1 || !strings.Contains(holes[0].Reason, "has no configuration") {
+		t.Errorf("no configuration: %v %v", ts, holes)
+	}
+}

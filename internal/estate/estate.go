@@ -52,31 +52,46 @@ func Open(st *store.Store, devices, vsys []string, w When) ([]Target, []Hole) {
 	var holes []Hole
 	for _, d := range devices {
 		sn, err := pick(st, d, w.At)
-		if err != nil {
-			holes = append(holes, Hole{Device: d, Reason: err.Error()})
-			w.Log.Warnf(runlog.TagSnap, "%s: hole: %v", d, err)
-			continue
-		}
-		cfg, rep, err := config.Load(sn.Path(store.ConfigDoc))
-		if err != nil {
-			holes = append(holes, Hole{Device: d, Reason: err.Error()})
-			w.Log.Warnf(runlog.TagSnap, "%s: hole: %v", d, err)
-			continue
-		}
-		w.Log.Infof(runlog.TagSnap, "%s: snapshot %s taken %s, PAN-OS %s read with the %s schema",
-			d, sn.ID, sn.Meta.TakenAt.Format(time.RFC3339), cfg.Version(), cfg.DigestVersion())
-		var notes []string
-		if age := w.Now.Sub(sn.Meta.TakenAt); w.MaxAge > 0 && age > w.MaxAge {
-			notes = append(notes, StaleNote(sn.ID, age, w.MaxAge))
-		}
-		ts, hs := scopes(d, &sn, cfg, rep, vsys, notes)
-		for _, h := range hs {
-			w.Log.Warnf(runlog.TagSnap, "%s/%s: hole: %s", h.Device, h.Vsys, h.Reason)
-		}
+		ts, hs := openSnapshot(d, sn, err, vsys, w)
 		targets = append(targets, ts...)
 		holes = append(holes, hs...)
 	}
 	return targets, holes
+}
+
+// OpenSnapshot reads one snapshot by its id, as Open reads a device's chosen
+// one. A snapshot without a configuration is a hole: it never falls back to an
+// older one, so a caller that pinned a snapshot reads exactly that one.
+func OpenSnapshot(st *store.Store, device, id string, vsys []string, w When) ([]Target, []Hole) {
+	sn, err := st.Get(device, id)
+	if err == nil && !sn.Has(store.ConfigDoc) {
+		err = fmt.Errorf("store: %s@%s has no configuration", device, id)
+	}
+	return openSnapshot(device, sn, err, vsys, w)
+}
+
+// openSnapshot loads a picked snapshot; err says why none could be picked.
+func openSnapshot(d string, sn store.Snapshot, err error, vsys []string, w When) ([]Target, []Hole) {
+	if err != nil {
+		w.Log.Warnf(runlog.TagSnap, "%s: hole: %v", d, err)
+		return nil, []Hole{{Device: d, Reason: err.Error()}}
+	}
+	cfg, rep, err := config.Load(sn.Path(store.ConfigDoc))
+	if err != nil {
+		w.Log.Warnf(runlog.TagSnap, "%s: hole: %v", d, err)
+		return nil, []Hole{{Device: d, Reason: err.Error()}}
+	}
+	w.Log.Infof(runlog.TagSnap, "%s: snapshot %s taken %s, PAN-OS %s read with the %s schema",
+		d, sn.ID, sn.Meta.TakenAt.Format(time.RFC3339), cfg.Version(), cfg.DigestVersion())
+	var notes []string
+	if age := w.Now.Sub(sn.Meta.TakenAt); w.MaxAge > 0 && age > w.MaxAge {
+		notes = append(notes, StaleNote(sn.ID, age, w.MaxAge))
+	}
+	ts, hs := scopes(d, &sn, cfg, rep, vsys, notes)
+	for _, h := range hs {
+		w.Log.Warnf(runlog.TagSnap, "%s/%s: hole: %s", h.Device, h.Vsys, h.Reason)
+	}
+	return ts, hs
 }
 
 // OpenFile reads one configuration file with no inventory or store.

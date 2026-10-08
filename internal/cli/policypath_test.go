@@ -17,6 +17,7 @@ import (
 	"github.com/okaiser/proteus/internal/simulate"
 	"github.com/okaiser/proteus/internal/simulate/pathlab"
 	"github.com/okaiser/proteus/internal/simulate/pathpolicy"
+	"github.com/okaiser/proteus/internal/simulate/routing"
 	"github.com/okaiser/proteus/internal/simulate/securitypolicy"
 )
 
@@ -26,6 +27,9 @@ import (
 type pathConfigs struct {
 	fw01, fw02 []byte
 	noDefault  bool
+	// fw02NextHop replaces fw02's next hop to fw01, so the path leaves the
+	// estate there.
+	fw02NextHop string
 }
 
 // fibCmd asks a device for its forwarding table.
@@ -48,6 +52,9 @@ func pathVariant(t *testing.T, pc pathConfigs, complete bool) *cli {
 	}
 	if pc.noDefault {
 		fw01.Ops[fibCmd] = defaultRoute.ReplaceAllString(fw01.Ops[fibCmd], "")
+	}
+	if pc.fw02NextHop != "" {
+		fw02.Ops[fibCmd] = strings.Replace(fw02.Ops[fibCmd], "<nexthop>198.19.0.254</nexthop>", "<nexthop>"+pc.fw02NextHop+"</nexthop>", 1)
 	}
 	c := newCLI(t)
 	c.inventory(inventoryFor(fw01.Start(t), fw02.Start(t)))
@@ -97,6 +104,7 @@ func pathGoldens(t *testing.T) []struct {
 		{"simulate-policy-path-default", 0, pathConfigs{}, append(flow, "--why")},
 		{"simulate-policy-path-no-route", 0, pathConfigs{fw02: allowing(t, pathlab.FW02), noDefault: true}, []string{"simulate", "policy", pathlab.Source, "198.18.30.5", "--port", "443"}},
 		{"simulate-policy-path-undecided", 3, pathConfigs{fw02: pathlab.Config(t, pathlab.FW02, differ)}, flow},
+		{"simulate-policy-path-left-estate", 3, pathConfigs{fw02: allowing(t, pathlab.FW02), fw02NextHop: "198.19.0.77"}, flow},
 	}
 }
 
@@ -468,5 +476,26 @@ func TestCheckActionAndChecksJSON(t *testing.T) {
 	b, err := json.Marshal(checksJSON{{name: "security"}, {name: "nat"}})
 	if err != nil || !strings.HasPrefix(string(b), `{"security":{`) || !strings.Contains(string(b), `},"nat":{`) {
 		t.Errorf("%v %s", err, b)
+	}
+}
+
+// The verdict line names what the hop looked up, the translated address after
+// a destination NAT, and survives a point without its hop.
+func TestVerdictLineEdges(t *testing.T) {
+	t.Parallel()
+	pre, post := simulate.Addr(netip.MustParseAddr("198.18.250.10")), simulate.Addr(netip.MustParseAddr("198.18.10.100"))
+	r := pathpolicy.Result{
+		Verdict: pathpolicy.VerdictDenied, At: &pathpolicy.Point{Hop: 1, Check: "routing"},
+		Hops: []pathpolicy.Hop{{Index: 1, Routing: routing.Hop{Device: "fw01", Flow: simulate.Flow{Destination: pre}, PostNAT: &simulate.Flow{Destination: post}}}},
+	}
+	if got := verdictLine(palette{}, r); got != "denied at hop 1: no route to 198.18.10.100 on fw01" {
+		t.Errorf("after NAT: %s", got)
+	}
+	r = pathpolicy.Result{Verdict: pathpolicy.VerdictUndecided, At: &pathpolicy.Point{Hop: 0, Check: "routing", Reason: "no hop"}}
+	if got := verdictLine(palette{}, r); got != "undecided at hop 0: no hop" {
+		t.Errorf("no hop: %s", got)
+	}
+	if un := pathUnresolved(r, nil); len(un) != 1 || un[0].Reason != "no hop" {
+		t.Errorf("unresolved: %+v", un)
 	}
 }

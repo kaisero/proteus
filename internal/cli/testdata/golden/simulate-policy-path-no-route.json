@@ -406,8 +406,8 @@
               "candidates": [],
               "doubts": [],
               "zones": {
-                "from": null,
-                "to": null,
+                "from": [],
+                "to": [],
                 "source": ""
               },
               "stages": []

@@ -398,6 +398,8 @@ func securityOf(v *securitypolicy.Verdict, verdict, reason, rule string, fid sim
 		Verdict: verdict, Reason: reason, Rule: rule, Fidelity: fid, Stages: simStages(stages),
 		Candidates: []ruleJSON{}, Doubts: []securitypolicy.Doubt{},
 	}
+	// Zones print [] rather than null, as every list of the block does.
+	out.Zones.From, out.Zones.To = []string{}, []string{}
 	if v == nil {
 		return out
 	}
@@ -411,7 +413,9 @@ func securityOf(v *securitypolicy.Verdict, verdict, reason, rule string, fid sim
 	if v.Doubts != nil {
 		out.Doubts = v.Doubts
 	}
-	out.Default, out.DefaultAction, out.DefaultSource, out.Zones = v.Default, v.DefaultAction, v.DefaultSource, v.Zones
+	out.Default, out.DefaultAction, out.DefaultSource = v.Default, v.DefaultAction, v.DefaultSource
+	out.Zones = v.Zones
+	out.Zones.From, out.Zones.To = nonNil(v.Zones.From), nonNil(v.Zones.To)
 	return out
 }
 
