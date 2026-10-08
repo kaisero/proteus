@@ -115,9 +115,11 @@ func TestStagesAreLogged(t *testing.T) {
 		return Outcome{Fidelity: UnderMatch("gap"), Unresolved: []index.Unresolved{{Value: "v", Reason: "a gap"}}}, nil
 	}}
 	_, _ = Execute(context.Background(), "demo", &state{set: roaring.BitmapOf(1, 2)}, []Step[state]{step("a", Exact, 1), gap, bad}, false, l)
+	(&Env{Log: l}).Stepf("hop%d: between stages", 1)
+	(&Env{}).Stepf("no log, no line")
 	_ = l.Close()
 	b, _ := os.ReadFile(l.Path())
-	for _, want := range []string{"[INFO] [STEP] demo/a: exact, 1 candidates", "[DEBUG] [STEP] demo/a: kept a", "[ERROR] [STEP] demo/z: failed: broke", "[INFO] [STEP] demo/u: unresolved: v: a gap"} {
+	for _, want := range []string{"[INFO] [STEP] demo/a: exact, 1 candidates", "[DEBUG] [STEP] demo/a: kept a", "[ERROR] [STEP] demo/z: failed: broke", "[INFO] [STEP] demo/u: unresolved: v: a gap", "[INFO] [STEP] hop1: between stages"} {
 		if !strings.Contains(string(b), want) {
 			t.Errorf("missing %q in:\n%s", want, b)
 		}

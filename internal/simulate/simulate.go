@@ -78,6 +78,10 @@ type Env struct {
 	Resolve func(ctx context.Context, name string) ([]netip.Addr, error)
 }
 
+// Stepf writes a STEP line to the run log, for a run that composes simulations
+// and says what it does between their stages. A nil log writes nothing.
+func (e *Env) Stepf(format string, args ...any) { e.Log.Infof(runlog.TagStep, format, args...) }
+
 // Network is the operational data a simulation reads beyond one device's
 // configuration: interface state and routing tables of every device it may cross.
 // Configuration still comes through Env.Load, and only for devices a run reaches.

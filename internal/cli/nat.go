@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -216,7 +217,7 @@ func (a *app) openEstate(s settings, at string) (fetchedEstate, error) {
 // env is a simulation environment over the estate, resolving FQDNs with the app's
 // DNS lookup.
 func (e fetchedEstate) env(a *app) *simulate.Env {
-	return &simulate.Env{Log: a.log, Network: e.network, Load: storeLoader(e.st, e.when), Resolve: a.lookup}
+	return &simulate.Env{Log: a.log, Network: e.network, Load: storeLoader(e.st, e.when, e.network, nil), Resolve: a.lookup}
 }
 
 // runEstate runs a simulation. A choice only the user can make, such as which of two
@@ -238,7 +239,9 @@ func runEstate(ctx context.Context, sim simulate.Simulation, env *simulate.Env, 
 }
 
 // runUnresolved collects what makes a run's answer incomplete: its stages'
-// unresolved entries and, with withReasons, the reasons of an under-matching run.
+// unresolved entries and, with withReasons, the undermatch reasons of an
+// under-matching run. Its overmatch reasons stay out: they name rules kept, not
+// a gap (CLI spec §4.1).
 // vsys is "" when the run spans devices and no single vsys applies.
 func runUnresolved(run simulate.Run, device, vsys string, withReasons bool) []unresolved {
 	var un []unresolved
@@ -248,7 +251,7 @@ func runUnresolved(run simulate.Run, device, vsys string, withReasons bool) []un
 		}
 	}
 	if withReasons && run.Fidelity.Level() == "undermatch" {
-		for _, r := range run.Fidelity.Reasons() {
+		for _, r := range run.Fidelity.UnderMatchReasons() {
 			un = append(un, unresolved{Device: device, Vsys: vsys, Reason: r})
 		}
 	}
@@ -256,17 +259,40 @@ func runUnresolved(run simulate.Run, device, vsys string, withReasons bool) []un
 }
 
 // storeLoader loads a device's vsys configuration and index from the store, as
-// every multi-device simulation needs.
-func storeLoader(st *store.Store, when estate.When) func(dev, vsys string) (simulate.Target, error) {
+// every multi-device simulation needs. A device the network knows reads the
+// snapshot its routing data came from: for an HA pair, the active member's, not
+// the first member's (spec 2026-10-07 §3.4). Each member, snapshot and vsys
+// loads once.
+func storeLoader(st *store.Store, when estate.When, net *estate.Network, users index.UserDirectory) func(dev, vsys string) (simulate.Target, error) {
+	type key struct{ member, snapshot, vsys string }
+	cache := map[key]simulate.Target{}
 	return func(dev, vsys string) (simulate.Target, error) {
-		ts, holes := estate.Open(st, []string{dev}, []string{vsys}, when)
+		k, w := key{member: dev, vsys: vsys}, when
+		if d, err := net.Device(dev); err == nil {
+			k.member, k.snapshot = d.Member, d.SnapshotID
+			// A snapshot id is its time, so the newest snapshot at or before it
+			// is that snapshot.
+			if at, err := estate.ParseAt(d.SnapshotID); err == nil {
+				w.At = at
+			}
+		}
+		if t, ok := cache[k]; ok {
+			return t, nil
+		}
+		ts, holes := estate.Open(st, []string{k.member}, []string{vsys}, w)
 		if len(ts) == 0 {
-			return simulate.Target{}, fmt.Errorf("%s/%s: %v", dev, vsys, holes)
+			var why []string
+			for _, h := range holes {
+				why = append(why, h.Reason)
+			}
+			return simulate.Target{}, fmt.Errorf("%s/%s: %s", dev, vsys, strings.Join(why, "; "))
 		}
 		idx, err := index.For(ts[0].Config, ts[0].Scope)
 		if err != nil {
 			return simulate.Target{}, err
 		}
-		return simulate.Target{Config: ts[0].Config, Index: idx, Notes: ts[0].Notes}, nil
+		t := simulate.Target{Config: ts[0].Config, Index: idx, Providers: index.Providers{Users: users}, Notes: ts[0].Notes}
+		cache[k] = t
+		return t, nil
 	}
 }

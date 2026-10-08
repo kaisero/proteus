@@ -1,0 +1,29 @@
+undecided at hop 1: fw02 / vsys1, local and pushed default rules disagree; precedence not verified
+  note: a later hop denies: hop 2 (fw01 vsys1), default rule interzone-default (deny), built-in
+
+simulate policy 198.18.1.10 -> 198.18.10.100 tcp/443            fidelity: undermatch
+
+  198.18.1.10
+     │ 198.18.1.0/24
+  ┌─ fw02 ─ vsys1 ─ router default ─ snapshot 1m ────────────────────────────────────────┐
+  │  zones   home -> labor                                                               │
+  │  in      vlan.1        198.18.1.1/24                                                 │
+  │  out     vlan.32       198.19.0.1/24                                                 │
+  │  route   198.18.0.0/15 via 198.19.0.254   static                                     │
+  │  policy  undecided: local and pushed default rules disagree; precedence not verified │
+  └──┬───────────────────────────────────────────────────────────────────────────────────┘
+     │ 198.19.0.0/24   198.19.0.1 -> 198.19.0.254
+  ┌─ fw01 ─ vsys1 ─ router default ─ snapshot 1m ────────────────────────────────────────┐
+  │  zones   transport -> server                                                         │
+  │  in      ethernet1/1   198.19.0.254/24                                               │
+  │  out     ethernet1/2   198.18.10.1/24                                                │
+  │  route   198.18.10.0/24  connected                                                   │
+  │  policy  interzone-default (deny)                                                    │
+  └──┬───────────────────────────────────────────────────────────────────────────────────┘
+     │ 198.18.10.0/24
+  198.18.10.100   delivered
+
+firewalls on the path: fw02 (home -> labor), fw01 (transport -> server)
+may be incomplete: local and pushed default rules disagree; precedence not verified
+unresolved: fw02/vsys1: local and pushed default rules disagree; precedence not verified
+

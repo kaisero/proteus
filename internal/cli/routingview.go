@@ -17,9 +17,11 @@ const minBox = 56
 
 // renderPath draws a path as one box per hop (spec §17.3, R8): the zone pair first,
 // because that is where a rule goes; a link line between boxes; the end; then the
-// firewalls on the path and what makes the answer uncertain.
-func renderPath(t *textOut, run simulate.Run, p routing.Path, now time.Time, why bool) {
-	fmt.Fprintf(t, "simulate routing %s -> %s            fidelity: %s\n\n", sourceText(p), p.Destination, styledLevel(t.pal, run.Fidelity.Level()))
+// firewalls on the path and what makes the answer uncertain. title leads the
+// first line; rows, when not nil, gives hop i (0-based) extra rows after
+// routing's.
+func renderPath(t *textOut, title string, run simulate.Run, p routing.Path, now time.Time, why bool, rows func(i int) [][2]string) {
+	fmt.Fprintf(t, "%s            fidelity: %s\n\n", title, styledLevel(t.pal, run.Fidelity.Level()))
 	for _, n := range p.Notes {
 		fmt.Fprintf(t, "  %s\n", noteStyle(t.pal, n)("note: "+n))
 	}
@@ -32,7 +34,7 @@ func renderPath(t *textOut, run simulate.Run, p routing.Path, now time.Time, why
 		case p.Placed == topology.PlacedRouted:
 			fmt.Fprintf(t, "  %s   placed by route %s on %s (inferred)\n", p.Source, p.PlacedVia, first.Device)
 		case len(p.Source.Addrs) == 0:
-			fmt.Fprintf(t, "  start on %s, router %s\n", first.Device, first.Lookups[0].Router)
+			fmt.Fprintf(t, "  start on %s, router %s\n", first.Device, hopRouter(first))
 		default:
 			fmt.Fprintf(t, "  %s\n", p.Source)
 		}
@@ -43,7 +45,11 @@ func renderPath(t *textOut, run simulate.Run, p routing.Path, now time.Time, why
 	boxes := make([]hopBox, len(p.Hops))
 	width := minBox
 	for i, h := range p.Hops {
-		boxes[i] = newHopBox(h, now)
+		var extra [][2]string
+		if rows != nil {
+			extra = rows(i)
+		}
+		boxes[i] = newHopBox(h, now, extra)
 		width = max(width, boxes[i].width)
 	}
 	for i, h := range p.Hops {
@@ -99,6 +105,11 @@ func continues(p routing.Path) bool {
 	return false
 }
 
+// routingTitle is simulate routing's title: the traced source and destination.
+func routingTitle(p routing.Path) string {
+	return fmt.Sprintf("simulate routing %s -> %s", sourceText(p), p.Destination)
+}
+
 func sourceText(p routing.Path) string {
 	if len(p.Source.Addrs) == 0 && p.Source.Name == "" {
 		return "(no source)"
@@ -132,8 +143,8 @@ type hopBox struct {
 	width int
 }
 
-func newHopBox(h routing.Hop, now time.Time) hopBox {
-	title := fmt.Sprintf("┌─ %s ─ %s ─ router %s", h.Device, h.Vsys, h.Lookups[0].Router)
+func newHopBox(h routing.Hop, now time.Time, extra [][2]string) hopBox {
+	title := fmt.Sprintf("┌─ %s ─ %s ─ router %s", h.Device, h.Vsys, hopRouter(h))
 	if !h.TakenAt.IsZero() {
 		title += " ─ snapshot " + ago(now.Sub(h.TakenAt))
 	}
@@ -163,13 +174,23 @@ func newHopBox(h routing.Hop, now time.Time) hopBox {
 	}
 	for _, a := range h.Alternates {
 		s := fmt.Sprintf("%s via %s   %s, distance %d", a.Destination, nextHopsText(a), a.Protocol, a.Distance)
-		if a.Selected && a.Destination == h.Lookups[0].Match.Destination {
+		if a.Selected && len(h.Lookups) > 0 && a.Destination == h.Lookups[0].Match.Destination {
 			s += " (active)"
 		}
 		rows = append(rows, [2]string{"alt", s})
 	}
+	rows = append(rows, extra...)
 
 	return newBox(title, rows)
+}
+
+// hopRouter is the router a hop starts in: its first lookup's, or, when no
+// route matched, the ingress interface's.
+func hopRouter(h routing.Hop) string {
+	if len(h.Lookups) > 0 {
+		return h.Lookups[0].Router
+	}
+	return h.In.Router
 }
 
 // newBox lays out a box's title and labelled rows; the routing and NAT renderers

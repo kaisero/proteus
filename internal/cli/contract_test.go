@@ -11,8 +11,6 @@ import (
 
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
-
-	"github.com/okaiser/proteus/internal/simulate/pathlab"
 )
 
 // fixture builds a fresh CLI for one run. complete is false for the "no snapshot"
@@ -60,14 +58,7 @@ func routingFixture(t *testing.T, complete bool) *cli {
 // security rule.
 func pathFixture(t *testing.T, complete bool) *cli {
 	t.Helper()
-	fw01 := lab(t)
-	fw01.Config = string(pathlab.Read(t, pathlab.ConfigFile(pathlab.FW01)))
-	c := newCLI(t)
-	c.inventory(inventoryFor(fw01.Start(t), labFW02(t).Start(t)))
-	if complete {
-		c.want(0, "fetch", "fw01", "fw02")
-	}
-	return c
+	return pathVariant(t, pathConfigs{}, complete)
 }
 
 // brokenDocFixture serves fw01 with one show command refused.

@@ -136,6 +136,7 @@ type Target struct{ ... }
 type UnavailableError struct{ ... }
 
 func (e *ChoiceError) Error() string
+func (e *Env) Stepf(format string, args ...any)
 func (e *UnavailableError) Error() string
 func (e Endpoint) String() string
 func (f Fidelity) Declared() bool

@@ -17,21 +17,23 @@ input:
   selection:
     file: ../../testdata/config/firewall-zones.xml
 results:
-  - candidates: []
-    doubts: []
-    verdict: stop
+  - verdict: stop
     reason: default rule interzone-default (deny), built-in
+    rule: interzone-default
     default: interzone-default
     default_action: deny
     default_source: built-in
     fidelity:
       level: exact
     first_match: null
-    kind: policy
-    relevance:
-      known: false
-      relevant: false
-      reason: no stored forwarding table
+    candidates: []
+    doubts: []
+    zones:
+      from:
+        - dmz
+      to:
+        - inside
+      source: given
     stages:
       - slug: resolve-source
         name: Resolve the source
@@ -89,15 +91,14 @@ results:
         candidates: 0
         detail: no enabled rule matches; default rule interzone-default (deny), built-in
         elapsed_ms: 0
+    kind: policy
+    relevance:
+      known: false
+      relevant: false
+      reason: no stored forwarding table
     target:
       device: file
       vsys: vsys1
-    zones:
-      from:
-        - dmz
-      to:
-        - inside
-      source: given
 holes: []
 unresolved: []
 notes: []

@@ -141,6 +141,7 @@ func run(ctx context.Context, env *simulate.Env, in simulate.Input, checks []Che
 		h.Doubts = append(h.Doubts, zd...)
 		res.Holes = addHoles(res.Holes, miss...)
 		for _, c := range checks {
+			env.Stepf("hop%d: %s on %s/%s", h.Index, c.Name(), rh.Device, rh.Vsys)
 			r, err := c.Evaluate(ctx, env, rh, rh.Flow)
 			if u, ok := errors.AsType[*simulate.UnavailableError](err); ok {
 				res.Holes = addHoles(res.Holes, u.Missing...)
@@ -148,6 +149,7 @@ func run(ctx context.Context, env *simulate.Env, in simulate.Input, checks []Che
 				return res, rr.Stages, err
 			}
 			r.Fidelity = simulate.Weakest(append([]simulate.Fidelity{r.Fidelity}, caps...)...)
+			env.Stepf("hop%d: %s (%s)", h.Index, r.Verdict, r.Reason)
 			h.Checks = append(h.Checks, r)
 		}
 		res.Hops = append(res.Hops, h)

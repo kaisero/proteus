@@ -280,14 +280,25 @@ func printRun(w *textOut, run simulate.Run, t estate.Target, v securitypolicy.Ve
 	}
 	fmt.Fprintf(w, "  fidelity   %s\n", run.Fidelity)
 	if why {
-		var stages table
-		for _, st := range run.Stages {
-			lvl := st.Fidelity.Level()
-			stages.row(plain(st.Slug), cell{text: lvl, style: fidelityStyle(w.pal, lvl)},
-				plain(fmt.Sprintf("%d", st.State.Candidates)), plain(st.Detail))
-		}
-		_ = stages.write(w, "  ", 1)
+		printStageTable(w, run.Stages)
 	}
+	printCandidates(w, v, why)
+}
+
+// printStageTable lists a security run's stages: level, candidates left, detail.
+func printStageTable(w *textOut, stages []simulate.Stage) {
+	var tb table
+	for _, st := range stages {
+		lvl := st.Fidelity.Level()
+		tb.row(plain(st.Slug), cell{text: lvl, style: fidelityStyle(w.pal, lvl)},
+			plain(fmt.Sprintf("%d", st.State.Candidates)), plain(st.Detail))
+	}
+	_ = tb.write(w, "  ", 1)
+}
+
+// printCandidates lists a verdict's candidates in rule order; with why, each
+// one's doubts and then the default rule that follows them.
+func printCandidates(w *textOut, v securitypolicy.Verdict, why bool) {
 	var tb table
 	for _, r := range v.Candidates {
 		action := cell{text: r.Action, style: w.pal.bad}
@@ -358,48 +369,72 @@ func toRuleJSON(r resolve.Rule) ruleJSON {
 	return ruleJSON{r.Position, r.Name, r.Action, r.Layer.String(), r.Scope.String()}
 }
 
-// policyResult is one device and vsys's simulate policy answer in the JSON envelope.
-type policyResult struct {
-	Candidates []ruleJSON `json:"candidates"`
-	// Doubts names the candidates that set a matching field no stage evaluates.
-	Doubts []securitypolicy.Doubt `json:"doubts"`
-	// Verdict is pass, stop or undecided, and Reason why (spec §4.7).
+// securityJSON is a security check's answer: one type for a --file target and
+// for each hop of a path (spec 2026-10-07 E14, §8.2).
+type securityJSON struct {
+	// Verdict is pass, stop, undecided or, on a hop, not-evaluated; Reason says
+	// why (spec §4.7).
 	Verdict string `json:"verdict"`
 	Reason  string `json:"reason"`
+	// Rule is the rule or default rule that decides; empty when undecided.
+	Rule string `json:"rule"`
 	// Default is the default rule that decides when no rule matches, empty when
 	// none does; DefaultSource says where its action came from.
-	Default       string                        `json:"default"`
-	DefaultAction string                        `json:"default_action"`
-	DefaultSource string                        `json:"default_source"`
-	Fidelity      simulate.Fidelity             `json:"fidelity"`
-	FirstMatch    *ruleJSON                     `json:"first_match"`
-	Kind          string                        `json:"kind"`
-	Relevance     securitypolicy.Relevance      `json:"relevance"`
-	Stages        []stageJSON                   `json:"stages"`
-	Target        target                        `json:"target"`
-	Zones         securitypolicy.ZoneDerivation `json:"zones"`
+	Default       string            `json:"default"`
+	DefaultAction string            `json:"default_action"`
+	DefaultSource string            `json:"default_source"`
+	Fidelity      simulate.Fidelity `json:"fidelity"`
+	FirstMatch    *ruleJSON         `json:"first_match"`
+	Candidates    []ruleJSON        `json:"candidates"`
+	// Doubts names the candidates that set a matching field no stage evaluates.
+	Doubts []securitypolicy.Doubt        `json:"doubts"`
+	Zones  securitypolicy.ZoneDerivation `json:"zones"`
+	Stages []stageJSON                   `json:"stages"`
+}
+
+// securityOf is a security answer's JSON. v is nil when the check did not run.
+func securityOf(v *securitypolicy.Verdict, verdict, reason, rule string, fid simulate.Fidelity, stages []simulate.Stage) securityJSON {
+	out := securityJSON{
+		Verdict: verdict, Reason: reason, Rule: rule, Fidelity: fid, Stages: simStages(stages),
+		Candidates: []ruleJSON{}, Doubts: []securitypolicy.Doubt{},
+	}
+	if v == nil {
+		return out
+	}
+	if v.Rule != nil {
+		r := toRuleJSON(*v.Rule)
+		out.FirstMatch = &r
+	}
+	for _, r := range v.Candidates {
+		out.Candidates = append(out.Candidates, toRuleJSON(r))
+	}
+	if v.Doubts != nil {
+		out.Doubts = v.Doubts
+	}
+	out.Default, out.DefaultAction, out.DefaultSource, out.Zones = v.Default, v.DefaultAction, v.DefaultSource, v.Zones
+	return out
+}
+
+// policyResult is one device and vsys's simulate policy answer in the JSON envelope.
+type policyResult struct {
+	securityJSON
+	Kind      string                   `json:"kind"`
+	Relevance securitypolicy.Relevance `json:"relevance"`
+	Target    target                   `json:"target"`
 }
 
 func runJSON(run simulate.Run, t estate.Target, v securitypolicy.Verdict) policyResult {
-	var first *ruleJSON
-	if v.Rule != nil {
-		r := toRuleJSON(*v.Rule)
-		first = &r
-	}
-	cands := make([]ruleJSON, len(v.Candidates))
-	for i, r := range v.Candidates {
-		cands[i] = toRuleJSON(r)
-	}
 	outcome, reason := v.Decision()
-	doubts := v.Doubts
-	if doubts == nil {
-		doubts = []securitypolicy.Doubt{}
+	var rule string
+	if outcome != securitypolicy.Undecided {
+		rule = v.Default
+		if v.Rule != nil {
+			rule = v.Rule.Name
+		}
 	}
 	return policyResult{
-		Doubts: doubts, Verdict: string(outcome), Reason: reason,
-		Kind: run.Kind, Target: targetOf(t), Fidelity: run.Fidelity, Stages: simStages(run.Stages),
-		FirstMatch: first, Candidates: cands, Zones: v.Zones, Relevance: v.Relevance,
-		Default: v.Default, DefaultAction: v.DefaultAction, DefaultSource: v.DefaultSource,
+		securityJSON: securityOf(&v, string(outcome), reason, rule, run.Fidelity, run.Stages),
+		Kind:         run.Kind, Target: targetOf(t), Relevance: v.Relevance,
 	}
 }
 

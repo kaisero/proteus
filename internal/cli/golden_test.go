@@ -161,6 +161,14 @@ func TestGoldenJSON(t *testing.T) {
 		goldenFile(t, "simulate-nat.yaml", outYAML)
 	})
 
+	for _, g := range pathGoldens(t) {
+		t.Run(g.name, func(t *testing.T) {
+			t.Parallel()
+			golden(t, g.name, pathVariant(t, g.pc, true).want(g.code, append(g.args, "--output", "json")...))
+			goldenFile(t, g.name+".yaml", pathVariant(t, g.pc, true).want(g.code, append(g.args, "--output", "yaml")...))
+		})
+	}
+
 	t.Run("simulate-routing", func(t *testing.T) {
 		t.Parallel()
 		out := routingLab(t, false).want(0, "simulate", "routing", "198.18.10.5", "8.8.8.8", "--output", "json")
@@ -234,6 +242,14 @@ func TestGoldenText(t *testing.T) {
 		goldenColour(t, "simulate-nat", natLab(t).want(0, "simulate", "nat", "198.18.1.10", "198.18.250.10",
 			"--device", "fw01", "--router", "default", "--from-zone", "transport", "--port", "8443", "--why", "--color", "always"))
 	})
+
+	for _, g := range pathGoldens(t) {
+		t.Run(g.name, func(t *testing.T) {
+			t.Parallel()
+			goldenText(t, g.name, pathVariant(t, g.pc, true).want(g.code, g.args...))
+			goldenColour(t, g.name, pathVariant(t, g.pc, true).want(g.code, append(g.args, "--color", "always")...))
+		})
+	}
 
 	t.Run("simulate-routing", func(t *testing.T) {
 		t.Parallel()

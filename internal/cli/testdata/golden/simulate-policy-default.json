@@ -26,10 +26,9 @@
   },
   "results": [
     {
-      "candidates": [],
-      "doubts": [],
       "verdict": "stop",
       "reason": "default rule interzone-default (deny), built-in",
+      "rule": "interzone-default",
       "default": "interzone-default",
       "default_action": "deny",
       "default_source": "built-in",
@@ -37,11 +36,16 @@
         "level": "exact"
       },
       "first_match": null,
-      "kind": "policy",
-      "relevance": {
-        "known": false,
-        "relevant": false,
-        "reason": "no stored forwarding table"
+      "candidates": [],
+      "doubts": [],
+      "zones": {
+        "from": [
+          "dmz"
+        ],
+        "to": [
+          "inside"
+        ],
+        "source": "given"
       },
       "stages": [
         {
@@ -125,18 +129,15 @@
           "elapsed_ms": 0
         }
       ],
+      "kind": "policy",
+      "relevance": {
+        "known": false,
+        "relevant": false,
+        "reason": "no stored forwarding table"
+      },
       "target": {
         "device": "file",
         "vsys": "vsys1"
-      },
-      "zones": {
-        "from": [
-          "dmz"
-        ],
-        "to": [
-          "inside"
-        ],
-        "source": "given"
       }
     }
   ],

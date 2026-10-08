@@ -17,7 +17,28 @@ input:
   selection:
     file: ../../testdata/config/firewall-doubt.xml
 results:
-  - candidates:
+  - verdict: undecided
+    reason: 'dmz-user (deny) at position 7 may match first: user not evaluated (corp\alice)'
+    rule: ""
+    default: ""
+    default_action: ""
+    default_source: ""
+    fidelity:
+      level: undermatch
+      reasons:
+        - 'kept rules whose service is application-default, predefined or absent: app-one, app-two, dmz-predefined, dmz-no-service'
+        - 'dmz-user (deny) at position 7 may match first: user not evaluated (corp\alice)'
+      not_evaluated:
+        - url category
+        - application
+        - user
+    first_match:
+      position: 13
+      name: dmz-plain
+      action: allow
+      layer: local
+      scope: vsys:vsys1
+    candidates:
       - position: 3
         name: app-one
         action: allow
@@ -97,31 +118,12 @@ results:
       - position: 12
         rule: dmz-no-service
         reason: service absent
-    verdict: undecided
-    reason: 'dmz-user (deny) at position 7 may match first: user not evaluated (corp\alice)'
-    default: ""
-    default_action: ""
-    default_source: ""
-    fidelity:
-      level: undermatch
-      reasons:
-        - 'kept rules whose service is application-default, predefined or absent: app-one, app-two, dmz-predefined, dmz-no-service'
-        - 'dmz-user (deny) at position 7 may match first: user not evaluated (corp\alice)'
-      not_evaluated:
-        - url category
-        - application
-        - user
-    first_match:
-      position: 13
-      name: dmz-plain
-      action: allow
-      layer: local
-      scope: vsys:vsys1
-    kind: policy
-    relevance:
-      known: false
-      relevant: false
-      reason: no stored forwarding table
+    zones:
+      from:
+        - dmz
+      to:
+        - wan
+      source: given
     stages:
       - slug: resolve-source
         name: Resolve the source
@@ -188,20 +190,16 @@ results:
         candidates: 9
         detail: 'dmz-plain (allow), position 13; undecided: dmz-user (deny) at position 7 may match first: user not evaluated (corp\alice)'
         elapsed_ms: 0
+    kind: policy
+    relevance:
+      known: false
+      relevant: false
+      reason: no stored forwarding table
     target:
       device: file
       vsys: vsys1
-    zones:
-      from:
-        - dmz
-      to:
-        - wan
-      source: given
 holes: []
 unresolved:
-  - device: file
-    vsys: vsys1
-    reason: 'kept rules whose service is application-default, predefined or absent: app-one, app-two, dmz-predefined, dmz-no-service'
   - device: file
     vsys: vsys1
     reason: 'dmz-user (deny) at position 7 may match first: user not evaluated (corp\alice)'

@@ -24,18 +24,9 @@
   },
   "results": [
     {
-      "candidates": [
-        {
-          "position": 1,
-          "name": "from-inside",
-          "action": "allow",
-          "layer": "local",
-          "scope": "vsys:vsys1"
-        }
-      ],
-      "doubts": [],
       "verdict": "pass",
       "reason": "rule from-inside (allow)",
+      "rule": "from-inside",
       "default": "",
       "default_action": "",
       "default_source": "",
@@ -49,11 +40,25 @@
         "layer": "local",
         "scope": "vsys:vsys1"
       },
-      "kind": "policy",
-      "relevance": {
-        "known": false,
-        "relevant": false,
-        "reason": "no stored forwarding table"
+      "candidates": [
+        {
+          "position": 1,
+          "name": "from-inside",
+          "action": "allow",
+          "layer": "local",
+          "scope": "vsys:vsys1"
+        }
+      ],
+      "doubts": [],
+      "zones": {
+        "from": [
+          "inside"
+        ],
+        "to": [
+          "dmz"
+        ],
+        "source": "configuration",
+        "detail": "10.1.0.5: inside via ethernet1/1 10.1.0.1/24; 10.2.0.5: dmz via ethernet1/2.20 10.2.0.1/24"
       },
       "stages": [
         {
@@ -137,19 +142,15 @@
           "elapsed_ms": 0
         }
       ],
+      "kind": "policy",
+      "relevance": {
+        "known": false,
+        "relevant": false,
+        "reason": "no stored forwarding table"
+      },
       "target": {
         "device": "file",
         "vsys": "vsys1"
-      },
-      "zones": {
-        "from": [
-          "inside"
-        ],
-        "to": [
-          "dmz"
-        ],
-        "source": "configuration",
-        "detail": "10.1.0.5: inside via ethernet1/1 10.1.0.1/24; 10.2.0.5: dmz via ethernet1/2.20 10.2.0.1/24"
       }
     }
   ],

@@ -79,7 +79,7 @@ func render(t *testing.T, src, dst string, params map[string]string, why bool) s
 		t.Fatal(err)
 	}
 	var b bytes.Buffer
-	renderPath(&textOut{w: &b}, run, run.Output.(routing.Path), viewNow, why)
+	renderPath(&textOut{w: &b}, routingTitle(run.Output.(routing.Path)), run, run.Output.(routing.Path), viewNow, why, nil)
 	return b.String()
 }
 
@@ -174,7 +174,7 @@ func TestRenderRowsAndEnds(t *testing.T) {
 		Hops: []routing.Hop{h1, h2}, Hidden: []string{"fw5 (Layer 2 or virtual wire)"}, Notes: []string{"n.example resolved to 2 addresses"},
 	}
 	var b bytes.Buffer
-	renderPath(&textOut{w: &b}, simulate.Run{Fidelity: simulate.Inferred}, p, viewNow, false)
+	renderPath(&textOut{w: &b}, routingTitle(p), simulate.Run{Fidelity: simulate.Inferred}, p, viewNow, false, nil)
 	got := b.String()
 	for _, want := range []string{
 		"  note: n.example resolved to 2 addresses\n",
@@ -196,7 +196,7 @@ func TestRenderRowsAndEnds(t *testing.T) {
 		Hops: []routing.Hop{hop("fw", "vsys1")},
 	}
 	b.Reset()
-	renderPath(&textOut{w: &b}, simulate.Run{Fidelity: simulate.Exact}, p, viewNow, false)
+	renderPath(&textOut{w: &b}, routingTitle(p), simulate.Run{Fidelity: simulate.Exact}, p, viewNow, false, nil)
 	if got := b.String(); !strings.Contains(got, "  └────") || strings.Contains(got, "┬") || strings.Contains(got, "may be incomplete") {
 		t.Errorf("dropped:\n%s", got)
 	}

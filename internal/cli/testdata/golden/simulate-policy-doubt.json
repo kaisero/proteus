@@ -26,6 +26,22 @@
   },
   "results": [
     {
+      "verdict": "stop",
+      "reason": "default rule interzone-default (deny), built-in",
+      "rule": "interzone-default",
+      "default": "interzone-default",
+      "default_action": "deny",
+      "default_source": "built-in",
+      "fidelity": {
+        "level": "overmatch",
+        "reasons": [
+          "earlier candidates in doubt share the action deny: labor-app"
+        ],
+        "not_evaluated": [
+          "application"
+        ]
+      },
+      "first_match": null,
       "candidates": [
         {
           "position": 14,
@@ -42,26 +58,14 @@
           "reason": "application not evaluated (dropbox)"
         }
       ],
-      "verdict": "stop",
-      "reason": "default rule interzone-default (deny), built-in",
-      "default": "interzone-default",
-      "default_action": "deny",
-      "default_source": "built-in",
-      "fidelity": {
-        "level": "overmatch",
-        "reasons": [
-          "earlier candidates in doubt share the action deny: labor-app"
+      "zones": {
+        "from": [
+          "labor"
         ],
-        "not_evaluated": [
-          "application"
-        ]
-      },
-      "first_match": null,
-      "kind": "policy",
-      "relevance": {
-        "known": false,
-        "relevant": false,
-        "reason": "no stored forwarding table"
+        "to": [
+          "dmz"
+        ],
+        "source": "given"
       },
       "stages": [
         {
@@ -151,18 +155,15 @@
           "elapsed_ms": 0
         }
       ],
+      "kind": "policy",
+      "relevance": {
+        "known": false,
+        "relevant": false,
+        "reason": "no stored forwarding table"
+      },
       "target": {
         "device": "file",
         "vsys": "vsys1"
-      },
-      "zones": {
-        "from": [
-          "labor"
-        ],
-        "to": [
-          "dmz"
-        ],
-        "source": "given"
       }
     }
   ],

@@ -1,0 +1,59 @@
+denied at hop 1: fw02 / vsys1, rule interzone-default (deny)
+
+simulate policy 198.18.1.10 -> 198.18.10.100 tcp/443            fidelity: exact
+
+  198.18.1.10
+     │ 198.18.1.0/24
+  ┌─ fw02 ─ vsys1 ─ router default ─ snapshot 1m ────────┐
+  │  zones   home -> labor                               │
+  │  in      vlan.1        198.18.1.1/24                 │
+  │  out     vlan.32       198.19.0.1/24                 │
+  │  route   198.18.0.0/15 via 198.19.0.254   static     │
+  │  policy  interzone-default (deny)                    │
+  └──┬───────────────────────────────────────────────────┘
+     │ 198.19.0.0/24   198.19.0.1 -> 198.19.0.254
+  ┌─ fw01 ─ vsys1 ─ router default ─ snapshot 1m ────────┐
+  │  zones   transport -> server                         │
+  │  in      ethernet1/1   198.19.0.254/24               │
+  │  out     ethernet1/2   198.18.10.1/24                │
+  │  route   198.18.10.0/24  connected                   │
+  │  policy  interzone-default (deny) (after the deny)   │
+  └──┬───────────────────────────────────────────────────┘
+     │ 198.18.10.0/24
+  198.18.10.100   delivered
+
+firewalls on the path: fw02 (home -> labor), fw01 (transport -> server)
+
+  place       exact connected: 198.18.1.10 on fw02 vlan.1
+  hop1/pbf    exact no PBF rule could match
+  hop1/lookup exact 198.18.10.100 in router default: 198.18.0.0/15 via 198.19.0.254 on vlan.32
+  hop1/zones  exact home -> labor
+  hop1/nat    exact no NAT rule matches
+  hop1/next   exact next: fw01 ethernet1/1
+  hop2/pbf    exact no PBF rule could match
+  hop2/lookup exact 198.18.10.100 in router default: 198.18.10.0/24 via 0.0.0.0 on ethernet1/2
+  hop2/zones  exact transport -> server
+  hop2/nat    exact no NAT rule matches
+  hop2/next   exact delivered in 198.18.10.0/24
+
+hop 1: fw02 / vsys1, security stop: default rule interzone-default (deny), built-in
+  - interzone-default deny [default built-in]
+  resolve-source      exact 0 198.18.1.10: 2 hits, 0 negated rules
+  resolve-destination exact 0 198.18.10.100: 1 hits, 0 negated rules
+  derive-zones        exact 0 from home, to labor, as given
+  match-service       exact 0 tcp/443
+  match-url           exact 0 no candidate names a URL category
+  drop-disabled       exact 0 0 disabled
+  order               exact 0 0 in order
+  first-match         exact 0 no enabled rule matches; default rule interzone-default (deny), built-in
+
+hop 2: fw01 / vsys1, security stop: default rule interzone-default (deny), built-in
+  - interzone-default deny [default built-in]
+  resolve-source      exact 0 198.18.1.10: 0 hits, 0 negated rules
+  resolve-destination exact 0 198.18.10.100: 1 hits, 0 negated rules
+  derive-zones        exact 0 from transport, to server, as given
+  match-service       exact 0 tcp/443
+  match-url           exact 0 no candidate names a URL category
+  drop-disabled       exact 0 0 disabled
+  order               exact 0 0 in order
+  first-match         exact 0 no enabled rule matches; default rule interzone-default (deny), built-in

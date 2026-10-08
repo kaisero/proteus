@@ -1,10 +1,13 @@
 package cli
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/netip"
+	"slices"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -13,6 +16,8 @@ import (
 	"github.com/okaiser/proteus/internal/runlog"
 	"github.com/okaiser/proteus/internal/simulate"
 	"github.com/okaiser/proteus/internal/simulate/pathpolicy"
+	"github.com/okaiser/proteus/internal/simulate/routing"
+	"github.com/okaiser/proteus/internal/simulate/topology"
 )
 
 // policyOptions are simulate policy's flags and arguments.
@@ -165,9 +170,14 @@ func (a *app) runPolicyPath(ctx context.Context, o policyOptions) (answer, error
 	if err != nil {
 		return nil, err
 	}
+	users, err := a.userSnapshot()
+	if err != nil {
+		return nil, err
+	}
 	env := es.env(a)
+	env.Load = storeLoader(es.st, es.when, es.network, users)
 	if o.fl.noDNS {
-		env.Resolve = nil
+		env.Resolve = nil // NAT does not resolve a translated FQDN either
 	}
 	start := dev
 	if start == "" {
@@ -203,6 +213,7 @@ func (a *app) runPolicyPath(ctx context.Context, o policyOptions) (answer, error
 		ans.holes = append(ans.holes, estate.Hole{Device: m.Device, Reason: m.Reason})
 	}
 	ans.un = pathUnresolved(res, stages)
+	ans.notes = pathNotes(res)
 	return ans, nil
 }
 
@@ -274,24 +285,140 @@ func (p pathAnswer) Results() any {
 	if !p.ok {
 		return []pathResult{}
 	}
-	r := pathResult{Mode: "path", Verdict: string(p.res.Verdict), Fidelity: p.res.Fidelity}
-	if at := p.res.At; at != nil {
-		r.At = &pointJSON{Hop: at.Hop, Check: at.Check, Rule: at.Rule, Reason: at.Reason}
+	r, path := p.res, p.res.Path
+	out := pathResult{
+		Mode: "path", Verdict: string(r.Verdict), Fidelity: r.Fidelity,
+		Source: path.Source, Destination: path.Destination, Placed: path.Placed, PlacedVia: path.PlacedVia,
+		StartVia: path.StartVia, Outcome: path.Outcome, End: path.End, Hidden: path.Hidden,
+		Stages: simStages(p.stages), Hops: []pathHopJSON{},
 	}
-	return []pathResult{r}
+	if at := r.At; at != nil {
+		out.At = &pointJSON{Hop: at.Hop, Check: at.Check, Rule: at.Rule, Reason: at.Reason}
+	}
+	for _, h := range r.Hops {
+		hj := pathHopJSON{
+			Index: h.Index, Hop: h.Routing, Notes: nonNil(h.Routing.Notes), PBF: nonNil(h.Routing.PBF),
+			ECMP: h.Routing.ECMP, ZonePlaceholder: h.Routing.ZonePlaceholder, Doubts: nonNil(h.Doubts),
+			AfterDeny: h.AfterDeny,
+		}
+		if hj.ECMP == nil {
+			hj.ECMP = []routing.NotFollowed{}
+		}
+		for _, c := range h.Checks {
+			hj.Checks = append(hj.Checks, checkJSON{name: c.Name, block: securityOf(c.Security, string(c.Verdict), c.Reason, c.Rule, c.Fidelity, c.Stages)})
+		}
+		out.Hops = append(out.Hops, hj)
+	}
+	return []pathResult{out}
 }
 
 func (p pathAnswer) Qualifiers() qualifiers {
 	return qualifiers{Holes: p.holes, Unresolved: p.un, Notes: p.notes}
 }
 
+// pathNotes are every note the text shows, for the envelope: routing's notes
+// on the path and on each hop, each check's target notes, such as a version
+// gap, and the answer's own (spec §8.2).
+func pathNotes(res pathpolicy.Result) []note {
+	var device string
+	if len(res.Hops) > 0 {
+		device = res.Hops[0].Routing.Device
+	}
+	var out []note
+	out = append(out, runNotes(device, res.Path.Notes)...)
+	for _, h := range res.Hops {
+		out = append(out, runNotes(h.Routing.Device, h.Routing.Notes)...)
+		for _, c := range h.Checks {
+			for _, n := range c.Notes {
+				out = append(out, note{Device: h.Routing.Device, Vsys: h.Routing.Vsys, Note: n})
+			}
+		}
+	}
+	out = append(out, runNotes(device, res.Notes)...)
+	seen := map[note]bool{}
+	return slices.DeleteFunc(out, func(n note) bool {
+		dup := seen[n]
+		seen[n] = true
+		return dup
+	})
+}
+
 func (p pathAnswer) Text(t *textOut) error {
 	if p.ok {
-		fmt.Fprintf(t, "%s\n\n", verdictLine(t.pal, p.res))
-		renderPath(t, simulate.Run{Fidelity: p.res.Fidelity, Stages: p.stages}, p.res.Path, t.now, p.o.fl.why)
+		p.text(t)
 	}
 	printQualifiers(t, p.Qualifiers())
 	return t.err
+}
+
+// text is the path answer (spec §8.1): the verdict line and the notes the
+// routing boxes do not show, then the path with a policy row per hop and, with
+// --why, each hop's security check.
+func (p pathAnswer) text(t *textOut) {
+	r := p.res
+	fmt.Fprintln(t, verdictLine(t.pal, r))
+	for _, h := range r.Hops {
+		for _, c := range h.Checks {
+			for _, n := range c.Notes {
+				fmt.Fprintf(t, "  %s\n", noteStyle(t.pal, n)(fmt.Sprintf("note: %s / %s: %s", h.Routing.Device, h.Routing.Vsys, n)))
+			}
+		}
+	}
+	for _, n := range r.Notes {
+		fmt.Fprintf(t, "  %s\n", noteStyle(t.pal, n)("note: "+n))
+	}
+	fmt.Fprintln(t)
+	title := fmt.Sprintf("simulate policy %s -> %s %s", sourceText(r.Path), r.Path.Destination, p.flow.Protocol)
+	if p.flow.DestPort != 0 {
+		title += fmt.Sprintf("/%d", p.flow.DestPort)
+	}
+	renderPath(t, title, simulate.Run{Fidelity: r.Fidelity, Stages: p.stages}, r.Path, t.now, p.o.fl.why,
+		func(i int) [][2]string { return policyRows(r.Hops[i]) })
+	if !p.o.fl.why {
+		return
+	}
+	for _, h := range r.Hops {
+		for _, c := range h.Checks {
+			fmt.Fprintf(t, "\nhop %d: %s / %s, %s %s", h.Index, h.Routing.Device, h.Routing.Vsys, c.Name, c.Verdict)
+			if c.Reason != "" {
+				fmt.Fprintf(t, ": %s", c.Reason)
+			}
+			fmt.Fprintf(t, "\n")
+			if c.Security != nil {
+				printCandidates(t, *c.Security, true)
+				printStageTable(t, c.Stages)
+			}
+		}
+	}
+}
+
+// policyRows are a hop's extra box rows: what each check concluded, then why
+// the path or the zones leave the hop undecided.
+func policyRows(h pathpolicy.Hop) [][2]string {
+	var rows [][2]string
+	for _, c := range h.Checks {
+		var s string
+		switch c.Verdict {
+		case pathpolicy.Pass, pathpolicy.Stop:
+			s = fmt.Sprintf("%s (%s)", c.Rule, checkAction(c))
+		case pathpolicy.Undecided:
+			s = "undecided: " + c.Reason
+		default:
+			s = "not evaluated: " + c.Reason
+		}
+		if h.AfterDeny {
+			s += " (after the deny)"
+		}
+		label := c.Name
+		if c.Name == "security" {
+			label = "policy"
+		}
+		rows = append(rows, [2]string{label, s})
+	}
+	for _, d := range h.Doubts {
+		rows = append(rows, [2]string{"doubt", d})
+	}
+	return rows
 }
 
 // verdictLine is the answer's first line, coloured by the verdict (spec §8.1).
@@ -307,24 +434,35 @@ func verdictLine(pal palette, r pathpolicy.Result) string {
 	case r.At.Check == "routing":
 		return pal.bad(at + fmt.Sprintf("no route to %s on %s", r.Path.Destination, h.Routing.Device))
 	}
-	return pal.bad(at + fmt.Sprintf("%s / %s, rule %s (%s)", h.Routing.Device, h.Routing.Vsys, r.At.Rule, ruleAction(h, r.At.Check)))
-}
-
-// ruleAction is the action of the rule that decided a hop's check.
-func ruleAction(h pathpolicy.Hop, check string) string {
+	var action string
 	for _, c := range h.Checks {
-		if c.Name != check || c.Security == nil {
-			continue
+		if c.Name == r.At.Check {
+			action = checkAction(c)
 		}
-		if v := c.Security; v.Rule != nil {
-			return v.Rule.Action
-		}
-		return c.Security.DefaultAction
 	}
-	return ""
+	return pal.bad(at + fmt.Sprintf("%s / %s, rule %s (%s)", h.Routing.Device, h.Routing.Vsys, r.At.Rule, action))
 }
 
-// pathInput is the input block in path mode.
+// checkAction is the action of the rule, or default rule, that decided a
+// check.
+func checkAction(c pathpolicy.CheckResult) string {
+	switch v := c.Security; {
+	case v == nil:
+		return ""
+	case v.Rule != nil:
+		return v.Rule.Action
+	}
+	return c.Security.DefaultAction
+}
+
+func nonNil(s []string) []string {
+	if s == nil {
+		return []string{}
+	}
+	return s
+}
+
+// pathInput is the input block in path mode (spec §8.2).
 type pathInput struct {
 	Mode   string        `json:"mode"`
 	Flow   simulate.Flow `json:"flow"`
@@ -333,12 +471,23 @@ type pathInput struct {
 	At     string        `json:"at"`
 }
 
-// pathResult is simulate policy's result in path mode.
+// pathResult is simulate policy's result in path mode: the verdict and where it
+// was decided, routing's path fields, and the hops with their checks.
 type pathResult struct {
-	Mode     string            `json:"mode"`
-	Verdict  string            `json:"verdict"`
-	At       *pointJSON        `json:"at"`
-	Fidelity simulate.Fidelity `json:"fidelity"`
+	Mode        string            `json:"mode"`
+	Verdict     string            `json:"verdict"`
+	At          *pointJSON        `json:"at"`
+	Fidelity    simulate.Fidelity `json:"fidelity"`
+	Source      simulate.Endpoint `json:"source"`
+	Destination simulate.Endpoint `json:"destination"`
+	Placed      topology.Placed   `json:"placed"`
+	PlacedVia   string            `json:"placed_via,omitempty"`
+	StartVia    netip.Prefix      `json:"start_via,omitzero"`
+	Outcome     routing.Outcome   `json:"outcome"`
+	End         string            `json:"end"`
+	Hidden      []string          `json:"hidden,omitempty"`
+	Stages      []stageJSON       `json:"stages"`
+	Hops        []pathHopJSON     `json:"hops"`
 }
 
 // pointJSON is where the verdict was decided, or became undecided.
@@ -347,4 +496,53 @@ type pointJSON struct {
 	Check  string `json:"check"`
 	Rule   string `json:"rule"`
 	Reason string `json:"reason"`
+}
+
+// pathHopJSON is one hop: routing's keys, with its notes, PBF rules, ECMP next
+// hops and placeholder flag present even when empty, then what the path mode
+// adds. A field declared here wins over routing.Hop's field of the same key.
+type pathHopJSON struct {
+	Index int `json:"index"`
+	routing.Hop
+	Notes           []string              `json:"notes"`
+	PBF             []string              `json:"pbf"`
+	ECMP            []routing.NotFollowed `json:"ecmp_not_followed"`
+	ZonePlaceholder bool                  `json:"zone_placeholder"`
+	Doubts          []string              `json:"doubts"`
+	AfterDeny       bool                  `json:"after_deny"`
+	Checks          checksJSON            `json:"checks"`
+}
+
+// checkJSON is one check's answer under its name.
+type checkJSON struct {
+	name  string
+	block securityJSON
+}
+
+// checksJSON is a hop's checks as one JSON object, its keys in check order.
+type checksJSON []checkJSON
+
+// MarshalJSON writes {"security": {...}, ...} in list order; a map would sort
+// the keys.
+func (cs checksJSON) MarshalJSON() ([]byte, error) {
+	var b bytes.Buffer
+	b.WriteByte('{')
+	for i, c := range cs {
+		if i > 0 {
+			b.WriteByte(',')
+		}
+		k, err := json.Marshal(c.name)
+		if err != nil {
+			return nil, err
+		}
+		v, err := json.Marshal(c.block)
+		if err != nil {
+			return nil, err
+		}
+		b.Write(k)
+		b.WriteByte(':')
+		b.Write(v)
+	}
+	b.WriteByte('}')
+	return b.Bytes(), nil
 }

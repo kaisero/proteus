@@ -31,7 +31,6 @@ file / vsys1   ../../testdata/config/firewall-doubt.xml
   12. dmz-no-service deny  [local vsys:vsys1]
       doubt: service absent
   13. dmz-plain      allow [local vsys:vsys1]
-unresolved: file/vsys1: kept rules whose service is application-default, predefined or absent: app-one, app-two, dmz-predefined, dmz-no-service
 unresolved: file/vsys1: dmz-user (deny) at position 7 may match first: user not evaluated (corp\alice)
 
 first certain match: dmz-plain (allow)

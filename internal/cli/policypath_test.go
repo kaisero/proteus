@@ -1,14 +1,104 @@
 package cli
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"net/netip"
+	"os"
+	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
 	"github.com/okaiser/proteus/internal/estate"
+	"github.com/okaiser/proteus/internal/fakepanos"
+	"github.com/okaiser/proteus/internal/simulate"
+	"github.com/okaiser/proteus/internal/simulate/pathlab"
+	"github.com/okaiser/proteus/internal/simulate/pathpolicy"
+	"github.com/okaiser/proteus/internal/simulate/securitypolicy"
 )
+
+// pathConfigs varies the path fixture: each device's configuration (the base
+// one when nil), and fw01 without its default routes, so a destination beyond
+// it has no route there.
+type pathConfigs struct {
+	fw01, fw02 []byte
+	noDefault  bool
+}
+
+// fibCmd asks a device for its forwarding table.
+const fibCmd = "<show><advanced-routing><fib><afi>both</afi></fib></advanced-routing></show>"
+
+// defaultRoute is a default route's entry in a forwarding table.
+var defaultRoute = regexp.MustCompile(`(?s)<entry>\s*<id>\d+</id>\s*<dst>0\.0\.0\.0/0</dst>.*?</entry>`)
+
+// pathVariant is the path fixture as an inventory of fw01 and fw02, both
+// fetched when complete is set.
+func pathVariant(t *testing.T, pc pathConfigs, complete bool) *cli {
+	t.Helper()
+	if pc.fw01 == nil {
+		pc.fw01 = pathlab.Read(t, pathlab.ConfigFile(pathlab.FW01))
+	}
+	fw01, fw02 := lab(t), labFW02(t)
+	fw01.Config = string(pc.fw01)
+	if pc.fw02 != nil {
+		fw02.Config = string(pc.fw02)
+	}
+	if pc.noDefault {
+		fw01.Ops[fibCmd] = defaultRoute.ReplaceAllString(fw01.Ops[fibCmd], "")
+	}
+	c := newCLI(t)
+	c.inventory(inventoryFor(fw01.Start(t), fw02.Start(t)))
+	if complete {
+		c.want(0, "fetch", "fw01", "fw02")
+	}
+	return c
+}
+
+// allowing is a device's base configuration whose interzone default rule allows.
+func allowing(t *testing.T, device string) []byte {
+	t.Helper()
+	return pathlab.Config(t, device, pathlab.Defaults{Local: pathlab.Entry(pathlab.Interzone, "allow")})
+}
+
+// withRule is a device's base configuration with one security rule between two
+// zones.
+func withRule(t *testing.T, device, from, to, name, action string) []byte {
+	t.Helper()
+	rule := `<rulebase><security><rules><entry name="` + name + `">` +
+		`<from><member>` + from + `</member></from><to><member>` + to + `</member></to>` +
+		`<source><member>any</member></source><destination><member>any</member></destination>` +
+		`<source-user><member>any</member></source-user><application><member>any</member></application>` +
+		`<service><member>any</member></service><action>` + action + `</action></entry></rules></security></rulebase>`
+	return bytes.Replace(pathlab.Read(t, pathlab.ConfigFile(device)), []byte("</zone>"), []byte("</zone>"+rule), 1)
+}
+
+// pathGoldens are the path mode answers the golden files hold: allowed, denied
+// by a rule, by a default rule and by no route, and undecided (spec §10.1).
+func pathGoldens(t *testing.T) []struct {
+	name string
+	code int
+	pc   pathConfigs
+	args []string
+} {
+	t.Helper()
+	differ := pathlab.Defaults{Local: pathlab.Entry(pathlab.Interzone, "allow"), Pushed: pathlab.Entry(pathlab.Interzone, "deny")}
+	flow := []string{"simulate", "policy", pathlab.Source, pathlab.Destination, "--port", "443"}
+	return []struct {
+		name string
+		code int
+		pc   pathConfigs
+		args []string
+	}{
+		{"simulate-policy-path-allowed", 0, pathConfigs{fw01: allowing(t, pathlab.FW01), fw02: allowing(t, pathlab.FW02)}, flow},
+		{"simulate-policy-path-rule", 0, pathConfigs{fw01: withRule(t, pathlab.FW01, "transport", "server", "block-servers", "deny"), fw02: allowing(t, pathlab.FW02)}, flow},
+		{"simulate-policy-path-default", 0, pathConfigs{}, append(flow, "--why")},
+		{"simulate-policy-path-no-route", 0, pathConfigs{fw02: allowing(t, pathlab.FW02), noDefault: true}, []string{"simulate", "policy", pathlab.Source, "198.18.30.5", "--port", "443"}},
+		{"simulate-policy-path-undecided", 3, pathConfigs{fw02: pathlab.Config(t, pathlab.FW02, differ)}, flow},
+	}
+}
 
 // Every exit-2 row of spec 2026-10-07 §7, and the mode choice of §3.1.
 func TestPolicyModeChoice(t *testing.T) {
@@ -112,6 +202,97 @@ func TestPolicyPathTracesTheFirstIPv4Address(t *testing.T) {
 	}
 }
 
+// The path answer as JSON: one result in the path shape, hop keys present even
+// when empty, the checks object in check order.
+func TestPolicyPathJSON(t *testing.T) {
+	t.Parallel()
+	out := pathLab(t).want(0, "simulate", "policy", pathlab.Source, pathlab.Destination, "--output", "json")
+	var env struct {
+		Input   struct{ Mode string }
+		Results []struct {
+			Mode, Verdict string
+			At            struct{ Hop int }
+			Hops          []map[string]json.RawMessage
+		}
+	}
+	if err := json.Unmarshal([]byte(out), &env); err != nil || len(env.Results) != 1 {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	r := env.Results[0]
+	if env.Input.Mode != "path" || r.Mode != "path" || r.Verdict != "denied" || r.At.Hop != 1 || len(r.Hops) != 2 {
+		t.Fatalf("%+v", env)
+	}
+	for _, k := range []string{"notes", "pbf", "ecmp_not_followed", "zone_placeholder", "after_deny", "checks"} {
+		if _, ok := r.Hops[0][k]; !ok {
+			t.Errorf("hop has no %q", k)
+		}
+	}
+	if got := string(r.Hops[1]["after_deny"]); got != "true" {
+		t.Errorf("after_deny = %s", got)
+	}
+	var compact bytes.Buffer
+	if err := json.Compact(&compact, r.Hops[0]["checks"]); err != nil || !strings.HasPrefix(compact.String(), `{"security":{"verdict":"stop"`) {
+		t.Errorf("checks = %s", r.Hops[0]["checks"])
+	}
+}
+
+// An undecided hop is an unresolved entry, after the deny too, so the answer
+// exits 3 (spec §5.4).
+func TestPolicyPathUndecidedIsUnresolved(t *testing.T) {
+	t.Parallel()
+	differ := pathlab.Defaults{Local: pathlab.Entry(pathlab.Interzone, "allow"), Pushed: pathlab.Entry(pathlab.Interzone, "deny")}
+	// fw02 denies first; fw01, after the deny, cannot decide.
+	c := pathVariant(t, pathConfigs{fw01: pathlab.Config(t, pathlab.FW01, differ)}, true)
+	out := c.want(3, "simulate", "policy", pathlab.Source, pathlab.Destination)
+	if !strings.HasPrefix(out, "denied at hop 1:") ||
+		!strings.Contains(out, "policy  undecided: local and pushed default rules disagree; precedence not verified (after the deny)") ||
+		!strings.Contains(out, "unresolved: fw01/vsys1: local and pushed default rules disagree") {
+		t.Errorf("after the deny:\n%s", out)
+	}
+}
+
+// An HA node's hop reads the active member's snapshot, not the first
+// member's (spec §3.4). fw01 and fw03 are one pair; fw03 is active and its
+// default rule allows.
+func TestPolicyPathReadsTheActiveMember(t *testing.T) {
+	t.Parallel()
+	haCmd := "<show><high-availability><state/></high-availability></show>"
+	state := func(local, localSerial, peer, peerSerial string) string {
+		return fakepanos.Success(`<enabled>yes</enabled><group><mode>active-passive</mode><local-info><state>` + local +
+			`</state><serial-num>` + localSerial + `</serial-num></local-info><peer-info><state>` + peer +
+			`</state><serial-num>` + peerSerial + `</serial-num><mgmt-ip>192.0.2.2</mgmt-ip></peer-info></group>`)
+	}
+	first, active := lab(t), lab(t)
+	first.Config = string(pathlab.Read(t, pathlab.ConfigFile(pathlab.FW01)))
+	active.Config = string(allowing(t, pathlab.FW01))
+	// The first member names a suspended peer, so its fetch keeps its own data.
+	first.Ops[haCmd] = state("passive", "A", "suspended", "B")
+	active.Ops[haCmd] = state("active", "B", "passive", "A")
+	c := newCLI(t)
+	c.inventory(inventoryFor(first.Start(t), pathVariantFW02(t), active.Start(t)))
+	c.want(0, "fetch", "fw01", "fw02", "fw03")
+	out := c.want(0, "simulate", "policy", pathlab.Source, pathlab.Destination, "--output", "json")
+	var env struct {
+		Results []struct {
+			Hops []struct {
+				Device string
+				Checks struct {
+					Security struct{ Verdict, Rule string }
+				}
+			}
+		}
+	}
+	if err := json.Unmarshal([]byte(out), &env); err != nil || len(env.Results) != 1 || len(env.Results[0].Hops) != 2 {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	if h := env.Results[0].Hops[1]; h.Device != "fw01" || h.Checks.Security.Verdict != "pass" {
+		t.Errorf("hop 2 must read fw03's configuration: %+v", h)
+	}
+}
+
+// pathVariantFW02 is fw02 of the path fixture, started.
+func pathVariantFW02(t *testing.T) string { t.Helper(); return labFW02(t).Start(t) }
+
 // A start device in the inventory but never fetched is a hole: results empty,
 // exit 3.
 func TestPolicyPathWithoutSnapshotsIsAHole(t *testing.T) {
@@ -130,5 +311,162 @@ func TestEveryKindHasACommand(t *testing.T) {
 		if kindCommands[k] == nil {
 			t.Errorf("kind %s has no command builder", k)
 		}
+	}
+}
+
+// A version gap on a hop is a note in the text and in the envelope, not an
+// unresolved entry: the hop's check is inferred and still decides (spec E25).
+func TestPolicyPathVersionGapIsANote(t *testing.T) {
+	t.Parallel()
+	gapped := bytes.Replace(pathlab.Read(t, pathlab.ConfigFile(pathlab.FW02)), []byte(`version="11.2.0"`), []byte(`version="12.2.0"`), 1)
+	c := pathVariant(t, pathConfigs{fw02: gapped}, true)
+	args := []string{"simulate", "policy", pathlab.Source, pathlab.Destination}
+	out := c.want(0, args...)
+	if !strings.Contains(out, "  note: fw02 / vsys1: ") || !strings.Contains(out, "12.2.0") || !strings.Contains(out, "fidelity: inferred") {
+		t.Errorf("text:\n%s", out)
+	}
+	var env struct {
+		Unresolved []any
+		Notes      []struct{ Device, Vsys, Note string }
+	}
+	out = c.want(0, append(args, "--output", "json")...)
+	if err := json.Unmarshal([]byte(out), &env); err != nil || len(env.Unresolved) != 0 {
+		t.Fatalf("json: %v\n%s", err, out)
+	}
+	found := false
+	for _, n := range env.Notes {
+		found = found || n.Device == "fw02" && n.Vsys == "vsys1" && strings.Contains(n.Note, "PAN-OS 12.2.0")
+	}
+	if !found {
+		t.Errorf("the gap must be an envelope note: %+v", env.Notes)
+	}
+}
+
+// Routing draws a hop where no route matched: its router is the ingress's.
+func TestRoutingDropsWithoutARoute(t *testing.T) {
+	t.Parallel()
+	c := pathVariant(t, pathConfigs{noDefault: true}, true)
+	out := c.want(0, "simulate", "routing", pathlab.Source, "198.18.30.5")
+	if !strings.Contains(out, "┌─ fw01 ─ vsys1 ─ router default") || !strings.Contains(out, "dropped on fw01: no route to 198.18.30.5") {
+		t.Errorf("routing:\n%s", out)
+	}
+}
+
+// The run log follows the path: the start, each hop's check and verdict, the
+// answer (spec §9).
+func TestPolicyPathLogs(t *testing.T) {
+	t.Parallel()
+	c := pathLab(t)
+	c.want(0, "simulate", "policy", pathlab.Source, pathlab.Destination, "--device", "fw02")
+	log := c.logFile()
+	for _, want := range []string{
+		"[STEP] policy path 198.18.1.10 -> 198.18.10.100, start fw02",
+		"[STEP] routing/hop1/lookup: ",
+		"[STEP] hop1: security on fw02/vsys1",
+		"[STEP] policy/first-match: ",
+		"[STEP] hop1: stop (default rule interzone-default (deny), built-in)",
+		"[STEP] hop2: security on fw01/vsys1",
+		"[STEP] path verdict: denied at hop 1 (security)",
+		"[RUN] answer: simulate policy: ",
+	} {
+		if !strings.Contains(log, want) {
+			t.Errorf("missing %q in:\n%s", want, log)
+		}
+	}
+	c.want(0, "simulate", "policy", pathlab.Source, pathlab.Destination)
+	if log := c.logFile(); !strings.Contains(log, "start placed by the source") {
+		t.Errorf("start:\n%s", log)
+	}
+}
+
+// A hop's configuration that cannot be read is a hole; the answer is
+// undecided and exits 3.
+func TestPolicyPathUnreadableConfigIsAHole(t *testing.T) {
+	t.Parallel()
+	c := pathLab(t)
+	cfgs, err := filepath.Glob(filepath.Join(c.env["PROTEUS_STORE"], "fw01", "*", "config.xml"))
+	if err != nil || len(cfgs) == 0 {
+		t.Fatalf("no stored configuration of fw01: %v", err)
+	}
+	for _, f := range cfgs {
+		if err := os.WriteFile(f, []byte("<config"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	c.want(3, "simulate", "policy", pathlab.Source, pathlab.Destination, "--no-dns")
+	out := c.want(3, "simulate", "policy", pathlab.Source, pathlab.Destination, "--device", "fw02", "--port", "443", "--output", "json")
+	var env struct {
+		Holes   []struct{ Device, Reason string }
+		Results []struct{ Verdict string }
+	}
+	if err := json.Unmarshal([]byte(out), &env); err != nil || len(env.Holes) != 1 || env.Holes[0].Device != "fw01" || len(env.Results) != 1 {
+		t.Errorf("%v\n%s", err, out)
+	}
+}
+
+// Errors before a path is traced.
+func TestPolicyPathInputErrors(t *testing.T) {
+	t.Parallel()
+	c := pathLab(t)
+	c.want(2, "simulate", "policy", "10.0.0.0/8", pathlab.Destination)
+	c.want(2, "simulate", "policy", pathlab.Source, pathlab.Destination, "--port", "https")
+	c.env["PROTEUS_USERS"] = filepath.Join(c.dir, "no-such-users.json")
+	c.want(1, "simulate", "policy", pathlab.Source, pathlab.Destination)
+	newCLI(t).want(1, "simulate", "policy", pathlab.Source, pathlab.Destination)
+}
+
+// --file keeps the single-target answer: no rule and no default rule, and a
+// vsys the file lacks.
+func TestPolicyFileEdges(t *testing.T) {
+	t.Parallel()
+	c := newCLI(t)
+	out := c.want(3, "simulate", "policy", "10.2.0.5", "10.1.0.5", "--file", fixture("firewall-ruletype.xml"), "--vsys", "vsys1")
+	if !strings.Contains(out, "no enabled rule matches\n") || !strings.Contains(out, "undecided: the default rule depends on the zones") {
+		t.Errorf("no match:\n%s", out)
+	}
+	out = c.want(3, "simulate", "policy", "1.1.1.1", "2.2.2.2", "--file", fixture("firewall-zones.xml"), "--vsys", "vsys9", "--output", "json")
+	if !strings.Contains(out, `"results": []`) {
+		t.Errorf("a missing vsys has no result:\n%s", out)
+	}
+}
+
+// printRun says what a stored forwarding table tells about relevance, and
+// printCandidates colours an allowing default rule ok.
+func TestPrintRunRelevanceAndDefault(t *testing.T) {
+	t.Parallel()
+	ts, _, err := estate.OpenFile(fixture("firewall-zones.xml"), []string{"vsys1"}, nil)
+	if err != nil || len(ts) != 1 {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		rel  securitypolicy.Relevance
+		want string
+	}{
+		{securitypolicy.Relevance{Known: true, Relevant: true, Reason: "10.0.0.0/8 via default covers 10.0.0.1"}, "  relevant   10.0.0.0/8 via default covers 10.0.0.1\n"},
+		{securitypolicy.Relevance{Known: true, Reason: "only a default route"}, "  relevance  not relevant: only a default route\n"},
+	} {
+		var b bytes.Buffer
+		v := securitypolicy.Verdict{
+			Relevance: tc.rel, Default: "intrazone-default", DefaultAction: "allow", DefaultSource: "built-in",
+			Zones: securitypolicy.ZoneDerivation{To: []string{"inside"}, Source: "given"},
+		}
+		printRun(&textOut{w: &b, pal: palette{on: true}}, simulate.Run{Fidelity: simulate.Exact}, ts[0], v, simulate.Flow{Protocol: "tcp"}, true)
+		if !strings.Contains(b.String(), tc.want) || !strings.Contains(b.String(), "zones      from any, to inside (given)") ||
+			!strings.Contains(b.String(), palette{on: true}.ok("allow")) {
+			t.Errorf("got:\n%s", b.String())
+		}
+	}
+}
+
+// A check without a security verdict names no action; checks marshal in list
+// order.
+func TestCheckActionAndChecksJSON(t *testing.T) {
+	t.Parallel()
+	if got := checkAction(pathpolicy.CheckResult{}); got != "" {
+		t.Errorf("checkAction = %q", got)
+	}
+	b, err := json.Marshal(checksJSON{{name: "security"}, {name: "nat"}})
+	if err != nil || !strings.HasPrefix(string(b), `{"security":{`) || !strings.Contains(string(b), `},"nat":{`) {
+		t.Errorf("%v %s", err, b)
 	}
 }
