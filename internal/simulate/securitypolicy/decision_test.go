@@ -147,7 +147,7 @@ func TestAnUndermatchLeavesTheFlowUndecided(t *testing.T) {
 			"an object the configuration cannot resolve",
 			env(t, "firewall-urlcat-edge.xml", false),
 			simulate.Flow{Source: ep("10.0.0.1"), Destination: ep("10.0.0.2"), URL: "good.example.com"},
-			Undecided, "PAN-DB",
+			Undecided, "a Category Match category lists predefined URL categories, whose contents are in the PAN-DB cloud",
 		},
 		{
 			"a version gap alone",
@@ -158,11 +158,26 @@ func TestAnUndermatchLeavesTheFlowUndecided(t *testing.T) {
 	} {
 		r, v := run(t, c.env, c.flow)
 		got, why := v.Decision()
-		if got != c.outcome || !strings.Contains(why, c.reason) {
+		if got != c.outcome || !strings.HasPrefix(why, c.reason) || strings.Contains(why, "kept rules") {
 			t.Errorf("%s: %s, %q; want %s, %q (fidelity %s)", c.name, got, why, c.outcome, c.reason, r.Fidelity)
 		}
 		if got == Undecided && r.Fidelity.Level() != "undermatch" {
 			t.Errorf("%s: fidelity %s", c.name, r.Fidelity)
 		}
+	}
+}
+
+// An undecided reason names only what may be missing: an overmatch reason of the
+// same stage stays out of it.
+func TestUndermatchedKeepsOnlyUndermatchReasons(t *testing.T) {
+	t.Parallel()
+	stages := []simulate.Stage{
+		{Slug: "match-service", Fidelity: simulate.OverMatchBecause("kept rules whose service is application-default")},
+		{Slug: "match-url", Fidelity: simulate.Weakest(
+			simulate.OverMatchBecause("kept rules naming a category the configuration does not define, such as a PAN-DB category: r1"),
+			simulate.UnderMatch("cat-x cannot be matched"))},
+	}
+	if got := undermatched(stages); got != "cat-x cannot be matched" {
+		t.Errorf("undermatched = %q", got)
 	}
 }

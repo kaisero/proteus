@@ -50,6 +50,10 @@ func TestReasonsMerge(t *testing.T) {
 	if !strings.HasPrefix(w.String(), "undermatch: a; b; c") {
 		t.Errorf("String = %s", w)
 	}
+	// Only the undermatch reasons say what may be missing; c is an overmatch's.
+	if strings.Join(w.UnderMatchReasons(), ";") != "a;b" {
+		t.Errorf("undermatch reasons = %v", w.UnderMatchReasons())
+	}
 }
 
 func TestDeclaredAndString(t *testing.T) {

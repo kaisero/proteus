@@ -75,6 +75,11 @@ func fold(r *Result, routingFid simulate.Fidelity) {
 	}
 	fs := []simulate.Fidelity{routingFid}
 	for _, h := range r.Hops[:upto] {
+		// A hop the path or its zones leave undecided may miss what its checks
+		// found, whatever they declared.
+		for _, d := range h.Doubts {
+			fs = append(fs, simulate.UnderMatch(d))
+		}
 		for _, c := range h.Checks {
 			fs = append(fs, c.Fidelity)
 		}

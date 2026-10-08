@@ -144,6 +144,7 @@ func (f Fidelity) MarshalJSON() ([]byte, error)
 func (f Fidelity) Reasons() []string
 func (f Fidelity) Skipped() []string
 func (f Fidelity) String() string
+func (f Fidelity) UnderMatchReasons() []string
 func (m Match) First() resolve.FIBRoute
 func (p Port) Link() netip.Prefix
 func Addr(a netip.Addr) Endpoint

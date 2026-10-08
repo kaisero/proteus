@@ -119,11 +119,16 @@ func TestFoldFidelity(t *testing.T) {
 	if got := r.Fidelity.String(); got != "inferred: hop 1" {
 		t.Errorf("up to the stop: %s", got)
 	}
-	r = folded(routing.Delivered, hops("pass", "pass"))
-	r.Hops[1].Checks[0].Fidelity = simulate.Inferred
-	fold(&r, simulate.Exact)
+	hs = hops("pass", "pass")
+	hs[1].Checks[0].Fidelity = simulate.Inferred
+	r = folded(routing.Delivered, hs)
 	if r.Fidelity.Level() != "inferred" {
 		t.Errorf("allowed: every hop counts: %s", r.Fidelity)
+	}
+	// A hop undecided by its path is undermatch, though its check said exact.
+	r = folded(routing.Delivered, hops("doubt", "pass"))
+	if got := r.Fidelity.String(); r.Verdict != VerdictUndecided || got != "undermatch: ECMP: 1 other next hops not followed" {
+		t.Errorf("a doubt up to the point: %s %s", r.Verdict, got)
 	}
 }
 

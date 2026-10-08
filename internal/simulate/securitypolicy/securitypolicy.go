@@ -158,12 +158,14 @@ func (Simulation) Run(ctx context.Context, env *simulate.Env, in simulate.Input)
 // undermatched is the reason of the first stage that may be missing matches, or
 // empty when none is. Such a stage may have dropped the rule the device would hit,
 // so no rule after it decides the flow: the tree's first question (spec §4.7), so
-// its reason wins over a doubt first-match found. A version gap does not count:
-// withoutGap has already made it inferred (E25).
+// its reason wins over a doubt first-match found. Only the undermatch reasons
+// count: an overmatch reason of the same stage says nothing about what is
+// missing. A version gap does not count: withoutGap has already made it inferred
+// (E25).
 func undermatched(stages []simulate.Stage) string {
 	for _, st := range stages {
 		if f := st.Fidelity; f.Level() == "undermatch" {
-			return strings.Join(f.Reasons(), "; ")
+			return strings.Join(f.UnderMatchReasons(), "; ")
 		}
 	}
 	return ""

@@ -18,6 +18,7 @@ import (
 	"github.com/okaiser/proteus/internal/simulate"
 	"github.com/okaiser/proteus/internal/simulate/pathlab"
 	"github.com/okaiser/proteus/internal/simulate/routing"
+	"github.com/okaiser/proteus/internal/simulate/securitypolicy"
 )
 
 // network is simulate.Network over fixed data. A device named in gone is
@@ -182,7 +183,7 @@ func TestThePathFixtureIsDeniedAtTheFirstHop(t *testing.T) {
 	}
 	c := r.Hops[0].Checks[0]
 	if c.Security == nil || c.Security.Zones.Source != "path" || !slices.Equal(c.Security.Zones.From, []string{"home"}) ||
-		!slices.Equal(c.Security.Zones.To, []string{"labor"}) || c.Fidelity.Level() != "exact" || len(c.Stages) != 8 {
+		!slices.Equal(c.Security.Zones.To, []string{"labor"}) || c.Fidelity.Level() != "exact" || !slices.Equal(slugs(c.Stages), securitypolicy.Simulation{}.Stages()) {
 		t.Errorf("hop 1 check: %+v", c)
 	}
 }
@@ -424,5 +425,38 @@ func TestTrimKeepsTheTracedAddress(t *testing.T) {
 	}
 	if d := r.Hops[0].Checks[0].Stages[1]; d.Slug != "resolve-destination" || d.Fidelity.Level() != "inferred" {
 		t.Errorf("the resolved FQDN is inferred: %s %s", d.Slug, d.Fidelity)
+	}
+}
+
+// slugs are the stages' slugs, in order.
+func slugs(stages []simulate.Stage) []string {
+	out := make([]string, len(stages))
+	for i, st := range stages {
+		out[i] = st.Slug
+	}
+	return out
+}
+
+// Run reads each hop's target once, though the zone check, the security check
+// and securitypolicy each ask for it.
+func TestEachTargetLoadsOnce(t *testing.T) {
+	t.Parallel()
+	env := lab{}.env(t)
+	loads := map[string]int{}
+	load := env.Load
+	env.Load = func(device, vsys string) (simulate.Target, error) {
+		loads[device+"/"+vsys]++
+		return load(device, vsys)
+	}
+	if _, _, err := Run(context.Background(), env, input(pathlab.Destination)); err != nil {
+		t.Fatal(err)
+	}
+	for k, n := range loads {
+		if n != 1 {
+			t.Errorf("%s loaded %d times", k, n)
+		}
+	}
+	if len(loads) != 2 {
+		t.Errorf("loads = %v", loads)
 	}
 }

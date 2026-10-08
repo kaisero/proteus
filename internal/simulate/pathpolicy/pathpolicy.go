@@ -115,6 +115,7 @@ func run(ctx context.Context, env *simulate.Env, in simulate.Input, checks []Che
 	if env.Load == nil {
 		return Result{}, nil, errors.New("pathpolicy: no configuration to read")
 	}
+	env = memoized(env)
 	rr, err := routing.Simulation{}.Run(ctx, env, in)
 	if err != nil {
 		return Result{}, rr.Stages, err
@@ -155,6 +156,28 @@ func run(ctx context.Context, env *simulate.Env, in simulate.Input, checks []Che
 	return res, rr.Stages, nil
 }
 
+// memoized is env with a Load that reads each device and vsys once: the zone
+// check, the security check and securitypolicy each load the hop's target.
+func memoized(env *simulate.Env) *simulate.Env {
+	type key struct{ device, vsys string }
+	type loaded struct {
+		t   simulate.Target
+		err error
+	}
+	cache := map[key]loaded{}
+	e, load := *env, env.Load
+	e.Load = func(device, vsys string) (simulate.Target, error) {
+		k := key{device, vsys}
+		if l, ok := cache[k]; ok {
+			return l.t, l.err
+		}
+		t, err := load(device, vsys)
+		cache[k] = loaded{t, err}
+		return t, err
+	}
+	return &e
+}
+
 // addHoles adds missing data once per device and reason.
 func addHoles(holes []simulate.Missing, ms ...simulate.Missing) []simulate.Missing {
 	for _, m := range ms {
@@ -180,12 +203,12 @@ func pathDoubts(p routing.Path, n int, stages []simulate.Stage) ([]string, []sim
 		doubts = append(doubts, fmt.Sprintf("PBF rule %s can redirect the flow", r))
 	}
 	if f, ok := stageFidelity(stages, n, "pbf"); ok && f.Level() == "undermatch" {
-		doubts = append(doubts, f.Reasons()...)
+		doubts = append(doubts, f.UnderMatchReasons()...)
 	}
 	if f, ok := stageFidelity(stages, n, "nat"); ok {
 		switch f.Level() {
 		case "undermatch":
-			doubts = append(doubts, f.Reasons()...)
+			doubts = append(doubts, f.UnderMatchReasons()...)
 		case "inferred":
 			caps = append(caps, simulate.Inferred)
 		}
