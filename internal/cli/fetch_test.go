@@ -531,8 +531,10 @@ func TestSimulateDimensions(t *testing.T) {
 		t.Errorf("port:\n%s", out)
 	}
 	out = c.want(3, "simulate", "policy", "10.0.0.1", "www.example.com", "--file", file, "--no-dns")
-	if strings.Count(out, "resolved to no address") != 2 { // the fidelity line and one unresolved line
-		t.Errorf("an unresolved FQDN is an incomplete answer, said once:\n%s", out)
+	// The fidelity line, one unresolved line, and the undecided line that the
+	// undermatch causes.
+	if strings.Count(out, "resolved to no address") != 3 || !strings.Contains(out, "undecided: www.example.com resolved to no address") {
+		t.Errorf("an unresolved FQDN is an incomplete answer, said once, and undecided:\n%s", out)
 	}
 }
 

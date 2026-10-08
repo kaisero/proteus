@@ -15,16 +15,7 @@ import (
 // on fw02 (2026-10-08).
 func TestDecision(t *testing.T) {
 	t.Parallel()
-	src, err := os.ReadFile("../../../testdata/config/firewall-doubt.xml")
-	if err != nil {
-		t.Fatal(err)
-	}
-	gapped := filepath.Join(t.TempDir(), "doubt-12.2.xml")
-	doc := strings.Replace(string(src), `version="11.2.0" urldb="paloaltonetworks" detail-version="11.2.5"`,
-		`version="12.2.0" urldb="paloaltonetworks" detail-version="12.2.3"`, 1)
-	if err := os.WriteFile(gapped, []byte(doc), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	gapped := gappedDoubt(t)
 	flow := func(src, dst, from, to, proto string, port uint16) simulate.Flow {
 		return simulate.Flow{Source: ep(src), Destination: ep(dst), FromZone: from, ToZone: to, Protocol: proto, DestPort: port}
 	}
@@ -97,6 +88,23 @@ func TestDecision(t *testing.T) {
 	}
 }
 
+// gappedDoubt writes the doubt fixture as PAN-OS 12.2, which this build reads with
+// the 11.2 schema, and returns its path.
+func gappedDoubt(t *testing.T) string {
+	t.Helper()
+	src, err := os.ReadFile("../../../testdata/config/firewall-doubt.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	gapped := filepath.Join(t.TempDir(), "doubt-12.2.xml")
+	doc := strings.Replace(string(src), `version="11.2.0" urldb="paloaltonetworks" detail-version="11.2.5"`,
+		`version="12.2.0" urldb="paloaltonetworks" detail-version="12.2.3"`, 1)
+	if err := os.WriteFile(gapped, []byte(doc), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return gapped
+}
+
 func TestDecisionOfAVerdict(t *testing.T) {
 	t.Parallel()
 	for _, c := range []struct {
@@ -113,6 +121,48 @@ func TestDecisionOfAVerdict(t *testing.T) {
 	} {
 		if got, why := c.v.Decision(); got != c.outcome || why != c.reason {
 			t.Errorf("%+v: %s, %q; want %s, %q", c.v, got, why, c.outcome, c.reason)
+		}
+	}
+}
+
+// A stage that may be missing matches leaves the flow undecided, whatever a later
+// rule says: the rule the device hits may be among those missed (spec §4.7). A
+// version gap alone is inferred, so the flow stays decided (E25).
+func TestAnUndermatchLeavesTheFlowUndecided(t *testing.T) {
+	t.Parallel()
+	for _, c := range []struct {
+		name    string
+		env     *simulate.Env
+		flow    simulate.Flow
+		outcome Outcome
+		reason  string
+	}{
+		{
+			"an FQDN that resolves to no address",
+			env(t, "firewall-simulate.xml", false),
+			simulate.Flow{Source: ep("10.0.0.1"), Destination: simulate.Endpoint{Name: "www.example.com"}},
+			Undecided, "www.example.com resolved to no address",
+		},
+		{
+			"an object the configuration cannot resolve",
+			env(t, "firewall-urlcat-edge.xml", false),
+			simulate.Flow{Source: ep("10.0.0.1"), Destination: ep("10.0.0.2"), URL: "good.example.com"},
+			Undecided, "PAN-DB",
+		},
+		{
+			"a version gap alone",
+			envPath(t, gappedDoubt(t), false),
+			simulate.Flow{Source: ep("198.18.1.68"), Destination: ep("192.0.2.1"), FromZone: "home", ToZone: "wan", Protocol: "udp", DestPort: 443},
+			Stop, "rule block-udp-443 (deny)",
+		},
+	} {
+		r, v := run(t, c.env, c.flow)
+		got, why := v.Decision()
+		if got != c.outcome || !strings.Contains(why, c.reason) {
+			t.Errorf("%s: %s, %q; want %s, %q (fidelity %s)", c.name, got, why, c.outcome, c.reason, r.Fidelity)
+		}
+		if got == Undecided && r.Fidelity.Level() != "undermatch" {
+			t.Errorf("%s: fidelity %s", c.name, r.Fidelity)
 		}
 	}
 }

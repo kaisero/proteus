@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"net/netip"
 	"slices"
+	"strings"
 
 	"github.com/RoaringBitmap/roaring/v2"
 
@@ -49,13 +50,13 @@ func (Simulation) Stages() []string {
 // Verdict is the output of a run.
 type Verdict struct {
 	Rule *resolve.Rule `json:"rule"` // first match; nil when none
+	// Undecided says why no rule or default rule decides the flow, empty when one
+	// does (spec §4.7): a stage that may miss matches, or candidates in doubt. Rule
+	// or Default may still be set: the first certain match.
+	Undecided string `json:"undecided,omitempty"`
 	// Default is the default rule that decides when no rule matches, empty when
 	// none decides; DefaultAction is its action, and DefaultSource where the action
 	// came from: built-in, local or pushed.
-	// Undecided says why no rule or default rule decides the flow, empty when one
-	// does (spec §4.7). Rule or Default may still be set: the first certain match,
-	// behind candidates in doubt.
-	Undecided     string         `json:"undecided,omitempty"`
 	Default       string         `json:"default"`
 	DefaultAction string         `json:"default_action"`
 	DefaultSource string         `json:"default_source"`
@@ -147,8 +148,25 @@ func (Simulation) Run(ctx context.Context, env *simulate.Env, in simulate.Input)
 	stages, err := simulate.Execute(ctx, Kind, s, steps, false, env.Log)
 	run.Stages = stages
 	run.Fidelity = simulate.Overall(stages)
+	if u := undermatched(stages); err == nil && u != "" {
+		s.verdict.Undecided = u
+	}
 	run.Output = s.verdict
 	return run, err
+}
+
+// undermatched is the reason of the first stage that may be missing matches, or
+// empty when none is. Such a stage may have dropped the rule the device would hit,
+// so no rule after it decides the flow: the tree's first question (spec §4.7), so
+// its reason wins over a doubt first-match found. A version gap does not count:
+// withoutGap has already made it inferred (E25).
+func undermatched(stages []simulate.Stage) string {
+	for _, st := range stages {
+		if f := st.Fidelity; f.Level() == "undermatch" {
+			return strings.Join(f.Reasons(), "; ")
+		}
+	}
+	return ""
 }
 
 // relevance reads the forwarding table's placements of both endpoints.
