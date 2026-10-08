@@ -68,6 +68,7 @@ The fetcher's tests run against `internal/fakepanos`, a fake XML API over TLS on
 | `unsupported-version.xml` | a version older than every digest, read with the lowest |
 | `firewall-version-12.2.xml` | a version newer than every digest, and the gap it reports |
 | `panorama-rejected.xml` | a Panorama refusal |
+| `path-fw01.xml`, `path-fw02.xml` | the two-firewall path fixture: zones as in the lab's operational data, no security rule; `internal/simulate/pathlab` serves them with default-rule variants to the path and CLI tests |
 
 ### The device probe
 

@@ -8,19 +8,34 @@ import (
 	"testing"
 
 	"github.com/okaiser/proteus/internal/fakepanos"
+	"github.com/okaiser/proteus/internal/simulate/pathlab"
 )
 
 // labFW02 is fw02 as captured: a PA-440 on PAN-OS 12.2 joined to fw01 by
-// 198.19.0.0/24. Its configuration is not captured; the lab's stands in.
+// 198.19.0.0/24. Its configuration is the path fixture's: zones home and labor,
+// and no security rule.
 func labFW02(t *testing.T) *fakepanos.Device {
 	t.Helper()
 	d := lab(t)
+	d.Config = string(pathlab.Read(t, pathlab.ConfigFile(pathlab.FW02)))
 	d.Ops["<show><system><info/></system></show>"] = fakepanos.Success(
 		"<system><hostname>fw02</hostname><model>PA-440</model><serial>000000000002</serial><sw-version>12.2.2</sw-version></system>")
 	d.Ops["<show><interface>all</interface></show>"] = read(t, "../../testdata/opdata/fw02-interface-all.xml")
 	d.Ops["<show><advanced-routing><fib><afi>both</afi></fib></advanced-routing></show>"] = read(t, "../../testdata/opdata/fw02-advanced-routing-fib.xml")
 	d.Ops["<show><advanced-routing><route><afi>ipv4</afi></route></advanced-routing></show>"] = read(t, "../../testdata/opdata/fw02-advanced-routing-route.xml")
 	return d
+}
+
+// pathLab is the path fixture as an inventory of fw01 and fw02, both fetched:
+// each with a configuration that defines its zones and holds no security rule.
+func pathLab(t *testing.T) *cli {
+	t.Helper()
+	fw01 := lab(t)
+	fw01.Config = string(pathlab.Read(t, pathlab.ConfigFile(pathlab.FW01)))
+	c := newCLI(t)
+	c.inventory(inventoryFor(fw01.Start(t), labFW02(t).Start(t)))
+	c.want(0, "fetch", "fw01", "fw02")
+	return c
 }
 
 // routingLab is an inventory of fw01 and fw02, both fetched, plus fw03, never
@@ -186,6 +201,23 @@ func TestRoutingNotesReachTheEnvelope(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("the FQDN note must be in the envelope's own notes:\n%s", out)
+	}
+}
+
+// On the path fixture the lab flow crosses fw02 home -> labor, then fw01
+// transport -> server, and the default rule denies it at hop 1.
+func TestThePathFixture(t *testing.T) {
+	t.Parallel()
+	c := pathLab(t)
+	out := c.want(0, "simulate", "routing", pathlab.Source, pathlab.Destination)
+	if !strings.Contains(out, "firewalls on the path: fw02 (home -> labor), fw01 (transport -> server)\n") ||
+		!strings.Contains(out, "  198.18.10.100   delivered\n") {
+		t.Errorf("routing:\n%s", out)
+	}
+	out = c.want(0, "simulate", "policy", pathlab.Source, pathlab.Destination, "--device", "fw02", "--vsys", "vsys1",
+		"--from-zone", "home", "--to-zone", "labor")
+	if !strings.Contains(out, "first match: interzone-default (deny), default rule (built-in)\n") {
+		t.Errorf("policy at hop 1:\n%s", out)
 	}
 }
 
