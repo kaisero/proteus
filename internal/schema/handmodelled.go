@@ -24,6 +24,13 @@ var handModelled = []HandModel{
 			"Panorama keeps them at this path (cms-schema.xml), next to the other pushed post-rules",
 		Owner: "internal/resolve",
 	},
+	{
+		Path: "/config/devices/entry/vsys/entry/rulebase/security/rules/entry",
+		Reason: "the schema says what each child of a security rule holds, not whether the device " +
+			"matches a flow on it nor whether the security check evaluates it; the check classifies " +
+			"every child, and a candidate that sets a matching field no stage evaluates has a doubt",
+		Owner: "internal/simulate/securitypolicy",
+	},
 }
 
 // HandModelled returns the registered hand-modelled nodes.

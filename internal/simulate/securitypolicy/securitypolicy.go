@@ -55,8 +55,11 @@ type Verdict struct {
 	DefaultAction string         `json:"default_action"`
 	DefaultSource string         `json:"default_source"`
 	Candidates    []resolve.Rule `json:"candidates"`
-	Zones         ZoneDerivation `json:"zones"`
-	Relevance     Relevance      `json:"relevance"`
+	// Doubts names the candidates that set a matching field no stage evaluates, in
+	// rule order (spec §4.7).
+	Doubts    []Doubt        `json:"doubts"`
+	Zones     ZoneDerivation `json:"zones"`
+	Relevance Relevance      `json:"relevance"`
 }
 
 // ZoneDerivation says which zones were used and where they came from.

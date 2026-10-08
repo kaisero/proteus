@@ -437,6 +437,7 @@ func order(_ context.Context, s *state) (simulate.Outcome, error) {
 	for it := s.cand.Iterator(); it.HasNext(); {
 		s.verdict.Candidates = append(s.verdict.Candidates, s.rules[it.Next()])
 	}
+	s.verdict.Doubts = s.doubts()
 	return simulate.Outcome{Fidelity: simulate.Exact, Detail: fmt.Sprintf("%d in order", len(s.verdict.Candidates))}, nil
 }
 
