@@ -218,7 +218,9 @@ for h in r.get("hops") or []:
     sec = (h.get("checks") or {}).get("security") or {}
     f = h.get("flow") or {}
     kind = sec.get("verdict") or "not-evaluated"
-    if at.get("check") == "routing" and at.get("hop") == h["index"]:
+    # Only a route lookup that fails drops the flow; a path that leaves the estate
+    # or ends unresolved still ran its checks on the last hop.
+    if r.get("outcome") == "dropped" and at.get("hop") == h["index"]:
         kind = "routing-drop"
     proto = str(f.get("protocol") or "")
     print("\t".join(str(x) if x not in (None, "") else "-" for x in (
@@ -226,14 +228,15 @@ for h in r.get("hops") or []:
         ((f.get("source") or {}).get("addrs") or [None])[0],
         ((f.get("destination") or {}).get("addrs") or [None])[0],
         f.get("from_zone"), f.get("to_zone"), num.get(proto, proto), f.get("port"),
-        (h.get("in") or {}).get("router"))))')
+        (h.get("in") or {}).get("router"),
+        ",".join(d.get("rule") or "" for d in sec.get("doubts") or []))))')
     if [ "$hops" = error ] || [ -z "$hops" ]; then
       # shellcheck disable=SC2059
       printf "$fmt" "$flow" - - "no JSON answer" - SKIP
       continue
     fi
-    local kind idx dev vsys rule dflt hsrc hdst fz tz pnum hport router
-    while IFS=$'\t' read -r kind idx dev vsys rule dflt hsrc hdst fz tz pnum hport router; do
+    local kind idx dev vsys rule dflt hsrc hdst fz tz pnum hport router doubted
+    while IFS=$'\t' read -r kind idx dev vsys rule dflt hsrc hdst fz tz pnum hport router doubted; do
       local mine="$rule $kind" theirs=- result=SKIP
       case $kind in
         undecided)
@@ -279,6 +282,12 @@ print("(default)" if e is None else (e.get("name") or (e.text or "").strip() or 
               *)
                 if [ "$theirs" = "$rule" ] || { [ "$theirs" = "(default)" ] && [ "$dflt" != - ]; }; then
                   result=AGREE; agreed=$((agreed + 1))
+                elif [[ ",$doubted," == *",$theirs,"* ]]; then
+                  # Without <application> the device skips the application but keeps
+                  # application-default ports (measured on fw02, 2026-10-08), so it can
+                  # stop at a rule proteus holds in doubt. proteus decided the hop only
+                  # because every such rule has the deciding action (spec E20).
+                  result=AGREE-ACTION; agreed=$((agreed + 1))
                 else
                   result=DISAGREE; disagreed=$((disagreed + 1))
                 fi ;;
