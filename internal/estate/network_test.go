@@ -133,6 +133,13 @@ func TestNetworkCollapsesAnHAPair(t *testing.T) {
 	if err != nil || d.Name != "fw-a" || d.TakenAt != t0.Add(time.Minute) {
 		t.Fatalf("pair = %+v, %v", d, err)
 	}
+	// The active member's name and snapshot, not the node's first member.
+	if active, err := st.Latest("fw-b"); err != nil || d.Member != "fw-b" || d.SnapshotID != active.ID {
+		t.Errorf("member = %s@%s, want fw-b@%s (%v)", d.Member, d.SnapshotID, active.ID, err)
+	}
+	if o, _ := n.Device("other"); o.Member != "other" {
+		t.Errorf("single device member = %q", o.Member)
+	}
 	if len(d.Notes) != 1 || !strings.Contains(d.Notes[0], "[fw-a fw-b] are one HA pair; fw-b answers") {
 		t.Errorf("notes = %v", d.Notes)
 	}

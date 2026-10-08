@@ -93,6 +93,7 @@ type Network interface {
 // DeviceData is one node's operational data, from one snapshot.
 type DeviceData struct {
 	Name       string
+	Member     string // the inventory member whose snapshot was read; Name for a single device
 	SnapshotID string
 	TakenAt    time.Time
 	Interfaces []resolve.InterfaceState
