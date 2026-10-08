@@ -215,6 +215,28 @@ func TestAGivenStart(t *testing.T) {
 	}
 }
 
+// StartVia is the route that placed the start or gave its ingress; zero when the
+// source is connected.
+func TestStartVia(t *testing.T) {
+	t.Parallel()
+	for name, c := range map[string]struct {
+		f      simulate.Flow
+		params map[string]string
+		want   string
+	}{
+		"connected":        {flow("198.18.1.10", "198.18.10.100"), nil, "invalid Prefix"},
+		"routed":           {flow("198.18.20.5", "8.8.8.8"), nil, "198.18.0.0/15"},
+		"device connected": {flow("198.18.100.7", "8.8.8.8"), map[string]string{"device": "fw02"}, "invalid Prefix"},
+		"device routed":    {flow("198.18.10.9", "8.8.8.8"), map[string]string{"device": "fw02"}, "198.18.0.0/15"},
+		"device default":   {flow("8.8.4.4", "198.18.10.100"), map[string]string{"device": "fw01", "router": "default"}, "0.0.0.0/0"},
+		"device no source": {flow("", "8.8.8.8"), map[string]string{"device": "fw01", "router": "default"}, "invalid Prefix"},
+	} {
+		if _, p, err := simulateOn(t, labNet(), c.f, c.params); err != nil || p.StartVia.String() != c.want {
+			t.Errorf("%s: start via %s, %v", name, p.StartVia, err)
+		}
+	}
+}
+
 func TestARoutedStartIsInferred(t *testing.T) {
 	t.Parallel()
 	run, p, err := simulateOn(t, labNet(), flow("198.18.20.5", "8.8.8.8"), nil)
@@ -358,13 +380,15 @@ func TestAVsysCrossing(t *testing.T) {
 	load := func(string, string) (simulate.Target, error) { return simulate.Target{Config: cfg}, nil }
 	run, err := Simulation{}.Run(context.Background(), &simulate.Env{Network: n, Load: load}, simulate.Input{Flow: flow("10.1.0.5", "10.2.0.9")})
 	p := run.Output.(Path)
-	if err != nil || trail(p) != "fw(trust->to-vsys2) fw(from-vsys1->dmz)" || p.Hops[1].Vsys != "vsys2" || p.Outcome != Delivered {
+	if err != nil || trail(p) != "fw(trust->to-vsys2) fw(from-vsys1->dmz)" || p.Hops[1].Vsys != "vsys2" || p.Outcome != Delivered ||
+		p.Hops[0].ZonePlaceholder || p.Hops[1].ZonePlaceholder {
 		t.Errorf("path = %s %+v, %v", trail(p), p, err)
 	}
 	// Without external zones in the configuration, placeholders, and Inferred.
 	run, _ = Simulation{}.Run(context.Background(), &simulate.Env{Network: n}, simulate.Input{Flow: flow("10.1.0.5", "10.2.0.9")})
 	p = run.Output.(Path)
-	if trail(p) != "fw(trust->external) fw(external->dmz)" || p.Hops[0].Fidelity.Level() != "overmatch" && p.Hops[0].Fidelity.Level() != "inferred" {
+	if trail(p) != "fw(trust->external) fw(external->dmz)" || p.Hops[0].Fidelity.Level() != "overmatch" && p.Hops[0].Fidelity.Level() != "inferred" ||
+		!p.Hops[0].ZonePlaceholder || !p.Hops[1].ZonePlaceholder {
 		t.Errorf("placeholders = %s, %s", trail(p), p.Hops[0].Fidelity)
 	}
 }

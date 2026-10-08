@@ -35,6 +35,8 @@ type state struct {
 	// pool names a source translation to one of several addresses; later hops
 	// match their rules against its first address and say so.
 	pool string
+	// placeholder is an ingress zone that is a placeholder: the next hop's.
+	placeholder bool
 }
 
 func newState(env *simulate.Env, in simulate.Input) *state {
@@ -72,8 +74,9 @@ func (s *state) newHop() {
 	h := Hop{
 		Device: s.port.Device, Vsys: vsysName(s.port.Vsys),
 		SnapshotID: s.data[s.port.Device].SnapshotID, TakenAt: s.data[s.port.Device].TakenAt,
-		In: s.port, Flow: s.flow(),
+		In: s.port, Flow: s.flow(), ZonePlaceholder: s.placeholder,
 	}
+	s.placeholder = false
 	if n := len(s.path.Hops); n == 0 || s.path.Hops[n-1].Device != h.Device {
 		h.Notes = append(h.Notes, s.data[h.Device].Notes...)
 	}
@@ -133,7 +136,7 @@ func place(_ context.Context, s *state) (simulate.Outcome, error) {
 		}
 		s.port, s.router, s.path.Placed = pl.Port, pl.Port.Router, pl.How
 		if pl.How == topology.PlacedRouted {
-			s.path.PlacedVia = pl.Via.String()
+			s.path.PlacedVia, s.path.StartVia = pl.Via.String(), pl.Via
 			fid = simulate.Inferred
 			out.Detail = fmt.Sprintf("routed: %s by %s on %s; traffic is assumed to arrive where its return leaves", s.src, pl.Via, pl.Port.Device)
 		} else {
@@ -156,11 +159,11 @@ func (s *state) placeGiven(dev string) error {
 	if err != nil {
 		return &simulate.ChoiceError{Question: fmt.Sprintf("cannot start on %s: %v", dev, err), Options: s.topo.Nodes()}
 	}
-	port, _, err := s.topo.Start(d.Name, s.in.Params["router"], s.src)
+	port, via, _, err := s.topo.Start(d.Name, s.in.Params["router"], s.src)
 	if err != nil {
 		return err
 	}
-	s.port, s.router = port, port.Router
+	s.port, s.router, s.path.StartVia = port, port.Router, via
 	return nil
 }
 
@@ -381,7 +384,7 @@ func (s *state) crossVsys(h *Hop, out simulate.Outcome) (simulate.Outcome, error
 	h.Out = simulate.Port{Device: h.Device, Vsys: h.In.Vsys, Router: s.router, Zone: fromExt}
 	h.Flow.ToZone = fromExt
 	if !ok1 || !ok2 {
-		out.Fidelity = simulate.Inferred
+		out.Fidelity, h.ZonePlaceholder, s.placeholder = simulate.Inferred, true, true
 		h.Notes = append(h.Notes, "no external zone joins these vsys in the configuration; the zone names are placeholders")
 	}
 	out.Detail = fmt.Sprintf("into %s by the external zones", vsysName(egress.Vsys))
