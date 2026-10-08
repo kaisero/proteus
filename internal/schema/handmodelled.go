@@ -10,10 +10,14 @@ type HandModel struct {
 
 // handModelled is the complete list. Adding an entry is a deliberate act: every
 // other field in the library comes from the schema (R1).
-//
-// It is empty. The registry and its check stay, so the next entry is declared
-// rather than slipped in.
-var handModelled = []HandModel{}
+var handModelled = []HandModel{
+	{
+		Path: "/config/shared/post-rulebase/default-security-rules/rules/entry",
+		Reason: "the firewall schema does not declare pushed default security rules; " +
+			"Panorama keeps them at this path (cms-schema.xml), next to the other pushed post-rules",
+		Owner: "internal/resolve",
+	},
+}
 
 // HandModelled returns the registered hand-modelled nodes.
 func HandModelled() []HandModel {
