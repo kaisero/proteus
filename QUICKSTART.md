@@ -122,6 +122,9 @@ proteus snapshot diff                  # after a second fetch
 ```
 
 Narrow a question with `--device fw01`, `--label site=vienna` or `--vsys vsys1`.
+`simulate policy` is the exception: it follows the routed path from the source and
+gives one verdict for the estate. `--device` names where the path starts; check one
+configuration with `--file <config.xml> --vsys vsys1`.
 
 ## Where next
 
