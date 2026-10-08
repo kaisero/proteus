@@ -24,7 +24,9 @@ ci: tidy-check lint test-race test-cov context-check build vuln
 | `context-check` | these agent docs drifting from the real API |
 
 `go test ./internal/archtest -run TestImportDirection` is R12: the read-only core
-imports no I/O, and the packages above it point one way. It runs in `test-race`.
+imports no I/O, and the packages above it point one way. `TestTestHelpersStayInTests`
+keeps the test helpers `internal/fakepanos` and `internal/simulate/pathlab`, which
+import `testing`, out of every package's non-test code. It runs in `test-race`.
 
 ### The coverage ratchet
 

@@ -13,7 +13,9 @@ import (
 
 // labFW02 is fw02 as captured: a PA-440 on PAN-OS 12.2 joined to fw01 by
 // 198.19.0.0/24. Its configuration is the path fixture's: zones home and labor,
-// and no security rule.
+// and no security rule. Its sw-version says 12.2.2, but path-fw02.xml is 11.2.0
+// and reads with its own schema, so these tests exercise no version gap; the
+// pathpolicy tests cover one.
 func labFW02(t *testing.T) *fakepanos.Device {
 	t.Helper()
 	d := lab(t)

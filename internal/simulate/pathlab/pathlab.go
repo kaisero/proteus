@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"testing"
 	"time"
 
@@ -153,7 +154,7 @@ func Device(tb testing.TB, device string) simulate.DeviceData {
 // network is simulate.Network over fixed data.
 type network map[string]simulate.DeviceData
 
-func (network) Devices() []string { return Devices }
+func (network) Devices() []string { return slices.Clone(Devices) }
 
 func (n network) Device(name string) (simulate.DeviceData, error) {
 	d, ok := n[name]

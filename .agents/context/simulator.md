@@ -8,7 +8,8 @@ Validated against 54cfdf9 on 2026-09-29 · Purpose: how a simulation runs as sta
 declaring its fidelity. It is a leaf (R12). `internal/simulate/securitypolicy` answers which
 rule one flow hits on one device; `internal/simulate/routing` (spec §17) which firewalls a
 packet crosses; `internal/simulate/nat` (spec §18) the NAT rule and the translated packet on
-one firewall. `internal/simulate/nat` is also the NAT engine routing and securitypolicy
+one firewall; `internal/simulate/pathpolicy` whether a flow passes every firewall on its
+path. `internal/simulate/nat` is also the NAT engine routing and securitypolicy
 call; `internal/simulate/topology` and `internal/simulate/rulebase` are leaf packages they share. `estate.Simulations` is the registry; the command makes one
 `simulate <kind>` subcommand per entry, from `kindCommands` when a kind needs its own
 flags (routing). `runlog` records each stage.
@@ -81,6 +82,24 @@ zone for the post-NAT destination zone.
 `Run.Output` is `routing.Path`: `Hops` (one per device and vsys; a vsys crossing
 splits through the external zones), `Outcome`, `End`, `Hidden` (off-path devices
 with interfaces without a router).
+
+### pathpolicy
+
+`pathpolicy.Run(ctx, env, in)` answers a flow along its path (spec 2026-10-07 §4,
+§5). It is a function package, not a registered kind. It runs routing once, then
+per hop: the path's doubts (ECMP, a PBF rule, PBF or NAT undermatch, a start by a
+default route), zone validity (both zones named, defined in the hop's vsys, not a
+placeholder), and each `Check` in list order. Today the one check is `Security`:
+securitypolicy with the hop's zones given and each endpoint trimmed to the traced
+address. Its fidelity is the weakest of the address, zone and `first-match` stages,
+capped by a routed start or inferred NAT; a version gap is inferred. A hop that
+routing drops runs no check. The fold: the first undecided or stopping hop sets
+`At`; undecided wins over stop on one hop; a later stop after an undecided point is
+a note; hops after a stop carry `AfterDeny`; with no point, routing's end decides
+(delivered or local: allowed; dropped: denied; any other end: undecided). Routing's
+`ChoiceError` and `UnavailableError` return unchanged; an unreadable hop
+configuration is a hole. `internal/simulate/pathlab` is the two-firewall fixture
+its tests share with the CLI's.
 
 ## Build / run pointers
 
@@ -167,6 +186,24 @@ func (Simulation) Describe() string
 func (Simulation) Kind() string
 func (Simulation) Run(ctx context.Context, env *simulate.Env, in simulate.Input) (simulate.Run, error)
 func (Simulation) Stages() []string
+```
+<!-- /GENERATED:api -->
+
+<!-- GENERATED:api ./internal/simulate/pathpolicy -->
+```go
+type Check interface{ ... }
+type CheckResult struct{ ... }
+type Hop struct{ ... }
+type HopVerdict string
+type Point struct{ ... }
+type Result struct{ ... }
+type Security struct{}
+type Verdict string
+
+func (Security) Evaluate(ctx context.Context, env *simulate.Env, h routing.Hop, flow simulate.Flow) (CheckResult, error)
+func (Security) Name() string
+func Checks() []Check
+func Run(ctx context.Context, env *simulate.Env, in simulate.Input) (Result, []simulate.Stage, error)
 ```
 <!-- /GENERATED:api -->
 

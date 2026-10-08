@@ -71,6 +71,9 @@ func TestTheVariantsOverrideTheDefaultRule(t *testing.T) {
 		"both different": "undecided",
 		"no action":      "deny, local",
 	}
+	if len(pathlab.Variants) != len(want) {
+		t.Fatalf("%d variants, %d expected answers", len(pathlab.Variants), len(want))
+	}
 	for _, c := range pathlab.Variants {
 		e := pathlab.Env(t, c.Defaults)
 		v := check(t, e, path(t, e).Hops[0])

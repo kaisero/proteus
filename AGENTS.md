@@ -144,11 +144,16 @@ the command line; it imports no I/O package and no package of this module except
 leaf packages `internal/simulate/topology` (interfaces, forwarding tables, placement) and
 `internal/simulate/rulebase` (rulebase matching, PBF), which import no simulation and no I/O
 package. `internal/simulate/nat` is also the NAT engine: `routing` and `securitypolicy` may
-import it, and it imports neither of them, nor I/O.
+import it, and it imports neither of them, nor I/O. `internal/simulate/pathpolicy`
+answers a flow along its path: it may import `simulate`, `simulate/routing`,
+`simulate/securitypolicy`, `resolve`, `simulate/topology`, `config` and `index`,
+and imports none of `estate`, `store`, `fetch`, `search`, `drift`, `card`, and no
+I/O package. The test helpers `internal/fakepanos` and `internal/simulate/pathlab`
+import `testing`; only tests import them.
 
 The core's freedom from I/O is an absolute property today. A fetcher in the same
 module makes it a conditional one, and conditional invariants decay unless a test
 holds them. A rule for a package that does not exist yet passes; it binds when
 the package lands.
 
-Check: `go test ./internal/archtest -run TestImportDirection`
+Check: `go test ./internal/archtest -run 'TestImportDirection|TestTestHelpersStayInTests'`
