@@ -115,19 +115,26 @@ func deriveZones(_ context.Context, s *state) (simulate.Outcome, error) {
 	if f.FromZone != "" {
 		fb, _ := s.view.Candidates(index.FromZone, f.FromZone)
 		tb, _ := s.view.Candidates(index.ToZone, f.ToZone)
-		s.cand.And(fb)
-		s.cand.And(tb)
 		z.From, z.To, z.Source = []string{f.FromZone}, []string{f.ToZone}, "given"
 		detail := fmt.Sprintf("from %s, to %s, as given", f.FromZone, f.ToZone)
+		out := simulate.Outcome{Fidelity: simulate.Exact}
+		s.known = s.defined(f.FromZone) && s.defined(f.ToZone)
+		if s.known {
+			s.cand.And(s.byRuleType(fb, tb, f.FromZone == f.ToZone))
+		} else {
+			kept := s.keepTyped(func() { s.cand.And(fb); s.cand.And(tb) })
+			if !kept.IsEmpty() {
+				out.Fidelity = simulate.OverMatchBecause("a given zone is not defined in the vsys, so rule-type was not applied to: " + names(s.rules, kept))
+			}
+		}
 		// A given zone wins; the engine only says when it derives another (§18 N10).
 		if nz := s.postNATZones([]string{f.FromZone}); len(nz.zones) > 0 && !slices.Contains(nz.zones, f.ToZone) {
 			detail += "; note: NAT would give " + nz.describe()
 			z.Detail = "NAT would give " + nz.describe()
 		}
-		return simulate.Outcome{
-			Fidelity: simulate.Exact, Detail: detail,
-			Candidates: s.cand, Debug: []string{"left: " + names(s.rules, s.cand)},
-		}, nil
+		out.Detail, out.Candidates = detail, s.cand
+		out.Debug = []string{"left: " + names(s.rules, s.cand)}
+		return out, nil
 	}
 	z.Source = "configuration"
 	if s.target.Providers.Zones != nil {
@@ -156,13 +163,24 @@ func deriveZones(_ context.Context, s *state) (simulate.Outcome, error) {
 		out.Fidelity = simulate.Weakest(out.Fidelity, simulate.OverMatchBecause("the NAT rule is not certain: "+strings.Join(nz.doubts, "; ")))
 	}
 	z.From, z.To = from, to
+	// Derived zones are never single and known, so rule-type cannot be applied: a
+	// rule with another type stays a candidate whatever its zones say.
+	kept := s.keepTyped(func() {
+		if fromB != nil {
+			s.cand.And(fromB)
+		}
+		if toB != nil {
+			s.cand.And(toB)
+		}
+	})
 	if fromB != nil {
-		s.cand.And(fromB)
 		details = append(details, "from "+strings.Join(from, ", "))
 	}
 	if toB != nil {
-		s.cand.And(toB)
 		details = append(details, "to "+strings.Join(to, ", "))
+	}
+	if !kept.IsEmpty() {
+		out.Fidelity = simulate.Weakest(out.Fidelity, simulate.OverMatchBecause("the zones are derived, so rule-type was not applied to: "+names(s.rules, kept)))
 	}
 	switch {
 	case fromB == nil && toB == nil:
@@ -186,6 +204,61 @@ func deriveZones(_ context.Context, s *state) (simulate.Outcome, error) {
 	out.Candidates = s.cand
 	out.Debug = append(append(fromVia, toVia...), "left: "+names(s.rules, s.cand))
 	return out, nil
+}
+
+// byRuleType returns the rules whose zones and rule-type match a single, known
+// from and to zone. Source: schemas/schema.xml, the rule-type help tips (11.2.0):
+// universal "applies to both interzone and intrazone traffic"; intrazone "only
+// applies to traffic within one of the specified zones", so the to zone is not
+// read; interzone "does not apply to traffic within a zone, even if the same zone
+// is in source and destination columns".
+func (s *state) byRuleType(from, to *roaring.Bitmap, same bool) *roaring.Bitmap {
+	out := roaring.New()
+	for i, r := range s.rules {
+		id := uint32(i)
+		switch r.RuleType {
+		case "intrazone":
+			if same && from.Contains(id) {
+				out.Add(id)
+			}
+		case "interzone":
+			if !same && from.Contains(id) && to.Contains(id) {
+				out.Add(id)
+			}
+		default:
+			if from.Contains(id) && to.Contains(id) {
+				out.Add(id)
+			}
+		}
+	}
+	return out
+}
+
+// keepTyped runs a narrowing that reads every rule as universal, then puts back the
+// candidates whose rule-type is not universal: without single and known zones
+// their type cannot be decided, so they stay (spec S12, over-match is the safe
+// direction). It returns them: each is a candidate the zones may not match.
+func (s *state) keepTyped(narrow func()) *roaring.Bitmap {
+	typed := roaring.New()
+	for i, r := range s.rules {
+		if r.RuleType != "" && r.RuleType != "universal" {
+			typed.Add(uint32(i))
+		}
+	}
+	typed.And(s.cand)
+	narrow()
+	s.cand.Or(typed)
+	return typed
+}
+
+// defined reports whether the vsys defines a zone of this name.
+func (s *state) defined(zone string) bool {
+	for _, z := range resolve.ZonesInScope(s.target.Config, s.target.Index.Scope()) {
+		if z.Name == zone {
+			return true
+		}
+	}
+	return false
 }
 
 // zonesOf returns the rules whose zone field could match the endpoint's addresses,

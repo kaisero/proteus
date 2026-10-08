@@ -71,12 +71,16 @@ type Relevance struct {
 
 // state is what the stages share.
 type state struct {
-	env     *simulate.Env
-	in      simulate.Input
-	target  simulate.Target
-	view    *index.View
-	rules   []resolve.Rule
-	cand    *roaring.Bitmap
+	env    *simulate.Env
+	in     simulate.Input
+	target simulate.Target
+	view   *index.View
+	rules  []resolve.Rule
+	cand   *roaring.Bitmap
+	// known is whether the flow's zones are single and known: given, one name
+	// each, and defined in the vsys. Only then do rule-type and the default rules
+	// decide (spec §4.6).
+	known   bool
 	verdict Verdict
 }
 

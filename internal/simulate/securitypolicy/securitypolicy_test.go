@@ -17,8 +17,14 @@ import (
 // env loads one fixture's vsys1, with the fw01 forwarding table when zones is set.
 func env(t *testing.T, fixture string, zones bool) *simulate.Env {
 	t.Helper()
+	return envPath(t, "../../../testdata/config/"+fixture, zones)
+}
+
+// envPath is env for a configuration at any path.
+func envPath(t *testing.T, path string, zones bool) *simulate.Env {
+	t.Helper()
 	return &simulate.Env{Load: func(_, vsys string) (simulate.Target, error) {
-		cfg, rep, err := config.Load("../../../testdata/config/" + fixture)
+		cfg, rep, err := config.Load(path)
 		if err != nil {
 			return simulate.Target{}, err
 		}
@@ -304,5 +310,70 @@ func TestADefaultRouteDoesNotPlaceTheSource(t *testing.T) {
 	}
 	if !viaDefault("ethernet1/1 via default 0.0.0.0/0") || viaDefault("ethernet1/3 via default 198.18.11.0/24") || viaDefault("") {
 		t.Error("viaDefault")
+	}
+}
+
+// rule-type with single and known zones: each type with equal and with different
+// zones.
+func TestRuleTypeWithGivenZones(t *testing.T) {
+	t.Parallel()
+	e := env(t, "firewall-ruletype.xml", false)
+	for _, c := range []struct {
+		from, to string
+		want     string // the candidates, in order
+	}{
+		{"inside", "inside", "intra-inside"}, // intrazone, equal: to is not read
+		{"inside", "dmz", "inter-inside"},    // intrazone, different: no; interzone, different: yes
+		{"dmz", "dmz", ""},                   // intrazone needs from in rule.from
+		{"out", "out", "universal-out"},      // universal, equal
+		{"out", "dmz", "universal-out"},      // universal, different
+		{"dmz", "inside", ""},                // nothing names dmz as from
+	} {
+		r, v := run(t, e, simulate.Flow{Source: ep("10.1.0.5"), Destination: ep("10.2.0.5"), FromZone: c.from, ToZone: c.to})
+		if got := ruleNames(v); got != c.want {
+			t.Errorf("%s -> %s: candidates %q, want %q", c.from, c.to, got, c.want)
+		}
+		if lvl := stage(r, "derive-zones").Fidelity.Level(); lvl != "exact" {
+			t.Errorf("%s -> %s: derive-zones = %s", c.from, c.to, lvl)
+		}
+	}
+}
+
+// Without single and known zones a rule of another type stays a candidate, and the
+// zone stage says so.
+func TestRuleTypeWithoutKnownZones(t *testing.T) {
+	t.Parallel()
+	e := env(t, "firewall-ruletype.xml", false)
+	for _, c := range []struct {
+		name   string
+		flow   simulate.Flow
+		want   string
+		reason string
+	}{
+		{
+			"derived inside to out",
+			simulate.Flow{Source: ep("10.1.0.5"), Destination: ep("10.3.0.5")},
+			"intra-inside,inter-inside", "the zones are derived",
+		},
+		{
+			"derived inside to inside",
+			simulate.Flow{Source: ep("10.1.0.5"), Destination: ep("10.1.0.6")},
+			"intra-inside,inter-inside", "the zones are derived",
+		},
+		{
+			"given but undefined",
+			simulate.Flow{Source: ep("10.1.0.5"), Destination: ep("10.2.0.5"), FromZone: "nowhere", ToZone: "dmz"},
+			"intra-inside,inter-inside", "a given zone is not defined",
+		},
+	} {
+		r, v := run(t, e, c.flow)
+		if got := ruleNames(v); got != c.want {
+			t.Errorf("%s: candidates %q, want %q", c.name, got, c.want)
+		}
+		f := stage(r, "derive-zones").Fidelity
+		// Derived zones are inferred, which is weaker than overmatch; the reason stays.
+		if f.Level() == "exact" || !strings.Contains(f.String(), c.reason) || !strings.Contains(f.String(), "intra-inside, inter-inside") {
+			t.Errorf("%s: derive-zones = %s", c.name, f)
+		}
 	}
 }
