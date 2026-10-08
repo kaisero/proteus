@@ -47,10 +47,16 @@ func (Simulation) Stages() []string {
 
 // Verdict is the output of a run.
 type Verdict struct {
-	Rule       *resolve.Rule  `json:"rule"` // first match; nil when none
-	Candidates []resolve.Rule `json:"candidates"`
-	Zones      ZoneDerivation `json:"zones"`
-	Relevance  Relevance      `json:"relevance"`
+	Rule *resolve.Rule `json:"rule"` // first match; nil when none
+	// Default is the default rule that decides when no rule matches, empty when
+	// none decides; DefaultAction is its action, and DefaultSource where the action
+	// came from: built-in, local or pushed.
+	Default       string         `json:"default"`
+	DefaultAction string         `json:"default_action"`
+	DefaultSource string         `json:"default_source"`
+	Candidates    []resolve.Rule `json:"candidates"`
+	Zones         ZoneDerivation `json:"zones"`
+	Relevance     Relevance      `json:"relevance"`
 }
 
 // ZoneDerivation says which zones were used and where they came from.

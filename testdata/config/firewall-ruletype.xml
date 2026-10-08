@@ -51,6 +51,19 @@
             </security>
           </rulebase>
         </entry>
+        <entry name="vsys2">
+          <zone>
+            <entry name="inside"/>
+            <entry name="dmz"/>
+          </zone>
+          <rulebase>
+            <default-security-rules>
+              <rules>
+                <entry name="interzone-default"><action>allow</action></entry>
+              </rules>
+            </default-security-rules>
+          </rulebase>
+        </entry>
       </vsys>
     </entry>
   </devices>

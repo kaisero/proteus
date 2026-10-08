@@ -1,0 +1,6 @@
+10.2.0.5 -> 10.1.0.5 tcp/443
+file / vsys1   ../../testdata/config/firewall-zones.xml
+  zones      from dmz, to inside (given)
+  relevance  unknown: no stored forwarding table
+  fidelity   overmatch; not evaluated: application
+first match: interzone-default (deny), default rule (built-in)

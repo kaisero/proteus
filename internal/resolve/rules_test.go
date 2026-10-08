@@ -217,3 +217,29 @@ func TestRuleType(t *testing.T) {
 		}
 	}
 }
+
+// A sibling vsys's default rules never appear (R5).
+func TestDefaultRulesExcludeASiblingVsys(t *testing.T) {
+	t.Parallel()
+	vsys := func(name, rules string) string {
+		return `<entry name="` + name + `"><rulebase><default-security-rules><rules>` + rules +
+			`</rules></default-security-rules></rulebase></entry>`
+	}
+	doc := `<config version="11.2.0"><devices><entry name="localhost.localdomain"><vsys>` +
+		vsys("vsys1", "") + vsys("vsys2", `<entry name="interzone-default"><action>allow</action></entry>`) +
+		`</vsys></entry></devices></config>`
+	path := filepath.Join(t.TempDir(), "siblings.xml")
+	if err := os.WriteFile(path, []byte(doc), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg := loadT(t, path)
+	for vsys, want := range map[string]int{"vsys1": 0, "vsys2": 1} {
+		tg, err := TargetFor(cfg, "localhost.localdomain", vsys)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := tg.DefaultRules(); len(got) != want {
+			t.Errorf("%s: default rules %+v, want %d", vsys, got, want)
+		}
+	}
+}

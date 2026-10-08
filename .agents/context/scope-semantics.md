@@ -78,6 +78,7 @@ possibly a zone of its own.
 
 <!-- GENERATED:api ./internal/resolve -->
 ```go
+type DefaultRule struct{ ... }
 type DestinationTranslation struct{ ... }
 type FIBRoute struct{ ... }
 type HAState struct{ ... }
@@ -109,6 +110,7 @@ func (p URLPattern) Match(url string) bool
 func (p URLPattern) Raw() string
 func (r Rulebase) String() string
 func (t *Target) Chain() []config.Scope
+func (t *Target) DefaultRules() []DefaultRule
 func (t *Target) NATRules() []NATRule
 func (t *Target) Objects(kind string) []Object
 func (t *Target) PBFRules() []PBFRule

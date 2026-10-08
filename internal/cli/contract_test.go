@@ -90,7 +90,7 @@ func contractRows() []contractRow {
 		{name: "search", fixture: labFixture(1), args: []string{"search", "198.18.10.100"}, empty: 3},
 		{name: "lookup", fixture: labFixture(1), args: []string{"lookup", "dc01"}, empty: 3},
 		{name: "lookup-missing", fixture: labFixture(1), args: []string{"lookup", "no-such-name"}, empty: 3},
-		{name: "simulate-policy", fixture: labFixture(1), args: []string{"simulate", "policy", "198.18.1.10", "198.18.10.100", "--device", "fw01", "--vsys", "vsys1"}, empty: 3},
+		{name: "simulate-policy", fixture: labFixture(1), args: []string{"simulate", "policy", "198.18.1.10", "198.18.10.100", "--device", "fw01", "--vsys", "vsys1"}, complete: 3, empty: 3},
 		{name: "simulate-nat", fixture: natFixture, args: []string{"simulate", "nat", "198.18.1.10", "198.18.250.10", "--device", "fw01", "--router", "default", "--from-zone", "transport", "--port", "8443"}, empty: 3},
 		{name: "simulate-routing", fixture: routingFixture, args: []string{"simulate", "routing", "198.18.10.5", "8.8.8.8"}, empty: 3},
 	}

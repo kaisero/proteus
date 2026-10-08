@@ -171,10 +171,13 @@ func (p policyAnswer) Text(t *textOut) error {
 	}
 	printRun(t, p.run, *p.target, p.verdict, p.flow, p.o.fl.why)
 	printQualifiers(t, p.Qualifiers())
-	if p.verdict.Rule == nil {
+	switch v := p.verdict; {
+	case v.Rule != nil:
+		fmt.Fprintf(t, "first match: %s (%s)\n", t.pal.accent(v.Rule.Name), v.Rule.Action)
+	case v.Default != "":
+		fmt.Fprintf(t, "first match: %s (%s), default rule (%s)\n", t.pal.accent(v.Default), v.DefaultAction, v.DefaultSource)
+	default:
 		fmt.Fprintln(t, "no enabled rule matches")
-	} else {
-		fmt.Fprintf(t, "first match: %s (%s)\n", t.pal.accent(p.verdict.Rule.Name), p.verdict.Rule.Action)
 	}
 	return t.err
 }
@@ -369,14 +372,19 @@ func toRuleJSON(r resolve.Rule) ruleJSON {
 
 // policyResult is one device and vsys's simulate policy answer in the JSON envelope.
 type policyResult struct {
-	Candidates []ruleJSON                    `json:"candidates"`
-	Fidelity   simulate.Fidelity             `json:"fidelity"`
-	FirstMatch *ruleJSON                     `json:"first_match"`
-	Kind       string                        `json:"kind"`
-	Relevance  securitypolicy.Relevance      `json:"relevance"`
-	Stages     []stageJSON                   `json:"stages"`
-	Target     target                        `json:"target"`
-	Zones      securitypolicy.ZoneDerivation `json:"zones"`
+	Candidates []ruleJSON `json:"candidates"`
+	// Default is the default rule that decides when no rule matches, empty when
+	// none does; DefaultSource says where its action came from.
+	Default       string                        `json:"default"`
+	DefaultAction string                        `json:"default_action"`
+	DefaultSource string                        `json:"default_source"`
+	Fidelity      simulate.Fidelity             `json:"fidelity"`
+	FirstMatch    *ruleJSON                     `json:"first_match"`
+	Kind          string                        `json:"kind"`
+	Relevance     securitypolicy.Relevance      `json:"relevance"`
+	Stages        []stageJSON                   `json:"stages"`
+	Target        target                        `json:"target"`
+	Zones         securitypolicy.ZoneDerivation `json:"zones"`
 }
 
 func runJSON(run simulate.Run, t estate.Target, v securitypolicy.Verdict) policyResult {
@@ -392,6 +400,7 @@ func runJSON(run simulate.Run, t estate.Target, v securitypolicy.Verdict) policy
 	return policyResult{
 		Kind: run.Kind, Target: targetOf(t), Fidelity: run.Fidelity, Stages: simStages(run.Stages),
 		FirstMatch: first, Candidates: cands, Zones: v.Zones, Relevance: v.Relevance,
+		Default: v.Default, DefaultAction: v.DefaultAction, DefaultSource: v.DefaultSource,
 	}
 }
 

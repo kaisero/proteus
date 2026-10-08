@@ -21,6 +21,9 @@ results:
         action: allow
         layer: local
         scope: vsys:vsys1
+    default: ""
+    default_action: ""
+    default_source: ""
     fidelity:
       level: inferred
       reasons:

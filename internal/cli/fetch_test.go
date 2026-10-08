@@ -466,8 +466,8 @@ func TestSimulatePolicy(t *testing.T) {
 	c.want(3, "simulate", "policy", "1.1.1.1", "2.2.2.2", "--file", file, "--vsys", "vsys9")
 	out = c.want(0, "simulate", "policy", "10.1.0.5", "10.2.0.5", "--file", file, "--from-zone", "dmz", "--to-zone", "inside")
 	c.want(2, "simulate", "policy", "10.1.0.5", "10.2.0.5", "--file", file, "--from-zone", "dmz")
-	if !strings.Contains(out, "no enabled rule matches") {
-		t.Errorf("no match:\n%s", out)
+	if !strings.Contains(out, "first match: interzone-default (deny), default rule (built-in)") {
+		t.Errorf("no match, the default rule decides:\n%s", out)
 	}
 	out = c.want(0, "simulate", "policy", "198.18.10.100", "198.18.1.5", "--file", "../../testdata/config/firewall-lab.xml",
 		"--vsys", "vsys1", "--port", "tcp/443", "--output", "json")

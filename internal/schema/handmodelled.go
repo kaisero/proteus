@@ -12,6 +12,13 @@ type HandModel struct {
 // other field in the library comes from the schema (R1).
 var handModelled = []HandModel{
 	{
+		Path: "/config/devices/entry/vsys/entry/rulebase/default-security-rules/rules/entry/action",
+		Reason: "the schema declares default allow for both default rules; the built-in action of " +
+			"interzone-default is deny (PAN-OS admin guide, \"Default Security Policy Rules\"), " +
+			"so an absent action takes the built-in action of its rule name",
+		Owner: "internal/simulate/securitypolicy",
+	},
+	{
 		Path: "/config/shared/post-rulebase/default-security-rules/rules/entry",
 		Reason: "the firewall schema does not declare pushed default security rules; " +
 			"Panorama keeps them at this path (cms-schema.xml), next to the other pushed post-rules",

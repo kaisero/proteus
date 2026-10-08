@@ -436,6 +436,10 @@ func order(_ context.Context, s *state) (simulate.Outcome, error) {
 
 // firstMatch takes the lowest position. Application is never evaluated, so the
 // device may still decline this rule and take a later one.
+//
+// With no candidate left, a default rule decides. The default rules are the tail of
+// the evaluation order, so they belong to this stage rather than to one of their
+// own: a separate stage would only ever narrow nothing.
 func firstMatch(_ context.Context, s *state) (simulate.Outcome, error) {
 	skipped := []string{"application"}
 	if s.in.Flow.User != "" {
@@ -443,13 +447,78 @@ func firstMatch(_ context.Context, s *state) (simulate.Outcome, error) {
 	}
 	out := simulate.Outcome{Fidelity: simulate.NotEvaluated(skipped...)}
 	if len(s.verdict.Candidates) == 0 {
-		out.Detail = "no enabled rule matches"
+		d, err := s.defaultRule()
+		if err != "" {
+			out.Detail = "no enabled rule matches; " + err
+			out.Fidelity = simulate.Weakest(out.Fidelity, simulate.UnderMatch(err))
+			return out, nil
+		}
+		s.verdict.Default, s.verdict.DefaultAction, s.verdict.DefaultSource = d.Name, d.Action, d.Source
+		out.Detail = fmt.Sprintf("no enabled rule matches; default rule %s (%s), %s", d.Name, d.Action, d.Source)
 		return out, nil
 	}
 	r := s.verdict.Candidates[0]
 	s.verdict.Rule = &r
 	out.Detail = fmt.Sprintf("%s (%s), position %d", r.Name, r.Action, r.Position)
 	return out, nil
+}
+
+// builtInDefaults are the actions of the default security rules when the
+// configuration does not override them. Source: PAN-OS admin guide, "Security
+// Policy Rule Types" and "Default Security Policy Rules": intrazone-default allows,
+// interzone-default denies. Hand-modelled (R8): the schema declares allow for both.
+var builtInDefaults = map[string]string{"intrazone-default": "allow", "interzone-default": "deny"}
+
+// validActions are the security rule actions a default rule may carry. allow lets
+// the flow pass; the others stop it (spec §4.6).
+var validActions = []string{"allow", "deny", "drop", "reset-client", "reset-server", "reset-both"}
+
+// defaultRule picks the default rule that decides a flow no other rule matches,
+// and its action. The empty reason means it decided; otherwise the reason says why
+// the answer is incomplete.
+//
+// PAN-OS evaluates the default rules after every other rule; intrazone-default
+// takes traffic within one zone and interzone-default traffic between zones.
+// Source: PAN-OS admin guide, "Default Security Policy Rules".
+func (s *state) defaultRule() (resolve.DefaultRule, string) {
+	if !s.known {
+		return resolve.DefaultRule{}, "the default rule depends on the zones"
+	}
+	name := "interzone-default"
+	if s.in.Flow.FromZone == s.in.Flow.ToZone {
+		name = "intrazone-default"
+	}
+	d := resolve.DefaultRule{Name: name, Action: builtInDefaults[name], Source: "built-in"}
+	var stored []resolve.DefaultRule
+	for _, tg := range resolve.Targets(s.target.Config) {
+		if tg.Scope() != s.target.Index.Scope() {
+			continue
+		}
+		for _, e := range tg.DefaultRules() {
+			if e.Name == name {
+				// An entry without an action keeps the built-in one (spec §4.6).
+				if e.Action == "" {
+					e.Action = d.Action
+				}
+				stored = append(stored, e)
+			}
+		}
+	}
+	// Precedence between a local and a pushed override is not verified on a
+	// device (spec E24): one source decides alone; two must agree, and then the
+	// answer names the first, local.
+	for i, e := range stored {
+		switch {
+		case i == 0:
+			d = e
+		case e.Action != d.Action:
+			return resolve.DefaultRule{}, "local and pushed default rules disagree; precedence not verified"
+		}
+	}
+	if !slices.Contains(validActions, d.Action) {
+		return resolve.DefaultRule{}, fmt.Sprintf("%s has the action %q, which is not a security rule action", name, d.Action)
+	}
+	return d, ""
 }
 
 // names lists the rules in a set, for the log.

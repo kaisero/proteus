@@ -103,6 +103,7 @@ func TestGoldenJSON(t *testing.T) {
 		{"lookup", 0, []string{"lookup", "branch-to-dc", "--file", fixture("firewall-lookup.xml")}},
 		{"snapshot-show-file", 0, []string{"snapshot", "show", "--file", fixture("firewall-multivsys.xml")}},
 		{"simulate-policy", 0, []string{"simulate", "policy", "10.1.0.5", "10.2.0.5", "--port", "443", "--file", fixture("firewall-zones.xml")}},
+		{"simulate-policy-default", 0, []string{"simulate", "policy", "10.2.0.5", "10.1.0.5", "--port", "443", "--from-zone", "dmz", "--to-zone", "inside", "--file", fixture("firewall-zones.xml")}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -185,6 +186,7 @@ func TestGoldenText(t *testing.T) {
 		{"snapshot-show-file", 0, []string{"snapshot", "show", "--file", fixture("firewall-multivsys.xml")}},
 		{"simulate-policy", 0, []string{"simulate", "policy", "10.1.0.5", "10.2.0.5", "--port", "443", "--file", fixture("firewall-zones.xml")}},
 		{"simulate-policy-why", 0, []string{"simulate", "policy", "10.1.0.5", "10.2.0.5", "--port", "443", "--why", "--file", fixture("firewall-zones.xml")}},
+		{"simulate-policy-default", 0, []string{"simulate", "policy", "10.2.0.5", "10.1.0.5", "--port", "443", "--from-zone", "dmz", "--to-zone", "inside", "--file", fixture("firewall-zones.xml")}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
