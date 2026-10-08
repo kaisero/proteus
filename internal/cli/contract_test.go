@@ -11,6 +11,8 @@ import (
 
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
+
+	"github.com/okaiser/proteus/internal/simulate/pathlab"
 )
 
 // fixture builds a fresh CLI for one run. complete is false for the "no snapshot"
@@ -54,6 +56,20 @@ func routingFixture(t *testing.T, complete bool) *cli {
 	return c
 }
 
+// pathFixture is the path fixture: fw01 and fw02 with their zones and no
+// security rule.
+func pathFixture(t *testing.T, complete bool) *cli {
+	t.Helper()
+	fw01 := lab(t)
+	fw01.Config = string(pathlab.Read(t, pathlab.ConfigFile(pathlab.FW01)))
+	c := newCLI(t)
+	c.inventory(inventoryFor(fw01.Start(t), labFW02(t).Start(t)))
+	if complete {
+		c.want(0, "fetch", "fw01", "fw02")
+	}
+	return c
+}
+
 // brokenDocFixture serves fw01 with one show command refused.
 func brokenDocFixture(t *testing.T, _ bool) *cli {
 	t.Helper()
@@ -90,7 +106,10 @@ func contractRows() []contractRow {
 		{name: "search", fixture: labFixture(1), args: []string{"search", "198.18.10.100"}, empty: 3},
 		{name: "lookup", fixture: labFixture(1), args: []string{"lookup", "dc01"}, empty: 3},
 		{name: "lookup-missing", fixture: labFixture(1), args: []string{"lookup", "no-such-name"}, empty: 3},
-		{name: "simulate-policy", fixture: labFixture(1), args: []string{"simulate", "policy", "198.18.1.10", "198.18.10.100", "--device", "fw01", "--vsys", "vsys1"}, complete: 3, empty: 3},
+		// Path mode on the path fixture: the default rule denies at hop 1, a
+		// complete answer.
+		{name: "simulate-policy", fixture: pathFixture, args: []string{"simulate", "policy", "198.18.1.10", "198.18.10.100"}, empty: 3},
+		{name: "simulate-policy-each", fixture: pathFixture, args: []string{"simulate", "policy", "198.18.1.10", "198.18.10.100", "--each"}, complete: 2, empty: 2},
 		// The lab snapshot's rules name no zones and no service, so none decides a
 		// flow there; a rule of the zones fixture does, and the answer is complete.
 		{name: "simulate-policy-match", fixture: labFixture(1), args: []string{"simulate", "policy", "10.1.0.5", "10.2.0.5", "--file", "../../testdata/config/firewall-zones.xml", "--vsys", "vsys1", "--port", "tcp/443"}},

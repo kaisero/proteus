@@ -569,26 +569,6 @@ func TestSimulateResolvesAnFQDN(t *testing.T) {
 	}
 }
 
-// Zones derive from a fetched device's forwarding table.
-func TestSimulateDerivesZonesFromTheStore(t *testing.T) {
-	t.Parallel()
-	c := newCLI(t)
-	d := lab(t)
-	d.Config = read(t, "../../testdata/config/firewall-fw01-zones.xml")
-	c.inventory(inventoryFor(d.Start(t)))
-	c.want(0, "fetch", "fw01")
-	out := c.want(0, "simulate", "policy", "198.18.11.5", "198.18.10.5", "--device", "fw01", "--why")
-	for _, want := range []string{"zones      from client, to server (forwarding table)", "relevant   198.18.", "first match: client-to-server (allow)"} {
-		if !strings.Contains(out, want) {
-			t.Errorf("missing %q in:\n%s", want, out)
-		}
-	}
-	out = c.want(0, "simulate", "policy", "8.8.8.8", "1.1.1.1", "--device", "fw01")
-	if !strings.Contains(out, "not relevant: only a default route") {
-		t.Errorf("relevance:\n%s", out)
-	}
-}
-
 func TestExitCode(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {

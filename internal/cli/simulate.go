@@ -31,61 +31,21 @@ type flowFlags struct {
 	why, noDNS                             bool
 }
 
-// kindCommands are the kinds whose flags differ from the flow command's, and so
-// need a command of their own.
+// kindCommands builds each registered simulation kind's command: each kind's
+// flags differ, so each has a builder of its own.
 var kindCommands = map[string]func(*app, simulate.Simulation) *cobra.Command{
-	routing.Kind: (*app).routingCmd,
-	nat.Kind:     (*app).natCmd,
+	securitypolicy.Kind: (*app).policyCmd,
+	routing.Kind:        (*app).routingCmd,
+	nat.Kind:            (*app).natCmd,
 }
 
-// simulateCmds returns one subcommand per registered simulation kind. A kind takes
-// the flow command unless it has its own; a new flow kind is a registry entry, not a
-// command change.
+// simulateCmds returns one subcommand per registered simulation kind.
 func (a *app) simulateCmds() []*cobra.Command {
 	var out []*cobra.Command
 	for _, kind := range estate.Kinds() {
-		build := (*app).simulateCmd
-		if own, ok := kindCommands[kind]; ok {
-			build = own
-		}
-		out = append(out, build(a, estate.Simulations[kind]))
+		out = append(out, kindCommands[kind](a, estate.Simulations[kind]))
 	}
 	return out
-}
-
-// policyOptions are simulate policy's flags and arguments.
-type policyOptions struct {
-	sim      simulate.Simulation
-	sel      selection
-	fl       flowFlags
-	src, dst string
-}
-
-func (a *app) simulateCmd(sim simulate.Simulation) *cobra.Command {
-	var o policyOptions
-	o.sim = sim
-	cmd := &cobra.Command{
-		Use:   sim.Kind() + " <source> <destination>",
-		Short: sim.Describe(),
-		Long: "Source and destination are an address or an FQDN; an FQDN is resolved with this\n" +
-			"machine's DNS unless --no-dns. Zones are derived from the stored forwarding table,\n" +
-			"or from the configuration, when --from-zone and --to-zone are not given.\n\n" +
-			"Stages: " + strings.Join(sim.Stages(), ", "),
-		Args: args(cobra.ExactArgs(2)),
-		RunE: func(c *cobra.Command, argv []string) error {
-			o.src, o.dst = argv[0], argv[1]
-			return a.emitRun(a.runSimulation(c.Context(), o))
-		},
-	}
-	o.sel.bind(cmd, selectOpts{file: true, at: true, fresh: true})
-	o.fl.bindProtocol(cmd)
-	o.fl.bindPort(cmd)
-	o.fl.bindSourcePort(cmd)
-	o.fl.bindZones(cmd)
-	o.fl.bindL7(cmd)
-	bindWhy(cmd, &o.fl.why)
-	bindNoDNS(cmd, &o.fl.noDNS)
-	return cmd
 }
 
 // policyAnswer is simulate policy's answer: one result when a target could be read,
@@ -101,12 +61,14 @@ type policyAnswer struct {
 	notes   []note
 }
 
+// runSimulation is simulate policy on one configuration file (--file): one
+// target, its zones given or derived from the configuration.
 func (a *app) runSimulation(ctx context.Context, o policyOptions) (answer, error) {
 	flow, err := parseFlow(o.fl)
 	if err != nil {
 		return nil, err
 	}
-	s, err := a.settings(o.sel.file == "")
+	s, err := a.settings(false)
 	if err != nil {
 		return nil, err
 	}
@@ -130,10 +92,10 @@ func (a *app) runSimulation(ctx context.Context, o policyOptions) (answer, error
 	case len(ts) == 0:
 		return nil, errors.New("the selection has no device and vsys to simulate on")
 	case len(ts) > 1:
-		return nil, usageErr("the selection has %d device and vsys pairs; estate simulation arrives in M5, so select one device and one vsys", len(ts))
+		return nil, usageErr("the file has %d vsys; select one with --vsys", len(ts))
 	}
 	t := ts[0]
-	env, err := a.policyEnv(t, s, o.fl.noDNS)
+	env, err := a.policyEnv(t, o.fl.noDNS)
 	if err != nil {
 		return nil, err
 	}
@@ -202,10 +164,10 @@ func policyNotes(t estate.Target) []note {
 	return out
 }
 
-// policyEnv is the simulation environment for one target: its configuration, the
-// user and zone providers, and the device's stored tables, so NAT can give the
-// post-NAT zone (spec §18 N10).
-func (a *app) policyEnv(t estate.Target, s settings, noDNS bool) (*simulate.Env, error) {
+// policyEnv is the simulation environment for one target read from a file: its
+// configuration and the user provider. A file has no stored tables, so zones
+// derive from the configuration.
+func (a *app) policyEnv(t estate.Target, noDNS bool) (*simulate.Env, error) {
 	users, err := a.userSnapshot()
 	if err != nil {
 		return nil, err
@@ -215,23 +177,10 @@ func (a *app) policyEnv(t estate.Target, s settings, noDNS bool) (*simulate.Env,
 		if err != nil {
 			return simulate.Target{}, err
 		}
-		p := index.Providers{Users: users}
-		if t.Snapshot != nil {
-			if z, err := t.Snapshot.Zones(); err == nil {
-				p.Zones = z
-			} else {
-				a.log.Infof(runlog.TagStep, "%s: no stored zones: %v", t.Device, err)
-			}
-		}
-		return simulate.Target{Config: t.Config, Index: idx, Providers: p, Notes: t.Notes}, nil
+		return simulate.Target{Config: t.Config, Index: idx, Providers: index.Providers{Users: users}, Notes: t.Notes}, nil
 	}, Resolve: a.lookup}
 	if noDNS {
 		env.Resolve = nil
-	}
-	if t.Snapshot != nil {
-		if st, err := a.openStore(s.storeRoot); err == nil {
-			env.Network = estate.NewNetwork(st, []string{t.Device}, estate.When{At: t.Snapshot.Meta.TakenAt, Now: a.now(), Log: a.log})
-		}
 	}
 	return env, nil
 }
@@ -484,7 +433,6 @@ func (fl *flowFlags) bindSourcePort(cmd *cobra.Command) {
 func (fl *flowFlags) bindZones(cmd *cobra.Command) {
 	cmd.Flags().StringVar(&fl.fromZone, "from-zone", "", "source zone; derived when absent")
 	cmd.Flags().StringVar(&fl.toZone, "to-zone", "", "destination zone; derived when absent")
-	cmd.MarkFlagsRequiredTogether("from-zone", "to-zone")
 }
 
 func (fl *flowFlags) bindL7(cmd *cobra.Command) {

@@ -30,15 +30,7 @@ func labFW02(t *testing.T) *fakepanos.Device {
 
 // pathLab is the path fixture as an inventory of fw01 and fw02, both fetched:
 // each with a configuration that defines its zones and holds no security rule.
-func pathLab(t *testing.T) *cli {
-	t.Helper()
-	fw01 := lab(t)
-	fw01.Config = string(pathlab.Read(t, pathlab.ConfigFile(pathlab.FW01)))
-	c := newCLI(t)
-	c.inventory(inventoryFor(fw01.Start(t), labFW02(t).Start(t)))
-	c.want(0, "fetch", "fw01", "fw02")
-	return c
-}
+func pathLab(t *testing.T) *cli { t.Helper(); return pathFixture(t, true) }
 
 // routingLab is an inventory of fw01 and fw02, both fetched, plus fw03, never
 // fetched when withHole is set.
@@ -216,9 +208,8 @@ func TestThePathFixture(t *testing.T) {
 		!strings.Contains(out, "  198.18.10.100   delivered\n") {
 		t.Errorf("routing:\n%s", out)
 	}
-	out = c.want(0, "simulate", "policy", pathlab.Source, pathlab.Destination, "--device", "fw02", "--vsys", "vsys1",
-		"--from-zone", "home", "--to-zone", "labor")
-	if !strings.Contains(out, "first match: interzone-default (deny), default rule (built-in)\n") {
+	out = c.want(0, "simulate", "policy", pathlab.Source, pathlab.Destination)
+	if !strings.HasPrefix(out, "denied at hop 1: fw02 / vsys1, rule interzone-default (deny)\n") {
 		t.Errorf("policy at hop 1:\n%s", out)
 	}
 }
