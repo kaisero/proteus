@@ -138,3 +138,36 @@ func TestDoubts(t *testing.T) {
 		t.Errorf("got %s, doubts %v", first(v), v.Doubts)
 	}
 }
+
+// A rule naming an external list, a region or a dynamic group stays a candidate
+// with a doubt, negated or not, unless a known path decides it (spec E23).
+func TestOpaqueAddressesStayInDoubt(t *testing.T) {
+	t.Parallel()
+	e := env(t, "firewall-opaque.xml", false)
+	flow := func(src string) simulate.Flow {
+		return simulate.Flow{Source: ep(src), Destination: ep("10.1.0.5"), FromZone: "outside", ToZone: "inside", DestPort: 443}
+	}
+	r, v := run(t, e, flow("10.1.0.10"))
+	if got := ruleNames(v); got != "from-edl,from-country,from-dag,from-group,not-from-edl,to-builtin,from-region,plain" {
+		t.Errorf("candidates %s", got)
+	}
+	want := strings.Join([]string{
+		"1 from-edl: source: external list (edl-bad)",
+		"2 from-country: source: region (AT)",
+		"3 from-dag: source: members registered at runtime are not known (dag-web)",
+		"5 not-from-edl: source: external list (edl-bad)",
+		"6 to-builtin: destination: external list (panw-highrisk-ip-list)",
+		"7 from-region: source: region (my-region)",
+	}, "\n")
+	if got := doubtList(v); got != want {
+		t.Errorf("doubts\n%s\nwant\n%s", got, want)
+	}
+	if d := stage(r, "resolve-source").Detail; !strings.Contains(d, "5 kept naming addresses the configuration does not hold") {
+		t.Errorf("resolve-source: %s", d)
+	}
+	// The tagged address is a known member of dag-web, and not of g-mixed.
+	_, v = run(t, e, flow("10.1.0.20"))
+	if got := doubtList(v); !strings.Contains(got, "4 from-group: source: external list (edl-bad, in group g-mixed)") || strings.Contains(got, "from-dag") {
+		t.Errorf("doubts\n%s", got)
+	}
+}

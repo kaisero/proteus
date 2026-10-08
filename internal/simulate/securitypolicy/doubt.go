@@ -98,6 +98,11 @@ func (s *state) doubts() []Doubt {
 				if why := s.categoryDoubt(r.Fields["category"], categories); why != "" {
 					add(why)
 				}
+			case f.name == "source" || f.name == "destination":
+				//nolint:gosec // a rule position cannot reach 2^32; a rulebase is capped far below that
+				if why, ok := s.opaque[f.name][uint32(r.Position-1)]; ok {
+					add(f.name + ": " + why)
+				}
 			case f.class != doubtful:
 			case f.name == "schedule":
 				if r.Schedule != "" {

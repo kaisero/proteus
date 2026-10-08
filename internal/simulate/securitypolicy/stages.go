@@ -69,6 +69,11 @@ func (s *state) side(f index.Field, ep simulate.Endpoint, negated func(resolve.R
 		}
 		out.Unresolved = append(out.Unresolved, rep.Unresolved...)
 	}
+	// A rule naming an external list, a region or a dynamic group may hold the
+	// address without the configuration saying so (spec E23). Unless a known path
+	// already decides it, it stays a candidate, negated or not, with a doubt.
+	opaque, why := s.view.Opaque(f)
+	opaque.AndNot(b)
 	// A negated rule matches every address except those it lists.
 	neg := roaring.New()
 	for i, r := range s.rules {
@@ -80,6 +85,15 @@ func (s *state) side(f index.Field, ep simulate.Endpoint, negated func(resolve.R
 		inverted := roaring.AndNot(neg, b)
 		b.AndNot(neg)
 		b.Or(inverted)
+	}
+	b.Or(opaque)
+	if s.opaque == nil {
+		s.opaque = map[string]map[uint32]string{}
+	}
+	s.opaque[f.String()] = map[uint32]string{}
+	for it := opaque.Iterator(); it.HasNext(); {
+		bit := it.Next()
+		s.opaque[f.String()][bit] = why[bit]
 	}
 
 	switch {
@@ -95,6 +109,10 @@ func (s *state) side(f index.Field, ep simulate.Endpoint, negated func(resolve.R
 	}
 	out.Unresolved = dedupe(out.Unresolved)
 	out.Detail = fmt.Sprintf("%s: %d hits, %d negated rules", ep, len(hits), neg.GetCardinality())
+	if !opaque.IsEmpty() {
+		out.Detail += fmt.Sprintf(", %d kept naming addresses the configuration does not hold", opaque.GetCardinality())
+		out.Debug = append(out.Debug, "kept, in doubt: "+names(s.rules, opaque))
+	}
 	if ep.Resolved {
 		out.Detail += fmt.Sprintf("; %s resolved by this machine's DNS to %v, which may answer differently from the firewall's", ep.Name, ep.Addrs)
 	}

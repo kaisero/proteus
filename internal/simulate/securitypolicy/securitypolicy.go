@@ -89,7 +89,10 @@ type state struct {
 	// known is whether the flow's zones are single and known: given, one name
 	// each, and defined in the vsys. Only then do rule-type and the default rules
 	// decide (spec §4.6).
-	known   bool
+	known bool
+	// opaque holds, per address field, the candidates kept because they name
+	// addresses the configuration does not hold, and why, by rule position.
+	opaque  map[string]map[uint32]string
 	verdict Verdict
 }
 
