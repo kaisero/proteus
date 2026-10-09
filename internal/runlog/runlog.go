@@ -228,6 +228,11 @@ func create(dir, base string, next func(uint64) uint64) (*os.File, string, error
 // and a sequence number after the command, so the files are sorted by those,
 // not by name. A file another run removed first is not an error: two runs that
 // open at once both rotate.
+//
+// Rotation does not know which logs are still open. A run that is still
+// writing loses its log's name when more than keep newer logs exist, as on a
+// server with more calls in flight than keep: its writes go to an unlinked
+// file. Size keep above the calls that can run at once.
 func rotate(dir string, keep int) error {
 	entries, err := os.ReadDir(dir)
 	if err != nil {

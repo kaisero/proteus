@@ -304,16 +304,26 @@ func (f fetchAnswer) Qualifiers() qualifiers {
 			q.Holes = append(q.Holes, estate.NewHole(r.Device, "", reason.New("gap.fetch-failed", r.Error)))
 		}
 	}
+	if n, ok := f.exportNote(); ok {
+		q.Notes = append(q.Notes, noteOf("", "", n))
+	}
 	return q
+}
+
+// exportNote is the note of a failed inventory export, if it failed.
+func (f fetchAnswer) exportNote() (reason.Reason, bool) {
+	if f.exportErr == nil {
+		return reason.Reason{}, false
+	}
+	return reason.New("note.export-failed", f.exportErr.Error()), true
 }
 
 // Status is C11: every device stored every document → complete; a failure with at
 // least one device stored → incomplete; no device stored → an error (spec §6.4).
+// A failed inventory export makes a complete run incomplete: the snapshots are
+// stored, and the note names the part that is missing. It never makes a run an
+// error, and a run that stored nothing stays one.
 func (f fetchAnswer) Status() error {
-	if f.exportErr != nil {
-		// The server reads the export: a run that could not write it failed.
-		return &exitErr{code: exitError, err: f.exportErr}
-	}
 	stored, failed := 0, 0
 	for _, r := range f.results {
 		if r.Stored {
@@ -330,7 +340,7 @@ func (f fetchAnswer) Status() error {
 	switch {
 	case stored == 0:
 		return &exitErr{code: exitError, err: errors.New("no device was fetched")}
-	case failed > 0:
+	case failed > 0 || f.exportErr != nil:
 		return errIncomplete
 	}
 	return nil
@@ -372,6 +382,9 @@ func (f fetchAnswer) Text(t *textOut) error {
 		if f.o.why {
 			printTaskStages(t, r.Stages)
 		}
+	}
+	if n, ok := f.exportNote(); ok {
+		fmt.Fprintf(t, "%s\n", t.pal.warn("note: "+n.Text))
 	}
 	return t.err
 }

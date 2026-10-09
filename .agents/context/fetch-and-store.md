@@ -32,7 +32,8 @@ The `mcp:` section (`Inventory.MCP`, nil when absent) holds the server's setting
 port). With `defaults.export_inventory: true`, `fetch` calls `WriteExport` after
 every run, a failed one too: `Export()` drops username, password and
 password_env everywhere, and the file lands at `<store>/.proteus/inventory.yaml`
-(0600, temp file and rename). A write failure exits 1. `ReadExport` (the server's
+(0600, temp file and rename, directory synced). A write failure adds
+`note.export-failed` and turns exit 0 into 3, never into 1. `ReadExport` (the server's
 reader) refuses any credential and clears `store` and `log_dir`. `.proteus` is not
 a valid device name, so it cannot collide with a device directory.
 

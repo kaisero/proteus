@@ -78,7 +78,21 @@ func WriteExport(storeRoot string, inv *Inventory) error {
 		return fmt.Errorf("inventory export: %w", err)
 	}
 	done = true
+	// The rename lives in the directory: sync it, so the new export survives a
+	// crash.
+	if err := syncDir(dir); err != nil {
+		return fmt.Errorf("inventory export: %w", err)
+	}
 	return nil
+}
+
+// syncDir flushes a directory's entries to disk.
+func syncDir(dir string) error {
+	d, err := os.Open(dir)
+	if err != nil {
+		return err
+	}
+	return cmp.Or(d.Sync(), d.Close())
 }
 
 // ReadExport reads an inventory export for proteus mcp. It refuses a file that

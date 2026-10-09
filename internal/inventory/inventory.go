@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -216,8 +217,8 @@ func (m *MCP) validate() error {
 		}
 	}
 	if m.Listen != "" {
-		host, port, ok := cutPort(m.Listen)
-		if n, err := strconv.Atoi(port); !ok || err != nil || n < 1 || n > 65535 || strings.ContainsAny(host, " /") {
+		host, port, err := net.SplitHostPort(m.Listen)
+		if n, perr := strconv.Atoi(port); err != nil || perr != nil || n < 1 || n > 65535 || strings.ContainsAny(host, " /") {
 			return fmt.Errorf("inventory: mcp: listen %q: want host:port, such as 127.0.0.1:8765", m.Listen)
 		}
 	}
@@ -227,19 +228,6 @@ func (m *MCP) validate() error {
 		}
 	}
 	return nil
-}
-
-// cutPort splits host:port at the last colon; an IPv6 host is in brackets.
-func cutPort(s string) (host, port string, ok bool) {
-	i := strings.LastIndex(s, ":")
-	if i < 0 {
-		return "", "", false
-	}
-	host, port = s[:i], s[i+1:]
-	if strings.Contains(host, ":") && (!strings.HasPrefix(host, "[") || !strings.HasSuffix(host, "]")) {
-		return "", "", false
-	}
-	return host, port, true
 }
 
 // Names returns the device names in file order.

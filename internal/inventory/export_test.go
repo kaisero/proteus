@@ -3,6 +3,7 @@ package inventory
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -244,5 +245,28 @@ func TestTheExportDirectoryIsNoDeviceName(t *testing.T) {
 	}
 	if _, err := Parse(strings.NewReader("version: 1\ndevices:\n  - {name: .proteus, host: h}\n")); err == nil {
 		t.Error("an inventory must not name a device .proteus")
+	}
+}
+
+// Every key of the defaults and of a device is classified: a credential the
+// export drops, or a setting it keeps. A new key fails here until it is
+// added to one list, so a new secret cannot reach the export unseen.
+func TestEveryExportKeyIsClassified(t *testing.T) {
+	t.Parallel()
+	credentials := []string{"username", "password", "password_env"}
+	kept := map[reflect.Type][]string{
+		reflect.TypeFor[Settings](): {
+			"insecure_tls", "timeout", "snapshot_keep", "store", "max_snapshot_age", "output",
+			"log_level", "log_dir", "log_keep", "color", "export_inventory",
+		},
+		reflect.TypeFor[Device](): {"name", "host", "insecure_tls", "timeout", "labels", "ha_peer"},
+	}
+	for ty, keep := range kept {
+		for _, f := range reflect.VisibleFields(ty) {
+			key, _, _ := strings.Cut(f.Tag.Get("yaml"), ",")
+			if !slices.Contains(credentials, key) && !slices.Contains(keep, key) {
+				t.Errorf("%s: yaml key %q is not classified as a credential or a kept setting", ty.Name(), key)
+			}
+		}
 	}
 }

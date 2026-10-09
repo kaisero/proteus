@@ -69,7 +69,8 @@ machine trusts. You can set it per device.
 `<store>/.proteus/inventory.yaml`, a failed run too. The export is this inventory
 without `username`, `password` and `password_env`, in the defaults and on every
 device. `fetch` writes it to a temporary file and renames it into place, mode
-`0600`. A run that cannot write it exits 1.
+`0600`. A run that stored its snapshots but cannot write the export exits 3 with
+the note `note.export-failed`; a run that stored nothing still exits 1.
 
 The server refuses an export that holds a credential. It ignores the exported
 `store` and `log_dir`: it sets its own. `.proteus` cannot clash with a device,

@@ -947,17 +947,41 @@ func TestFetchExportsTheInventory(t *testing.T) {
 	}
 }
 
-// An export that cannot be written fails the run: the server would read a
-// stale device list.
-func TestAFailedExportFailsTheFetch(t *testing.T) {
+// An export that cannot be written leaves the fetch rules in place (C11):
+// a complete run becomes incomplete with a coded note, an incomplete run stays
+// incomplete, and a run that stored nothing stays an error.
+func TestAFailedExportMakesTheFetchIncomplete(t *testing.T) {
 	t.Parallel()
-	c := newCLI(t)
-	c.inventory(exporting(inventoryFor(lab(t).Start(t))))
-	if err := os.MkdirAll(filepath.Join(inventory.ExportPath(c.env["PROTEUS_STORE"]), "x"), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	out, errOut, code := c.run("fetch", "fw01")
-	if code != exitError || !strings.Contains(errOut, "inventory export") || !strings.Contains(out, "stored fw01@") {
-		t.Errorf("exit %d\nstdout:\n%s\nstderr:\n%s", code, out, errOut)
+	for _, tc := range []struct {
+		name   string
+		hosts  func(t *testing.T) []string
+		args   []string
+		code   int
+		stored bool
+	}{
+		{"all stored", func(t *testing.T) []string { return []string{lab(t).Start(t)} }, []string{"fw01"}, exitIncomplete, true},
+		{"some stored", func(t *testing.T) []string { return []string{lab(t).Start(t), "127.0.0.1:1"} }, []string{"--all"}, exitIncomplete, true},
+		{"none stored", func(*testing.T) []string { return []string{"127.0.0.1:1"} }, []string{"fw01"}, exitError, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			c := newCLI(t)
+			c.inventory(exporting(inventoryFor(tc.hosts(t)...)))
+			// A directory where the export goes: the rename fails.
+			if err := os.MkdirAll(filepath.Join(inventory.ExportPath(c.env["PROTEUS_STORE"]), "x"), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			out, errOut, code := c.run(append([]string{"fetch"}, tc.args...)...)
+			if code != tc.code || !strings.Contains(out, "note: inventory export") || strings.Contains(out, "stored fw01@") != tc.stored {
+				t.Errorf("exit %d\nstdout:\n%s\nstderr:\n%s", code, out, errOut)
+			}
+			if !tc.stored && !strings.Contains(errOut, "no device was fetched") {
+				t.Errorf("stderr:\n%s", errOut)
+			}
+			out, _, _ = c.run(append([]string{"fetch", "--output", "json"}, tc.args...)...)
+			if !strings.Contains(out, `"code": "note.export-failed"`) {
+				t.Errorf("json:\n%s", out)
+			}
+		})
 	}
 }

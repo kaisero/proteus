@@ -330,7 +330,9 @@ func sdkImporters(imports map[string][]string) []string {
 }
 
 // allFiles reads every Go file of a package, those behind a build tag too
-// (resolve's live test), so a tag cannot hide an import from R12.
+// (resolve's live test), so a tag cannot hide an import from R12. UseAllFiles
+// also reads files behind //go:build ignore and files for another OS or
+// architecture: their imports count as well.
 var allFiles = func() build.Context {
 	c := build.Default
 	c.UseAllFiles = true

@@ -2,6 +2,7 @@ package runlog
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -296,5 +297,33 @@ func TestRemoveGone(t *testing.T) {
 	}
 	if err := rotate(filepath.Join(dir, "absent"), 1); err == nil {
 		t.Error("an absent directory must fail")
+	}
+}
+
+// Rotations that run at once over the same files all succeed: each tolerates
+// a file another one removed first, and one file is left.
+func TestConcurrentRotationsSucceed(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	for i := range 50 {
+		name := fmt.Sprintf("simulate_policy-20260929T100000.000Z-%03d.log", i+1)
+		if err := os.WriteFile(filepath.Join(dir, name), nil, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var wg sync.WaitGroup
+	errs := make(chan error, 16)
+	for range 16 {
+		wg.Go(func() { errs <- rotate(dir, 1) })
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Errorf("rotate: %v", err)
+		}
+	}
+	if entries, _ := os.ReadDir(dir); len(entries) != 1 || entries[0].Name() != "simulate_policy-20260929T100000.000Z-050.log" {
+		t.Errorf("left %v", entries)
 	}
 }

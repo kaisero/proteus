@@ -69,10 +69,11 @@ Reads every device's interface state, FIB and RIB through `simulate.Network`
 path device's configuration through `Env.Load`. A `Network` is per question (its lazy
 maps have no lock). It reads the raw tables through `When.Ops` (`estate.OpSource`;
 nil reads the store, a server shares a cache keyed by member and snapshot id) and
-builds every note (stale, HA, unreadable RIB) per question from the meta and `Now`. `routing.Topology` is built once:
-address owners, connected nets, a `bart` table per router, and `Place` (connected,
-else the most specific non-default route, walking on while that route leads to
-another node; ties and default-only are `ChoiceError`, exit 2).
+builds every note (stale, HA, unreadable RIB) per question from the meta and `Now`.
+`routing.Topology` is built once: address owners, connected nets, a `bart` table per
+router, and `Place` (connected, else the most specific non-default route, walking on
+while that route leads to another node; ties and default-only are `ChoiceError`,
+exit 2).
 
 | Slug | Fidelity |
 |---|---|
