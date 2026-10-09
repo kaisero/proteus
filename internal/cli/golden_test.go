@@ -1,7 +1,9 @@
 package cli
 
 import (
+	"context"
 	"flag"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -256,4 +258,39 @@ func TestGoldenText(t *testing.T) {
 		goldenText(t, "simulate-routing", routingLab(t, false).want(0, "simulate", "routing", "198.18.10.5", "8.8.8.8", "--why"))
 		goldenColour(t, "simulate-routing", routingLab(t, false).want(0, "simulate", "routing", "198.18.10.5", "8.8.8.8", "--why", "--color", "always"))
 	})
+}
+
+// fqdnGoldens are simulate policy on an FQDN (spec 2026-10-09 §3.8). The fake
+// resolver gives www.example.com one address and an alias. Off 203.0.113.0/24,
+// to-web-by-name matches only through its FQDN object; on it, the address rule
+// matches too.
+var fqdnGoldens = []struct {
+	name, addr string
+}{
+	{"simulate-policy-fqdn-only", "198.51.100.7"},
+	{"simulate-policy-fqdn-and-address", "203.0.113.10"},
+}
+
+// fqdnCLI is a harness whose resolver answers www.example.com with addr, and
+// web.cdn.example.net as its canonical name.
+func fqdnCLI(t *testing.T, addr string) *cli {
+	c := newCLI(t)
+	c.lookup = func(context.Context, string) ([]netip.Addr, error) {
+		return []netip.Addr{netip.MustParseAddr(addr)}, nil
+	}
+	c.canonical = func(context.Context, string) (string, error) { return "web.cdn.example.net.", nil }
+	return c
+}
+
+func TestGoldenFQDN(t *testing.T) {
+	t.Parallel()
+	for _, g := range fqdnGoldens {
+		t.Run(g.name, func(t *testing.T) {
+			t.Parallel()
+			args := []string{"simulate", "policy", "10.0.0.1", "www.example.com", "--port", "443", "--file", fixture("firewall-simulate.xml")}
+			goldenText(t, g.name, fqdnCLI(t, g.addr).want(0, append(args, "--why")...))
+			golden(t, g.name, fqdnCLI(t, g.addr).want(0, append(args, "--output", "json")...))
+			goldenFile(t, g.name+".yaml", fqdnCLI(t, g.addr).want(0, append(args, "--output", "yaml")...))
+		})
+	}
 }

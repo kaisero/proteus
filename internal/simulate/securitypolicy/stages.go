@@ -45,12 +45,13 @@ func resolveDestination(_ context.Context, s *state) (simulate.Outcome, error) {
 // side resolves one endpoint in one field: the FQDN against FQDN objects, every
 // address against everything, and negated rules inverted.
 func (s *state) side(f index.Field, ep simulate.Endpoint, negated func(resolve.Rule) bool) (*roaring.Bitmap, simulate.Outcome) {
-	b := roaring.New()
+	b, byName, byAddr := roaring.New(), roaring.New(), roaring.New()
 	var out simulate.Outcome
 	var hits []string
 	if ep.Name != "" {
 		nb, rep := s.view.Candidates(f, ep.Name)
 		b.Or(nb)
+		byName = nb
 		for _, h := range rep.Hits {
 			hits = append(hits, fmt.Sprintf("%s (%s) via %s", h.Name, h.Kind, h.Via))
 		}
@@ -65,6 +66,7 @@ func (s *state) side(f index.Field, ep simulate.Endpoint, negated func(resolve.R
 	for _, a := range ep.Addrs {
 		ab, rep := s.view.Candidates(f, a.String())
 		b.Or(ab)
+		byAddr.Or(ab)
 		for _, h := range rep.Hits {
 			hits = append(hits, fmt.Sprintf("%s (%s) via %s", h.Name, h.Kind, h.Via))
 		}
@@ -82,6 +84,15 @@ func (s *state) side(f index.Field, ep simulate.Endpoint, negated func(resolve.R
 			neg.Add(uint32(i))
 		}
 	}
+	// A rule the name reaches and no address does matched only through an FQDN
+	// object. The firewall resolves that object itself and refreshes it (default
+	// every 30 minutes), and policy matches the packet's addresses, so the rule
+	// holds the flow only if the firewall's answer agrees with this machine's.
+	// Source: PAN-OS admin guide, "Use FQDN Objects" (spec 2026-10-09 §3.8, R9).
+	// A field of any matches every address and is no FQDN match.
+	fqdnOnly := roaring.AndNot(byName, byAddr)
+	fqdnOnly.AndNot(s.idx.RulesWithAny(f))
+	fqdnOnly.AndNot(neg)
 	if !neg.IsEmpty() {
 		inverted := roaring.AndNot(neg, b)
 		b.AndNot(neg)
@@ -96,6 +107,10 @@ func (s *state) side(f index.Field, ep simulate.Endpoint, negated func(resolve.R
 		bit := it.Next()
 		s.opaque[f.String()][bit] = why[bit]
 	}
+	if s.fqdn == nil {
+		s.fqdn = map[string]fqdnMatch{}
+	}
+	s.fqdn[f.String()] = fqdnMatch{name: ep.Name, rules: fqdnOnly}
 
 	switch {
 	case ep.Name != "" && len(ep.Addrs) == 0:

@@ -221,6 +221,10 @@ func PolicyFile(ctx context.Context, env Env, in PolicyFileInput) (Envelope[Poli
 	for _, n := range t.Notes {
 		e.Notes = append(e.Notes, NoteOf(t.Device, t.Vsys, n))
 	}
+	// Every address is matched, so only an alias is worth a note.
+	for _, n := range simulate.DNSNotes(flow, false) {
+		e.Notes = append(e.Notes, NoteOf(t.Device, t.Vsys, n))
+	}
 	e.Unresolved = dedupeUnresolved(runUnresolved(run, t.Device, t.Vsys, true))
 	return e, nil
 }

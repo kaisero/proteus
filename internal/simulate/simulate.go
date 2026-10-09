@@ -20,6 +20,9 @@ type Endpoint struct {
 	Name     string       `json:"name,omitempty"` // the FQDN; empty for an address
 	Addrs    []netip.Addr `json:"addrs"`          // the address, or the FQDN's addresses
 	Resolved bool         `json:"resolved"`       // Addrs came from DNS
+	// Canonical is the FQDN's canonical name when this machine's resolver
+	// reports one other than Name; DNSNotes names it.
+	Canonical string `json:"-"`
 }
 
 // Addr returns an endpoint for one address.

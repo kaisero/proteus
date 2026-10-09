@@ -158,8 +158,17 @@ type state struct {
 	known bool
 	// opaque holds, per address field, the candidates kept because they name
 	// addresses the configuration does not hold, and why, by rule position.
-	opaque  map[string]map[uint32][]reason.Reason
+	opaque map[string]map[uint32][]reason.Reason
+	// fqdn holds, per address field, the candidates that matched the flow's
+	// FQDN only through an FQDN object, by rule position (spec 2026-10-09 §3.8).
+	fqdn    map[string]fqdnMatch
 	verdict Verdict
+}
+
+// fqdnMatch is the rules an FQDN reached only through an FQDN object.
+type fqdnMatch struct {
+	name  string
+	rules *roaring.Bitmap
 }
 
 // Run implements simulate.Simulation.

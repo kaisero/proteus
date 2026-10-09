@@ -203,3 +203,18 @@ func TestAnUnreadableDeviceIsUnavailable(t *testing.T) {
 		t.Errorf("err = %v, want UnavailableError", err)
 	}
 }
+
+// An FQDN's alias and the addresses not followed are notes of the result.
+func TestDNSNotesLeadTheResult(t *testing.T) {
+	t.Parallel()
+	dst := simulate.Endpoint{
+		Name: "web.example", Resolved: true, Canonical: "edge.example",
+		Addrs: []netip.Addr{netip.MustParseAddr("198.18.250.10"), netip.MustParseAddr("198.18.250.11")},
+	}
+	f := simulate.Flow{Source: simulate.Addr(netip.MustParseAddr("198.18.1.10")), Destination: dst, Protocol: "tcp", DestPort: 8443}
+	r, err := Simulation{}.Run(context.Background(), fw01Env(t, "firewall-nat.xml"), simulate.Input{Flow: f, Params: map[string]string{"device": "fw01", "router": "default"}})
+	res, _ := r.Output.(Result)
+	if err != nil || len(res.Notes) < 2 || res.Notes[0].Code != "dns.canonical-name" || res.Notes[1].Code != "dns.other-addresses" {
+		t.Errorf("notes = %v, %v", res.Notes, err)
+	}
+}

@@ -3,8 +3,6 @@ package cli
 import (
 	"context"
 	"fmt"
-	"net"
-	"net/netip"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -108,11 +106,6 @@ func (fl flowFlags) input(src, dst string) query.FlowInput {
 	}
 }
 
-// lookupDNS resolves a name with this machine's resolver.
-func lookupDNS(ctx context.Context, name string) ([]netip.Addr, error) {
-	return net.DefaultResolver.LookupNetIP(ctx, "ip", name)
-}
-
 func printRun(w *textOut, run simulate.Run, t estate.Target, v securitypolicy.Verdict, flow simulate.Flow, why bool) {
 	fmt.Fprintf(w, "%s -> %s %s", flow.Source, flow.Destination, flow.Protocol)
 	if flow.DestPort != 0 {
@@ -132,6 +125,9 @@ func printRun(w *textOut, run simulate.Run, t estate.Target, v securitypolicy.Ve
 		if ep.Name != "" {
 			fmt.Fprintf(w, "  dns        %s -> %v\n", ep.Name, ep.Addrs)
 		}
+	}
+	for _, n := range simulate.DNSNotes(flow, false) {
+		fmt.Fprintf(w, "  %s\n", noteStyle(w.pal, n)("note: "+n.Text))
 	}
 	zones := "not evaluated"
 	if v.Zones.Source != "not evaluated" && (len(v.Zones.From) > 0 || len(v.Zones.To) > 0) {

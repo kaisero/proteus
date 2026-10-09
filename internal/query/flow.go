@@ -88,28 +88,54 @@ func endpoint(ctx context.Context, env Env, s string, noDNS bool) (simulate.Endp
 		env.Log.Warnf(runlog.TagRun, "dns: %s: %v", ep.Name, err)
 		return ep, nil
 	}
+	// The resolver answers IPv4 and IPv6 in its own order. A simulation that
+	// follows one address takes the first, which must be IPv4, so the first
+	// IPv4 address moves to the front and the rest keep their order (C3).
+	var rest []netip.Addr
 	for _, ad := range addrs {
-		ep.Addrs = append(ep.Addrs, ad.Unmap())
+		ad = ad.Unmap()
+		if ad.Is4() && len(ep.Addrs) == 0 {
+			ep.Addrs = append(ep.Addrs, ad)
+			continue
+		}
+		rest = append(rest, ad)
 	}
+	ep.Addrs = append(ep.Addrs, rest...)
 	ep.Resolved = len(ep.Addrs) > 0
 	env.Log.Infof(runlog.TagRun, "dns: %s -> %v", ep.Name, ep.Addrs)
+	if ep.Resolved {
+		ep.Canonical = canonical(ctx, env, ep.Name)
+	}
 	return ep, nil
 }
 
+// canonical is the name's canonical name as the env's resolver reports it,
+// or "" when it is the name itself or cannot be read. Resolvers differ: the
+// cgo one reports the first alias of a chain, the pure Go one the last (C2).
+func canonical(ctx context.Context, env Env, name string) string {
+	if env.CanonicalName == nil {
+		return ""
+	}
+	c, err := env.CanonicalName(ctx, name)
+	if err != nil {
+		env.Log.Warnf(runlog.TagRun, "dns: canonical name of %s: %v", name, err)
+		return ""
+	}
+	c = strings.ToLower(strings.TrimSuffix(c, "."))
+	if c == "" || c == name {
+		return ""
+	}
+	env.Log.Infof(runlog.TagRun, "dns: %s is an alias of %s", name, c)
+	return c
+}
+
 // pathEndpoint reads an endpoint for path mode. A path is traced from an
-// address, so an FQDN must resolve to an IPv4 one: the first in the resolver's
-// order is traced, and moves to the front (spec 2026-10-07 §3.3).
+// address, so an FQDN must resolve to an IPv4 one: endpoint puts the first in
+// front (spec 2026-10-07 §3.3).
 func pathEndpoint(ctx context.Context, env Env, s string, noDNS bool) (simulate.Endpoint, error) {
 	ep, err := endpoint(ctx, env, s, noDNS)
-	if err != nil || ep.Name == "" {
+	if err != nil || ep.Name == "" || (len(ep.Addrs) > 0 && ep.Addrs[0].Is4()) {
 		return ep, err
-	}
-	for i, ad := range ep.Addrs {
-		if ad.Is4() {
-			rest := append(append([]netip.Addr{}, ep.Addrs[:i]...), ep.Addrs[i+1:]...)
-			ep.Addrs = append([]netip.Addr{ad}, rest...)
-			return ep, nil
-		}
 	}
 	return ep, usage(fmt.Sprintf("path mode needs an address for %s; remove --no-dns or give an address", ep.Name),
 		fmt.Sprintf("path mode needs an address for %s; set no_dns to false or give an address", ep.Name))

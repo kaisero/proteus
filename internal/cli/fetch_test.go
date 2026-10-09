@@ -201,6 +201,9 @@ type cli struct {
 	// lookup, when set, is passed to every app the harness builds, in place of
 	// the real DNS resolver.
 	lookup func(context.Context, string) ([]netip.Addr, error)
+	// canonical goes with lookup: with a fake resolver, the canonical name
+	// comes from this fake too, nil for none.
+	canonical func(context.Context, string) (string, error)
 }
 
 func newCLI(t *testing.T) *cli {
@@ -235,7 +238,7 @@ func (c *cli) runRaw(args ...string) (string, string, int) {
 	a := newApp(&out, &errOut, func(k string) string { return c.env[k] }, func() time.Time { return now })
 	a.peerHost = c.peerHost
 	if c.lookup != nil {
-		a.lookup = c.lookup
+		a.lookup, a.canonical = c.lookup, c.canonical
 	}
 	code := a.execute(context.Background(), args)
 	return out.String(), errOut.String(), code
@@ -548,6 +551,7 @@ func TestSimulateResolvesAnFQDN(t *testing.T) {
 	a.lookup = func(context.Context, string) ([]netip.Addr, error) {
 		return []netip.Addr{netip.MustParseAddr("203.0.113.10")}, nil
 	}
+	a.canonical = nil
 	code := a.execute(context.Background(), []string{
 		"simulate", "policy", "10.0.0.1", "WWW.example.com",
 		"--file", "../../testdata/config/firewall-simulate.xml",
@@ -561,6 +565,7 @@ func TestSimulateResolvesAnFQDN(t *testing.T) {
 		return map[string]string{"PROTEUS_LOG_DIR": filepath.Join(dir, "log"), "PROTEUS_CONFIG": filepath.Join(dir, "none.yaml")}[k]
 	}, time.Now)
 	a.lookup = func(context.Context, string) ([]netip.Addr, error) { return nil, errors.New("no such host") }
+	a.canonical = nil
 	if code := a.execute(context.Background(), []string{
 		"simulate", "policy", "10.0.0.1", "www.example.com",
 		"--file", "../../testdata/config/firewall-simulate.xml",

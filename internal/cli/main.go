@@ -18,6 +18,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/okaiser/proteus/internal/inventory"
+	"github.com/okaiser/proteus/internal/query"
 	"github.com/okaiser/proteus/internal/runlog"
 )
 
@@ -118,6 +119,8 @@ type app struct {
 	argv   []string
 	log    *runlog.Logger // the run log; nil until the command starts
 	lookup func(ctx context.Context, name string) ([]netip.Addr, error)
+	// canonical gives an FQDN's canonical name; nil gives none.
+	canonical func(ctx context.Context, name string) (string, error)
 	// peerHost maps an HA peer's reported management address to a host; nil uses
 	// the address. Tests point it at a second fake device.
 	peerHost func(mgmtIP string) string
@@ -130,7 +133,7 @@ type app struct {
 }
 
 func newApp(stdout, stderr io.Writer, getenv func(string) string, now func() time.Time) *app {
-	return &app{stdout: stdout, stderr: stderr, getenv: getenv, now: now, version: "dev", lookup: lookupDNS}
+	return &app{stdout: stdout, stderr: stderr, getenv: getenv, now: now, version: "dev", lookup: query.SystemResolve, canonical: query.SystemCanonicalName}
 }
 
 func (a *app) root() *cobra.Command {

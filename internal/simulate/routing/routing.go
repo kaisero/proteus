@@ -118,7 +118,7 @@ func (Simulation) Run(ctx context.Context, env *simulate.Env, in simulate.Input)
 		return run, &simulate.ChoiceError{Question: "the source must be an IPv4 address; IPv6 is not simulated yet"}
 	}
 	s := newState(env, in)
-	s.path.Notes = append(s.path.Notes, endpointNotes(in.Flow)...)
+	s.path.Notes = append(s.path.Notes, simulate.DNSNotes(in.Flow, true)...)
 	stages, err := simulate.Execute(ctx, Kind, s, []simulate.Step[state]{{Name: "place the start", Slug: "place", Do: place}}, false, env.Log)
 	run.Stages = append(run.Stages, stages...)
 	for err == nil && !s.done {
@@ -134,22 +134,6 @@ func (Simulation) Run(ctx context.Context, env *simulate.Env, in simulate.Input)
 	run.Fidelity = simulate.Overall(run.Stages)
 	run.Output = s.path
 	return run, err
-}
-
-// endpointNotes names what an FQDN resolved to beyond the address traced.
-func endpointNotes(f simulate.Flow) simulate.Reasons {
-	var out simulate.Reasons
-	for _, ep := range []simulate.Endpoint{f.Source, f.Destination} {
-		if ep.Name != "" && len(ep.Addrs) > 1 {
-			var rest []string
-			for _, a := range ep.Addrs[1:] {
-				rest = append(rest, a.String())
-			}
-			out = append(out, reason.New("dns.other-addresses",
-				fmt.Sprintf("%s resolved to %d addresses; traced %s, not %s", ep.Name, len(ep.Addrs), ep.Addrs[0], strings.Join(rest, ", "))))
-		}
-	}
-	return out
 }
 
 func hopSteps(n int) []simulate.Step[state] {

@@ -135,6 +135,11 @@ func (s *state) doubts() []Doubt {
 				if why, ok := s.opaque[f.name][uint32(r.Position-1)]; ok {
 					add(simulate.Reasons(why).Prefixed(f.name + ": ")...)
 				}
+				//nolint:gosec // as above
+				if m := s.fqdn[f.name]; m.rules != nil && m.rules.Contains(uint32(r.Position-1)) {
+					add(reason.New("doubt.fqdn-resolution", fmt.Sprintf(
+						"%s: %s matched only through an FQDN object; the firewall resolves this object itself; its addresses can differ from ours", f.name, m.name)))
+				}
 			case f.class != doubtful:
 			case f.name == "schedule":
 				if r.Schedule != "" {

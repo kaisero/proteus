@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -326,5 +327,56 @@ func TestPolicyFileNotesAVersionGap(t *testing.T) {
 	e, err := PolicyFile(context.Background(), Env{}, in)
 	if err != nil || len(e.Notes) != 1 || e.Notes[0].Code != "gap.version" || len(e.Unresolved) != 0 {
 		t.Errorf("notes %+v, unresolved %+v, %v", e.Notes, e.Unresolved, err)
+	}
+}
+
+// The resolver's first IPv4 address goes in front, the rest keep their order,
+// and an alias's canonical name becomes a note (C2, C3).
+func TestEndpointOrdersAndNamesTheAlias(t *testing.T) {
+	t.Parallel()
+	env := Env{
+		Resolve: resolver(map[string][]string{"app.example.test": {"2001:db8::1", "10.1.0.5", "2001:db8::2", "10.1.0.6"}}),
+		CanonicalName: func(_ context.Context, name string) (string, error) {
+			if name == "app.example.test" {
+				return "App.CDN.example.test.", nil
+			}
+			return "", errors.New("no such host")
+		},
+	}
+	ep, err := endpoint(context.Background(), env, "APP.example.test", false)
+	if err != nil || fmt.Sprint(ep.Addrs) != "[10.1.0.5 2001:db8::1 2001:db8::2 10.1.0.6]" || ep.Canonical != "app.cdn.example.test" {
+		t.Errorf("endpoint = %+v, %v", ep, err)
+	}
+	same := env
+	same.CanonicalName = func(context.Context, string) (string, error) { return "app.example.test.", nil }
+	if ep, _ := endpoint(context.Background(), same, "app.example.test", false); ep.Canonical != "" {
+		t.Errorf("the name itself is no alias: %q", ep.Canonical)
+	}
+	failing := env
+	failing.Resolve = resolver(map[string][]string{"other.example.test": {"10.1.0.7"}})
+	if ep, _ := endpoint(context.Background(), failing, "other.example.test", false); ep.Canonical != "" || !ep.Resolved {
+		t.Errorf("a failed canonical lookup gives none: %+v", ep)
+	}
+	in := PolicyFileInput{
+		Flow:      FlowInput{Source: "10.2.0.5", Destination: "app.example.test", Protocol: "tcp"},
+		Selection: Selection{File: fixture("firewall-ruletype.xml"), Vsys: []string{"vsys1"}},
+	}
+	e, err := PolicyFile(context.Background(), env, in)
+	var codes []string
+	for _, n := range e.Notes {
+		codes = append(codes, string(n.Code))
+	}
+	if err != nil || !slices.Contains(codes, "dns.canonical-name") || slices.Contains(codes, "dns.other-addresses") {
+		t.Errorf("file notes: %+v %v", e.Notes, err)
+	}
+}
+
+// The system resolver answers localhost from the hosts file.
+func TestSystemResolve(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithTimeout(context.Background(), dnsTimeout)
+	defer cancel()
+	if as, err := SystemResolve(ctx, "localhost"); err != nil || len(as) == 0 {
+		t.Skipf("no local resolver: %v %v", as, err)
 	}
 }

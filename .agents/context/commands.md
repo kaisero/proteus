@@ -191,6 +191,8 @@ func Search(ctx context.Context, env Env, in SearchInput) (Envelope[SearchInput,
 func SimStages(stages []simulate.Stage) []Stage
 func SnapshotDiff(ctx context.Context, env Env, in DiffInput) (Envelope[DiffInput, DiffResult], error)
 func Summarize[In, R, S any](e Envelope[In, R], f func(R) S) Envelope[In, S]
+func SystemCanonicalName(ctx context.Context, name string) (string, error)
+func SystemResolve(ctx context.Context, name string) ([]netip.Addr, error)
 func TargetOf(t estate.Target) Target
 func TargetQualifiers(ts []estate.Target) ([]Unresolved, []Note)
 func Targets(ctx context.Context, env Env, sel Selection) ([]estate.Target, []estate.Hole, error)

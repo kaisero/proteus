@@ -3,6 +3,7 @@ package securitypolicy
 import (
 	"encoding/json"
 	"fmt"
+	"net/netip"
 	"slices"
 	"strings"
 	"testing"
@@ -244,5 +245,56 @@ func TestRelevanceJSON(t *testing.T) {
 	b, err := json.Marshal(r)
 	if err != nil || string(b) != `{"known":true,"relevant":true,"reason":"10.0.0.0/8 via default covers 10.0.0.1"}` {
 		t.Errorf("json = %s, %v", b, err)
+	}
+}
+
+// A rule that a resolved FQDN reaches only through an FQDN object is in doubt,
+// and an earlier such rule with another action leaves the flow undecided (spec
+// 2026-10-09 §3.8, E20). A rule an address reaches, a field of any and a
+// negated rule are not.
+func TestFQDNResolutionDoubt(t *testing.T) {
+	t.Parallel()
+	e := env(t, "firewall-fqdn.xml", false)
+	dst := func(a string) simulate.Endpoint {
+		return simulate.Endpoint{Name: "www.example.com", Addrs: []netip.Addr{netip.MustParseAddr(a)}, Resolved: true}
+	}
+	want := func(rule string) string {
+		return rule + ": destination: www.example.com matched only through an FQDN object; the firewall resolves this object itself; its addresses can differ from ours"
+	}
+	for _, tc := range []struct {
+		name, addr string
+		doubts     []string
+		first      string
+	}{
+		{"name only", "198.51.100.7", []string{want("block-web-by-name"), want("allow-web")}, "rest"},
+		{"name and address", "203.0.113.10", []string{want("block-web-by-name")}, "allow-web"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			_, v := run(t, e, simulate.Flow{Source: ep("10.0.0.1"), Destination: dst(tc.addr)})
+			var got []string
+			for _, d := range v.Doubts {
+				if len(d.Reasons) != 1 || d.Reasons[0].Code != "doubt.fqdn-resolution" {
+					t.Errorf("doubt %v", d.Reasons)
+				}
+				got = append(got, d.Rule+": "+d.Text())
+			}
+			if !slices.Equal(got, tc.doubts) {
+				t.Errorf("doubts = %q, want %q", got, tc.doubts)
+			}
+			if first(v) != tc.first {
+				t.Errorf("first certain match = %s, want %s", first(v), tc.first)
+			}
+			out, why := v.Decision()
+			if out != Undecided || why.Code != "doubt.fqdn-resolution" ||
+				!strings.HasPrefix(why.Text, "block-web-by-name (deny) at position 1 may match first: destination: www.example.com") {
+				t.Errorf("decision = %s, %+v", out, why)
+			}
+		})
+	}
+	// An address alone reaches no rule through the FQDN object.
+	_, v := run(t, e, simulate.Flow{Source: ep("10.0.0.1"), Destination: ep("203.0.113.10")})
+	if len(v.Doubts) != 0 || first(v) != "allow-web" {
+		t.Errorf("an address: doubts %v, first %s", v.Doubts, first(v))
 	}
 }
