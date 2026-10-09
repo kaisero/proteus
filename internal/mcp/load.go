@@ -12,7 +12,7 @@ import (
 
 // errLoadsBusy is a load refused because max_queue loads already wait for a
 // slot (spec §4.7).
-var errLoadsBusy = errors.New("the server is busy: too many snapshot loads wait; ask again later")
+var errLoadsBusy = &busyError{"the server is busy: too many snapshot loads wait; ask again later"}
 
 // errDropped is a queued load no caller waited for any more. It never reaches
 // a caller that still waits: that caller starts the load again.

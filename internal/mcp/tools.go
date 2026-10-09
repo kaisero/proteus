@@ -138,8 +138,8 @@ func errorOf(err error) *toolError {
 		e.Needs = append(e.Needs, need)
 		return e
 	}
-	if errors.Is(err, errLoadsBusy) {
-		return newError("call.busy", errLoadsBusy.Error())
+	if isBusy(err) {
+		return newError("call.busy", err.Error())
 	}
 	if _, ok := errors.AsType[*panicError](err); ok {
 		return newError("call.internal", internalText)

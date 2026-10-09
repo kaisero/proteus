@@ -33,19 +33,33 @@ type Options struct {
 
 // Limits bound what the server does at once and keeps (spec §4.2, §4.7).
 type Limits struct {
+	// MaxConcurrent is how many calls run at once.
+	MaxConcurrent int
+	// MaxWait is how long a call waits for a free slot.
+	MaxWait time.Duration
+	// CallTimeout is how long a call may run before it answers call.timeout.
+	// Its work keeps the slot until it returns. Stopping waits as long.
+	CallTimeout time.Duration
 	// MaxLoads is how many configuration loads and index builds run at once.
 	MaxLoads int
-	// MaxQueue is how many loads may wait for one of them.
+	// MaxQueue is how many calls may wait for a slot, and how many loads
+	// for a load slot.
 	MaxQueue int
 	// MaxCacheMB is the cache's size limit in MB (spec §4.8).
 	MaxCacheMB int
 }
 
 // DefaultLimits are the limits of spec §4.2.
-var DefaultLimits = Limits{MaxLoads: 2, MaxQueue: 16, MaxCacheMB: 2048}
+var DefaultLimits = Limits{
+	MaxConcurrent: 4, MaxWait: 10 * time.Second, CallTimeout: 60 * time.Second,
+	MaxLoads: 2, MaxQueue: 16, MaxCacheMB: 2048,
+}
 
 // withDefaults is l with each zero field set to its default.
 func (l Limits) withDefaults() Limits {
+	l.MaxConcurrent = cmp.Or(l.MaxConcurrent, DefaultLimits.MaxConcurrent)
+	l.MaxWait = cmp.Or(l.MaxWait, DefaultLimits.MaxWait)
+	l.CallTimeout = cmp.Or(l.CallTimeout, DefaultLimits.CallTimeout)
 	l.MaxLoads = cmp.Or(l.MaxLoads, DefaultLimits.MaxLoads)
 	l.MaxQueue = cmp.Or(l.MaxQueue, DefaultLimits.MaxQueue)
 	l.MaxCacheMB = cmp.Or(l.MaxCacheMB, DefaultLimits.MaxCacheMB)
@@ -125,43 +139,79 @@ func New(o Options) (*sdk.Server, error) {
 // does: there an unregistered reason code or a bug fails the test instead of
 // hiding as call.internal.
 func newServer(o Options, strict bool) (*sdk.Server, error) {
+	s, _, err := build(o, strict)
+	return s, err
+}
+
+// build is newServer, with the limiter that Serve stops.
+func build(o Options, strict bool) (*sdk.Server, *limiter, error) {
 	if o.Env.Inventory == nil || len(o.Env.Inventory.Devices) == 0 {
-		return nil, errors.New("mcp: the inventory has no device")
+		return nil, nil, errors.New("mcp: the inventory has no device")
 	}
 	s := sdk.NewServer(&sdk.Implementation{Name: "proteus", Version: o.Version}, &sdk.ServerOptions{Instructions: instructions})
 	lim := o.Limits.withDefaults()
 	cache := newCache(int64(lim.MaxCacheMB)<<20, lim.MaxLoads, lim.MaxQueue, strict)
 	if err := addTools(s, calls{env: o.Env, cache: cache}, o.Env.Inventory.Names()); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if err := addResources(s); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	m := middleware{audit: o.Audit, now: o.Now, strict: strict}
+	m := middleware{audit: o.Audit, now: o.Now, strict: strict, lim: newLimiter(lim.MaxConcurrent, lim.MaxQueue, lim.MaxWait, lim.CallTimeout)}
 	if m.now == nil {
 		m.now = time.Now
 	}
 	s.AddReceivingMiddleware(m.receive)
-	return s, nil
+	return s, m.lim, nil
 }
 
-// Serve answers MCP calls over t until ctx ends or the client goes.
+// Serve answers MCP calls over t until ctx ends or the client goes. When ctx
+// ends (SIGTERM), new calls answer call.busy, the running calls get up to
+// the call timeout to answer over t, and then Serve returns.
 func Serve(ctx context.Context, o Options, t sdk.Transport) error {
-	s, err := New(o)
+	s, lim, err := build(o, testing.Testing())
 	if err != nil {
 		return err
 	}
-	return s.Run(ctx, t)
+	// The session outlives ctx: the calls that run when it ends still answer.
+	ss, err := s.Connect(context.WithoutCancel(ctx), t, nil)
+	if err != nil {
+		return err
+	}
+	ended := make(chan error, 1)
+	go func() { ended <- ss.Wait() }()
+	select {
+	case err := <-ended:
+		// The client went; the work of its calls still holds their slots.
+		lim.stop()
+		return err
+	case <-ctx.Done():
+	}
+	lim.stop()
+	// Close waits for the answers in flight to be written.
+	// The SDK's Close refuses every answer not yet written, so it waits a
+	// moment for the answers of the calls that just returned.
+	time.Sleep(answerGrace)
+	_ = ss.Close()
+	<-ended
+	return ctx.Err()
 }
+
+// answerGrace is how long Serve waits, after the last call returned, for its
+// answer to be written before it closes the session.
+const answerGrace = 100 * time.Millisecond
 
 // Stdio is the transport over standard input and output.
 func Stdio() sdk.Transport { return &sdk.StdioTransport{} }
 
-// middleware audits each tool call and recovers a panic (S3, S7, S8).
+// middleware audits each tool call, bounds the calls and recovers a panic
+// (S3, S7, S8, spec §4.7).
 type middleware struct {
 	audit  Auditor
 	now    func() time.Time
 	strict bool
+	// lim bounds the calls; nil runs each at once with no time limit.
+	lim *limiter
 }
 
 // internalText is a recovered panic's error text.
@@ -186,42 +236,127 @@ func (m middleware) receive(next sdk.MethodHandler) sdk.MethodHandler {
 			c.Tool, c.Input = r.Params.Name, r.Params.Arguments
 		}
 		defer func() {
-			if p := recover(); p != nil {
-				if m.strict {
-					panic(p)
-				}
-				c.Status, c.Code = StatusInternal, "call.internal"
-				// The handler may have filled the record before it failed;
-				// the call gave no answer.
-				c.Answers, c.Codes, c.Snapshots = nil, nil, nil
-				c.Stack = fmt.Appendf(nil, "panic: %v\n\n%s", p, debug.Stack())
-				te := newError("call.internal", internalText)
-				res, err = &sdk.CallToolResult{
-					IsError: true, Content: []sdk.Content{&sdk.TextContent{Text: errorText(te)}},
-					StructuredContent: output{Error: te},
-				}, nil
-			}
 			c.Duration = m.now().Sub(c.Time)
 			if m.audit != nil {
 				m.audit.Audit(*c)
 			}
 		}()
-		res, err = next(context.WithValue(ctx, callKey{}, c), method, req)
-		switch r, _ := res.(*sdk.CallToolResult); {
-		case err != nil && c.Status == "":
-			// The handler did not run: no such tool, or a request the SDK
-			// refused.
-			c.Status, c.Code, c.Err = StatusUsage, "call.usage", err.Error()
-		case err != nil:
-			// The handler answered and the SDK refused the answer: output
-			// that fails its schema reaches the client as a JSON-RPC error
-			// (S3).
-			c.Status, c.Code, c.Err = StatusInternal, "call.internal", err.Error()
-		case r != nil && r.GetError() != nil:
-			// An input the SDK refused before the handler, such as a value
-			// outside an enum (S7): handlers never set an error.
-			c.Status, c.Code, c.Err = StatusUsage, "call.usage", r.GetError().Error()
+		if m.lim == nil {
+			return m.handle(ctx, next, method, req, c)
 		}
-		return res, err
+		m.lim.begin()
+		defer m.lim.end()
+		if err := m.lim.enter(ctx); err != nil {
+			return refused(c, err), nil
+		}
+		return m.bounded(ctx, next, method, req, c)
 	}
 }
+
+// refused is a call that did not run, as its result; c gets its status.
+func refused(c *Call, err error) *sdk.CallToolResult {
+	te := errorOf(err)
+	c.Status, c.Code = statuses[te.Code], te.Code
+	return &sdk.CallToolResult{
+		IsError: true, Content: []sdk.Content{&sdk.TextContent{Text: errorText(te)}},
+		StructuredContent: output{Error: te},
+	}
+}
+
+// outcome is what a call's work returned, with the record it filled and a
+// panic a strict server lets go on.
+type outcome struct {
+	res      sdk.Result
+	err      error
+	call     Call
+	panicked bool
+	panic    any
+}
+
+// bounded runs a call that holds a slot. Its work runs apart, with the call
+// timeout: past it the caller gets call.timeout, and the work keeps the slot
+// until it returns. The work fills its own record; the caller's takes it
+// when the work answers in time.
+func (m middleware) bounded(ctx context.Context, next sdk.MethodHandler, method string, req sdk.Request, c *Call) (sdk.Result, error) {
+	work, cancel := context.WithTimeout(ctx, m.lim.timeout)
+	done := make(chan outcome, 1)
+	left := make(chan struct{})
+	o := outcome{call: *c}
+	go func() {
+		defer m.lim.leave()
+		defer cancel()
+		func() {
+			// Only a strict server's panic gets here: handle recovers the rest.
+			defer func() {
+				if p := recover(); p != nil {
+					o.panicked, o.panic = true, p
+				}
+			}()
+			o.res, o.err = m.handle(work, next, method, req, &o.call)
+		}()
+		if o.panicked {
+			select {
+			case <-left:
+				panic(o.panic) // nobody waits to panic on
+			default:
+			}
+		}
+		done <- o
+	}()
+	take := func(o outcome) (sdk.Result, error) {
+		if o.panicked {
+			panic(o.panic)
+		}
+		*c = o.call
+		return o.res, o.err
+	}
+	select {
+	case o := <-done:
+		return take(o)
+	case <-work.Done():
+	}
+	select {
+	case o := <-done:
+		return take(o) // it answered at the deadline
+	default:
+	}
+	close(left)
+	return refused(c, work.Err()), nil
+}
+
+// handle runs a call's handler with c as its record, recovers a panic into
+// call.internal, and audits what the SDK did around the handler.
+func (m middleware) handle(ctx context.Context, next sdk.MethodHandler, method string, req sdk.Request, c *Call) (res sdk.Result, err error) {
+	defer func() {
+		if p := recover(); p != nil {
+			if m.strict {
+				panic(p)
+			}
+			c.Status, c.Code = StatusInternal, "call.internal"
+			// The handler may have filled the record before it failed; the
+			// call gave no answer.
+			c.Answers, c.Codes, c.Snapshots = nil, nil, nil
+			c.Stack = fmt.Appendf(nil, "panic: %v\n\n%s", p, debug.Stack())
+			res, err = refused(&Call{}, errInternal), nil
+		}
+	}()
+	res, err = next(context.WithValue(ctx, callKey{}, c), method, req)
+	switch r, _ := res.(*sdk.CallToolResult); {
+	case err != nil && c.Status == "":
+		// The handler did not run: no such tool, or a request the SDK
+		// refused.
+		c.Status, c.Code, c.Err = StatusUsage, "call.usage", err.Error()
+	case err != nil:
+		// The handler answered and the SDK refused the answer: output that
+		// fails its schema reaches the client as a JSON-RPC error (S3).
+		c.Status, c.Code, c.Err = StatusInternal, "call.internal", err.Error()
+	case r != nil && r.GetError() != nil:
+		// An input the SDK refused before the handler, such as a value
+		// outside an enum (S7): handlers never set an error.
+		c.Status, c.Code, c.Err = StatusUsage, "call.usage", r.GetError().Error()
+	}
+	return res, err
+}
+
+// errInternal is a recovered panic as an error.
+var errInternal = &panicError{value: internalText}
