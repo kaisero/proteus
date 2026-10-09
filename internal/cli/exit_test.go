@@ -125,6 +125,23 @@ func TestEarlyErrorsFollowTheFormat(t *testing.T) {
 	}
 }
 
+// An early error of proteus mcp does not read the inventory with
+// credentials: its output: json does not apply, a flag does.
+func TestAnEarlyMCPErrorReadsNoInventory(t *testing.T) {
+	t.Parallel()
+	c := newCLI(t)
+	c.inventory("version: 1\ndefaults:\n  output: json\ndevices: []\n")
+	if _, errOut, code := c.run("search", "--bogus"); code != exitUsage || !strings.HasPrefix(errOut, "{") {
+		t.Fatalf("search: exit %d, stderr %q", code, errOut)
+	}
+	if _, errOut, code := c.run("mcp", "--bogus"); code != exitUsage || strings.HasPrefix(errOut, "{") {
+		t.Errorf("mcp: exit %d, stderr %q", code, errOut)
+	}
+	if _, errOut, code := c.run("mcp", "--bogus", "--output", "json"); code != exitUsage || !strings.HasPrefix(errOut, "{") {
+		t.Errorf("mcp --output json: exit %d, stderr %q", code, errOut)
+	}
+}
+
 func TestIncompleteJSONRunsEndWithTheExitLine(t *testing.T) {
 	t.Parallel()
 	c := newCLI(t)

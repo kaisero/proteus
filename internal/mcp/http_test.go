@@ -418,6 +418,27 @@ func TestRefusalsAreRateLimited(t *testing.T) {
 		t.Errorf("a final flush keeps %d", len(r.by))
 	}
 	r.mu.Unlock()
+	// A refusal past its address's window writes that address's summary
+	// first; another address's window waits for the ticker's flush.
+	rec2 := &recorder{}
+	r2 := &refusals{audit: rec2, now: func() time.Time { return now }, by: map[string]*refusalCount{}}
+	for range refusalLimit + 2 {
+		r2.refuse("198.18.0.1", http.StatusUnauthorized)
+		r2.refuse("198.18.0.2", http.StatusForbidden)
+	}
+	now = now.Add(refusalWindow)
+	r2.refuse("198.18.0.1", http.StatusUnauthorized)
+	rec2.mu.Lock()
+	got := rec2.calls[2*refusalLimit:]
+	rec2.mu.Unlock()
+	if len(got) != 2 || got[0].Remote != "198.18.0.1" || got[0].Refused != 2 || got[1].Refused != 0 {
+		t.Errorf("after the window: %+v", got)
+	}
+	r2.mu.Lock()
+	if n := r2.by["198.18.0.2"]; n == nil || n.dropped != 2 {
+		t.Errorf("the other address's window: %+v", n)
+	}
+	r2.mu.Unlock()
 	// Without an audit, nothing is counted.
 	quiet := &refusals{now: time.Now, by: map[string]*refusalCount{}}
 	quiet.refuse("198.18.0.1", http.StatusUnauthorized)
@@ -474,6 +495,15 @@ func TestHeaderIdentity(t *testing.T) {
 			t.Errorf("%q: identity %+v", v, got)
 		}
 	}
+	// A JSON object with none of the audited claims: unknown, from the header.
+	h = http.Header{}
+	h.Set("X-User-Claims", `{"email":"bob@example.test"}`)
+	if got := id(h); got.Source != SourceHeader || got.Claims != nil {
+		t.Errorf("no audited claim: %+v", got)
+	}
+	if l := lineOf(Call{Identity: id(h)}); l.Identity != "unknown" || l.IdentitySource != SourceHeader {
+		t.Errorf("no audited claim, line %+v", l)
+	}
 	if got := HeaderIdentity("", nil)(nil); got.Source != SourceNone {
 		t.Errorf("no header name: %+v", got)
 	}
@@ -491,7 +521,11 @@ func TestHeaderIdentity(t *testing.T) {
 func TestTheAuditLog(t *testing.T) {
 	t.Parallel()
 	path := filepath.Join(t.TempDir(), "audit.jsonl")
+	// An existing file others can read is made 0600.
 	if err := os.WriteFile(path, []byte(`{"earlier":true}`+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(path, 0o644); err != nil {
 		t.Fatal(err)
 	}
 	a, err := OpenAudit(path)

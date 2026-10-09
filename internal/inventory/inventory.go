@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -227,6 +228,11 @@ func (m *MCP) Validate() error {
 	for _, h := range m.AllowedHosts {
 		if h == "" || strings.ContainsAny(h, " /") {
 			return fmt.Errorf("mcp: allowed_hosts: %q is not a host name", h)
+		}
+		// The server compares the Host without its port and brackets, so an
+		// entry with them never matches. A colon is fine in an IPv6 address.
+		if _, err := netip.ParseAddr(h); strings.ContainsAny(h, "[]") || strings.Contains(h, ":") && err != nil {
+			return fmt.Errorf("mcp: allowed_hosts: %q: give the host without a port or brackets", h)
 		}
 	}
 	if m.IdentityHeader != "" && !headerName.MatchString(m.IdentityHeader) {

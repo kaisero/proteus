@@ -43,7 +43,8 @@ const maxClaim = 256
 // HeaderIdentity reads a call's identity from the header name, as the gateway
 // sets it: a JSON object of claims, of which claims are kept, each value cut
 // to 256 bytes. A missing header or one that is not a JSON object is the
-// identity "unknown"; the call goes on. A token holder can forge the header:
+// identity "unknown" from source none; an object with none of claims is the
+// identity "unknown" from source header. The call goes on. A token holder can forge the header:
 // the audit line records the identity as the gateway claimed it.
 func HeaderIdentity(name string, claims []string) func(http.Header) Identity {
 	return func(h http.Header) Identity {
@@ -67,6 +68,11 @@ func HeaderIdentity(name string, claims []string) func(http.Header) Identity {
 				s = string(raw) // a number, a list or an object: its JSON text
 			}
 			id.Claims[c] = cut(s, maxClaim)
+		}
+		if len(id.Claims) == 0 {
+			// The gateway sent claims, none of those audited: the identity
+			// is unknown, and the line says the header was there.
+			id.Claims = nil
 		}
 		return id
 	}
@@ -102,10 +108,14 @@ type AuditLog struct {
 }
 
 // OpenAudit opens the audit file at path for appending, creating it with
-// mode 0600.
+// mode 0600. An existing file others could read is made 0600 too.
 func OpenAudit(path string) (*AuditLog, error) {
 	f, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o600)
 	if err != nil {
+		return nil, fmt.Errorf("audit log: %w", err)
+	}
+	if err := f.Chmod(0o600); err != nil {
+		_ = f.Close()
 		return nil, fmt.Errorf("audit log: %w", err)
 	}
 	return &AuditLog{f: f}, nil

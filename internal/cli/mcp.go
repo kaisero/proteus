@@ -135,16 +135,20 @@ var mcpKeys = []mcpKey{
 	number("max_cache", "max-cache", func(m *inventory.MCP) *int { return &m.MaxCache }),
 }
 
-// mcpDefaults are the settings no source sets (spec 2026-10-09 §4.2).
-func mcpDefaults(getenv func(string) string) (inventory.MCP, error) {
-	dir, err := defaultLogDir(getenv)
-	if err != nil {
-		return inventory.MCP{}, err
+// mcpDefaults are the settings no source sets (spec 2026-10-09 §4.2). The
+// calls' run logs go to mcp under the CLI's log directory logDir: a
+// directory of their own, so each rotates apart.
+func mcpDefaults(logDir string, getenv func(string) string) (inventory.MCP, error) {
+	if logDir == "" {
+		var err error
+		if logDir, err = defaultLogDir(getenv); err != nil {
+			return inventory.MCP{}, err
+		}
 	}
 	l := mcp.DefaultLimits
 	return inventory.MCP{
-		Listen: "127.0.0.1:8765", AuditClaims: []string{"sub"},
-		LogDir: filepath.Join(filepath.Dir(dir), "mcp"), LogKeep: 200,
+		Listen: "127.0.0.1:8765", IdentityHeader: "X-User-Claims", AuditClaims: []string{"sub"},
+		LogDir: filepath.Join(logDir, "mcp"), LogKeep: 200,
 		MaxConcurrent: l.MaxConcurrent, MaxQueue: l.MaxQueue, MaxWait: l.MaxWait.String(),
 		CallTimeout: l.CallTimeout.String(), MaxLoads: l.MaxLoads, MaxCache: l.MaxCacheMB,
 	}, nil
@@ -153,7 +157,7 @@ func mcpDefaults(getenv func(string) string) (inventory.MCP, error) {
 // mcpSettings resolves the mcp: settings: default < the export's mcp:
 // section < PROTEUS_MCP_* < flag. A value is checked as the file's are.
 func (a *app) mcpSettings(c *cobra.Command, file *inventory.MCP) (inventory.MCP, error) {
-	m, err := mcpDefaults(a.getenv)
+	m, err := mcpDefaults(a.logDir, a.getenv)
 	if err != nil {
 		return m, err
 	}
@@ -252,11 +256,13 @@ func (a *app) runMCP(c *cobra.Command, useHTTP bool) error {
 	if err != nil {
 		return err
 	}
-	token, err := a.mcpToken(c, m)
-	if err != nil {
-		return err
-	}
+	// Only --http reads the token: a token_file the export names must not
+	// stop a stdio server, which needs none.
+	var token string
 	if useHTTP {
+		if token, err = a.mcpToken(c, m); err != nil {
+			return err
+		}
 		switch {
 		case token == "":
 			return usageErr("--http needs a token: set token_file, --token-file or PROTEUS_MCP_TOKEN")

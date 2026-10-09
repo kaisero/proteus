@@ -283,8 +283,7 @@ func (m middleware) receive(next sdk.MethodHandler) sdk.MethodHandler {
 			m.lim.begin()
 			defer m.lim.end()
 		}
-		log := m.openLog(c)
-		ctx = context.WithValue(ctx, logKey{}, log)
+		var log *runlog.Logger
 		defer func() {
 			c.Duration = m.now().Sub(c.Time)
 			if m.audit != nil {
@@ -292,11 +291,16 @@ func (m middleware) receive(next sdk.MethodHandler) sdk.MethodHandler {
 			}
 			closeLog(log, c)
 		}()
+		if m.lim != nil {
+			if err := m.lim.enter(ctx); err != nil {
+				// Refused before it ran: audited, but no run log.
+				return refused(c, err), nil
+			}
+		}
+		log = m.openLog(c)
+		ctx = context.WithValue(ctx, logKey{}, log)
 		if m.lim == nil {
 			return m.handle(ctx, next, method, req, c)
-		}
-		if err := m.lim.enter(ctx); err != nil {
-			return refused(c, err), nil
 		}
 		return m.bounded(ctx, next, method, req, c)
 	}

@@ -190,7 +190,7 @@ func TestMCPSettingPrecedence(t *testing.T) {
 	}
 	want := inventory.MCP{
 		Listen: "127.0.0.1:8765", AllowedHosts: []string{"a.example.org", "b.example.org"}, IdentityHeader: "X-User-Claims",
-		AuditClaims: []string{"sub", "email"}, LogDir: "/state/proteus/mcp", LogKeep: 9,
+		AuditClaims: []string{"sub", "email"}, LogDir: "/state/proteus/log/mcp", LogKeep: 9,
 		MaxConcurrent: 3, MaxQueue: 7, MaxWait: "4s", CallTimeout: "1m0s", MaxLoads: 2, MaxCache: 2048,
 	}
 	if b, w := mustJSON(t, m), mustJSON(t, want); b != w {
@@ -201,8 +201,13 @@ func TestMCPSettingPrecedence(t *testing.T) {
 	}
 	// Without a file, the defaults.
 	m, err = a.mcpSettings(a.mcpCmd(), nil)
-	if err != nil || m.MaxConcurrent != 4 || m.MaxWait != "3s" {
+	if err != nil || m.MaxConcurrent != 4 || m.MaxWait != "3s" || m.IdentityHeader != "X-User-Claims" || !slices.Equal(m.AuditClaims, []string{"sub", "email"}) {
 		t.Errorf("no file: %+v %v", m, err)
+	}
+	// The calls' logs default to mcp under the CLI's log directory.
+	a.logDir = "/logs/cli"
+	if m, err = a.mcpSettings(a.mcpCmd(), nil); err != nil || m.LogDir != "/logs/cli/mcp" {
+		t.Errorf("log dir %q, %v", m.LogDir, err)
 	}
 }
 
@@ -267,6 +272,30 @@ func TestMCPToken(t *testing.T) {
 	if os.Geteuid() != 0 {
 		if _, err := readToken(unreadable); err == nil {
 			t.Error("read an unreadable token file")
+		}
+	}
+}
+
+// Only --http reads the token: a token_file in the export that is missing,
+// or that others can write, does not stop a stdio server.
+func TestMCPStdioIgnoresTheToken(t *testing.T) {
+	t.Parallel()
+	writable := filepath.Join(t.TempDir(), "token")
+	if err := os.WriteFile(writable, []byte(mcpTokenValue), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(writable, 0o666); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{filepath.Join(t.TempDir(), "missing"), writable} {
+		c := mcpLab(t, "  token_file: "+path+"\n  allowed_hosts: [proteus.example.org]\n")
+		var stderr bytes.Buffer
+		if code := c.serveMCP(context.Background(), strings.NewReader(""), io.Discard, &stderr); code != 0 {
+			t.Errorf("%s: stdio exit %d: %s", path, code, stderr.String())
+		}
+		stderr.Reset()
+		if code := c.serveMCP(context.Background(), strings.NewReader(""), io.Discard, &stderr, "--http", "--audit-log", filepath.Join(c.dir, "audit.jsonl")); code != 2 || !strings.Contains(stderr.String(), "token file") {
+			t.Errorf("%s: http exit %d: %s", path, code, stderr.String())
 		}
 	}
 }
@@ -343,14 +372,17 @@ func TestMCPOverStdio(t *testing.T) {
 }
 
 // proteus mcp --http: a client with the token gets an answer, one without
-// gets 401; SIGTERM ends the server with exit 143, SIGINT with 130.
+// gets 401; SIGTERM ends the server with exit 143, SIGINT with 130. The
+// defaults read the identity from X-User-Claims and write each call's run log
+// to mcp under the CLI's log directory.
 func TestMCPOverHTTP(t *testing.T) {
 	t.Parallel()
 	for _, sig := range []struct {
 		sig  os.Signal
 		code int
 	}{{syscall.SIGTERM, 143}, {os.Interrupt, 130}} {
-		c := mcpLab(t, "  allowed_hosts: [127.0.0.1]\n  identity_header: X-User-Claims\n")
+		c := mcpLab(t, "  allowed_hosts: [127.0.0.1]\n")
+		delete(c.env, "PROTEUS_MCP_LOG_DIR")
 		c.env["PROTEUS_MCP_LISTEN"] = freePort(t)
 		auditPath := filepath.Join(c.dir, "audit.jsonl")
 		c.env["PROTEUS_MCP_TOKEN"] = mcpTokenValue
@@ -418,7 +450,7 @@ func TestMCPOverHTTP(t *testing.T) {
 				t.Fatal(err)
 			}
 			statuses = append(statuses, m["status"].(string))
-			if m["status"] == "ok" && (m["auth"] != "token" || mustJSON(t, m["identity"]) != `{"sub":"alice"}`) {
+			if m["status"] == "ok" && (m["auth"] != "token" || m["identity_source"] != "header" || mustJSON(t, m["identity"]) != `{"sub":"alice"}`) {
 				t.Errorf("audit %s", l)
 			}
 		}
@@ -427,6 +459,10 @@ func TestMCPOverHTTP(t *testing.T) {
 		}
 		if fi, err := os.Stat(auditPath); err != nil || fi.Mode().Perm() != 0o600 {
 			t.Errorf("audit mode %v %v", fi, err)
+		}
+		logs, _ := os.ReadDir(filepath.Join(c.env["PROTEUS_LOG_DIR"], "mcp"))
+		if len(logs) != 1 || !strings.HasPrefix(logs[0].Name(), "mcp-search-") {
+			t.Errorf("call logs %v", logs)
 		}
 	}
 }

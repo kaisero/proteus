@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"encoding/json"
 	"net/netip"
 	"os"
 	"path/filepath"
@@ -9,6 +10,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -93,4 +95,28 @@ func TestEachCallHasItsRunLog(t *testing.T) {
 		t.Errorf("opened %s", l.Path())
 	}
 	closeLog(nil, &Call{})
+}
+
+// A call refused before it runs (busy) is audited but writes no run log.
+func TestABusyCallHasNoRunLog(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	rec := &recorder{}
+	lim := newLimiter(1, 1, time.Second, time.Second)
+	lim.stop()
+	m := middleware{audit: rec, now: time.Now, logs: &runlog.Options{Dir: dir, Keep: 10, Level: runlog.Info}, lim: lim}
+	next := func(context.Context, string, sdk.Request) (sdk.Result, error) {
+		t.Error("a refused call ran")
+		return nil, nil
+	}
+	req := &sdk.CallToolRequest{Params: &sdk.CallToolParamsRaw{Name: "search", Arguments: json.RawMessage(`{"value":"x"}`)}}
+	if _, err := m.receive(next)(context.Background(), "tools/call", req); err != nil {
+		t.Fatal(err)
+	}
+	if c := rec.last(t); c.Status != StatusBusy || c.Code != "call.busy" {
+		t.Errorf("audit %+v", c)
+	}
+	if entries, _ := os.ReadDir(dir); len(entries) != 0 {
+		t.Errorf("run logs %v", entries)
+	}
 }

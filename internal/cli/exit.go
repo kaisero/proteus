@@ -106,6 +106,10 @@ func (a *app) early(flag, env string, file func(inventory.Settings) string, def 
 	if path == "" {
 		path, _ = inventory.DefaultPath(a.getenv)
 	}
+	if a.noInventory {
+		// proteus mcp never reads the inventory with credentials.
+		return def
+	}
 	if inv, err := inventory.Load(expandHome(path)); err == nil && file(inv.Defaults) != "" {
 		return file(inv.Defaults)
 	}

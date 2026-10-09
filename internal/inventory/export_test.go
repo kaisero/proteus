@@ -84,6 +84,8 @@ func TestParseRejectsABadMCPSection(t *testing.T) {
 		{"bare ipv6", "listen: ::1:8765"},
 		{"empty host", "allowed_hosts: ['']"},
 		{"host with path", "allowed_hosts: [a.example/x]"},
+		{"host with a port", "allowed_hosts: ['proteus.example.org:443']"},
+		{"bracketed ipv6", "allowed_hosts: ['[::1]']"},
 		{"header with a space", "identity_header: 'X User'"},
 		{"header with a colon", "identity_header: 'X-User:'"},
 		{"empty claim", "audit_claims: [sub, '']"},
@@ -98,6 +100,9 @@ func TestParseRejectsABadMCPSection(t *testing.T) {
 	}
 	if _, err := Parse(strings.NewReader("version: 1\ndevices: []\nmcp: {identity_header: X-User-Claims, audit_claims: [sub, email]}\n")); err != nil {
 		t.Errorf("a valid header and claims: %v", err)
+	}
+	if _, err := Parse(strings.NewReader("version: 1\ndevices: []\nmcp: {allowed_hosts: [proteus.example.org, '::1', 198.18.0.1]}\n")); err != nil {
+		t.Errorf("valid hosts: %v", err)
 	}
 	for _, listen := range []string{":8765", "0.0.0.0:8765", "[::1]:8765", "proteus.example.org:443"} {
 		if _, err := Parse(strings.NewReader("version: 1\ndevices: []\nmcp: {listen: '" + listen + "'}\n")); err != nil {

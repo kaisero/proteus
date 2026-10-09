@@ -60,8 +60,9 @@ func ServeHTTP(ctx context.Context, o Options, h HTTPOptions, ln net.Listener) e
 	for stopping := false; !stopping; {
 		select {
 		case err := <-served:
-			// The listener failed.
+			// The listener failed. Close ends the connections it left.
 			lim.stop()
+			_ = srv.Close()
 			ref.flush(true)
 			return err
 		case <-tick.C:
@@ -76,7 +77,10 @@ func ServeHTTP(ctx context.Context, o Options, h HTTPOptions, ln net.Listener) e
 	// the wait for a call that stop gave up on.
 	sctx, cancel := context.WithTimeout(context.Background(), lim.timeout)
 	defer cancel()
-	_ = srv.Shutdown(sctx)
+	if srv.Shutdown(sctx) != nil {
+		// The deadline passed: close the connections still open.
+		_ = srv.Close()
+	}
 	<-served
 	ref.flush(true)
 	return ctx.Err()
@@ -210,27 +214,38 @@ func (r *refusals) refuse(remote string, code int) {
 		return
 	}
 	now := r.now()
-	r.flush(false)
+	var summary *Call
 	r.mu.Lock()
 	n := r.by[remote]
+	if n == nil && len(r.by) >= maxRefusers {
+		remote = "other"
+		n = r.by[remote]
+	}
+	if n != nil && now.Sub(n.start) >= refusalWindow {
+		// This address's window is over: its summary, then a new window. The
+		// ticker ends the windows of the addresses that went quiet.
+		summary = n.summary(remote, now)
+		n = nil
+		delete(r.by, remote)
+	}
 	if n == nil {
-		if len(r.by) >= maxRefusers {
-			remote = "other"
-			n = r.by[remote]
-		}
-		if n == nil {
-			n = &refusalCount{start: now}
-			r.by[remote] = n
-		}
+		n = &refusalCount{start: now}
+		r.by[remote] = n
 	}
 	n.lastCode = code
-	if n.audited >= refusalLimit {
+	audit := n.audited < refusalLimit
+	if audit {
+		n.audited++
+	} else {
 		n.dropped++
-		r.mu.Unlock()
+	}
+	r.mu.Unlock()
+	if summary != nil {
+		r.audit.Audit(*summary)
+	}
+	if !audit {
 		return
 	}
-	n.audited++
-	r.mu.Unlock()
 	r.audit.Audit(Call{
 		Time: now, Identity: Identity{Auth: AuthToken, Source: SourceNone}, Remote: remote,
 		Status: StatusUnauthorised, HTTPStatus: code,
@@ -251,15 +266,24 @@ func (r *refusals) flush(all bool) {
 			continue
 		}
 		delete(r.by, remote)
-		if n.dropped > 0 {
-			lines = append(lines, Call{
-				Time: now, Identity: Identity{Auth: AuthToken, Source: SourceNone}, Remote: remote,
-				Status: StatusUnauthorised, HTTPStatus: n.lastCode, Refused: n.dropped,
-			})
+		if c := n.summary(remote, now); c != nil {
+			lines = append(lines, *c)
 		}
 	}
 	r.mu.Unlock()
 	for _, c := range lines {
 		r.audit.Audit(c)
+	}
+}
+
+// summary is the line that counts the refusals of remote not audited in
+// this window; nil when there were none.
+func (n *refusalCount) summary(remote string, now time.Time) *Call {
+	if n.dropped == 0 {
+		return nil
+	}
+	return &Call{
+		Time: now, Identity: Identity{Auth: AuthToken, Source: SourceNone}, Remote: remote,
+		Status: StatusUnauthorised, HTTPStatus: n.lastCode, Refused: n.dropped,
 	}
 }

@@ -72,6 +72,10 @@ func (a *app) execute(ctx context.Context, argv []string) int {
 	a.stderr = &lockedWriter{w: a.stderr}
 	cmd := a.root()
 	cmd.SetArgs(argv)
+	// An error before the root hook reads no inventory for mcp either.
+	if c, _, err := cmd.Find(argv); err == nil && c.CommandPath() == cmd.Name()+" mcp" {
+		a.noInventory = true
+	}
 	err := cmd.ExecuteContext(ctx)
 	code, msg := a.exitCode(ctx, err)
 	if a.log != nil {
