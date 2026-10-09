@@ -143,6 +143,7 @@ func (i *Index) Overlapping(p netip.Prefix) []Match
 func (i *Index) ProfileUses(value string) []ProfileUse
 func (i *Index) Refs(name string) []Ref
 func (i *Index) Rules() []resolve.Rule
+func (i *Index) RulesReaching(f Field, name string) *roaring.Bitmap
 func (i *Index) RulesWith(f Field, ids ...uint32) *roaring.Bitmap
 func (i *Index) RulesWithAddr(f Field, addr netip.Addr) *roaring.Bitmap
 func (i *Index) RulesWithAny(f Field) *roaring.Bitmap

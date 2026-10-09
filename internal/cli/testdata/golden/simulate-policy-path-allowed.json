@@ -46,6 +46,7 @@
       "placed": "connected",
       "outcome": "delivered",
       "end": "198.18.10.100   delivered",
+      "end_code": "path.delivered",
       "stages": [
         {
           "slug": "place",

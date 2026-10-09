@@ -263,13 +263,14 @@ func TestFQDNResolutionDoubt(t *testing.T) {
 	want := func(rule string) string {
 		return rule + ": destination: www.example.com matched only through an FQDN object; the firewall resolves this object itself; its addresses can differ from ours"
 	}
+	negated := "not-web: destination: www.example.com excluded from the negated field only through an FQDN object; the firewall resolves this object itself; its addresses can differ from ours"
 	for _, tc := range []struct {
 		name, addr string
 		doubts     []string
 		first      string
 	}{
-		{"name only", "198.51.100.7", []string{want("block-web-by-name"), want("allow-web")}, "rest"},
-		{"name and address", "203.0.113.10", []string{want("block-web-by-name")}, "allow-web"},
+		{"name only", "198.51.100.7", []string{want("block-web-by-name"), want("allow-web"), negated}, "rest"},
+		{"name and address", "203.0.113.10", []string{want("block-web-by-name"), negated}, "allow-web"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -284,18 +285,30 @@ func TestFQDNResolutionDoubt(t *testing.T) {
 			if !slices.Equal(got, tc.doubts) {
 				t.Errorf("doubts = %q, want %q", got, tc.doubts)
 			}
+			// An object named like the FQDN is not reached by the name.
+			for _, r := range v.Candidates {
+				if r.Name == "block-lookalike" {
+					t.Errorf("block-lookalike is a candidate")
+				}
+			}
 			if first(v) != tc.first {
 				t.Errorf("first certain match = %s, want %s", first(v), tc.first)
 			}
 			out, why := v.Decision()
 			if out != Undecided || why[0].Code != "doubt.fqdn-resolution" ||
-				!strings.HasPrefix(why.Text(), "block-web-by-name (deny) at position 1 may match first: destination: www.example.com") {
+				!strings.HasPrefix(why.Text(), "block-web-by-name (deny) at position 2 may match first: destination: www.example.com") {
 				t.Errorf("decision = %s, %+v", out, why)
 			}
 		})
 	}
+	// The network object named like the FQDN matches by its address, with no
+	// FQDN doubt.
+	_, v := run(t, e, simulate.Flow{Source: ep("10.0.0.1"), Destination: dst("192.0.2.9")})
+	if out, _ := v.Decision(); first(v) != "block-lookalike" || out != Stop || slices.ContainsFunc(v.Doubts, func(d Doubt) bool { return d.Rule == "block-lookalike" }) {
+		t.Errorf("lookalike: doubts %v, first %s, %s", v.Doubts, first(v), out)
+	}
 	// An address alone reaches no rule through the FQDN object.
-	_, v := run(t, e, simulate.Flow{Source: ep("10.0.0.1"), Destination: ep("203.0.113.10")})
+	_, v = run(t, e, simulate.Flow{Source: ep("10.0.0.1"), Destination: ep("203.0.113.10")})
 	if len(v.Doubts) != 0 || first(v) != "allow-web" {
 		t.Errorf("an address: doubts %v, first %s", v.Doubts, first(v))
 	}

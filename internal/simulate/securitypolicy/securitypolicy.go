@@ -157,10 +157,12 @@ type state struct {
 	verdict Verdict
 }
 
-// fqdnMatch is the rules an FQDN reached only through an FQDN object.
+// fqdnMatch is the rules an FQDN reached only through an FQDN object, and the
+// negated rules it excluded only through one.
 type fqdnMatch struct {
-	name  string
-	rules *roaring.Bitmap
+	name    string
+	rules   *roaring.Bitmap
+	negated *roaring.Bitmap
 }
 
 // Run implements simulate.Simulation.

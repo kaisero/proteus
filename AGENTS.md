@@ -128,37 +128,38 @@ Check: `go test ./internal/index -run TestClosureRepresentation`
 
 ## R12 — The read-only core imports no I/O, and dependencies point one way
 
-`config`, `resolve` and `index` import no `net`, `net/http`, `net/url` or
-`os/exec`, and no package of this module except each other, `internal/schema`,
-`internal/digest` and `internal/reason`. `index` does not import `simulate`. `fetch` imports
-neither `simulate` nor `estate`. `store` does not import `fetch`. `search` and
-`drift` answer from one configuration and import none of `fetch`, `store` or
+`config`, `resolve` and `index` import no `net`, `net/http`, `net/url` or `os/exec`,
+and no package of this module except each other, `internal/schema`,
+`internal/digest` and `internal/reason`. `index` does not import `simulate`. `fetch`
+imports neither `simulate` nor `estate`. `store` does not import `fetch`. `search`
+and `drift` answer from one configuration and import none of `fetch`, `store` or
 `estate`. `card` builds lookup's cards from one configuration and imports none of
-`fetch`, `store`, `estate` or `simulate`. `simulate` is a leaf: it imports no simulation implementation and none of
-`estate`, `store`, `fetch`, `search` or `drift`. `internal/simulate/securitypolicy` imports
-none of `estate`, `store` or `fetch`. `internal/simulate/routing` imports none of `estate`,
-`store`, `fetch`, `search` or `drift`, and no I/O package: every device's data
-reaches it through `simulate.Network`. `internal/task` runs staged operations for
-the command line; it imports no I/O package and no package of this module except
-`internal/runlog` and `internal/reason`. `fetch` may import `task`. What the simulations share lives in the
-leaf packages `internal/simulate/topology` (interfaces, forwarding tables, placement) and
-`internal/simulate/rulebase` (rulebase matching, PBF), which import no simulation and no I/O
-package. `internal/simulate/nat` is also the NAT engine: `routing` and `securitypolicy` may
-import it, and it imports neither of them, nor I/O. `internal/simulate/pathpolicy`
-answers a flow along its path: it may import `simulate`, `simulate/routing`,
-`simulate/securitypolicy`, `resolve`, `simulate/topology`, `config`, `index` and
-`reason`, and imports none of `estate`, `store`, `fetch`, `search`, `drift`,
-`card`, and no I/O package. `internal/query` answers the questions for every front end: it may
-import the simulations, `estate`, `store`, `inventory`, `search`, `drift`, `card`,
-`resolve`, `index`, `config`, `runlog` and `reason`, and reaches none of `fetch`,
-`cli`, `mcp`, Cobra or a terminal package; `cli` imports it. `internal/reason`
-names the reason codes answers carry. It imports only the standard library, and
-every package may import it: each rule above allows it.
-The test helpers `internal/fakepanos` and `internal/simulate/pathlab`
-import `testing`; only tests import them. `internal/reason` also imports
-`testing`, for `testing.Testing()` alone: its strict hook, which makes
-`reason.New` panic on an unregistered code in a test binary. It is not a test
-helper, and production code imports it.
+`fetch`, `store`, `estate` or `simulate`. `simulate` is a leaf: it imports no
+simulation implementation and none of `estate`, `store`, `fetch`, `search` or
+`drift`. `internal/simulate/securitypolicy` imports none of `estate`, `store` or
+`fetch`. `internal/simulate/routing` imports none of `estate`, `store`, `fetch`,
+`search` or `drift`, and no I/O package: every device's data reaches it through
+`simulate.Network`. `internal/task` runs staged operations for the command line; it
+imports no I/O package and no package of this module except `internal/runlog` and
+`internal/reason`. `fetch` may import `task`. What the simulations share lives in
+the leaf packages `internal/simulate/topology` (interfaces, forwarding tables,
+placement) and `internal/simulate/rulebase` (rulebase matching, PBF), which import
+no simulation and no I/O package. `internal/simulate/nat` is also the NAT engine:
+`routing` and `securitypolicy` may import it, and it imports neither of them, nor
+I/O. `internal/simulate/pathpolicy` answers a flow along its path: it may import
+`simulate`, `simulate/routing`, `simulate/securitypolicy`, `resolve`,
+`simulate/topology`, `config`, `index` and `reason`, and imports none of `estate`,
+`store`, `fetch`, `search`, `drift`, `card`, and no I/O package. `internal/query`
+answers the questions for every front end: it may import the simulations, `estate`,
+`store`, `inventory`, `search`, `drift`, `card`, `resolve`, `index`, `config`,
+`runlog` and `reason`, and reaches none of `fetch`, `cli`, `mcp`, Cobra or a
+terminal package; `cli` imports it. `internal/reason` names the reason codes answers
+carry. It imports only the standard library, and every package may import it: each
+rule above allows it. The test helpers `internal/fakepanos` and
+`internal/simulate/pathlab` import `testing`; only tests import them.
+`internal/reason` also imports `testing`, for `testing.Testing()` alone: its strict
+hook, which makes `reason.New` panic on an unregistered code in a test binary. It is
+not a test helper, and production code imports it.
 
 The core's freedom from I/O is an absolute property today. A fetcher in the same
 module makes it a conditional one, and conditional invariants decay unless a test

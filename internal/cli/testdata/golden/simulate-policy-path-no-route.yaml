@@ -39,6 +39,7 @@ results:
     placed: connected
     outcome: dropped
     end: 'dropped on fw01: no route to 198.18.30.5'
+    end_code: path.no-route
     stages:
       - slug: place
         name: place the start

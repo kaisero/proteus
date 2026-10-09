@@ -113,6 +113,7 @@ func (i *Index) Overlapping(p netip.Prefix) []Match
 func (i *Index) ProfileUses(value string) []ProfileUse
 func (i *Index) Refs(name string) []Ref
 func (i *Index) Rules() []resolve.Rule
+func (i *Index) RulesReaching(f Field, name string) *roaring.Bitmap
 func (i *Index) RulesWith(f Field, ids ...uint32) *roaring.Bitmap
 func (i *Index) RulesWithAddr(f Field, addr netip.Addr) *roaring.Bitmap
 func (i *Index) RulesWithAny(f Field) *roaring.Bitmap
@@ -185,7 +186,10 @@ its own code: `Fidelity` holds it as one group, a check's and a path point's
 `reasons` list its parts, and the envelope has one unresolved entry per part,
 the later ones marked `Part`, which the text joins on one line. Text output is
 the same as in format 1. Only a summary that names its own cause keeps one
-code: `doubt.nat-rule` over NAT doubts, whose parts stay in the NAT doubts.
+code: `doubt.nat-rule` over NAT doubts, whose parts stay in the NAT doubts, and
+`path.nat-undermatch`, routing's hop note for each NAT doubt. Text may join
+consecutive unresolved entries of one composite on one line; JSON lists them
+separately.
 
 `reason` imports only the standard library, so every package may import it; the
 archtest allows it in every R12 rule.

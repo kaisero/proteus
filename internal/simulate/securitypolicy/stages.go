@@ -45,16 +45,23 @@ func resolveDestination(_ context.Context, s *state) (simulate.Outcome, error) {
 // side resolves one endpoint in one field: the FQDN against FQDN objects, every
 // address against everything, and negated rules inverted.
 func (s *state) side(f index.Field, ep simulate.Endpoint, negated func(resolve.Rule) bool) (*roaring.Bitmap, simulate.Outcome) {
-	b, byName, byAddr := roaring.New(), roaring.New(), roaring.New()
+	b, byFQDN, byAddr := roaring.New(), roaring.New(), roaring.New()
 	var out simulate.Outcome
 	var hits []string
 	if ep.Name != "" {
-		nb, rep := s.view.Candidates(f, ep.Name)
-		b.Or(nb)
-		byName = nb
+		// The name reaches rules only through FQDN objects, and a field of any.
+		// An object merely named like the FQDN holds an address the
+		// configuration states, so the addresses below decide it.
+		_, rep := s.view.Candidates(f, ep.Name)
+		b.Or(s.idx.RulesWithAny(f))
 		for _, h := range rep.Hits {
 			hits = append(hits, fmt.Sprintf("%s (%s) via %s", h.Name, h.Kind, h.Via))
+			// Only an address object whose value is the name is an FQDN object.
+			if h.Kind == "address" && strings.EqualFold(h.Via, ep.Name) {
+				byFQDN.Or(s.idx.RulesReaching(f, h.Name))
+			}
 		}
+		b.Or(byFQDN)
 		// An FQDN nothing defines is expected; only a real gap, such as a version
 		// gap, counts as unresolved.
 		for _, u := range rep.Unresolved {
@@ -84,20 +91,24 @@ func (s *state) side(f index.Field, ep simulate.Endpoint, negated func(resolve.R
 			neg.Add(uint32(i))
 		}
 	}
-	// A rule the name reaches and no address does matched only through an FQDN
-	// object. The firewall resolves that object itself and refreshes it (default
-	// every 30 minutes), and policy matches the packet's addresses, so the rule
-	// holds the flow only if the firewall's answer agrees with this machine's.
-	// Source: PAN-OS admin guide, "Use FQDN Objects" (spec 2026-10-09 §3.8, R9).
-	// A field of any matches every address and is no FQDN match.
-	fqdnOnly := roaring.AndNot(byName, byAddr)
-	fqdnOnly.AndNot(s.idx.RulesWithAny(f))
-	fqdnOnly.AndNot(neg)
+	// A rule an FQDN object reaches and no address does matched only through
+	// that object. The firewall resolves that object itself and refreshes it
+	// (default every 30 minutes), and policy matches the packet's addresses, so
+	// the rule holds the flow only if the firewall's answer agrees with this
+	// machine's. Source: PAN-OS admin guide, "Use FQDN Objects" (spec 2026-10-09
+	// §3.8, R9). A field of any matches every address and is no FQDN match.
+	// A negated rule excluded only through such an object may match on the
+	// firewall, so it stays a candidate with the same doubt.
+	byFQDN.AndNot(byAddr)
+	byFQDN.AndNot(s.idx.RulesWithAny(f))
+	fqdnOnly := roaring.AndNot(byFQDN, neg)
+	fqdnNegated := roaring.And(byFQDN, neg)
 	if !neg.IsEmpty() {
 		inverted := roaring.AndNot(neg, b)
 		b.AndNot(neg)
 		b.Or(inverted)
 	}
+	b.Or(fqdnNegated)
 	b.Or(opaque)
 	if s.opaque == nil {
 		s.opaque = map[string]map[uint32][]reason.Reason{}
@@ -110,7 +121,7 @@ func (s *state) side(f index.Field, ep simulate.Endpoint, negated func(resolve.R
 	if s.fqdn == nil {
 		s.fqdn = map[string]fqdnMatch{}
 	}
-	s.fqdn[f.String()] = fqdnMatch{name: ep.Name, rules: fqdnOnly}
+	s.fqdn[f.String()] = fqdnMatch{name: ep.Name, rules: fqdnOnly, negated: fqdnNegated}
 
 	switch {
 	case ep.Name != "" && len(ep.Addrs) == 0:

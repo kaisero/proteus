@@ -39,6 +39,7 @@
       "placed": "connected",
       "outcome": "left-estate",
       "end": "192.168.0.1   leaves the estate (not in the inventory)",
+      "end_code": "path.left-estate",
       "hops": [
         {
           "device": "fw01",

@@ -73,7 +73,8 @@ note are objects with `code` and `text` beside `device` and `vsys`. A list of
 reasons, such as `fidelity.reasons`, a doubt's `reasons` or a check's `reasons`,
 holds `{"code", "text"}` objects. A script matches the `code`; the `text` is for
 people and may change. A reason built from several parts lists each part with
-its own code.
+its own code. Text may join consecutive unresolved entries of one composite on
+one line; JSON lists them separately.
 
 ```
 "unresolved": [

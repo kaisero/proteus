@@ -42,6 +42,7 @@ results:
     placed: connected
     outcome: left-estate
     end: 198.19.0.77   leaves the estate (not in the inventory)
+    end_code: path.left-estate
     stages:
       - slug: place
         name: place the start

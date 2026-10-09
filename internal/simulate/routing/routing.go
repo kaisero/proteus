@@ -95,8 +95,8 @@ type Path struct {
 	PlacedVia   string            `json:"placed_via,omitempty"`
 	StartVia    netip.Prefix      `json:"start_via,omitzero"` // the route that placed the start or gave its ingress
 	Outcome     Outcome           `json:"outcome"`
-	End         string            `json:"end"` // the end line's text
-	EndCode     reason.Code       `json:"-"`   // the kind of end, for a reason that names it
+	End         string            `json:"end"`      // the end line's text
+	EndCode     reason.Code       `json:"end_code"` // the kind of end, for a reason that names it
 	Hops        []Hop             `json:"hops"`
 	Hidden      []string          `json:"hidden,omitempty"` // spec §17 R19
 	Notes       simulate.Reasons  `json:"notes,omitempty"`

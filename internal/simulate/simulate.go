@@ -84,6 +84,9 @@ func (t Target) Index(rb resolve.Rulebase, vsys string) (*index.Index, error) {
 	if err != nil {
 		return nil, err
 	}
+	if idx == nil {
+		return nil, errors.New("the index provider gives no index")
+	}
 	// A provider of another vsys would answer with that vsys's rules.
 	if idx.Scope().Name != vsys {
 		return nil, fmt.Errorf("the index provider gives %s, not vsys %s", idx.Scope(), vsys)

@@ -122,6 +122,13 @@ func (r *rulesIndex) addLiteral(f Field, value string, bit uint32) {
 	}
 }
 
+// RulesReaching returns the rules whose field names the object, or a group that
+// holds it at any depth.
+func (i *Index) RulesReaching(f Field, name string) *roaring.Bitmap {
+	var rep Report
+	return i.RulesWith(f, i.reach(name, &rep)...)
+}
+
 // RulesWith returns the rules naming any of the ids in a field.
 func (i *Index) RulesWith(f Field, ids ...uint32) *roaring.Bitmap {
 	out := roaring.New()

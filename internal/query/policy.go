@@ -11,6 +11,7 @@ import (
 
 	"github.com/okaiser/proteus/internal/estate"
 	"github.com/okaiser/proteus/internal/index"
+	"github.com/okaiser/proteus/internal/reason"
 	"github.com/okaiser/proteus/internal/resolve"
 	"github.com/okaiser/proteus/internal/runlog"
 	"github.com/okaiser/proteus/internal/simulate"
@@ -363,6 +364,7 @@ type PathResult struct {
 	StartVia    netip.Prefix      `json:"start_via,omitzero"`
 	Outcome     routing.Outcome   `json:"outcome"`
 	End         string            `json:"end"`
+	EndCode     reason.Code       `json:"end_code"`
 	Hidden      []string          `json:"hidden,omitempty"`
 	Stages      []Stage           `json:"stages"`
 	Hops        []PathHop         `json:"hops"`
@@ -435,7 +437,7 @@ func pathResultOf(r pathpolicy.Result, stages []simulate.Stage) PathResult {
 	out := PathResult{
 		Mode: "path", Verdict: string(r.Verdict), Fidelity: r.Fidelity,
 		Source: path.Source, Destination: path.Destination, Placed: path.Placed, PlacedVia: path.PlacedVia,
-		StartVia: path.StartVia, Outcome: path.Outcome, End: path.End, Hidden: path.Hidden,
+		StartVia: path.StartVia, Outcome: path.Outcome, End: path.End, EndCode: path.EndCode, Hidden: path.Hidden,
 		Stages: SimStages(stages), Hops: []PathHop{}, Result: r, RunStages: stages,
 	}
 	if at := r.At; at != nil {

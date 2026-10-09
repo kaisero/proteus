@@ -48,6 +48,10 @@ func TestTargetIndexComesFromItsProvider(t *testing.T) {
 	if _, err := failing.Index(resolve.NAT, "vsys1"); err == nil || err.Error() != "broken" {
 		t.Errorf("a failed provider: %v", err)
 	}
+	empty := Target{Indexes: func(resolve.Rulebase) (*index.Index, error) { return nil, nil }}
+	if _, err := empty.Index(resolve.Security, "vsys1"); err == nil || err.Error() != "the index provider gives no index" {
+		t.Errorf("no index: %v", err)
+	}
 	cfg, _, err := config.Load("../../testdata/config/firewall-simulate.xml")
 	if err != nil {
 		t.Fatal(err)

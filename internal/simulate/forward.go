@@ -47,7 +47,6 @@ type Forward struct {
 	Routes   []Match  `json:"routes"`        // one per router crossed
 	End      string   `json:"end,omitempty"` // "" when the packet leaves by Out
 	Fidelity Fidelity `json:"fidelity"`
-	Notes    []string `json:"notes,omitempty"`
 }
 
 // ChoiceError is a question only the user can answer: which device, which router,

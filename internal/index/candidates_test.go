@@ -59,6 +59,20 @@ func TestCandidatesForNameCoversNameGroupsAndAny(t *testing.T) {
 	}
 }
 
+// RulesReaching is the name and its groups only: no any, no literal.
+func TestRulesReachingIsTheNameAndItsGroups(t *testing.T) {
+	t.Parallel()
+	idx := indexOf(t, "../../testdata/config/firewall-paths.xml", "vsys1")
+	rules := idx.Rules()
+	got := map[string]bool{}
+	for it := idx.RulesReaching(Source, "h-1").Iterator(); it.HasNext(); {
+		got[rules[it.Next()].Name] = true
+	}
+	if !got["by-object"] || !got["by-group"] || got["by-any"] || got["by-literal"] {
+		t.Errorf("got %v", keys(got))
+	}
+}
+
 // The composition a consumer writes: two sides, intersect, drop disabled, take the
 // lowest bit. The library supplies the sides and nothing more.
 func TestComposingSidesGivesTheDeviceAnswer(t *testing.T) {
