@@ -243,7 +243,7 @@ func TestUnresolvedString(t *testing.T) {
 	}
 }
 
-// An Unresolved keeps its code, and the code stays out of the format-1 JSON.
+// An Unresolved keeps its code, and JSON writes it (format 2).
 func TestUnresolvedKeepsItsCode(t *testing.T) {
 	t.Parallel()
 	r := reason.New("zone.missing", "why")
@@ -252,7 +252,7 @@ func TestUnresolvedKeepsItsCode(t *testing.T) {
 		t.Errorf("got %+v", u)
 	}
 	b, err := json.Marshal(u)
-	if err != nil || string(b) != `{"Value":"x","Kind":"zone","Reason":"why"}` {
+	if err != nil || string(b) != `{"value":"x","kind":"zone","code":"zone.missing","text":"why"}` {
 		t.Errorf("json = %s, %v", b, err)
 	}
 }

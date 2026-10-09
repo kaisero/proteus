@@ -1,5 +1,5 @@
 {
-  "format": 1,
+  "format": 2,
   "command": "simulate policy",
   "input": {
     "mode": "path",
@@ -31,7 +31,12 @@
         "hop": 1,
         "check": "security",
         "rule": "interzone-default",
-        "reason": "default rule interzone-default (deny), built-in"
+        "reasons": [
+          {
+            "code": "verdict.default",
+            "text": "default rule interzone-default (deny), built-in"
+          }
+        ]
       },
       "fidelity": {
         "level": "exact"
@@ -238,7 +243,12 @@
           "checks": {
             "security": {
               "verdict": "stop",
-              "reason": "default rule interzone-default (deny), built-in",
+              "reasons": [
+                {
+                  "code": "verdict.default",
+                  "text": "default rule interzone-default (deny), built-in"
+                }
+              ],
               "rule": "interzone-default",
               "default": "interzone-default",
               "default_action": "deny",
@@ -417,7 +427,12 @@
           "checks": {
             "security": {
               "verdict": "stop",
-              "reason": "default rule interzone-default (deny), built-in",
+              "reasons": [
+                {
+                  "code": "verdict.default",
+                  "text": "default rule interzone-default (deny), built-in"
+                }
+              ],
               "rule": "interzone-default",
               "default": "interzone-default",
               "default_action": "deny",

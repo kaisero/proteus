@@ -14,6 +14,7 @@ import (
 
 	"github.com/okaiser/proteus/internal/estate"
 	"github.com/okaiser/proteus/internal/fakepanos"
+	"github.com/okaiser/proteus/internal/query"
 	"github.com/okaiser/proteus/internal/reason"
 	"github.com/okaiser/proteus/internal/simulate"
 	"github.com/okaiser/proteus/internal/simulate/pathlab"
@@ -336,7 +337,7 @@ func TestPolicyPathVersionGapIsANote(t *testing.T) {
 	}
 	var env struct {
 		Unresolved []any
-		Notes      []struct{ Device, Vsys, Note string }
+		Notes      []struct{ Device, Vsys, Text string }
 	}
 	out = c.want(0, append(args, "--output", "json")...)
 	if err := json.Unmarshal([]byte(out), &env); err != nil || len(env.Unresolved) != 0 {
@@ -344,7 +345,7 @@ func TestPolicyPathVersionGapIsANote(t *testing.T) {
 	}
 	found := false
 	for _, n := range env.Notes {
-		found = found || n.Device == "fw02" && n.Vsys == "vsys1" && strings.Contains(n.Note, "PAN-OS 12.2.0")
+		found = found || n.Device == "fw02" && n.Vsys == "vsys1" && strings.Contains(n.Text, "PAN-OS 12.2.0")
 	}
 	if !found {
 		t.Errorf("the gap must be an envelope note: %+v", env.Notes)
@@ -487,8 +488,23 @@ func TestVerdictLineEdges(t *testing.T) {
 	if got := verdictLine(palette{}, r); got != "denied at hop 1: no route to 198.18.10.100 on fw01" {
 		t.Errorf("after NAT: %s", got)
 	}
-	r = pathpolicy.Result{Verdict: pathpolicy.VerdictUndecided, At: &pathpolicy.Point{Hop: 0, Check: "routing", Reason: reason.New("path.unresolved", "no hop")}}
+	r = pathpolicy.Result{Verdict: pathpolicy.VerdictUndecided, At: &pathpolicy.Point{Hop: 0, Check: "routing", Reason: simulate.Reasons{reason.New("path.unresolved", "no hop")}}}
 	if got := verdictLine(palette{}, r); got != "undecided at hop 0: no hop" {
 		t.Errorf("no hop: %s", got)
+	}
+}
+
+// A composite reason's parts are one unresolved line of text, as one reason.
+func TestUnresolvedPartsShareALine(t *testing.T) {
+	t.Parallel()
+	var b bytes.Buffer
+	w := &textOut{w: &b}
+	parts := query.UnresolvedOfParts("fw01", "vsys1", simulate.Reasons{
+		reason.New("doubt.edl", "r may match first: source: external list (x)"), reason.New("doubt.region", "region (AT)"),
+	})
+	printQualifiers(w, qualifiers{Unresolved: append(parts, query.UnresolvedOf("fw02", "", reason.New("gap.version", "other")))})
+	want := "unresolved: fw01/vsys1: r may match first: source: external list (x); region (AT)\nunresolved: fw02: other\n\n"
+	if b.String() != want {
+		t.Errorf("got\n%q\nwant\n%q", b.String(), want)
 	}
 }

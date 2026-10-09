@@ -1,6 +1,6 @@
 // Package task runs an operation as named steps and records each one: its status,
-// what it concluded, how long it took. It is a leaf: it imports runlog and nothing
-// else of this module (AGENTS.md R12).
+// what it concluded, how long it took. It is a leaf: it imports runlog and reason
+// and nothing else of this module (AGENTS.md R12).
 package task
 
 import (
@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/okaiser/proteus/internal/reason"
 	"github.com/okaiser/proteus/internal/runlog"
 )
 
@@ -30,10 +31,10 @@ type Step[S any] struct {
 
 // Result is what a step concluded.
 type Result struct {
-	Status Status   // OK when empty
-	Detail string   // one line: the stage table and the STEP log line
-	Notes  []string // what a reader of the answer should know
-	Debug  []string // run log at debug level only
+	Status Status          // OK when empty
+	Detail string          // one line: the stage table and the STEP log line
+	Notes  []reason.Reason // what a reader of the answer should know
+	Debug  []string        // run log at debug level only
 }
 
 // Record is one step as it ran.
@@ -41,7 +42,7 @@ type Record struct {
 	Name, Slug string
 	Status     Status
 	Detail     string
-	Notes      []string
+	Notes      []reason.Reason
 	Elapsed    time.Duration
 	Err        error
 }

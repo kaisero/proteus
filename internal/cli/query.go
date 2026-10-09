@@ -14,7 +14,7 @@ import (
 
 // enveloped is the part of an answer a query's envelope gives: the command, the
 // results and the qualifiers. A command's answer type embeds it and adds its
-// format-1 input block and its text.
+// input block and its text.
 type enveloped[In, Res any] struct {
 	e query.Envelope[In, Res]
 }

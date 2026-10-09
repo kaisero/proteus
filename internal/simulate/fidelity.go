@@ -34,8 +34,12 @@ var levelNames = map[level]string{
 // UnderMatch may be missing matches, the most dangerous for a verdict.
 type Fidelity struct {
 	level level
-	why   []reason.Reason // why the output is weaker than exact, at any level
-	under []reason.Reason // the reasons given at UnderMatch, a subset of why
+	// why says why the output is weaker than exact, at any level; under holds
+	// the reasons given at UnderMatch, a subset of why. Each entry is one
+	// reason as given: one part, or the parts of a composite reason, which read
+	// as one, joined with "; ".
+	why   []Reasons
+	under []Reasons
 	skip  []reason.Reason // NotEvaluated: the dimensions skipped, as text with their codes
 }
 
@@ -49,9 +53,14 @@ var (
 	Inferred = Fidelity{level: inferred}
 )
 
-// UnderMatch declares that the output may be missing matches, and why.
-func UnderMatch(r reason.Reason) Fidelity {
-	return Fidelity{level: underMatch, why: []reason.Reason{r}, under: []reason.Reason{r}}
+// UnderMatch declares that the output may be missing matches, and why: one
+// reason, or the parts of a composite one, each with its own code.
+func UnderMatch(rs ...reason.Reason) Fidelity {
+	f := Fidelity{level: underMatch}
+	if len(rs) > 0 {
+		f.why, f.under = []Reasons{slices.Clone(rs)}, []Reasons{slices.Clone(rs)}
+	}
+	return f
 }
 
 // NotEvaluated declares that the stage skipped dimensions. Skipping a matching
@@ -82,7 +91,7 @@ var dimensionCodes = map[string]reason.Code{
 // OverMatchBecause is OverMatch with a reason, such as the rules kept because a
 // configuration cannot say whether they match.
 func OverMatchBecause(r reason.Reason) Fidelity {
-	return Fidelity{level: overMatch, why: []reason.Reason{r}}
+	return Fidelity{level: overMatch, why: []Reasons{{r}}}
 }
 
 // Declared reports whether the stage said anything at all.
@@ -98,17 +107,36 @@ func (f Fidelity) Skipped() []string { return texts(f.skip) }
 func (f Fidelity) SkippedReasons() Reasons { return slices.Clone(f.skip) }
 
 // Reasons lists why the output is weaker than exact, where a stage said.
-func (f Fidelity) Reasons() Reasons { return slices.Clone(f.why) }
+func (f Fidelity) Reasons() Reasons { return flat(f.why) }
 
 // UnderMatchReasons lists only the reasons given at UnderMatch: why matches may
 // be missing. Weakest keeps the reasons of every level, so an undermatch can also
 // carry an overmatch reason that says nothing about what is missing.
-func (f Fidelity) UnderMatchReasons() Reasons { return slices.Clone(f.under) }
+func (f Fidelity) UnderMatchReasons() Reasons { return flat(f.under) }
+
+// UnderMatchGroups lists the reasons given at UnderMatch as given: each a
+// reason, or the parts of a composite one.
+func (f Fidelity) UnderMatchGroups() []Reasons {
+	out := make([]Reasons, 0, len(f.under))
+	for _, g := range f.under {
+		out = append(out, slices.Clone(g))
+	}
+	return out
+}
+
+// flat lists the parts of every reason in order; nil for none.
+func flat(gs []Reasons) Reasons {
+	var out Reasons
+	for _, g := range gs {
+		out = append(out, g...)
+	}
+	return out
+}
 
 func (f Fidelity) String() string {
 	s := f.Level()
 	if len(f.why) > 0 {
-		s += ": " + strings.Join(texts(f.why), "; ")
+		s += ": " + flat(f.why).Text()
 	}
 	if len(f.skip) > 0 {
 		s += "; not evaluated: " + strings.Join(texts(f.skip), ", ")
@@ -119,9 +147,10 @@ func (f Fidelity) String() string {
 // texts lists the texts of rs, nil for none.
 func texts(rs []reason.Reason) []string { return Reasons(rs).Texts() }
 
-// sameText matches a reason with r's text.
-func sameText(r reason.Reason) func(reason.Reason) bool {
-	return func(o reason.Reason) bool { return o.Text == r.Text }
+// sameText matches a reason with r's text: a composite's reads as its parts
+// joined.
+func sameText(r Reasons) func(Reasons) bool {
+	return func(o Reasons) bool { return o.Text() == r.Text() }
 }
 
 // Weakest returns the weakest fidelity: the highest level, with every reason and
@@ -132,8 +161,8 @@ func Weakest(fs ...Fidelity) Fidelity {
 		if f.level > out.level {
 			out.level = f.level
 		}
-		// Reasons are the same when their texts are, as in format 1, which
-		// prints only the text: the first code stays.
+		// Reasons are the same when their texts are: the text reads the
+		// same twice, so the first code stays.
 		for _, r := range f.why {
 			if !slices.ContainsFunc(out.why, sameText(r)) {
 				out.why = append(out.why, r)
@@ -153,11 +182,13 @@ func Weakest(fs ...Fidelity) Fidelity {
 	return out
 }
 
-// MarshalJSON writes {"level":…, "reasons":[…], "not_evaluated":[…]}.
+// MarshalJSON writes {"level":…, "reasons":[{"code","text"}…],
+// "not_evaluated":[…]}: each reason with its code, each skipped dimension by
+// name (spec 2026-10-09 §3.2).
 func (f Fidelity) MarshalJSON() ([]byte, error) {
 	return json.Marshal(struct {
-		Level        string   `json:"level"`
-		Reasons      []string `json:"reasons,omitempty"`
-		NotEvaluated []string `json:"not_evaluated,omitempty"`
-	}{f.Level(), texts(f.why), texts(f.skip)})
+		Level        string          `json:"level"`
+		Reasons      []reason.Reason `json:"reasons,omitempty"`
+		NotEvaluated []string        `json:"not_evaluated,omitempty"`
+	}{f.Level(), flat(f.why), texts(f.skip)})
 }

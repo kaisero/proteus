@@ -166,8 +166,8 @@ func (p pathAnswer) text(t *textOut, res query.PathResult) {
 	for _, h := range r.Hops {
 		for _, c := range h.Checks {
 			fmt.Fprintf(t, "\nhop %d: %s / %s, %s %s", h.Index, h.Routing.Device, h.Routing.Vsys, c.Name, c.Verdict)
-			if c.Reason.Text != "" {
-				fmt.Fprintf(t, ": %s", c.Reason.Text)
+			if len(c.Reason) > 0 {
+				fmt.Fprintf(t, ": %s", c.Reason.Text())
 			}
 			fmt.Fprintf(t, "\n")
 			if c.Security != nil {
@@ -188,9 +188,9 @@ func policyRows(h pathpolicy.Hop) [][2]string {
 		case pathpolicy.Pass, pathpolicy.Stop:
 			s = fmt.Sprintf("%s (%s)", c.Rule, checkAction(c))
 		case pathpolicy.Undecided:
-			s = "undecided: " + c.Reason.Text
+			s = "undecided: " + c.Reason.Text()
 		default:
-			s = "not evaluated: " + c.Reason.Text
+			s = "not evaluated: " + c.Reason.Text()
 		}
 		if h.AfterDeny {
 			s += " (after the deny)"
@@ -216,9 +216,9 @@ func verdictLine(pal palette, r pathpolicy.Result) string {
 	at := fmt.Sprintf("%s at hop %d: ", r.Verdict, r.At.Hop)
 	switch {
 	case !ok:
-		return pal.warn(at + r.At.Reason.Text)
+		return pal.warn(at + r.At.Reason.Text())
 	case r.Verdict == pathpolicy.VerdictUndecided:
-		return pal.warn(at + fmt.Sprintf("%s / %s, %s", h.Device, h.Vsys, r.At.Reason.Text))
+		return pal.warn(at + fmt.Sprintf("%s / %s, %s", h.Device, h.Vsys, r.At.Reason.Text()))
 	case r.At.Check == "routing":
 		// The address the hop looked up: after a destination NAT, the
 		// translated one.

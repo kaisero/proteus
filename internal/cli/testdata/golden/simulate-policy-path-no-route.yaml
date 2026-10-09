@@ -1,4 +1,4 @@
-format: 1
+format: 2
 command: simulate policy
 input:
   mode: path
@@ -23,7 +23,9 @@ results:
       hop: 2
       check: routing
       rule: ""
-      reason: 'dropped on fw01: no route to 198.18.30.5'
+      reasons:
+        - code: path.no-route
+          text: 'dropped on fw01: no route to 198.18.30.5'
     fidelity:
       level: exact
     source:
@@ -174,7 +176,9 @@ results:
         checks:
           security:
             verdict: pass
-            reason: default rule interzone-default (allow), local
+            reasons:
+              - code: verdict.default
+                text: default rule interzone-default (allow), local
             rule: interzone-default
             default: interzone-default
             default_action: allow
@@ -289,7 +293,9 @@ results:
         checks:
           security:
             verdict: not-evaluated
-            reason: dropped by routing before security policy
+            reasons:
+              - code: path.no-route
+                text: dropped by routing before security policy
             rule: ""
             default: ""
             default_action: ""

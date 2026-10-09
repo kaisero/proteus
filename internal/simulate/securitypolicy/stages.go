@@ -524,7 +524,7 @@ func firstMatch(_ context.Context, s *state) (simulate.Outcome, error) {
 		d, err := s.defaultRule()
 		if err.Text != "" {
 			out.Detail = lead + "; " + err.Text
-			s.verdict.Undecided = err
+			s.verdict.Undecided = simulate.Reasons{err}
 			out.Fidelity = simulate.Weakest(out.Fidelity, simulate.UnderMatch(err))
 			return out, nil
 		}
@@ -534,12 +534,13 @@ func firstMatch(_ context.Context, s *state) (simulate.Outcome, error) {
 	}
 	for _, r := range before {
 		if r.Action != action {
-			// The undecided reason is the doubt's, named with its rule.
+			// The undecided reason is the doubt's, named with its rule: each of
+			// the doubt's parts keeps its code.
 			d := doubted[r.Position]
-			why := d.Reasons.Prefixed(fmt.Sprintf("%s (%s) at position %d may match first: ", r.Name, r.Action, r.Position)).Joined()
+			why := d.Reasons.Prefixed(fmt.Sprintf("%s (%s) at position %d may match first: ", r.Name, r.Action, r.Position))
 			s.verdict.Undecided = why
-			out.Detail += "; undecided: " + why.Text
-			out.Fidelity = simulate.Weakest(out.Fidelity, simulate.UnderMatch(why))
+			out.Detail += "; undecided: " + why.Text()
+			out.Fidelity = simulate.Weakest(out.Fidelity, simulate.UnderMatch(why...))
 			return out, nil
 		}
 	}

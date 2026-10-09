@@ -1,4 +1,4 @@
-format: 1
+format: 2
 command: fetch
 input:
   devices:
@@ -58,4 +58,5 @@ holes: []
 unresolved: []
 notes:
   - device: fw01
-    note: TLS certificate verification is off (insecure_tls)
+    code: note.tls-off
+    text: TLS certificate verification is off (insecure_tls)

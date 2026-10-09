@@ -107,8 +107,13 @@ func printQualifiers(t *textOut, q qualifiers) {
 	for _, h := range q.Holes {
 		fmt.Fprintf(t, "%s %s: %s\n", t.pal.bad("hole:"), where(h.Device, h.Vsys), h.Reason)
 	}
-	for _, u := range q.Unresolved {
-		fmt.Fprintf(t, "%s %s: %s\n", t.pal.warn("unresolved:"), where(u.Device, u.Vsys), u.Reason)
+	// A composite reason's parts read as one line, as one reason.
+	for i := 0; i < len(q.Unresolved); {
+		u, text := q.Unresolved[i], q.Unresolved[i].Reason
+		for i++; i < len(q.Unresolved) && q.Unresolved[i].Part; i++ {
+			text += "; " + q.Unresolved[i].Reason
+		}
+		fmt.Fprintf(t, "%s %s: %s\n", t.pal.warn("unresolved:"), where(u.Device, u.Vsys), text)
 	}
 	if len(q.Holes)+len(q.Unresolved) > 0 {
 		fmt.Fprintln(t)

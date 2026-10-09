@@ -175,9 +175,17 @@ first, or build `reason.Reason{Code: c, Text: t}` directly. Producers keep a
 fixed table instead (`simulate`'s dimension codes, `securitypolicy`'s doubt
 codes), so each code is a literal the source test sees.
 
-Until JSON format 2 the codes stay out of the output. `simulate.Reasons` writes
-its reasons as texts, `index.Unresolved.Code` and `simulate.Missing.Code` are not
-in the JSON, and a doubt with several reasons writes them joined by "; ".
+JSON format 2 writes every reason as `{"code", "text"}`, beside its context
+fields: envelope holes, unresolved entries and notes are
+`{device, vsys, [value,] code, text}`; `fidelity.reasons`, `simulate.Reasons`,
+hop notes and doubts are lists of `{code, text}`; a doubt is
+`{position, rule, reasons}`. A composite reason (an undecided rule that names
+its doubt, several undermatch reasons of one stage) keeps its parts, each with
+its own code: `Fidelity` holds it as one group, a check's and a path point's
+`reasons` list its parts, and the envelope has one unresolved entry per part,
+the later ones marked `Part`, which the text joins on one line. Text output is
+the same as in format 1. Only a summary that names its own cause keeps one
+code: `doubt.nat-rule` over NAT doubts, whose parts stay in the NAT doubts.
 
 `reason` imports only the standard library, so every package may import it; the
 archtest allows it in every R12 rule.

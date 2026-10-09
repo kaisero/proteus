@@ -78,8 +78,10 @@ simulate nat <src> <dst> --device <fw>      the NAT rule and the translated pack
   (exit 3). `scripts/device-probe.sh --routing <device>
   <router> <dst>...` checks its first lookup against the device.
 - **Output:** `--output text|json|yaml`. JSON and YAML are the same envelope:
-  `format` (1), `command`, `input`, `results` (always an array), `holes`,
-  `unresolved`, `notes`. Every note the text shows is in `notes` too.
+  `format` (2), `command`, `input`, `results` (always an array), `holes`,
+  `unresolved`, `notes`. Every note the text shows is in `notes` too. Format 2
+  writes every reason as `{code, text}` with its context fields (see
+  reporting.md); the text output does not change with it.
 - **Colour:** `--color auto|always|never` (also `PROTEUS_COLOR`, inventory `color:`),
   default `auto`. JSON and YAML are never coloured. `NO_COLOR`, `CLICOLOR_FORCE` and
   `TERM=dumb` act on `auto` only; `auto` colours a terminal and nothing else.
@@ -93,7 +95,7 @@ simulate nat <src> <dst> --device <fw>      the NAT rule and the translated pack
   prints its answer in all three.
 - **Errors on stderr:** text mode prints `proteus: <message>` and `log: <path>`. In
   JSON and YAML mode the last stderr line of a non-zero exit is one JSON object,
-  `{"format":1,"exit":N,"error":…,"log":…}`, also for command-line errors.
+  `{"format":2,"exit":N,"error":…,"log":…}`, also for command-line errors.
 - **A new command** builds an `answer` (`Command`, `Input`, `Results`,
   `Qualifiers`, `Text`) and ends its `RunE` with `a.emitRun(a.runX(...))`. It never
   writes to stdout itself; `emit` renders the format, logs the `answer:` line and
@@ -197,6 +199,7 @@ func TargetOf(t estate.Target) Target
 func TargetQualifiers(ts []estate.Target) ([]Unresolved, []Note)
 func Targets(ctx context.Context, env Env, sel Selection) ([]estate.Target, []estate.Hole, error)
 func UnresolvedOf(device, vsys string, r reason.Reason) Unresolved
+func UnresolvedOfParts(device, vsys string, rs simulate.Reasons) []Unresolved
 ```
 <!-- /GENERATED:api -->
 

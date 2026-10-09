@@ -53,8 +53,9 @@ type Verdict struct {
 	Rule *resolve.Rule `json:"rule"` // first match; nil when none
 	// Undecided says why no rule or default rule decides the flow, empty when one
 	// does (spec §4.7): a stage that may miss matches, or candidates in doubt. Rule
-	// or Default may still be set: the first certain match.
-	Undecided reason.Reason `json:"undecided,omitzero"`
+	// or Default may still be set: the first certain match. A composite reason
+	// keeps its parts, each with its code; its text joins them.
+	Undecided simulate.Reasons `json:"undecided,omitempty"`
 	// Default is the default rule that decides when no rule matches, empty when
 	// none decides; DefaultAction is its action, and DefaultSource where the action
 	// came from: built-in, local or pushed.
@@ -84,9 +85,9 @@ const (
 // Any other action, or no deciding rule, is undecided.
 //
 // The reason of a decided flow is a verdict: the rule or default rule that
-// decides (spec §12 C9).
-func (v Verdict) Decision() (Outcome, reason.Reason) {
-	if v.Undecided.Text != "" {
+// decides (spec §12 C9). An undecided flow's reason can have several parts.
+func (v Verdict) Decision() (Outcome, simulate.Reasons) {
+	if len(v.Undecided) > 0 {
 		return Undecided, v.Undecided
 	}
 	what, action := fmt.Sprintf("default rule %s (%s), %s", v.Default, v.DefaultAction, v.DefaultSource), v.DefaultAction
@@ -96,25 +97,15 @@ func (v Verdict) Decision() (Outcome, reason.Reason) {
 		what, action = fmt.Sprintf("rule %s (%s)", v.Rule.Name, v.Rule.Action), v.Rule.Action
 		code, invalid = "verdict.rule", "doubt.invalid-action"
 	case v.Default == "":
-		return Undecided, reason.New("default.none", "no rule decides")
+		return Undecided, simulate.Reasons{reason.New("default.none", "no rule decides")}
 	}
 	switch {
 	case action == "allow":
-		return Pass, reason.New(code, what)
+		return Pass, simulate.Reasons{reason.New(code, what)}
 	case slices.Contains(validActions, action):
-		return Stop, reason.New(code, what)
+		return Stop, simulate.Reasons{reason.New(code, what)}
 	}
-	return Undecided, reason.New(invalid, what+" is not a security rule action")
-}
-
-// MarshalJSON writes the verdict with undecided as its text, omitted when empty,
-// as format 1 has it.
-func (v Verdict) MarshalJSON() ([]byte, error) {
-	type plain Verdict
-	return json.Marshal(struct {
-		plain
-		Undecided string `json:"undecided,omitempty"`
-	}{plain(v), v.Undecided.Text})
+	return Undecided, simulate.Reasons{reason.New(invalid, what+" is not a security rule action")}
 }
 
 // ZoneDerivation says which zones were used and where they came from.
@@ -133,14 +124,15 @@ type Relevance struct {
 	Reason   reason.Reason // a verdict when known (spec §12 C9)
 }
 
-// MarshalJSON writes {"known", "relevant", "reason"}, the reason as its text, as
-// format 1 does.
+// MarshalJSON writes {"known", "relevant", "code", "text"}: the reason with
+// its context (spec 2026-10-09 §3.2).
 func (r Relevance) MarshalJSON() ([]byte, error) {
 	return json.Marshal(struct {
-		Known    bool   `json:"known"`
-		Relevant bool   `json:"relevant"`
-		Reason   string `json:"reason"`
-	}{r.Known, r.Relevant, r.Reason.Text})
+		Known    bool        `json:"known"`
+		Relevant bool        `json:"relevant"`
+		Code     reason.Code `json:"code"`
+		Text     string      `json:"text"`
+	}{r.Known, r.Relevant, r.Reason.Code, r.Reason.Text})
 }
 
 // state is what the stages share.
@@ -188,7 +180,7 @@ func (Simulation) Run(ctx context.Context, env *simulate.Env, in simulate.Input)
 	stages, err := simulate.Execute(ctx, Kind, s, steps, false, env.Log)
 	run.Stages = stages
 	run.Fidelity = simulate.Overall(stages)
-	if u := undermatched(stages); err == nil && u.Text != "" {
+	if u := undermatched(stages); err == nil && len(u) > 0 {
 		s.verdict.Undecided = u
 	}
 	run.Output = s.verdict
@@ -201,14 +193,14 @@ func (Simulation) Run(ctx context.Context, env *simulate.Env, in simulate.Input)
 // its reason wins over a doubt first-match found. Only the undermatch reasons
 // count: an overmatch reason of the same stage says nothing about what is
 // missing. A version gap does not count: withoutGap has already made it inferred
-// (E25). Several reasons read as one, with the first one's code.
-func undermatched(stages []simulate.Stage) reason.Reason {
+// (E25). Several reasons stay parts, each with its code.
+func undermatched(stages []simulate.Stage) simulate.Reasons {
 	for _, st := range stages {
 		if f := st.Fidelity; f.Level() == "undermatch" {
-			return f.UnderMatchReasons().Joined()
+			return f.UnderMatchReasons()
 		}
 	}
-	return reason.Reason{}
+	return nil
 }
 
 // relevance reads the forwarding table's placements of both endpoints.

@@ -26,7 +26,7 @@ import (
 
 // FormatVersion is the envelope's format. A change that breaks a consumer
 // increments it.
-const FormatVersion = 1
+const FormatVersion = 2
 
 // Env is what a query reads besides its input. The caller owns every value.
 type Env struct {
@@ -75,8 +75,8 @@ func (e Env) users() (index.UserDirectory, error) {
 // input and result element. Detail is "full" for a query's own answer and
 // "summary" after Summarize.
 //
-// The fields carry no JSON tags: the command line writes format 1 from them,
-// with its own input block. Targets holds what the renderers need and no
+// The fields carry no JSON tags: the command line writes the envelope from
+// them, with its own input block. Targets holds what the renderers need and no
 // envelope prints: every target read, with or without results (C16).
 type Envelope[In, Res any] struct {
 	Format     int
@@ -148,22 +148,25 @@ func usageOf(err error, text, toolText string) *UsageError {
 }
 
 // Unresolved is something that makes an answer incomplete: it can be missing
-// matches.
+// matches. JSON writes {device, vsys, value, code, text} (spec 2026-10-09 §3.2).
+// A composite reason is one entry per part; Part marks each entry after the
+// first, so a renderer can print the parts on one line.
 type Unresolved struct {
 	Device string      `json:"device"`
 	Vsys   string      `json:"vsys,omitempty"`
 	Value  string      `json:"value,omitempty"`
-	Reason string      `json:"reason"`
-	Code   reason.Code `json:"-"` // the kind of Reason; out of the JSON until format 2
+	Code   reason.Code `json:"code"`
+	Reason string      `json:"text"`
+	Part   bool        `json:"-"`
 }
 
 // Note qualifies an answer without making it incomplete, such as a snapshot
-// past its age limit.
+// past its age limit. JSON writes {device, vsys, code, text}.
 type Note struct {
 	Device string      `json:"device"`
 	Vsys   string      `json:"vsys,omitempty"`
-	Note   string      `json:"note"`
-	Code   reason.Code `json:"-"` // the kind of Note; out of the JSON until format 2
+	Code   reason.Code `json:"code"`
+	Note   string      `json:"text"`
 }
 
 // NoteOf is a note for a device and vsys with r's code and text.
@@ -175,6 +178,18 @@ func NoteOf(device, vsys string, r reason.Reason) Note {
 // text.
 func UnresolvedOf(device, vsys string, r reason.Reason) Unresolved {
 	return Unresolved{Device: device, Vsys: vsys, Reason: r.Text, Code: r.Code}
+}
+
+// UnresolvedOfParts is a composite reason's unresolved entries: one per part,
+// each with its code, the later ones marked as parts.
+func UnresolvedOfParts(device, vsys string, rs simulate.Reasons) []Unresolved {
+	out := make([]Unresolved, 0, len(rs))
+	for i, r := range rs {
+		u := UnresolvedOf(device, vsys, r)
+		u.Part = i > 0
+		out = append(out, u)
+	}
+	return out
 }
 
 // Target is how a result names where it came from.
@@ -204,7 +219,7 @@ type Stage struct {
 	Fidelity   *simulate.Fidelity `json:"fidelity,omitempty"`
 	Candidates *uint64            `json:"candidates,omitempty"`
 	Detail     string             `json:"detail,omitempty"`
-	Notes      []string           `json:"notes,omitempty"`
+	Notes      []reason.Reason    `json:"notes,omitempty"`
 	Unresolved []index.Unresolved `json:"unresolved,omitempty"`
 	ElapsedMS  float64            `json:"elapsed_ms"`
 }

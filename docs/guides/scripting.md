@@ -21,7 +21,7 @@ are at the top level, so a script cannot miss them.
 $ proteus search 10.124.0.1 --vsys vsys1 --show objects --output json \
     --file testdata/config/firewall-multivsys.xml
 {
-  "format": 1,
+  "format": 2,
   "command": "search",
   "input": {
     "direct": false,
@@ -67,6 +67,24 @@ $ proteus search 10.124.0.1 --vsys vsys1 --show objects --output json \
 
 `format` is the version of the envelope. It changes only when a field changes its
 meaning or is removed.
+
+Format 2 gives every reason a stable code. A hole, an unresolved entry and a
+note are objects with `code` and `text` beside `device` and `vsys`. A list of
+reasons, such as `fidelity.reasons`, a doubt's `reasons` or a check's `reasons`,
+holds `{"code", "text"}` objects. A script matches the `code`; the `text` is for
+people and may change. A reason built from several parts lists each part with
+its own code.
+
+```
+"unresolved": [
+  {
+    "device": "file",
+    "vsys": "vsys1",
+    "code": "doubt.not-evaluated.user",
+    "text": "dmz-user (deny) at position 7 may match first: user not evaluated (corp\\alice)"
+  }
+]
+```
 
 ## A version without a digest
 

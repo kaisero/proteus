@@ -11,7 +11,6 @@ import (
 
 	"github.com/okaiser/proteus/internal/estate"
 	"github.com/okaiser/proteus/internal/index"
-	"github.com/okaiser/proteus/internal/reason"
 	"github.com/okaiser/proteus/internal/resolve"
 	"github.com/okaiser/proteus/internal/runlog"
 	"github.com/okaiser/proteus/internal/simulate"
@@ -262,7 +261,7 @@ func pathUnresolved(res pathpolicy.Result, stages []simulate.Stage) []Unresolved
 	var un []Unresolved
 	for _, h := range res.Hops {
 		if why, ok := hopUndecided(h); ok {
-			un = append(un, UnresolvedOf(h.Routing.Device, h.Routing.Vsys, why))
+			un = append(un, UnresolvedOfParts(h.Routing.Device, h.Routing.Vsys, why)...)
 		}
 		for _, c := range h.Checks {
 			un = append(un, runUnresolved(simulate.Run{Stages: c.Stages}, h.Routing.Device, h.Routing.Vsys, false)...)
@@ -270,7 +269,7 @@ func pathUnresolved(res pathpolicy.Result, stages []simulate.Stage) []Unresolved
 	}
 	if at := res.At; res.Verdict == pathpolicy.VerdictUndecided && at.Check == "routing" {
 		h, _ := PointHop(res)
-		un = append(un, UnresolvedOf(h.Device, h.Vsys, at.Reason))
+		un = append(un, UnresolvedOfParts(h.Device, h.Vsys, at.Reason)...)
 	}
 	var device string
 	if len(res.Hops) > 0 {
@@ -282,16 +281,16 @@ func pathUnresolved(res pathpolicy.Result, stages []simulate.Stage) []Unresolved
 
 // hopUndecided says whether a hop is undecided, and why: the path's or the
 // zones' doubts first, then the first undecided check.
-func hopUndecided(h pathpolicy.Hop) (reason.Reason, bool) {
+func hopUndecided(h pathpolicy.Hop) (simulate.Reasons, bool) {
 	if len(h.Doubts) > 0 {
-		return h.Doubts[0], true
+		return h.Doubts[:1:1], true
 	}
 	for _, c := range h.Checks {
 		if c.Verdict == pathpolicy.Undecided {
 			return c.Reason, true
 		}
 	}
-	return reason.Reason{}, false
+	return nil, false
 }
 
 // pathNotes are every note the text shows, for the envelope: routing's notes
@@ -313,8 +312,8 @@ func pathNotes(res pathpolicy.Result) []Note {
 		}
 	}
 	out = append(out, runNotes(device, res.Notes)...)
-	// A note is the same when its printed fields are: the code is not printed
-	// in format 1, so the first code stays.
+	// A note is the same when its text and place are: it reads the same
+	// twice, so the first code stays.
 	seen := map[Note]bool{}
 	return slices.DeleteFunc(out, func(n Note) bool {
 		k := n
@@ -332,6 +331,14 @@ func PointHop(r pathpolicy.Result) (routing.Hop, bool) {
 		return routing.Hop{}, false
 	}
 	return r.Hops[r.At.Hop-1].Routing, true
+}
+
+// nonNilReasons is rs, or an empty list for none, so JSON prints [].
+func nonNilReasons(rs simulate.Reasons) simulate.Reasons {
+	if rs == nil {
+		return simulate.Reasons{}
+	}
+	return rs
 }
 
 func nonNil(s []string) []string {
@@ -364,12 +371,13 @@ type PathResult struct {
 	RunStages []simulate.Stage  `json:"-"`
 }
 
-// Point is where the verdict was decided, or became undecided.
+// Point is where the verdict was decided, or became undecided, and why: one
+// reason, or the parts of a composite one, each with its code.
 type Point struct {
-	Hop    int    `json:"hop"`
-	Check  string `json:"check"`
-	Rule   string `json:"rule"`
-	Reason string `json:"reason"`
+	Hop     int              `json:"hop"`
+	Check   string           `json:"check"`
+	Rule    string           `json:"rule"`
+	Reasons simulate.Reasons `json:"reasons"`
 }
 
 // PathHop is one hop: routing's keys, with its notes, PBF rules, ECMP next
@@ -378,11 +386,11 @@ type Point struct {
 type PathHop struct {
 	Index int `json:"index"`
 	routing.Hop
-	Notes           []string              `json:"notes"`
+	Notes           simulate.Reasons      `json:"notes"`
 	PBF             []string              `json:"pbf"`
 	ECMP            []routing.NotFollowed `json:"ecmp_not_followed"`
 	ZonePlaceholder bool                  `json:"zone_placeholder"`
-	Doubts          []string              `json:"doubts"`
+	Doubts          simulate.Reasons      `json:"doubts"`
 	AfterDeny       bool                  `json:"after_deny"`
 	Checks          Checks                `json:"checks"`
 }
@@ -431,19 +439,19 @@ func pathResultOf(r pathpolicy.Result, stages []simulate.Stage) PathResult {
 		Stages: SimStages(stages), Hops: []PathHop{}, Result: r, RunStages: stages,
 	}
 	if at := r.At; at != nil {
-		out.At = &Point{Hop: at.Hop, Check: at.Check, Rule: at.Rule, Reason: at.Reason.Text}
+		out.At = &Point{Hop: at.Hop, Check: at.Check, Rule: at.Rule, Reasons: at.Reason}
 	}
 	for _, h := range r.Hops {
 		hj := PathHop{
-			Index: h.Index, Hop: h.Routing, Notes: nonNil(h.Routing.Notes.Texts()), PBF: nonNil(h.Routing.PBF),
-			ECMP: h.Routing.ECMP, ZonePlaceholder: h.Routing.ZonePlaceholder, Doubts: nonNil(h.Doubts.Texts()),
+			Index: h.Index, Hop: h.Routing, Notes: nonNilReasons(h.Routing.Notes), PBF: nonNil(h.Routing.PBF),
+			ECMP: h.Routing.ECMP, ZonePlaceholder: h.Routing.ZonePlaceholder, Doubts: nonNilReasons(h.Doubts),
 			AfterDeny: h.AfterDeny,
 		}
 		if hj.ECMP == nil {
 			hj.ECMP = []routing.NotFollowed{}
 		}
 		for _, c := range h.Checks {
-			hj.Checks = append(hj.Checks, Check{Name: c.Name, Security: securityOf(c.Security, string(c.Verdict), c.Reason.Text, c.Rule, c.Fidelity, c.Stages)})
+			hj.Checks = append(hj.Checks, Check{Name: c.Name, Security: securityOf(c.Security, string(c.Verdict), c.Reason, c.Rule, c.Fidelity, c.Stages)})
 		}
 		out.Hops = append(out.Hops, hj)
 	}
@@ -466,10 +474,10 @@ func ruleOf(r resolve.Rule) Rule {
 // Security is a security check's answer: one type for a file target and for
 // each hop of a path (spec 2026-10-07 E14, §8.2).
 type Security struct {
-	// Verdict is pass, stop, undecided or, on a hop, not-evaluated; Reason says
-	// why (spec 2026-10-07 §4.7).
-	Verdict string `json:"verdict"`
-	Reason  string `json:"reason"`
+	// Verdict is pass, stop, undecided or, on a hop, not-evaluated; Reasons say
+	// why (spec 2026-10-07 §4.7): one reason, or a composite one's parts.
+	Verdict string           `json:"verdict"`
+	Reasons simulate.Reasons `json:"reasons"`
 	// Rule is the rule or default rule that decides; empty when undecided.
 	Rule string `json:"rule"`
 	// Default is the default rule that decides when no rule matches, empty when
@@ -487,9 +495,9 @@ type Security struct {
 }
 
 // securityOf is a security answer. v is nil when the check did not run.
-func securityOf(v *securitypolicy.Verdict, verdict, why, rule string, fid simulate.Fidelity, stages []simulate.Stage) Security {
+func securityOf(v *securitypolicy.Verdict, verdict string, why simulate.Reasons, rule string, fid simulate.Fidelity, stages []simulate.Stage) Security {
 	out := Security{
-		Verdict: verdict, Reason: why, Rule: rule, Fidelity: fid, Stages: SimStages(stages),
+		Verdict: verdict, Reasons: nonNilReasons(why), Rule: rule, Fidelity: fid, Stages: SimStages(stages),
 		Candidates: []Rule{}, Doubts: []securitypolicy.Doubt{},
 	}
 	// Zones print [] rather than null, as every list of the block does.
@@ -536,7 +544,7 @@ func securityResultOf(run simulate.Run, t estate.Target, v securitypolicy.Verdic
 		}
 	}
 	return SecurityResult{
-		Security: securityOf(&v, string(outcome), why.Text, rule, run.Fidelity, run.Stages),
+		Security: securityOf(&v, string(outcome), why, rule, run.Fidelity, run.Stages),
 		Kind:     run.Kind, Target: TargetOf(t), Relevance: v.Relevance,
 		Run: run, Check: v, From: t,
 	}

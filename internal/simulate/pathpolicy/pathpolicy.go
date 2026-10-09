@@ -46,8 +46,8 @@ type Check interface {
 type CheckResult struct {
 	Name     string
 	Verdict  HopVerdict
-	Reason   reason.Reason // why it passes, stops, is undecided, or is not evaluated
-	Rule     string        // the deciding rule's name, or the default rule's name; empty when undecided
+	Reason   simulate.Reasons // why it passes, stops, is undecided, or is not evaluated; a composite has parts
+	Rule     string           // the deciding rule's name, or the default rule's name; empty when undecided
 	Fidelity simulate.Fidelity
 	Security *securitypolicy.Verdict // the security check's typed output
 	Stages   []simulate.Stage
@@ -81,7 +81,7 @@ type Point struct {
 	Hop    int    // index of the hop; for a routing end, the last hop
 	Check  string // "security" or "routing"
 	Rule   string
-	Reason reason.Reason
+	Reason simulate.Reasons // a composite has parts, each with its code
 }
 
 // Result is a path mode answer.
@@ -133,7 +133,7 @@ func run(ctx context.Context, env *simulate.Env, in simulate.Input, checks []Che
 			for _, c := range checks {
 				h.Checks = append(h.Checks, CheckResult{
 					Name: c.Name(), Verdict: NotEvaluated, Fidelity: simulate.Exact,
-					Reason: reason.Reason{Code: p.EndCode, Text: "dropped by routing before security policy"},
+					Reason: simulate.Reasons{{Code: p.EndCode, Text: "dropped by routing before security policy"}},
 				})
 			}
 			res.Hops = append(res.Hops, h)
@@ -151,7 +151,7 @@ func run(ctx context.Context, env *simulate.Env, in simulate.Input, checks []Che
 				return res, rr.Stages, err
 			}
 			r.Fidelity = simulate.Weakest(append([]simulate.Fidelity{r.Fidelity}, caps...)...)
-			env.Stepf("hop%d: %s (%s)", h.Index, r.Verdict, r.Reason.Text)
+			env.Stepf("hop%d: %s (%s)", h.Index, r.Verdict, r.Reason.Text())
 			h.Checks = append(h.Checks, r)
 		}
 		res.Hops = append(res.Hops, h)

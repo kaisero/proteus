@@ -245,14 +245,16 @@ func policyOf(t *testing.T, file string) rulebase.Vsys {
 	return v
 }
 
-// A NAT doubt with several reasons reads as one line, in format 1 as before.
+// A NAT doubt with several reasons reads as one line; JSON keeps each with its
+// code.
 func TestANATDoubtJoinsItsReasons(t *testing.T) {
 	t.Parallel()
 	d := Doubt{Rule: "r", Reasons: simulate.Reasons{
 		reason.New("zone.missing", "the ingress zone is unknown"), reason.New("doubt.source-unknown", "the source is unknown"),
 	}}
 	b, err := json.Marshal(d)
-	if err != nil || string(b) != `{"rule":"r","reason":"the ingress zone is unknown; the source is unknown"}` {
+	if err != nil || d.Text() != "the ingress zone is unknown; the source is unknown" ||
+		string(b) != `{"rule":"r","reasons":[{"code":"zone.missing","text":"the ingress zone is unknown"},{"code":"doubt.source-unknown","text":"the source is unknown"}]}` {
 		t.Errorf("json = %s, %v", b, err)
 	}
 }

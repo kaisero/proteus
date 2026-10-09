@@ -16,13 +16,13 @@ import (
 type Unresolved struct {
 	// Value is what was asked about: a query value, or the object whose contents
 	// could not be determined.
-	Value string
+	Value string `json:"value"`
 	// Kind is the schema object kind involved, empty when the value named no kind.
-	Kind string
+	Kind string `json:"kind"`
+	// Code names the kind of reason.
+	Code reason.Code `json:"code"`
 	// Reason says why the evaluation could not be completed.
-	Reason string
-	// Code names the kind of reason. It stays out of the JSON until format 2.
-	Code reason.Code `json:"-"`
+	Reason string `json:"text"`
 }
 
 // NewUnresolved returns an entry for value and kind with r's code and text.

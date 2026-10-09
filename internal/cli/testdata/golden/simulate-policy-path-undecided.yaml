@@ -1,4 +1,4 @@
-format: 1
+format: 2
 command: simulate policy
 input:
   mode: path
@@ -23,11 +23,14 @@ results:
       hop: 1
       check: security
       rule: ""
-      reason: local and pushed default rules disagree; precedence not verified
+      reasons:
+        - code: default.precedence-unverified
+          text: local and pushed default rules disagree; precedence not verified
     fidelity:
       level: undermatch
       reasons:
-        - local and pushed default rules disagree; precedence not verified
+        - code: default.precedence-unverified
+          text: local and pushed default rules disagree; precedence not verified
     source:
       addrs:
         - 198.18.1.10
@@ -176,7 +179,9 @@ results:
         checks:
           security:
             verdict: undecided
-            reason: local and pushed default rules disagree; precedence not verified
+            reasons:
+              - code: default.precedence-unverified
+                text: local and pushed default rules disagree; precedence not verified
             rule: ""
             default: ""
             default_action: ""
@@ -184,7 +189,8 @@ results:
             fidelity:
               level: undermatch
               reasons:
-                - local and pushed default rules disagree; precedence not verified
+                - code: default.precedence-unverified
+                  text: local and pushed default rules disagree; precedence not verified
             first_match: null
             candidates: []
             doubts: []
@@ -249,7 +255,8 @@ results:
                 fidelity:
                   level: undermatch
                   reasons:
-                    - local and pushed default rules disagree; precedence not verified
+                    - code: default.precedence-unverified
+                      text: local and pushed default rules disagree; precedence not verified
                 candidates: 0
                 detail: no enabled rule matches; local and pushed default rules disagree; precedence not verified
                 elapsed_ms: 0
@@ -311,7 +318,9 @@ results:
         checks:
           security:
             verdict: stop
-            reason: default rule interzone-default (deny), built-in
+            reasons:
+              - code: verdict.default
+                text: default rule interzone-default (deny), built-in
             rule: interzone-default
             default: interzone-default
             default_action: deny
@@ -388,7 +397,9 @@ holes: []
 unresolved:
   - device: fw02
     vsys: vsys1
-    reason: local and pushed default rules disagree; precedence not verified
+    code: default.precedence-unverified
+    text: local and pushed default rules disagree; precedence not verified
 notes:
   - device: fw02
-    note: 'a later hop denies: hop 2 (fw01 vsys1), default rule interzone-default (deny), built-in'
+    code: note.later-deny
+    text: 'a later hop denies: hop 2 (fw01 vsys1), default rule interzone-default (deny), built-in'

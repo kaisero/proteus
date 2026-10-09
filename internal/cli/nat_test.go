@@ -218,14 +218,14 @@ func TestNATResultNotesReachTheEnvelope(t *testing.T) {
 	out := c.want(0, "simulate", "nat", "198.18.1.10", "198.18.250.30", "--device", "fw01",
 		"--router", "default", "--from-zone", "transport", "--output", "json")
 	var env struct {
-		Notes []struct{ Device, Note string }
+		Notes []struct{ Device, Text string }
 	}
 	if err := json.Unmarshal([]byte(out), &env); err != nil {
 		t.Fatalf("%v\n%s", err, out)
 	}
 	found := false
 	for _, n := range env.Notes {
-		if n.Device == "fw01" && strings.Contains(n.Note, "resolved by this machine's DNS") {
+		if n.Device == "fw01" && strings.Contains(n.Text, "resolved by this machine's DNS") {
 			found = true
 		}
 	}

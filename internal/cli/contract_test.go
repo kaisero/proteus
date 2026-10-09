@@ -218,7 +218,7 @@ func checkStreams(t *testing.T, format string, code int, answered bool, out, err
 			Format int `json:"format"`
 			Exit   int `json:"exit"`
 		}
-		if err := json.Unmarshal([]byte(lines[len(lines)-1]), &last); err != nil || last.Format != 1 || last.Exit != code {
+		if err := json.Unmarshal([]byte(lines[len(lines)-1]), &last); err != nil || last.Format != 2 || last.Exit != code {
 			t.Errorf("the last stderr line must be the JSON exit line (exit %d), got:\n%s", code, errOut)
 		}
 		if strings.Contains(errOut, "\x1b[") {

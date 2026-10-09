@@ -338,7 +338,7 @@ func TestSearchAcrossTheEstate(t *testing.T) {
 		Format  int
 		Results []struct{ Device, Vsys, Stage, Kind, Name, Snapshot string }
 	}
-	if err := json.Unmarshal([]byte(out), &env); err != nil || env.Format != 1 || len(env.Results) == 0 ||
+	if err := json.Unmarshal([]byte(out), &env); err != nil || env.Format != 2 || len(env.Results) == 0 ||
 		env.Results[0].Device != "fw01" || env.Results[0].Snapshot == "" {
 		t.Errorf("json: %v %+v", err, env)
 	}
@@ -511,11 +511,11 @@ func TestSimulatePolicyVersionGap(t *testing.T) {
 	out = c.want(0, append(args, "--output", "json")...)
 	var env struct {
 		Unresolved []any
-		Notes      []struct{ Note string }
-		Results    []struct{ Verdict, Reason string }
+		Notes      []struct{ Text string }
+		Results    []struct{ Verdict string }
 	}
 	if err := json.Unmarshal([]byte(out), &env); err != nil || len(env.Unresolved) != 0 || len(env.Notes) != 1 ||
-		!strings.Contains(env.Notes[0].Note, "12.2.0") || env.Results[0].Verdict != "stop" {
+		!strings.Contains(env.Notes[0].Text, "12.2.0") || env.Results[0].Verdict != "stop" {
 		t.Errorf("json: %v\n%s", err, out)
 	}
 }
@@ -868,7 +868,7 @@ func TestFetchNotesReachTheEnvelope(t *testing.T) {
 	t.Parallel()
 	c := newCLI(t)
 	c.inventory(inventoryFor(lab(t).Start(t)))
-	if got := fetchNotes(t, c.want(0, "fetch", "fw01", "--output", "json")); !slices.Contains(got, note{Device: "fw01", Note: tlsOff().Text}) {
+	if got := fetchNotes(t, c.want(0, "fetch", "fw01", "--output", "json")); !slices.Contains(got, note{Device: "fw01", Code: "note.tls-off", Note: tlsOff().Text}) {
 		t.Errorf("a lab fetch has the TLS note, got %+v", got)
 	}
 

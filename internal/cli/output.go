@@ -9,9 +9,10 @@ import (
 	"github.com/okaiser/proteus/internal/reason"
 )
 
-// formatVersion is the JSON envelope's format. A change that breaks a consumer
+// formatVersion is the JSON envelope's format, the query layer's: 2 since every
+// reason carries its code (spec 2026-10-09 §3.2). A change that breaks a consumer
 // increments it. Spec §15 C10.
-const formatVersion = 1
+const formatVersion = query.FormatVersion
 
 // envelope is the one JSON object every command prints with --output json.
 type envelope struct {

@@ -80,7 +80,7 @@ func (p policyAnswer) Text(t *textOut) error {
 	printQualifiers(t, p.Qualifiers())
 	// Behind candidates in doubt, the first match is only the first certain one.
 	lead := "first match:"
-	if r.Check.Undecided.Text != "" {
+	if len(r.Check.Undecided) > 0 {
 		lead = "first certain match:"
 	}
 	switch v := r.Check; {
@@ -91,8 +91,8 @@ func (p policyAnswer) Text(t *textOut) error {
 	case len(v.Candidates) == 0:
 		fmt.Fprintln(t, "no enabled rule matches")
 	}
-	if v := r.Check; v.Undecided.Text != "" {
-		fmt.Fprintf(t, "%s %s\n", t.pal.warn("undecided:"), v.Undecided.Text)
+	if v := r.Check; len(v.Undecided) > 0 {
+		fmt.Fprintf(t, "%s %s\n", t.pal.warn("undecided:"), v.Undecided.Text())
 	}
 	return t.err
 }

@@ -1,14 +1,14 @@
 package simulate
 
 import (
-	"encoding/json"
 	"strings"
 
 	"github.com/okaiser/proteus/internal/reason"
 )
 
-// Reasons is a list of reasons, such as a hop's notes. Until JSON format 2 it
-// writes each reason as its text alone, so the output keeps its format-1 shape.
+// Reasons is a list of reasons, such as a hop's notes. JSON writes each as
+// {"code", "text"} (format 2); a composite reason is a list of its parts, each
+// with its own code, the first carrying the prefix that names the subject.
 type Reasons []reason.Reason
 
 // Texts lists the texts; nil for a nil list, so JSON writes null for nil and []
@@ -28,8 +28,8 @@ func (rs Reasons) Texts() []string {
 func (rs Reasons) Text() string { return strings.Join(rs.Texts(), "; ") }
 
 // Joined is the list as one reason: the first reason's code and every text
-// joined with "; ". It keeps a composite reason one entry where the output has
-// always shown one; the zero reason for none.
+// joined with "; "; the zero reason for none. Only a summary that names its
+// own cause may join; JSON keeps the parts.
 func (rs Reasons) Joined() reason.Reason {
 	if len(rs) == 0 {
 		return reason.Reason{}
@@ -45,9 +45,4 @@ func (rs Reasons) Prefixed(p string) Reasons {
 		out[0].Text = p + out[0].Text
 	}
 	return out
-}
-
-// MarshalJSON writes the texts, as format 1 does.
-func (rs Reasons) MarshalJSON() ([]byte, error) {
-	return json.Marshal(rs.Texts())
 }

@@ -88,7 +88,7 @@ func TestFidelityJSON(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(b) != `{"level":"undermatch","reasons":["x"],"not_evaluated":["application"]}` {
+	if string(b) != `{"level":"undermatch","reasons":[{"code":"gap.object-unresolved","text":"x"}],"not_evaluated":["application"]}` {
 		t.Errorf("json = %s", b)
 	}
 	b, _ = json.Marshal(Exact)
@@ -97,8 +97,7 @@ func TestFidelityJSON(t *testing.T) {
 	}
 }
 
-// Every reason keeps its code through Weakest; the codes stay out of the JSON
-// until format 2.
+// Every reason keeps its code through Weakest.
 func TestReasonsKeepTheirCodes(t *testing.T) {
 	t.Parallel()
 	w := Weakest(under("a"), over("c"), NotEvaluated("application", "url category"))
@@ -156,7 +155,7 @@ func TestReasonsList(t *testing.T) {
 	for _, tc := range []struct {
 		in   Reasons
 		want string
-	}{{nil, "null"}, {Reasons{}, "[]"}, {rs, `["a","b"]`}} {
+	}{{nil, "null"}, {Reasons{}, "[]"}, {rs, `[{"code":"doubt.edl","text":"a"},{"code":"doubt.region","text":"b"}]`}} {
 		if b, err := json.Marshal(tc.in); err != nil || string(b) != tc.want {
 			t.Errorf("json of %v = %s, %v", tc.in, b, err)
 		}
@@ -172,8 +171,8 @@ func TestMissingKeepsItsCode(t *testing.T) {
 	}
 }
 
-// Format 1 prints a reason's text, not its code: two reasons with one text are
-// one, and the first code stays.
+// Two reasons with one text read the same twice: they are one, and the first
+// code stays.
 func TestWeakestKeepsATextOnce(t *testing.T) {
 	t.Parallel()
 	a := UnderMatch(reason.New("gap.object-unresolved", "same"))
@@ -194,5 +193,25 @@ func TestCodedError(t *testing.T) {
 	var coded interface{ Code() reason.Code }
 	if !errors.As(err, &coded) || coded.Code() != "gap.config-missing" || err.Error() != "fw01/vsys1: no configuration" {
 		t.Errorf("%v", err)
+	}
+}
+
+// A composite reason keeps its parts, each with its code, and reads as one: its
+// text, its sameness in Weakest, and its group (spec 2026-10-09 §3.2).
+func TestACompositeReasonKeepsItsParts(t *testing.T) {
+	t.Parallel()
+	a, b := reason.New("doubt.edl", "r at 1 may match first: source: external list (x)"), reason.New("doubt.region", "region (AT)")
+	f := Weakest(UnderMatch(a, b), UnderMatch(a, b), UnderMatch(reason.New("gap.version", "other")))
+	if got := f.String(); got != "undermatch: r at 1 may match first: source: external list (x); region (AT); other" {
+		t.Errorf("string = %s", got)
+	}
+	if g := f.UnderMatchGroups(); len(g) != 2 || len(g[0]) != 2 || g[0][1] != b {
+		t.Errorf("groups = %v", g)
+	}
+	if rs := f.UnderMatchReasons(); len(rs) != 3 || rs[1].Code != "doubt.region" {
+		t.Errorf("parts = %v", rs)
+	}
+	if u := UnderMatch(); u.Level() != "undermatch" || len(u.Reasons()) != 0 {
+		t.Errorf("no reason: %v", u)
 	}
 }

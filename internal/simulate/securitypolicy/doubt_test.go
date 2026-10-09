@@ -226,24 +226,26 @@ func TestOpaqueAddressesStayInDoubt(t *testing.T) {
 	}
 }
 
-// A doubt with several reasons reads as one line, in format 1 as before.
+// A doubt with several reasons reads as one line; JSON keeps each with its
+// code (spec 2026-10-09 §12 C6).
 func TestADoubtJoinsItsReasons(t *testing.T) {
 	t.Parallel()
 	d := Doubt{Position: 2, Rule: "r", Reasons: simulate.Reasons{
 		reason.New("doubt.edl", "source: external list (a)"), reason.New("doubt.region", "region (AT)"),
 	}}
 	b, err := json.Marshal(d)
-	if err != nil || string(b) != `{"position":2,"rule":"r","reason":"source: external list (a); region (AT)"}` {
+	if err != nil || d.Text() != "source: external list (a); region (AT)" ||
+		string(b) != `{"position":2,"rule":"r","reasons":[{"code":"doubt.edl","text":"source: external list (a)"},{"code":"doubt.region","text":"region (AT)"}]}` {
 		t.Errorf("json = %s, %v", b, err)
 	}
 }
 
-// Relevance writes its reason as text, as format 1 does.
+// Relevance writes its reason's code and text beside what it says.
 func TestRelevanceJSON(t *testing.T) {
 	t.Parallel()
 	r := Relevance{Known: true, Relevant: true, Reason: reason.New("verdict.relevant-route", "10.0.0.0/8 via default covers 10.0.0.1")}
 	b, err := json.Marshal(r)
-	if err != nil || string(b) != `{"known":true,"relevant":true,"reason":"10.0.0.0/8 via default covers 10.0.0.1"}` {
+	if err != nil || string(b) != `{"known":true,"relevant":true,"code":"verdict.relevant-route","text":"10.0.0.0/8 via default covers 10.0.0.1"}` {
 		t.Errorf("json = %s, %v", b, err)
 	}
 }
@@ -286,8 +288,8 @@ func TestFQDNResolutionDoubt(t *testing.T) {
 				t.Errorf("first certain match = %s, want %s", first(v), tc.first)
 			}
 			out, why := v.Decision()
-			if out != Undecided || why.Code != "doubt.fqdn-resolution" ||
-				!strings.HasPrefix(why.Text, "block-web-by-name (deny) at position 1 may match first: destination: www.example.com") {
+			if out != Undecided || why[0].Code != "doubt.fqdn-resolution" ||
+				!strings.HasPrefix(why.Text(), "block-web-by-name (deny) at position 1 may match first: destination: www.example.com") {
 				t.Errorf("decision = %s, %+v", out, why)
 			}
 		})

@@ -149,7 +149,7 @@ func runLab(t *testing.T, l lab, dst string) Result {
 func summary(r Result) string {
 	s := string(r.Verdict)
 	if r.At != nil {
-		s += fmt.Sprintf(" at %d %s %s (%s)", r.At.Hop, r.At.Check, r.At.Rule, r.At.Reason.Text)
+		s += fmt.Sprintf(" at %d %s %s (%s)", r.At.Hop, r.At.Check, r.At.Rule, r.At.Reason.Text())
 	}
 	for _, h := range r.Hops {
 		s += fmt.Sprintf(" | %d %s/%s", h.Index, h.Routing.Device, h.Routing.Vsys)
@@ -300,7 +300,7 @@ func TestTheEndsOfAPath(t *testing.T) {
 		if got := summary(r); got != c.want || !slices.Equal(r.Notes.Texts(), c.notes) {
 			t.Errorf("%s:\ngot  %s %v\nwant %s %v", c.name, got, r.Notes, c.want, c.notes)
 		}
-		if last := r.Hops[len(r.Hops)-1]; last.Checks[0].Verdict == NotEvaluated && last.Checks[0].Reason != dropped {
+		if last := r.Hops[len(r.Hops)-1]; last.Checks[0].Verdict == NotEvaluated && !slices.Equal(last.Checks[0].Reason, simulate.Reasons{dropped}) {
 			t.Errorf("%s: reason %q", c.name, last.Checks[0].Reason)
 		}
 	}
@@ -316,7 +316,7 @@ func TestADroppedHopCarriesTheEndCode(t *testing.T) {
 		t.Fatalf("path %s %s", r.Path.Outcome, r.Path.EndCode)
 	}
 	for _, c := range last.Checks {
-		if c.Verdict != NotEvaluated || c.Reason.Code != r.Path.EndCode {
+		if c.Verdict != NotEvaluated || c.Reason[0].Code != r.Path.EndCode {
 			t.Errorf("%s: %s %+v", c.Name, c.Verdict, c.Reason)
 		}
 	}
@@ -365,7 +365,7 @@ func TestErrors(t *testing.T) {
 		t.Errorf("a check's error: %v", err)
 	}
 	miss := &simulate.UnavailableError{Missing: []simulate.Missing{{Device: "fw02", Reason: "gone"}}}
-	r, _, err := run(ctx, e, input(pathlab.Destination), []Check{fake{r: CheckResult{Name: "fake", Verdict: Undecided, Reason: reason.New("gap.load-failed", "gone")}, err: miss}})
+	r, _, err := run(ctx, e, input(pathlab.Destination), []Check{fake{r: CheckResult{Name: "fake", Verdict: Undecided, Reason: simulate.Reasons{reason.New("gap.load-failed", "gone")}}, err: miss}})
 	if err != nil || len(r.Holes) != 1 || r.Verdict != VerdictUndecided || r.At.Check != "fake" {
 		t.Errorf("a check's missing data: %v, %v, %+v", err, r.Holes, r.At)
 	}
@@ -396,10 +396,10 @@ func TestTheSecurityCheck(t *testing.T) {
 	h := routing.Hop{Device: pathlab.FW02, Vsys: "vsys1"}
 	f := input(pathlab.Destination).Flow
 	r, err := Security{}.Evaluate(context.Background(), e, h, f)
-	if err != nil || r.Verdict != NotEvaluated || !r.Fidelity.Declared() || r.Name != "security" || r.Reason.Code != "zone.missing" {
+	if err != nil || r.Verdict != NotEvaluated || !r.Fidelity.Declared() || r.Name != "security" || r.Reason[0].Code != "zone.missing" {
 		t.Errorf("no zones: %+v, %v", r, err)
 	}
-	if r, _ := (Security{}).Evaluate(context.Background(), e, routing.Hop{Device: pathlab.FW02}, f); r.Reason.Code != "zone.vsys-unknown" {
+	if r, _ := (Security{}).Evaluate(context.Background(), e, routing.Hop{Device: pathlab.FW02}, f); r.Reason[0].Code != "zone.vsys-unknown" {
 		t.Errorf("no vsys: %+v", r)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
@@ -416,7 +416,7 @@ func TestTheSecurityCheck(t *testing.T) {
 	nilCfg.Load = func(string, string) (simulate.Target, error) { return simulate.Target{}, nil }
 	r, err = Security{}.Evaluate(context.Background(), &nilCfg, h, f)
 	if !isType[*simulate.UnavailableError](err) || r.Verdict != Undecided || r.Fidelity.Level() != "undermatch" ||
-		r.Reason != reason.New("gap.config-missing", "the configuration of fw02 vsys1 cannot be read: no configuration") {
+		!slices.Equal(r.Reason, simulate.Reasons{reason.New("gap.config-missing", "the configuration of fw02 vsys1 cannot be read: no configuration")}) {
 		t.Errorf("no configuration: %+v, %v", r, err)
 	}
 }

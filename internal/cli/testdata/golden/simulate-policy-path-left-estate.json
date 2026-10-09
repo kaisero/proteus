@@ -1,5 +1,5 @@
 {
-  "format": 1,
+  "format": 2,
   "command": "simulate policy",
   "input": {
     "mode": "path",
@@ -31,12 +31,20 @@
         "hop": 1,
         "check": "routing",
         "rule": "",
-        "reason": "198.19.0.77 leaves the estate (not in the inventory)"
+        "reasons": [
+          {
+            "code": "path.left-estate",
+            "text": "198.19.0.77 leaves the estate (not in the inventory)"
+          }
+        ]
       },
       "fidelity": {
         "level": "undermatch",
         "reasons": [
-          "the path leaves the estate at 198.19.0.77"
+          {
+            "code": "path.left-estate",
+            "text": "the path leaves the estate at 198.19.0.77"
+          }
         ]
       },
       "source": {
@@ -111,7 +119,10 @@
           "fidelity": {
             "level": "undermatch",
             "reasons": [
-              "the path leaves the estate at 198.19.0.77"
+              {
+                "code": "path.left-estate",
+                "text": "the path leaves the estate at 198.19.0.77"
+              }
             ]
           },
           "candidates": 0,
@@ -185,7 +196,10 @@
           "fidelity": {
             "level": "undermatch",
             "reasons": [
-              "the path leaves the estate at 198.19.0.77"
+              {
+                "code": "path.left-estate",
+                "text": "the path leaves the estate at 198.19.0.77"
+              }
             ]
           },
           "notes": [],
@@ -197,7 +211,12 @@
           "checks": {
             "security": {
               "verdict": "pass",
-              "reason": "default rule interzone-default (allow), local",
+              "reasons": [
+                {
+                  "code": "verdict.default",
+                  "text": "default rule interzone-default (allow), local"
+                }
+              ],
               "rule": "interzone-default",
               "default": "interzone-default",
               "default_action": "allow",
@@ -310,7 +329,8 @@
     {
       "device": "fw02",
       "vsys": "vsys1",
-      "reason": "198.19.0.77 leaves the estate (not in the inventory)"
+      "code": "path.left-estate",
+      "text": "198.19.0.77 leaves the estate (not in the inventory)"
     }
   ],
   "notes": []

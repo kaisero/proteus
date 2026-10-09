@@ -42,7 +42,8 @@ func TestUsageErrorReadsAsItsText(t *testing.T) {
 	}
 }
 
-// The qualifier constructors keep the reason's code out of the format-1 JSON.
+// The qualifier constructors keep the reason's code, and JSON writes it
+// (format 2). A composite's later parts are marked as parts.
 func TestQualifiersCarryTheCode(t *testing.T) {
 	t.Parallel()
 	r := reason.New("note.snapshot-stale", "old")
@@ -51,8 +52,17 @@ func TestQualifiersCarryTheCode(t *testing.T) {
 		t.Errorf("%+v %+v", n, u)
 	}
 	b, err := json.Marshal([]any{n, u})
-	if err != nil || string(b) != `[{"device":"fw01","vsys":"vsys1","note":"old"},{"device":"fw01","reason":"old"}]` {
+	if err != nil || string(b) != `[{"device":"fw01","vsys":"vsys1","code":"note.snapshot-stale","text":"old"},{"device":"fw01","code":"note.snapshot-stale","text":"old"}]` {
 		t.Errorf("%s %v", b, err)
+	}
+	parts := UnresolvedOfParts("fw01", "vsys1", simulate.Reasons{r, reason.New("gap.version", "new")})
+	if len(parts) != 2 || parts[0].Part || !parts[1].Part || parts[1].Code != "gap.version" {
+		t.Errorf("parts %+v", parts)
+	}
+	// A composite goes or stays whole: here the second is a copy of the first.
+	un := dedupeUnresolved(append(append(parts, UnresolvedOf("fw01", "vsys1", r)), parts...))
+	if len(un) != 3 {
+		t.Errorf("dedupe %+v", un)
 	}
 }
 

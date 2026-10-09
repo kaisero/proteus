@@ -1,5 +1,5 @@
 {
-  "format": 1,
+  "format": 2,
   "command": "simulate routing",
   "input": {
     "at": "",
@@ -167,7 +167,10 @@
           "fidelity": {
             "level": "undermatch",
             "reasons": [
-              "the path leaves the estate at 192.168.0.1"
+              {
+                "code": "path.left-estate",
+                "text": "the path leaves the estate at 192.168.0.1"
+              }
             ]
           }
         }
@@ -175,7 +178,10 @@
       "fidelity": {
         "level": "undermatch",
         "reasons": [
-          "the path leaves the estate at 192.168.0.1"
+          {
+            "code": "path.left-estate",
+            "text": "the path leaves the estate at 192.168.0.1"
+          }
         ]
       },
       "stages": [
@@ -285,7 +291,10 @@
           "fidelity": {
             "level": "undermatch",
             "reasons": [
-              "the path leaves the estate at 192.168.0.1"
+              {
+                "code": "path.left-estate",
+                "text": "the path leaves the estate at 192.168.0.1"
+              }
             ]
           },
           "candidates": 0,

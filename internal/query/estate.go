@@ -242,8 +242,8 @@ func runUnresolved(run simulate.Run, device, vsys string, withReasons bool) []Un
 		}
 	}
 	if withReasons && run.Fidelity.Level() == "undermatch" {
-		for _, r := range run.Fidelity.UnderMatchReasons() {
-			un = append(un, UnresolvedOf(device, vsys, r))
+		for _, g := range run.Fidelity.UnderMatchGroups() {
+			un = append(un, UnresolvedOfParts(device, vsys, g)...)
 		}
 	}
 	return un
@@ -264,16 +264,27 @@ func runNotes(device string, rs simulate.Reasons) []Note {
 }
 
 // dedupeUnresolved keeps one entry per device, vsys and reason. A stage's
-// unresolved entry and the run's fidelity can carry the same reason.
+// unresolved entry and the run's fidelity can carry the same reason. A
+// composite reason's parts go or stay together: it is the same when its whole
+// text is.
 func dedupeUnresolved(in []Unresolved) []Unresolved {
 	seen := map[string]bool{}
 	var out []Unresolved
-	for _, u := range in {
-		k := u.Device + "|" + u.Vsys + "|" + u.Reason
+	for i := 0; i < len(in); {
+		j := i + 1
+		for j < len(in) && in[j].Part {
+			j++
+		}
+		texts := make([]string, 0, j-i)
+		for _, u := range in[i:j] {
+			texts = append(texts, u.Reason)
+		}
+		k := in[i].Device + "|" + in[i].Vsys + "|" + strings.Join(texts, "; ")
 		if !seen[k] {
 			seen[k] = true
-			out = append(out, u)
+			out = append(out, in[i:j]...)
 		}
+		i = j
 	}
 	return out
 }

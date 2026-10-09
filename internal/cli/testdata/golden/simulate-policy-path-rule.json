@@ -1,5 +1,5 @@
 {
-  "format": 1,
+  "format": 2,
   "command": "simulate policy",
   "input": {
     "mode": "path",
@@ -31,7 +31,12 @@
         "hop": 2,
         "check": "security",
         "rule": "block-servers",
-        "reason": "rule block-servers (deny)"
+        "reasons": [
+          {
+            "code": "verdict.rule",
+            "text": "rule block-servers (deny)"
+          }
+        ]
       },
       "fidelity": {
         "level": "exact"
@@ -238,7 +243,12 @@
           "checks": {
             "security": {
               "verdict": "pass",
-              "reason": "default rule interzone-default (allow), local",
+              "reasons": [
+                {
+                  "code": "verdict.default",
+                  "text": "default rule interzone-default (allow), local"
+                }
+              ],
               "rule": "interzone-default",
               "default": "interzone-default",
               "default_action": "allow",
@@ -417,7 +427,12 @@
           "checks": {
             "security": {
               "verdict": "stop",
-              "reason": "rule block-servers (deny)",
+              "reasons": [
+                {
+                  "code": "verdict.rule",
+                  "text": "rule block-servers (deny)"
+                }
+              ],
               "rule": "block-servers",
               "default": "",
               "default_action": "",

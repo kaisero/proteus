@@ -37,12 +37,12 @@ func (Security) Evaluate(ctx context.Context, env *simulate.Env, h routing.Hop, 
 		if h.Vsys == "" {
 			code = "zone.vsys-unknown"
 		}
-		out.Verdict, out.Reason, out.Fidelity = NotEvaluated, reason.New(code, "the hop's vsys or zones are not known"), simulate.Exact
+		out.Verdict, out.Reason, out.Fidelity = NotEvaluated, simulate.Reasons{reason.New(code, "the hop's vsys or zones are not known")}, simulate.Exact
 		return out, nil
 	}
 	t, miss := load(env, h)
 	if miss != nil {
-		out.Verdict, out.Reason, out.Fidelity = Undecided, miss.Why(), simulate.UnderMatch(miss.Why())
+		out.Verdict, out.Reason, out.Fidelity = Undecided, simulate.Reasons{miss.Why()}, simulate.UnderMatch(miss.Why())
 		return out, &simulate.UnavailableError{Missing: []simulate.Missing{*miss}}
 	}
 	run, err := securitypolicy.Simulation{}.Run(ctx, env, simulate.Input{Device: h.Device, Vsys: h.Vsys, Flow: trim(flow)})
@@ -77,7 +77,7 @@ func (Security) Evaluate(ctx context.Context, env *simulate.Env, h routing.Hop, 
 		out.Verdict = Stop
 	default:
 		out.Verdict = Undecided
-		out.Fidelity = simulate.Weakest(out.Fidelity, simulate.UnderMatch(why))
+		out.Fidelity = simulate.Weakest(out.Fidelity, simulate.UnderMatch(why...))
 	}
 	if out.Verdict != Undecided {
 		out.Rule = v.Default

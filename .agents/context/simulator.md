@@ -167,12 +167,12 @@ func (f Fidelity) Reasons() Reasons
 func (f Fidelity) Skipped() []string
 func (f Fidelity) SkippedReasons() Reasons
 func (f Fidelity) String() string
+func (f Fidelity) UnderMatchGroups() []Reasons
 func (f Fidelity) UnderMatchReasons() Reasons
 func (m Match) First() resolve.FIBRoute
 func (m Missing) Why() reason.Reason
 func (p Port) Link() netip.Prefix
 func (rs Reasons) Joined() reason.Reason
-func (rs Reasons) MarshalJSON() ([]byte, error)
 func (rs Reasons) Prefixed(p string) Reasons
 func (rs Reasons) Text() string
 func (rs Reasons) Texts() []string
@@ -184,7 +184,7 @@ func NewMissing(device string, r reason.Reason) Missing
 func NotEvaluated(dimensions ...string) Fidelity
 func OverMatchBecause(r reason.Reason) Fidelity
 func Overall(stages []Stage) Fidelity
-func UnderMatch(r reason.Reason) Fidelity
+func UnderMatch(rs ...reason.Reason) Fidelity
 func Weakest(fs ...Fidelity) Fidelity
 ```
 <!-- /GENERATED:api -->
@@ -202,11 +202,9 @@ func (Simulation) Describe() string
 func (Simulation) Kind() string
 func (Simulation) Run(ctx context.Context, env *simulate.Env, in simulate.Input) (simulate.Run, error)
 func (Simulation) Stages() []string
-func (d Doubt) MarshalJSON() ([]byte, error)
 func (d Doubt) Text() string
 func (r Relevance) MarshalJSON() ([]byte, error)
-func (v Verdict) Decision() (Outcome, reason.Reason)
-func (v Verdict) MarshalJSON() ([]byte, error)
+func (v Verdict) Decision() (Outcome, simulate.Reasons)
 ```
 <!-- /GENERATED:api -->
 
@@ -259,7 +257,6 @@ func (Simulation) Describe() string
 func (Simulation) Kind() string
 func (Simulation) Run(ctx context.Context, env *simulate.Env, in simulate.Input) (simulate.Run, error)
 func (Simulation) Stages() []string
-func (d Doubt) MarshalJSON() ([]byte, error)
 func (d Doubt) Text() string
 func FQDNs(in Input, m MatchResult) []string
 func Match(in Input) MatchResult

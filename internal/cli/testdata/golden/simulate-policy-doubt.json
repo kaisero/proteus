@@ -1,5 +1,5 @@
 {
-  "format": 1,
+  "format": 2,
   "command": "simulate policy",
   "input": {
     "flow": {
@@ -27,7 +27,12 @@
   "results": [
     {
       "verdict": "stop",
-      "reason": "default rule interzone-default (deny), built-in",
+      "reasons": [
+        {
+          "code": "verdict.default",
+          "text": "default rule interzone-default (deny), built-in"
+        }
+      ],
       "rule": "interzone-default",
       "default": "interzone-default",
       "default_action": "deny",
@@ -35,7 +40,10 @@
       "fidelity": {
         "level": "overmatch",
         "reasons": [
-          "earlier candidates in doubt share the action deny: labor-app"
+          {
+            "code": "doubt.same-action",
+            "text": "earlier candidates in doubt share the action deny: labor-app"
+          }
         ],
         "not_evaluated": [
           "application"
@@ -55,7 +63,12 @@
         {
           "position": 14,
           "rule": "labor-app",
-          "reason": "application not evaluated (dropbox)"
+          "reasons": [
+            {
+              "code": "doubt.application",
+              "text": "application not evaluated (dropbox)"
+            }
+          ]
         }
       ],
       "zones": {
@@ -144,7 +157,10 @@
           "fidelity": {
             "level": "overmatch",
             "reasons": [
-              "earlier candidates in doubt share the action deny: labor-app"
+              {
+                "code": "doubt.same-action",
+                "text": "earlier candidates in doubt share the action deny: labor-app"
+              }
             ],
             "not_evaluated": [
               "application"
@@ -159,7 +175,8 @@
       "relevance": {
         "known": false,
         "relevant": false,
-        "reason": "no stored forwarding table"
+        "code": "gap.fib-missing",
+        "text": "no stored forwarding table"
       },
       "target": {
         "device": "file",

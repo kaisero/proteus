@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -74,7 +75,7 @@ func TestDecision(t *testing.T) {
 			r, v := run(t, e, c.flow)
 			got, why := v.Decision()
 			fm := stage(r, "first-match")
-			if got != c.outcome || why.Text != c.reason || why.Code != c.code || fm.Fidelity.String() != c.fidelity {
+			if got != c.outcome || why.Text() != c.reason || why[0].Code != c.code || fm.Fidelity.String() != c.fidelity {
 				t.Errorf("%s: %s, %q, first-match %s\nwant %s, %q, %s\n(%s)", c.name, got, why, fm.Fidelity, c.outcome, c.reason, c.fidelity, fm.Detail)
 			}
 			for _, st := range r.Stages {
@@ -121,13 +122,13 @@ func TestDecisionOfAVerdict(t *testing.T) {
 		{Verdict{Rule: &resolve.Rule{Name: "r", Action: "allow"}}, Pass, "verdict.rule", "rule r (allow)"},
 		{Verdict{Rule: &resolve.Rule{Name: "r", Action: "maybe"}}, Undecided, "doubt.invalid-action", "rule r (maybe) is not a security rule action"},
 		{
-			Verdict{Rule: &resolve.Rule{Name: "r", Action: "allow"}, Undecided: reason.New("doubt.application", "doubt")},
+			Verdict{Rule: &resolve.Rule{Name: "r", Action: "allow"}, Undecided: simulate.Reasons{reason.New("doubt.application", "doubt")}},
 			Undecided, "doubt.application", "doubt",
 		},
 		{Verdict{Default: "intrazone-default", DefaultAction: "allow", DefaultSource: "local"}, Pass, "verdict.default", "default rule intrazone-default (allow), local"},
 		{Verdict{Default: "intrazone-default", DefaultAction: "maybe", DefaultSource: "local"}, Undecided, "default.invalid-action", "default rule intrazone-default (maybe), local is not a security rule action"},
 	} {
-		if got, why := c.v.Decision(); got != c.outcome || why.Text != c.reason || why.Code != c.code {
+		if got, why := c.v.Decision(); got != c.outcome || why.Text() != c.reason || why[0].Code != c.code {
 			t.Errorf("%+v: %s, %q; want %s, %q", c.v, got, why, c.outcome, c.reason)
 		}
 	}
@@ -166,7 +167,7 @@ func TestAnUndermatchLeavesTheFlowUndecided(t *testing.T) {
 	} {
 		r, v := run(t, c.env, c.flow)
 		got, why := v.Decision()
-		if got != c.outcome || !strings.HasPrefix(why.Text, c.reason) || strings.Contains(why.Text, "kept rules") {
+		if got != c.outcome || !strings.HasPrefix(why.Text(), c.reason) || strings.Contains(why.Text(), "kept rules") {
 			t.Errorf("%s: %s, %q; want %s, %q (fidelity %s)", c.name, got, why, c.outcome, c.reason, r.Fidelity)
 		}
 		if got == Undecided && r.Fidelity.Level() != "undermatch" {
@@ -187,18 +188,20 @@ func TestUndermatchedKeepsOnlyUndermatchReasons(t *testing.T) {
 			simulate.UnderMatch(reason.New("gap.category-match", "cat-x cannot be matched")),
 			simulate.UnderMatch(reason.New("gap.object-unresolved", "y is unknown")))},
 	}
-	// Several undermatch reasons read as one, with the first one's code.
-	if got := undermatched(stages); got != reason.New("gap.category-match", "cat-x cannot be matched; y is unknown") {
+	// Several undermatch reasons stay parts, each with its code.
+	if got := undermatched(stages); !slices.Equal(got, simulate.Reasons{
+		reason.New("gap.category-match", "cat-x cannot be matched"), reason.New("gap.object-unresolved", "y is unknown"),
+	}) {
 		t.Errorf("undermatched = %q", got)
 	}
 }
 
-// Format 1 writes undecided as its text, and leaves it out when the flow is
-// decided.
-func TestVerdictJSONWritesUndecidedAsText(t *testing.T) {
+// Format 2 writes undecided as its parts, each with its code, and leaves it out
+// when the flow is decided.
+func TestVerdictJSONWritesUndecidedParts(t *testing.T) {
 	t.Parallel()
-	b, err := json.Marshal(Verdict{Undecided: reason.New("default.none", "no rule decides")})
-	if err != nil || !strings.Contains(string(b), `"undecided":"no rule decides"`) || strings.Contains(string(b), `"code"`) {
+	b, err := json.Marshal(Verdict{Undecided: simulate.Reasons{reason.New("default.none", "no rule decides")}})
+	if err != nil || !strings.Contains(string(b), `"undecided":[{"code":"default.none","text":"no rule decides"}]`) {
 		t.Errorf("%s %v", b, err)
 	}
 	b, err = json.Marshal(Verdict{Default: "intrazone-default"})

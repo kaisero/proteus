@@ -1,4 +1,4 @@
-format: 1
+format: 2
 command: simulate policy
 input:
   flow:
@@ -17,7 +17,9 @@ input:
     file: ../../testdata/config/firewall-simulate.xml
 results:
   - verdict: pass
-    reason: rule anything (allow)
+    reasons:
+      - code: verdict.rule
+        text: rule anything (allow)
     rule: anything
     default: ""
     default_action: ""
@@ -25,7 +27,8 @@ results:
     fidelity:
       level: inferred
       reasons:
-        - 'earlier candidates in doubt share the action allow: to-web-by-name'
+        - code: doubt.same-action
+          text: 'earlier candidates in doubt share the action allow: to-web-by-name'
       not_evaluated:
         - zones
     first_match:
@@ -48,7 +51,9 @@ results:
     doubts:
       - position: 2
         rule: to-web-by-name
-        reason: 'destination: www.example.com matched only through an FQDN object; the firewall resolves this object itself; its addresses can differ from ours'
+        reasons:
+          - code: doubt.fqdn-resolution
+            text: 'destination: www.example.com matched only through an FQDN object; the firewall resolves this object itself; its addresses can differ from ours'
     zones:
       from: []
       to: []
@@ -110,7 +115,8 @@ results:
         fidelity:
           level: overmatch
           reasons:
-            - 'earlier candidates in doubt share the action allow: to-web-by-name'
+            - code: doubt.same-action
+              text: 'earlier candidates in doubt share the action allow: to-web-by-name'
         candidates: 2
         detail: anything (allow), position 9
         elapsed_ms: 0
@@ -118,7 +124,8 @@ results:
     relevance:
       known: false
       relevant: false
-      reason: no stored forwarding table
+      code: gap.fib-missing
+      text: no stored forwarding table
     target:
       device: file
       vsys: vsys1
@@ -127,4 +134,5 @@ unresolved: []
 notes:
   - device: file
     vsys: vsys1
-    note: www.example.com has the canonical name web.cdn.example.net, as this machine's resolver reports it
+    code: dns.canonical-name
+    text: www.example.com has the canonical name web.cdn.example.net, as this machine's resolver reports it

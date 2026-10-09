@@ -1,7 +1,6 @@
 package securitypolicy
 
 import (
-	"encoding/json"
 	"fmt"
 	"slices"
 	"strings"
@@ -12,25 +11,16 @@ import (
 
 // Doubt names a candidate the check cannot decide, and why. It does not change
 // which rules are candidates. Most doubts have one reason; a rule naming several
-// opaque addresses in one field has one per address.
+// opaque addresses in one field has one per address. JSON writes
+// {"position", "rule", "reasons": [{"code", "text"}]} (spec 2026-10-09 §12 C6).
 type Doubt struct {
-	Position int // the rule's position in the effective order
-	Rule     string
-	Reasons  simulate.Reasons // "application not evaluated (quic)", "service application-default", ...
+	Position int              `json:"position"` // the rule's position in the effective order
+	Rule     string           `json:"rule"`
+	Reasons  simulate.Reasons `json:"reasons"` // "application not evaluated (quic)", "service application-default", ...
 }
 
 // Text is the reasons as one line, as the output shows them.
 func (d Doubt) Text() string { return d.Reasons.Text() }
-
-// MarshalJSON writes {"position", "rule", "reason"}, the reasons joined, as
-// format 1 does.
-func (d Doubt) MarshalJSON() ([]byte, error) {
-	return json.Marshal(struct {
-		Position int    `json:"position"`
-		Rule     string `json:"rule"`
-		Reason   string `json:"reason"`
-	}{d.Position, d.Rule, d.Text()})
-}
 
 // fieldClass says how the check treats one child of a security rule entry.
 type fieldClass int

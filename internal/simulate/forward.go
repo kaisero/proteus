@@ -83,9 +83,9 @@ type UnavailableError struct {
 
 // Missing is one device a simulation could not read, and why.
 type Missing struct {
-	Device string
-	Reason string
-	Code   reason.Code `json:"-"` // the kind of Reason; out of the JSON until format 2
+	Device string      `json:"device"`
+	Code   reason.Code `json:"code"` // the kind of Reason
+	Reason string      `json:"text"`
 }
 
 // CodedError is an error that keeps the kind of a failure as a reason code. A

@@ -17,7 +17,7 @@ import (
 
 // check is a security check result with a verdict; a stop or pass names rule r.
 func check(v HopVerdict, f simulate.Fidelity) CheckResult {
-	c := CheckResult{Name: checkSecurity, Verdict: v, Reason: reason.New("verdict.rule", string(v)+" reason"), Fidelity: f}
+	c := CheckResult{Name: checkSecurity, Verdict: v, Reason: simulate.Reasons{reason.New("verdict.rule", string(v)+" reason")}, Fidelity: f}
 	if v == Pass || v == Stop {
 		c.Rule = "r-" + string(v)
 	}
@@ -94,7 +94,7 @@ func TestFold(t *testing.T) {
 		r := folded(c.outcome, hops(c.hops...))
 		got := string(r.Verdict)
 		if r.At != nil {
-			got += fmt.Sprintf(" at %d %s %s (%s)", r.At.Hop, r.At.Check, r.At.Rule, r.At.Reason.Text)
+			got += fmt.Sprintf(" at %d %s %s (%s)", r.At.Hop, r.At.Check, r.At.Rule, r.At.Reason.Text())
 		}
 		var after []int
 		for _, h := range r.Hops {
@@ -251,7 +251,7 @@ func TestARoutingEndReadsAsASentence(t *testing.T) {
 		Outcome: routing.LeftEstate, End: "192.168.0.1   leaves the estate (not in the inventory)", EndCode: "path.left-estate",
 	}, Hops: hops("pass")}
 	fold(&r, simulate.Exact)
-	if r.At == nil || r.At.Reason != reason.New("path.left-estate", "192.168.0.1 leaves the estate (not in the inventory)") {
+	if r.At == nil || !slices.Equal(r.At.Reason, simulate.Reasons{reason.New("path.left-estate", "192.168.0.1 leaves the estate (not in the inventory)")}) {
 		t.Errorf("point: %+v", r.At)
 	}
 }

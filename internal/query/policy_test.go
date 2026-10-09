@@ -246,8 +246,7 @@ func TestPolicyFileInputRules(t *testing.T) {
 	}
 }
 
-// Format 1 prints a note's text, not its code: two notes that print the same are
-// one.
+// Two notes with one text read the same twice: they are one.
 func TestPathNotesDropTheSameText(t *testing.T) {
 	t.Parallel()
 	res := pathpolicy.Result{Notes: simulate.Reasons{reason.New("note.ha-peer", "same"), reason.New("note.ha-binding", "same")}}
@@ -259,7 +258,7 @@ func TestPathNotesDropTheSameText(t *testing.T) {
 // A point without its hop names no hop, and is still unresolved.
 func TestPathUnresolvedWithoutAHop(t *testing.T) {
 	t.Parallel()
-	r := pathpolicy.Result{Verdict: pathpolicy.VerdictUndecided, At: &pathpolicy.Point{Hop: 0, Check: "routing", Reason: reason.New("path.unresolved", "no hop")}}
+	r := pathpolicy.Result{Verdict: pathpolicy.VerdictUndecided, At: &pathpolicy.Point{Hop: 0, Check: "routing", Reason: simulate.Reasons{reason.New("path.unresolved", "no hop")}}}
 	if un := pathUnresolved(r, nil); len(un) != 1 || un[0].Reason != "no hop" || un[0].Code != "path.unresolved" {
 		t.Errorf("unresolved: %+v", un)
 	}

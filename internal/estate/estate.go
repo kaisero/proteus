@@ -37,8 +37,8 @@ type Target struct {
 type Hole struct {
 	Device string      `json:"device"`
 	Vsys   string      `json:"vsys,omitempty"`
-	Reason string      `json:"reason"`
-	Code   reason.Code `json:"-"` // the kind of Reason; out of the JSON until format 2
+	Code   reason.Code `json:"code"` // the kind of Reason
+	Reason string      `json:"text"`
 }
 
 // NewHole returns a hole for a device and vsys with r's code and text.

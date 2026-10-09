@@ -1,5 +1,5 @@
 {
-  "format": 1,
+  "format": 2,
   "command": "simulate policy",
   "input": {
     "flow": {
@@ -26,7 +26,12 @@
   "results": [
     {
       "verdict": "pass",
-      "reason": "rule to-web-by-address (allow)",
+      "reasons": [
+        {
+          "code": "verdict.rule",
+          "text": "rule to-web-by-address (allow)"
+        }
+      ],
       "rule": "to-web-by-address",
       "default": "",
       "default_action": "",
@@ -34,7 +39,10 @@
       "fidelity": {
         "level": "inferred",
         "reasons": [
-          "earlier candidates in doubt share the action allow: to-web-by-name"
+          {
+            "code": "doubt.same-action",
+            "text": "earlier candidates in doubt share the action allow: to-web-by-name"
+          }
         ],
         "not_evaluated": [
           "zones"
@@ -74,7 +82,12 @@
         {
           "position": 2,
           "rule": "to-web-by-name",
-          "reason": "destination: www.example.com matched only through an FQDN object; the firewall resolves this object itself; its addresses can differ from ours"
+          "reasons": [
+            {
+              "code": "doubt.fqdn-resolution",
+              "text": "destination: www.example.com matched only through an FQDN object; the firewall resolves this object itself; its addresses can differ from ours"
+            }
+          ]
         }
       ],
       "zones": {
@@ -162,7 +175,10 @@
           "fidelity": {
             "level": "overmatch",
             "reasons": [
-              "earlier candidates in doubt share the action allow: to-web-by-name"
+              {
+                "code": "doubt.same-action",
+                "text": "earlier candidates in doubt share the action allow: to-web-by-name"
+              }
             ]
           },
           "candidates": 3,
@@ -174,7 +190,8 @@
       "relevance": {
         "known": false,
         "relevant": false,
-        "reason": "no stored forwarding table"
+        "code": "gap.fib-missing",
+        "text": "no stored forwarding table"
       },
       "target": {
         "device": "file",
@@ -188,7 +205,8 @@
     {
       "device": "file",
       "vsys": "vsys1",
-      "note": "www.example.com has the canonical name web.cdn.example.net, as this machine's resolver reports it"
+      "code": "dns.canonical-name",
+      "text": "www.example.com has the canonical name web.cdn.example.net, as this machine's resolver reports it"
     }
   ]
 }

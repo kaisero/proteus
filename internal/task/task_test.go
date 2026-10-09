@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/okaiser/proteus/internal/reason"
 	"github.com/okaiser/proteus/internal/runlog"
 )
 
@@ -25,12 +26,12 @@ func TestRunRecordsEveryStepInOrder(t *testing.T) {
 	c := &counter{}
 	recs, err := Run(context.Background(), "fw1", c, []Step[counter]{
 		step("a", Result{Detail: "one"}, nil),
-		step("b", Result{Status: Partial, Notes: []string{"n"}}, nil),
+		step("b", Result{Status: Partial, Notes: []reason.Reason{reason.New("note.ha-binding", "n")}}, nil),
 	}, Options{OnStep: func(kind string, r Record) { seen = append(seen, kind+"/"+r.Slug+" "+string(r.Status)) }})
 	if err != nil || c.n != 2 || len(recs) != 2 {
 		t.Fatalf("err %v, ran %d, records %d", err, c.n, len(recs))
 	}
-	if recs[0].Status != OK || recs[0].Detail != "one" || recs[1].Status != Partial || recs[1].Notes[0] != "n" {
+	if recs[0].Status != OK || recs[0].Detail != "one" || recs[1].Status != Partial || recs[1].Notes[0].Text != "n" {
 		t.Errorf("records = %+v", recs)
 	}
 	if strings.Join(seen, ",") != "fw1/a ok,fw1/b partial" {

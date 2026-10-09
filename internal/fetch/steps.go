@@ -108,7 +108,7 @@ func haStep(ctx context.Context, s *State) (task.Result, error) {
 // stay records why the fetch stays on the device asked.
 func (s *State) stay(note reason.Reason) (task.Result, error) {
 	s.Result.Notes = append(s.Result.Notes, note)
-	return task.Result{Detail: "fetched this device as it is", Notes: []string{note.Text}}, nil
+	return task.Result{Detail: "fetched this device as it is", Notes: []reason.Reason{note}}, nil
 }
 
 func documentsStep(ctx context.Context, s *State) (task.Result, error) {
