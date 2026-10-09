@@ -95,7 +95,7 @@ func TestMCPStartChecks(t *testing.T) {
 		{"http without a token", nil, []string{"--http", audit}, 2, "--http needs a token"},
 		{"short token", map[string]string{"PROTEUS_MCP_TOKEN": "short"}, []string{"--http", audit}, 2, "at least 32"},
 		{"short token file", nil, []string{"--http", audit, "--token-file", tokenFile(0o600, "short\n")}, 2, "at least 32"},
-		{"no allowed hosts", map[string]string{"PROTEUS_MCP_TOKEN": mcpTokenValue, "PROTEUS_MCP_ALLOWED_HOSTS": ""}, []string{"--http", audit, "--allowed-host", ""}, 2, "allowed_hosts"},
+		{"an empty allowed host", map[string]string{"PROTEUS_MCP_TOKEN": mcpTokenValue}, []string{"--http", audit, "--allowed-host", ""}, 2, "allowed_hosts"},
 		{"no audit log", map[string]string{"PROTEUS_MCP_TOKEN": mcpTokenValue}, []string{"--http"}, 2, "--http needs audit_log"},
 		{"token file others write", nil, []string{"--http", audit, "--token-file", tokenFile(0o666, mcpTokenValue)}, 2, "others can write it"},
 		{"missing token file", nil, []string{"--http", audit, "--token-file", filepath.Join(c.dir, "none")}, 2, "token file"},
@@ -123,6 +123,19 @@ func TestMCPStartChecks(t *testing.T) {
 				t.Errorf("exit %d, want %d; stderr:\n%s", code, tc.code, errOut.String())
 			}
 		})
+	}
+}
+
+// --http without allowed_hosts in any source does not start.
+func TestMCPNeedsAllowedHosts(t *testing.T) {
+	t.Parallel()
+	c := mcpLab(t, "")
+	c.env["PROTEUS_MCP_TOKEN"] = mcpTokenValue
+	var errOut bytes.Buffer
+	audit := "--audit-log=" + filepath.Join(c.dir, "audit.jsonl")
+	if code := c.serveMCP(context.Background(), strings.NewReader(""), io.Discard, &errOut, "--http", audit); code != 2 ||
+		!strings.Contains(errOut.String(), "--http needs allowed_hosts") {
+		t.Errorf("exit %d; stderr:\n%s", code, errOut.String())
 	}
 }
 
@@ -179,6 +192,7 @@ func TestMCPSettingPrecedence(t *testing.T) {
 			"PROTEUS_MCP_AUDIT_CLAIMS": "sub, email", "PROTEUS_MCP_ALLOWED_HOSTS": "env.example.org",
 		}[k]
 	}, time.Now)
+	a.logDir = "/state/proteus/log" // the root hook resolves it
 	cmd := a.mcpCmd()
 	if err := cmd.ParseFlags([]string{"--max-wait", "4s", "--allowed-host", "a.example.org", "--allowed-host", "b.example.org"}); err != nil {
 		t.Fatal(err)

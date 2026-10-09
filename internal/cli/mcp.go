@@ -136,31 +136,22 @@ var mcpKeys = []mcpKey{
 }
 
 // mcpDefaults are the settings no source sets (spec 2026-10-09 §4.2). The
-// calls' run logs go to mcp under the CLI's log directory logDir: a
-// directory of their own, so each rotates apart.
-func mcpDefaults(logDir string, getenv func(string) string) (inventory.MCP, error) {
-	if logDir == "" {
-		var err error
-		if logDir, err = defaultLogDir(getenv); err != nil {
-			return inventory.MCP{}, err
-		}
-	}
+// calls' run logs go to mcp under the CLI's log directory logDir, which the
+// root hook resolved: a directory of their own, so each rotates apart.
+func mcpDefaults(logDir string) inventory.MCP {
 	l := mcp.DefaultLimits
 	return inventory.MCP{
 		Listen: "127.0.0.1:8765", IdentityHeader: "X-User-Claims", AuditClaims: []string{"sub"},
 		LogDir: filepath.Join(logDir, "mcp"), LogKeep: 200,
 		MaxConcurrent: l.MaxConcurrent, MaxQueue: l.MaxQueue, MaxWait: l.MaxWait.String(),
 		CallTimeout: l.CallTimeout.String(), MaxLoads: l.MaxLoads, MaxCache: l.MaxCacheMB,
-	}, nil
+	}
 }
 
 // mcpSettings resolves the mcp: settings: default < the export's mcp:
 // section < PROTEUS_MCP_* < flag. A value is checked as the file's are.
 func (a *app) mcpSettings(c *cobra.Command, file *inventory.MCP) (inventory.MCP, error) {
-	m, err := mcpDefaults(a.logDir, a.getenv)
-	if err != nil {
-		return m, err
-	}
+	m := mcpDefaults(a.logDir)
 	for _, k := range mcpKeys {
 		if file != nil {
 			if v := k.get(file); v != "" {
