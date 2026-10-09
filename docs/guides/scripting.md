@@ -89,6 +89,14 @@ the `input` name and a `text` that names the rules it decides. An empty list
 means no input can help, such as a rule that names an application. A decided
 result has no `needs` key.
 
+The questions also take `--detail summary`. The envelope then says
+`"detail": "summary"`, and each result keeps the answer, the verdict, the
+fidelity, the reasons and the needs, and of a path each hop's device, vsys,
+snapshot, zones, route and policy verdict. It leaves out candidates, stage
+tables and each hop's interfaces and lookups. Holes, unresolved entries and
+notes stay. The default is `--detail full`; the envelope says
+`"detail": "full"`.
+
 Format 2 gives every reason a stable code. A hole, an unresolved entry and a
 note are objects with `code` and `text` beside `device` and `vsys`. A list of
 reasons, such as `fidelity.reasons`, a doubt's `reasons` or a check's `reasons`,

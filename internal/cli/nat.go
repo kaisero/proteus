@@ -54,6 +54,7 @@ func (a *app) natCmd(sim simulate.Simulation) *cobra.Command {
 	f.StringVar(&o.at, "at", "", "read the newest snapshot at or before this time (id, RFC 3339 or date)")
 	bindWhy(cmd, &o.fl.why)
 	bindNoDNS(cmd, &o.fl.noDNS)
+	a.bindDetail(cmd)
 	return cmd
 }
 
@@ -90,6 +91,10 @@ func (a *app) runNAT(ctx context.Context, o natOptions) (answer, error) {
 		return nil, err
 	}
 	return natAnswer{enveloped: enveloped[query.NATInput, query.NATResult]{e}, why: o.fl.why}, nil
+}
+
+func (n natAnswer) SummaryResults() any {
+	return query.Summarize(n.e, query.NATResult.Summary).Results
 }
 
 func (n natAnswer) Input() any {

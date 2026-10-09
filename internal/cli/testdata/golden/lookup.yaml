@@ -1,5 +1,6 @@
 format: 2
 command: lookup
+detail: full
 input:
   expand: false
   full: false

@@ -105,6 +105,8 @@ type app struct {
 	logLevelFlag, logDirFlag                      string
 	verbose                                       bool
 	colorFlag                                     string
+	// detail is --detail on a question: summary or full.
+	detail string
 
 	// Resolved by resolveSettings in the root hook.
 	hookRan      bool
@@ -172,7 +174,7 @@ func (a *app) root() *cobra.Command {
 		if err := c.ValidateFlagGroups(); err != nil {
 			return &exitErr{code: exitUsage, err: err}
 		}
-		return nil
+		return a.checkDetail(c)
 	}
 
 	inv := group("inventory", "Manage the device inventory", a.inventoryInitCmd())

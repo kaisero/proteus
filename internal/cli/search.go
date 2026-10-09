@@ -49,6 +49,7 @@ func (a *app) searchCmd() *cobra.Command {
 	f.StringSliceVar(&o.show, "show", nil, "only these stages: objects, groups, refs, literals")
 	f.BoolVar(&o.direct, "direct", false, "groups one level up only")
 	bindWhy(cmd, &o.why)
+	a.bindDetail(cmd)
 	return cmd
 }
 
@@ -93,6 +94,10 @@ func (a *app) runSearch(ctx context.Context, o searchOptions) (answer, error) {
 }
 
 func (s searchAnswer) Summary() *query.Summary { return s.e.Summary }
+
+func (s searchAnswer) SummaryResults() any {
+	return query.Summarize(s.e, query.Finding.Summary).Results
+}
 
 func (s searchAnswer) Input() any {
 	in := s.e.Input

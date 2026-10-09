@@ -1,6 +1,7 @@
 {
   "format": 2,
   "command": "snapshot diff",
+  "detail": "full",
   "input": {
     "from": "",
     "selection": {

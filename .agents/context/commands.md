@@ -75,7 +75,11 @@ simulate nat <src> <dst> --device <fw>      the NAT rule and the translated pack
   `--why`. An undecided or undermatched simulate result also carries `needs`
   (`query/needs.go`, spec 2026-10-09 §3.4): the port, protocol or URL a second
   call can give, found from the reason codes; `[]` when none helps, no key
-  when the result is decided. It reads every inventory device's stored interfaces and tables, draws a
+  when the result is decided. `--detail summary|full` (default `full`) picks the
+  results' form on `--output json|yaml` for every question; with text output it
+  is a usage error. The envelope says which in `detail`; the summary types
+  (`query/summary.go`, spec §3.5) drop candidates, stage tables and a hop's
+  interfaces and lookups. It reads every inventory device's stored interfaces and tables, draws a
   box per firewall and vsys, and exits 2 for a start it cannot choose (ties,
   default-only, several routers, IPv6); a start device without a snapshot is a hole
   (exit 3). `scripts/device-probe.sh --routing <device>
@@ -148,30 +152,39 @@ with no choice).
 <!-- GENERATED:api ./internal/query -->
 ```go
 type Check struct{ ... }
+type CheckSummary struct{ ... }
 type Checks []Check
 type DiffInput struct{ ... }
 type DiffResult struct{ ... }
+type DiffSummary struct{ ... }
 type Env struct{ ... }
 type Envelope[In, Res any] struct{ ... }
 type Finding struct{ ... }
+type FindingSummary struct{ ... }
 type FlowInput struct{ ... }
+type HopSummary struct{ ... }
 type LookupInput struct{ ... }
 type LookupResult struct{ ... }
+type LookupSummary struct{ ... }
 type NATInput struct{ ... }
 type NATResult struct{ ... }
+type NATSummary struct{ ... }
 type Need struct{ ... }
 type Note struct{ ... }
 type PathHop struct{ ... }
 type PathResult struct{ ... }
+type PathSummary struct{ ... }
 type Point struct{ ... }
 type PolicyFileInput struct{ ... }
 type PolicyInput struct{ ... }
 type RoutingInput struct{ ... }
 type RoutingResult struct{ ... }
+type RoutingSummary struct{ ... }
 type Rule struct{ ... }
 type SearchInput struct{ ... }
 type Security struct{ ... }
 type SecurityResult struct{ ... }
+type SecuritySummary struct{ ... }
 type Selection struct{ ... }
 type Stage struct{ ... }
 type Summary struct{ ... }
@@ -182,6 +195,7 @@ type UsageError struct{ ... }
 func (cs Checks) MarshalJSON() ([]byte, error)
 func (e *UsageError) Error() string
 func (e *UsageError) Unwrap() error
+func (f Finding) Summary() FindingSummary
 func (in DiffInput) Validate() *UsageError
 func (in LookupInput) Validate() *UsageError
 func (in NATInput) Validate() *UsageError
@@ -190,6 +204,12 @@ func (in PolicyInput) Validate() *UsageError
 func (in RoutingInput) Validate() *UsageError
 func (in SearchInput) Matching() string
 func (in SearchInput) Validate() *UsageError
+func (r DiffResult) Summary() DiffSummary
+func (r LookupResult) Summary() LookupSummary
+func (r NATResult) Summary() NATSummary
+func (r PathResult) Summary() PathSummary
+func (r RoutingResult) Summary() RoutingSummary
+func (r SecurityResult) Summary() SecuritySummary
 func CheckAction(c pathpolicy.CheckResult) string
 func DecisionLine(v securitypolicy.Verdict, name func(string) string) string
 func DestinationTranslation(d *nat.Translation, port uint16) string

@@ -1,0 +1,112 @@
+{
+  "format": 2,
+  "command": "simulate policy",
+  "detail": "summary",
+  "input": {
+    "mode": "path",
+    "flow": {
+      "source": {
+        "addrs": [
+          "198.18.1.10"
+        ],
+        "resolved": false
+      },
+      "destination": {
+        "addrs": [
+          "198.18.10.100"
+        ],
+        "resolved": false
+      },
+      "protocol": "tcp",
+      "port": 443
+    },
+    "device": "",
+    "router": "",
+    "at": ""
+  },
+  "results": [
+    {
+      "answer": "denied at hop 2: fw01 / vsys1, rule block-servers (deny)",
+      "mode": "path",
+      "verdict": "denied",
+      "at": {
+        "hop": 2,
+        "check": "security",
+        "rule": "block-servers",
+        "reasons": [
+          {
+            "code": "verdict.rule",
+            "text": "rule block-servers (deny)"
+          }
+        ]
+      },
+      "fidelity": {
+        "level": "exact"
+      },
+      "source": {
+        "addrs": [
+          "198.18.1.10"
+        ],
+        "resolved": false
+      },
+      "destination": {
+        "addrs": [
+          "198.18.10.100"
+        ],
+        "resolved": false
+      },
+      "outcome": "delivered",
+      "end": "198.18.10.100   delivered",
+      "end_code": "path.delivered",
+      "hops": [
+        {
+          "index": 1,
+          "device": "fw02",
+          "vsys": "vsys1",
+          "snapshot": "2026-09-28T10-00-00Z",
+          "from_zone": "home",
+          "to_zone": "labor",
+          "route": "198.18.0.0/15 via 198.19.0.254",
+          "checks": [
+            {
+              "name": "security",
+              "verdict": "pass",
+              "rule": "interzone-default",
+              "reasons": [
+                {
+                  "code": "verdict.default",
+                  "text": "default rule interzone-default (allow), local"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "device": "fw01",
+          "vsys": "vsys1",
+          "snapshot": "2026-09-28T10-00-00Z",
+          "from_zone": "transport",
+          "to_zone": "server",
+          "route": "198.18.10.0/24 via ethernet1/2",
+          "checks": [
+            {
+              "name": "security",
+              "verdict": "stop",
+              "rule": "block-servers",
+              "reasons": [
+                {
+                  "code": "verdict.rule",
+                  "text": "rule block-servers (deny)"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "holes": [],
+  "unresolved": [],
+  "notes": []
+}

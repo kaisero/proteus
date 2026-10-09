@@ -1,0 +1,208 @@
+{
+  "format": 2,
+  "command": "simulate policy",
+  "detail": "summary",
+  "input": {
+    "flow": {
+      "source": {
+        "addrs": [
+          "10.0.0.5"
+        ],
+        "resolved": false
+      },
+      "destination": {
+        "addrs": [
+          "203.0.113.5"
+        ],
+        "resolved": false
+      },
+      "protocol": "tcp",
+      "port": 443,
+      "from_zone": "dmz",
+      "to_zone": "wan"
+    },
+    "selection": {
+      "file": "../../testdata/config/firewall-doubt.xml"
+    }
+  },
+  "results": [
+    {
+      "answer": "undecided: dmz-user (deny) at position 7 may match first: user not evaluated (corp\\alice)",
+      "needs": [
+        {
+          "code": "input.url",
+          "input": "url",
+          "text": "give the URL; it decides the URL category of rules dmz-pandb, dmz-custom"
+        }
+      ],
+      "verdict": "undecided",
+      "reasons": [
+        {
+          "code": "doubt.not-evaluated.user",
+          "text": "dmz-user (deny) at position 7 may match first: user not evaluated (corp\\alice)"
+        }
+      ],
+      "rule": "",
+      "default_action": "",
+      "fidelity": {
+        "level": "undermatch",
+        "reasons": [
+          {
+            "code": "doubt.service-kept",
+            "text": "kept rules whose service is application-default, predefined or absent: app-one, app-two, dmz-predefined, dmz-no-service"
+          },
+          {
+            "code": "doubt.not-evaluated.user",
+            "text": "dmz-user (deny) at position 7 may match first: user not evaluated (corp\\alice)"
+          }
+        ],
+        "not_evaluated": [
+          "url category",
+          "application",
+          "user"
+        ]
+      },
+      "doubts": [
+        {
+          "position": 3,
+          "rule": "app-one",
+          "reasons": [
+            {
+              "code": "doubt.service-application-default",
+              "text": "service application-default"
+            }
+          ]
+        },
+        {
+          "position": 3,
+          "rule": "app-one",
+          "reasons": [
+            {
+              "code": "doubt.application",
+              "text": "application not evaluated (dropbox)"
+            }
+          ]
+        },
+        {
+          "position": 4,
+          "rule": "app-two",
+          "reasons": [
+            {
+              "code": "doubt.service-application-default",
+              "text": "service application-default"
+            }
+          ]
+        },
+        {
+          "position": 4,
+          "rule": "app-two",
+          "reasons": [
+            {
+              "code": "doubt.application",
+              "text": "application not evaluated (zoom)"
+            }
+          ]
+        },
+        {
+          "position": 7,
+          "rule": "dmz-user",
+          "reasons": [
+            {
+              "code": "doubt.not-evaluated.user",
+              "text": "user not evaluated (corp\\alice)"
+            }
+          ]
+        },
+        {
+          "position": 7,
+          "rule": "dmz-user",
+          "reasons": [
+            {
+              "code": "doubt.hip",
+              "text": "destination-hip not evaluated (hip-a)"
+            }
+          ]
+        },
+        {
+          "position": 8,
+          "rule": "dmz-schedule",
+          "reasons": [
+            {
+              "code": "doubt.schedule",
+              "text": "schedule not evaluated (work-hours)"
+            }
+          ]
+        },
+        {
+          "position": 9,
+          "rule": "dmz-pandb",
+          "reasons": [
+            {
+              "code": "doubt.category-no-url",
+              "text": "url category not evaluated without a URL (news)"
+            }
+          ]
+        },
+        {
+          "position": 10,
+          "rule": "dmz-custom",
+          "reasons": [
+            {
+              "code": "doubt.category-no-url",
+              "text": "url category not evaluated without a URL (my-cat)"
+            }
+          ]
+        },
+        {
+          "position": 11,
+          "rule": "dmz-predefined",
+          "reasons": [
+            {
+              "code": "doubt.service-predefined",
+              "text": "service predefined or not defined in the configuration (service-https)"
+            }
+          ]
+        },
+        {
+          "position": 12,
+          "rule": "dmz-no-service",
+          "reasons": [
+            {
+              "code": "doubt.service-absent",
+              "text": "service absent"
+            }
+          ]
+        }
+      ],
+      "zones": {
+        "from": [
+          "dmz"
+        ],
+        "to": [
+          "wan"
+        ],
+        "source": "given"
+      },
+      "relevance": {
+        "known": false,
+        "relevant": false,
+        "code": "gap.fib-missing",
+        "text": "no stored forwarding table"
+      },
+      "target": {
+        "device": "file",
+        "vsys": "vsys1"
+      }
+    }
+  ],
+  "holes": [],
+  "unresolved": [
+    {
+      "device": "file",
+      "vsys": "vsys1",
+      "code": "doubt.not-evaluated.user",
+      "text": "dmz-user (deny) at position 7 may match first: user not evaluated (corp\\alice)"
+    }
+  ],
+  "notes": []
+}

@@ -65,6 +65,10 @@ func (a *app) runPolicyFile(ctx context.Context, o policyOptions) (answer, error
 	return policyAnswer{enveloped: enveloped[query.PolicyFileInput, query.SecurityResult]{e}, why: o.fl.why}, nil
 }
 
+func (p policyAnswer) SummaryResults() any {
+	return query.Summarize(p.e, query.SecurityResult.Summary).Results
+}
+
 func (p policyAnswer) Input() any {
 	return policyInput{Flow: p.e.Input.Simulated, Selection: p.e.Input.Selection}
 }

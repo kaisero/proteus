@@ -18,6 +18,7 @@ const formatVersion = query.FormatVersion
 type envelope struct {
 	Format     int            `json:"format"`
 	Command    string         `json:"command"`
+	Detail     string         `json:"detail,omitempty"` // the questions only
 	Input      any            `json:"input"`
 	Results    any            `json:"results"`
 	Summary    *query.Summary `json:"summary,omitempty"` // search and lookup

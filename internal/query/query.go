@@ -104,7 +104,7 @@ type Summary struct {
 // f, Detail "summary", every qualifier kept.
 func Summarize[In, R, S any](e Envelope[In, R], f func(R) S) Envelope[In, S] {
 	out := Envelope[In, S]{
-		Format: e.Format, Command: e.Command, Detail: "summary", Input: e.Input, Summary: e.Summary,
+		Format: e.Format, Command: e.Command, Detail: DetailSummary, Input: e.Input, Summary: e.Summary,
 		Holes: e.Holes, Unresolved: e.Unresolved, Notes: e.Notes, Targets: e.Targets,
 	}
 	if e.Results != nil {
@@ -118,7 +118,7 @@ func Summarize[In, R, S any](e Envelope[In, R], f func(R) S) Envelope[In, S] {
 
 // envelope starts a full envelope of a command.
 func envelope[In, Res any](command string, in In) Envelope[In, Res] {
-	return Envelope[In, Res]{Format: FormatVersion, Command: command, Detail: "full", Input: in}
+	return Envelope[In, Res]{Format: FormatVersion, Command: command, Detail: DetailFull, Input: in}
 }
 
 // UsageError is an input that is not a valid question. Text is the command

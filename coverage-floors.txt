@@ -18,7 +18,7 @@ github.com/okaiser/proteus/internal/index  97.7
 github.com/okaiser/proteus/internal/inventory  96.2
 github.com/okaiser/proteus/internal/fetch  100.0
 github.com/okaiser/proteus/internal/store  90.2
-github.com/okaiser/proteus/internal/cli      96.8
+github.com/okaiser/proteus/internal/cli      97.0
 github.com/okaiser/proteus/internal/estate  100.0
 github.com/okaiser/proteus/internal/search  99.3
 github.com/okaiser/proteus/internal/card  94.4
@@ -36,4 +36,4 @@ github.com/okaiser/proteus/internal/task  100.0
 github.com/okaiser/proteus/internal/simulate/pathlab  92.4
 github.com/okaiser/proteus/internal/simulate/pathpolicy  100.0
 github.com/okaiser/proteus/internal/reason  100.0
-github.com/okaiser/proteus/internal/query  96.6
+github.com/okaiser/proteus/internal/query  97.4

@@ -1,5 +1,6 @@
 format: 2
 command: search
+detail: full
 input:
   direct: false
   fields: null

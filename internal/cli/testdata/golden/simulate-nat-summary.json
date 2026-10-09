@@ -1,0 +1,65 @@
+{
+  "format": 2,
+  "command": "simulate nat",
+  "detail": "summary",
+  "input": {
+    "at": "",
+    "device": "fw01",
+    "flow": {
+      "source": {
+        "addrs": [
+          "198.18.1.10"
+        ],
+        "resolved": false
+      },
+      "destination": {
+        "addrs": [
+          "198.18.250.10"
+        ],
+        "resolved": false
+      },
+      "protocol": "tcp",
+      "port": 8443
+    },
+    "from_interface": "",
+    "from_zone": "transport",
+    "router": "default"
+  },
+  "results": [
+    {
+      "answer": "t-dnat-port: destination 198.18.250.10:8443 -\u003e 198.18.10.100:443",
+      "rule": "t-dnat-port",
+      "fidelity": {
+        "level": "exact"
+      },
+      "doubts": [],
+      "destination": {
+        "kind": "static",
+        "candidates": [
+          "198.18.10.100"
+        ],
+        "address": "198.18.10.100",
+        "port": "443"
+      },
+      "flow": {
+        "source": {
+          "addrs": [
+            "198.18.1.10"
+          ],
+          "resolved": false
+        },
+        "destination": {
+          "addrs": [
+            "198.18.10.100"
+          ],
+          "resolved": false
+        },
+        "protocol": "tcp",
+        "port": 443
+      }
+    }
+  ],
+  "holes": [],
+  "unresolved": [],
+  "notes": []
+}

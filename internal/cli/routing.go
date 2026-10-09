@@ -55,6 +55,7 @@ func (a *app) routingCmd(sim simulate.Simulation) *cobra.Command {
 	f.BoolVar(&o.rib, "rib", false, "list the routing table's other routes to the destination at each firewall")
 	bindWhy(cmd, &o.why)
 	bindNoDNS(cmd, &o.noDNS)
+	a.bindDetail(cmd)
 	return cmd
 }
 
@@ -91,6 +92,10 @@ func (a *app) runRouting(ctx context.Context, o routingOptions) (answer, error) 
 		return nil, err
 	}
 	return routingAnswer{enveloped: enveloped[query.RoutingInput, query.RoutingResult]{e}, why: o.why}, nil
+}
+
+func (r routingAnswer) SummaryResults() any {
+	return query.Summarize(r.e, query.RoutingResult.Summary).Results
 }
 
 func (r routingAnswer) Input() any {

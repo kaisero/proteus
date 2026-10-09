@@ -40,6 +40,13 @@ func (q qualifiers) status() error {
 	return nil
 }
 
+// detailer is an answer with a summary form (spec 2026-10-09 §3.5): the
+// questions of the query layer.
+type detailer interface {
+	Detail() string
+	SummaryResults() any
+}
+
 // summarizer is an answer whose envelope counts its results: search and
 // lookup.
 type summarizer interface {
@@ -76,9 +83,9 @@ func (a *app) emit(ans answer) error {
 	var err error
 	switch a.format {
 	case formatJSON:
-		err = writeJSON(a.stdout, envelopeOf(ans))
+		err = writeJSON(a.stdout, a.envelopeOf(ans))
 	case formatYAML:
-		err = writeYAML(a.stdout, envelopeOf(ans))
+		err = writeYAML(a.stdout, a.envelopeOf(ans))
 	default:
 		err = ans.Text(&textOut{w: a.stdout, now: a.now(), pal: palette{on: useColor(a.color, a.format, a.getenv, a.stdoutTTY)}})
 	}
@@ -93,8 +100,8 @@ func (a *app) emit(ans answer) error {
 	return q.status()
 }
 
-// envelopeOf is an answer's JSON envelope.
-func envelopeOf(ans answer) envelope {
+// envelopeOf is an answer's JSON envelope, in the form --detail asks.
+func (a *app) envelopeOf(ans answer) envelope {
 	q := ans.Qualifiers()
 	e := envelope{
 		Command: ans.Command(), Input: ans.Input(), Results: ans.Results(),
@@ -102,6 +109,12 @@ func envelopeOf(ans answer) envelope {
 	}
 	if s, ok := ans.(summarizer); ok {
 		e.Summary = s.Summary()
+	}
+	if d, ok := ans.(detailer); ok {
+		e.Detail = d.Detail()
+		if a.detail == query.DetailSummary {
+			e.Results, e.Detail = d.SummaryResults(), query.DetailSummary
+		}
 	}
 	return e
 }

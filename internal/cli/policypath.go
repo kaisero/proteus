@@ -71,6 +71,7 @@ func (a *app) policyCmd(sim simulate.Simulation) *cobra.Command {
 	o.fl.bindL7(cmd)
 	bindWhy(cmd, &o.fl.why)
 	bindNoDNS(cmd, &o.fl.noDNS)
+	a.bindDetail(cmd)
 	return cmd
 }
 
@@ -122,6 +123,10 @@ func (a *app) runPolicyPath(ctx context.Context, o policyOptions) (answer, error
 		return nil, err
 	}
 	return pathAnswer{enveloped: enveloped[query.PolicyInput, query.PathResult]{e}, why: o.fl.why}, nil
+}
+
+func (p pathAnswer) SummaryResults() any {
+	return query.Summarize(p.e, query.PathResult.Summary).Results
 }
 
 func (p pathAnswer) Input() any {

@@ -6,6 +6,8 @@ import (
 	"io/fs"
 	"os"
 
+	"github.com/spf13/cobra"
+
 	"github.com/okaiser/proteus/internal/inventory"
 	"github.com/okaiser/proteus/internal/query"
 	"github.com/okaiser/proteus/internal/reason"
@@ -20,10 +22,32 @@ type enveloped[In, Res any] struct {
 }
 
 func (a enveloped[In, Res]) Command() string { return a.e.Command }
+func (a enveloped[In, Res]) Detail() string  { return a.e.Detail }
 func (a enveloped[In, Res]) Results() any    { return a.e.Results }
 
 func (a enveloped[In, Res]) Qualifiers() qualifiers {
 	return qualifiers{Holes: a.e.Holes, Unresolved: a.e.Unresolved, Notes: a.e.Notes}
+}
+
+// bindDetail registers --detail on a question's command.
+func (a *app) bindDetail(cmd *cobra.Command) {
+	cmd.Flags().StringVar(&a.detail, "detail", query.DetailFull, "with --output json or yaml: summary or full")
+}
+
+// checkDetail refuses a --detail the command cannot honour: a value other
+// than summary or full, or any with text output, which has one form.
+func (a *app) checkDetail(c *cobra.Command) error {
+	f := c.Flags().Lookup("detail")
+	if f == nil || !f.Changed {
+		return nil
+	}
+	if a.detail != query.DetailSummary && a.detail != query.DetailFull {
+		return usageErr("--detail %q: want summary or full", a.detail)
+	}
+	if a.format == formatText {
+		return usageErr("--detail needs --output json or yaml")
+	}
+	return nil
 }
 
 // queryEnv is what a query reads, from the resolved settings, without the store:

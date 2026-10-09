@@ -184,7 +184,12 @@ func LookupAnswer(t Target, kind, name string) string {
 
 // DiffAnswer counts one scope's changes.
 func DiffAnswer(device, scope string, changes []drift.Change) string {
-	var added, removed, changed int
+	added, removed, changed := countChanges(changes)
+	return fmt.Sprintf("%s/%s: %d added, %d removed, %d changed", device, scope, added, removed, changed)
+}
+
+// countChanges counts changes by kind.
+func countChanges(changes []drift.Change) (added, removed, changed int) {
 	for _, c := range changes {
 		switch c.Op {
 		case drift.Added:
@@ -195,7 +200,7 @@ func DiffAnswer(device, scope string, changes []drift.Change) string {
 			changed++
 		}
 	}
-	return fmt.Sprintf("%s/%s: %d added, %d removed, %d changed", device, scope, added, removed, changed)
+	return added, removed, changed
 }
 
 // searchCount is search's count line; lookupCount is lookup's.

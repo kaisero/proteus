@@ -237,6 +237,7 @@ func (a *app) snapshotDiffCmd() *cobra.Command {
 	o.sel.bind(cmd, selectOpts{})
 	cmd.Flags().StringVar(&o.from, "from", "", "compare from the newest snapshot at or before this time (default: the one before --to)")
 	cmd.Flags().StringVar(&o.to, "to", "", "compare to the newest snapshot at or before this time (default: latest)")
+	a.bindDetail(cmd)
 	return cmd
 }
 
@@ -263,6 +264,10 @@ func (a *app) runSnapshotDiff(ctx context.Context, o snapshotDiffOptions) (answe
 		return nil, err
 	}
 	return snapshotDiffAnswer{enveloped[query.DiffInput, query.DiffResult]{e}}, nil
+}
+
+func (d snapshotDiffAnswer) SummaryResults() any {
+	return query.Summarize(d.e, query.DiffResult.Summary).Results
 }
 
 func (d snapshotDiffAnswer) Input() any {

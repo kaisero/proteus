@@ -49,6 +49,7 @@ func (a *app) lookupCmd() *cobra.Command {
 	f.StringVar(&o.kind, "kind", "", "the kind of element: security-rule or an object kind")
 	f.BoolVar(&o.expand, "expand", false, "show each name's value and every group's members")
 	f.BoolVar(&o.full, "full", false, "show every item of a list")
+	a.bindDetail(cmd)
 	return cmd
 }
 
@@ -74,6 +75,10 @@ func (a *app) runLookup(ctx context.Context, o lookupOptions) (answer, error) {
 }
 
 func (l lookupAnswer) Summary() *query.Summary { return l.e.Summary }
+
+func (l lookupAnswer) SummaryResults() any {
+	return query.Summarize(l.e, query.LookupResult.Summary).Results
+}
 
 func (l lookupAnswer) Input() any {
 	in := l.e.Input

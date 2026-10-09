@@ -376,3 +376,75 @@ func TestGoldenAnswersAreTextLines(t *testing.T) {
 		t.Errorf("only %d answers checked", checked)
 	}
 }
+
+// Every question's --detail summary (spec 2026-10-09 §3.5): the same
+// envelope with "detail": "summary" and summary results.
+func TestGoldenSummary(t *testing.T) {
+	t.Parallel()
+	summary := []string{"--output", "json", "--detail", "summary"}
+	for _, tc := range []struct {
+		name string
+		code int
+		args []string
+	}{
+		{"search-summary", 0, []string{"search", "10.124.0.1", "--file", fixture("firewall-multivsys.xml")}},
+		{"lookup-summary", 0, []string{"lookup", "branch-to-dc", "--file", fixture("firewall-lookup.xml")}},
+		{"simulate-policy-summary", 3, []string{"simulate", "policy", "10.0.0.5", "203.0.113.5", "--port", "443", "--from-zone", "dmz", "--to-zone", "wan", "--file", fixture("firewall-doubt.xml")}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			golden(t, tc.name, newCLI(t).want(tc.code, append(tc.args, summary...)...))
+		})
+	}
+	t.Run("search-summary-yaml", func(t *testing.T) {
+		t.Parallel()
+		goldenFile(t, "search-summary.yaml", newCLI(t).want(0, "search", "10.124.0.1", "--file", fixture("firewall-multivsys.xml"),
+			"--output", "yaml", "--detail", "summary"))
+	})
+	for _, g := range pathGoldens(t) {
+		if g.name != "simulate-policy-path-rule" && g.name != "simulate-policy-path-undecided" {
+			continue
+		}
+		t.Run(g.name, func(t *testing.T) {
+			t.Parallel()
+			golden(t, g.name+"-summary", pathVariant(t, g.pc, true).want(g.code, append(g.args, summary...)...))
+		})
+	}
+	t.Run("simulate-nat-summary", func(t *testing.T) {
+		t.Parallel()
+		golden(t, "simulate-nat-summary", natLab(t).want(0, append([]string{
+			"simulate", "nat", "198.18.1.10", "198.18.250.10",
+			"--device", "fw01", "--router", "default", "--from-zone", "transport", "--port", "8443",
+		}, summary...)...))
+	})
+	t.Run("simulate-routing-summary", func(t *testing.T) {
+		t.Parallel()
+		golden(t, "simulate-routing-summary", routingLab(t, false).want(0, append([]string{"simulate", "routing", "198.18.10.5", "8.8.8.8"}, summary...)...))
+	})
+	t.Run("snapshot-diff-summary", func(t *testing.T) {
+		t.Parallel()
+		d := lab(t)
+		c := newCLI(t)
+		c.inventory(inventoryFor(d.Start(t)))
+		c.want(0, "fetch", "fw01")
+		d.Config = read(t, fixture("firewall-lab-changed.xml"))
+		c.want(0, "fetch", "fw01")
+		golden(t, "snapshot-diff-summary", c.want(0, append([]string{"snapshot", "diff", "--vsys", "vsys1"}, summary...)...))
+	})
+}
+
+// --detail takes summary or full, and only with JSON or YAML output.
+func TestDetailIsAUsageErrorWithText(t *testing.T) {
+	t.Parallel()
+	args := []string{"search", "10.124.0.1", "--file", fixture("firewall-multivsys.xml")}
+	for _, extra := range [][]string{{"--detail", "summary"}, {"--detail", "full"}, {"--output", "json", "--detail", "short"}} {
+		out, errOut, code := newCLI(t).run(append(append([]string{}, args...), extra...)...)
+		if code != exitUsage || out != "" || !strings.Contains(errOut, "--detail") {
+			t.Errorf("%v: exit %d\n%s\n%s", extra, code, out, errOut)
+		}
+	}
+	full := newCLI(t).want(0, append(args, "--output", "json", "--detail", "full")...)
+	if def := newCLI(t).want(0, append(args, "--output", "json")...); def != full || !strings.Contains(full, `"detail": "full"`) {
+		t.Errorf("the default is not full:\n%s", def)
+	}
+}

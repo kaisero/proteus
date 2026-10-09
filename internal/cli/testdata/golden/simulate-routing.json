@@ -1,6 +1,7 @@
 {
   "format": 2,
   "command": "simulate routing",
+  "detail": "full",
   "input": {
     "at": "",
     "device": "",

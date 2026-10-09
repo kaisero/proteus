@@ -1,5 +1,6 @@
 format: 2
 command: simulate policy
+detail: full
 input:
   mode: path
   flow:
