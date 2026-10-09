@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"runtime/debug"
 	"testing"
 	"time"
@@ -29,6 +30,9 @@ type Options struct {
 	Now func() time.Time
 	// Limits bound the loads and the cache; a zero field takes its default.
 	Limits Limits
+	// Identify gives a call's identity from its HTTP header (nil over
+	// stdio): HeaderIdentity or StdioIdentity. Nil records none.
+	Identify func(http.Header) Identity
 }
 
 // Limits bound what the server does at once and keeps (spec §4.2, §4.7).
@@ -98,6 +102,14 @@ type Call struct {
 	// Stack is a recovered panic's value and stack, for the run log; the
 	// audit line does not hold it.
 	Stack []byte
+	// Identity is who the call claims to come from.
+	Identity Identity
+	// Remote, HTTPStatus and Refused describe a request the HTTP server
+	// refused: the client's address, 401 or 403, and on a summary line the
+	// refusals of that address not audited one by one.
+	Remote     string
+	HTTPStatus int
+	Refused    int
 }
 
 // Auditor records tool calls. Audit runs once per call, after the answer,
@@ -157,7 +169,7 @@ func build(o Options, strict bool) (*sdk.Server, *limiter, error) {
 	if err := addResources(s); err != nil {
 		return nil, nil, err
 	}
-	m := middleware{audit: o.Audit, now: o.Now, strict: strict, lim: newLimiter(lim.MaxConcurrent, lim.MaxQueue, lim.MaxWait, lim.CallTimeout)}
+	m := middleware{audit: o.Audit, now: o.Now, identify: o.Identify, strict: strict, lim: newLimiter(lim.MaxConcurrent, lim.MaxQueue, lim.MaxWait, lim.CallTimeout)}
 	if m.now == nil {
 		m.now = time.Now
 	}
@@ -207,9 +219,10 @@ func Stdio() sdk.Transport { return &sdk.StdioTransport{} }
 // middleware audits each tool call, bounds the calls and recovers a panic
 // (S3, S7, S8, spec §4.7).
 type middleware struct {
-	audit  Auditor
-	now    func() time.Time
-	strict bool
+	audit    Auditor
+	now      func() time.Time
+	identify func(http.Header) Identity
+	strict   bool
 	// lim bounds the calls; nil runs each at once with no time limit.
 	lim *limiter
 }
@@ -234,6 +247,13 @@ func (m middleware) receive(next sdk.MethodHandler) sdk.MethodHandler {
 		c := &Call{Time: m.now()}
 		if r, ok := req.(*sdk.CallToolRequest); ok && r.Params != nil {
 			c.Tool, c.Input = r.Params.Name, r.Params.Arguments
+		}
+		if m.identify != nil {
+			var h http.Header
+			if ex := req.GetExtra(); ex != nil {
+				h = ex.Header
+			}
+			c.Identity = m.identify(h)
 		}
 		defer func() {
 			c.Duration = m.now().Sub(c.Time)
