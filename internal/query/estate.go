@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/okaiser/proteus/internal/config"
 	"github.com/okaiser/proteus/internal/estate"
 	"github.com/okaiser/proteus/internal/index"
 	"github.com/okaiser/proteus/internal/reason"
@@ -46,9 +47,9 @@ func parseAt(at string) (estate.When, *UsageError) {
 	return when, nil
 }
 
-// targets opens what a question runs against: one file, or the selected devices'
+// Targets opens what a question runs against: one file, or the selected devices'
 // snapshots. What a fresh fetch found becomes notes on that device's targets.
-func targets(ctx context.Context, env Env, sel Selection) ([]estate.Target, []estate.Hole, error) {
+func Targets(ctx context.Context, env Env, sel Selection) ([]estate.Target, []estate.Hole, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, nil, err
 	}
@@ -87,6 +88,38 @@ func targets(ctx context.Context, env Env, sel Selection) ([]estate.Target, []es
 		ts[i].Notes = append(ts[i].Notes, fresh[ts[i].Device]...)
 	}
 	return ts, holes, nil
+}
+
+// TargetQualifiers splits each target's notes: a version gap can make an answer
+// miss rules, so it is unresolved; a stale snapshot or a failed fresh fetch is a
+// note.
+func TargetQualifiers(ts []estate.Target) ([]Unresolved, []Note) {
+	var un []Unresolved
+	var notes []Note
+	for _, t := range ts {
+		for _, n := range t.Notes {
+			if n.Code == "gap.version" {
+				un = append(un, UnresolvedOf(t.Device, t.Vsys, n))
+				continue
+			}
+			notes = append(notes, NoteOf(t.Device, t.Vsys, n))
+		}
+	}
+	return un, notes
+}
+
+// indexSets keeps one index set per configuration a query reads, so it builds
+// each (configuration, scope, rulebase) index at most once. The query owns it
+// and drops it when it returns.
+type indexSets map[*config.Config]*index.Set
+
+func (m indexSets) of(cfg *config.Config) *index.Set {
+	s, ok := m[cfg]
+	if !ok {
+		s = index.NewSet(cfg)
+		m[cfg] = s
+	}
+	return s
 }
 
 // fetchedEstate is the store at one point in time, for the simulations that

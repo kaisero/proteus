@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -13,11 +12,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/okaiser/proteus/internal/estate"
 	"github.com/okaiser/proteus/internal/inventory"
 	"github.com/okaiser/proteus/internal/reason"
 	"github.com/okaiser/proteus/internal/runlog"
-	"github.com/okaiser/proteus/internal/simulate"
 	"github.com/okaiser/proteus/internal/store"
 )
 
@@ -256,63 +253,6 @@ func (sel *selection) bind(cmd *cobra.Command, o selectOpts) {
 // tlsOff is the note on a device fetched without TLS certificate verification.
 func tlsOff() reason.Reason {
 	return reason.New("note.tls-off", "TLS certificate verification is off (insecure_tls)")
-}
-
-// targets opens what a question runs against: one file, or the selected devices'
-// snapshots. What a --fresh fetch found becomes notes on that device's targets: TLS
-// verification off, a failed document, or a failed fetch that leaves the previous
-// snapshot in use.
-func (a *app) targets(ctx context.Context, sel selection, s settings) ([]estate.Target, []estate.Hole, error) {
-	if err := ctx.Err(); err != nil {
-		return nil, nil, err
-	}
-	if sel.file != "" {
-		return estate.OpenFile(sel.file, sel.vsys, a.log)
-	}
-	if s.inv == nil {
-		return nil, nil, fmt.Errorf("no inventory at %s; run proteus inventory init, or pass --file", s.invPath)
-	}
-	names, err := s.inv.Select(sel.devices, sel.labels)
-	if err != nil {
-		return nil, nil, usageErr("%w", err)
-	}
-	if len(names) == 0 {
-		return nil, nil, usageErr("the selection matches no device")
-	}
-	var when estate.When
-	when.Now, when.MaxAge, when.Log = a.now(), s.maxAge, a.log
-	if sel.at != "" {
-		if when.At, err = estate.ParseAt(sel.at); err != nil {
-			return nil, nil, usageErr("%w", err)
-		}
-	}
-	st, err := a.openStore(s.storeRoot)
-	if err != nil {
-		return nil, nil, err
-	}
-	fresh := map[string]simulate.Reasons{}
-	if sel.fresh {
-		for _, r := range a.fetcher(s.inv, st).each(ctx, names) {
-			var ns simulate.Reasons
-			if r.TLSVerification != nil && !*r.TLSVerification {
-				ns = append(ns, tlsOff())
-			}
-			for _, d := range r.Documents {
-				if d.Error != "" {
-					ns = append(ns, reason.New("note.fresh-document-failed", "fresh fetch: "+d.Name+" failed: "+d.Error))
-				}
-			}
-			if r.Error != "" {
-				ns = append(ns, reason.New("note.fresh-failed", "fresh fetch failed, answering from the previous snapshot: "+r.Error))
-			}
-			fresh[r.Device] = ns
-		}
-	}
-	ts, holes := estate.Open(st, names, sel.vsys, when)
-	for i := range ts {
-		ts[i].Notes = append(ts[i].Notes, fresh[ts[i].Device]...)
-	}
-	return ts, holes, nil
 }
 
 // openStore opens the store with the app's clock, so snapshot ids follow it.

@@ -97,17 +97,3 @@ func TestStaleNotesWarn(t *testing.T) {
 		t.Errorf("got  %q\nwant %q", b.String(), want)
 	}
 }
-
-// A version gap is unresolved by its code, not by its text: a note that reads
-// the same with another code stays a note.
-func TestTargetQualifiersUseTheCode(t *testing.T) {
-	t.Parallel()
-	gap := "the configuration is PAN-OS 12.2.0"
-	tg := estate.Target{Device: "fw01", Vsys: "vsys1", Notes: simulate.Reasons{
-		reason.New("gap.version", gap), reason.New("note.ha-peer", gap),
-	}}
-	un, notes := targetQualifiers([]estate.Target{tg})
-	if len(un) != 1 || un[0].Code != "gap.version" || len(notes) != 1 || notes[0].Code != "note.ha-peer" {
-		t.Errorf("unresolved %+v, notes %+v", un, notes)
-	}
-}

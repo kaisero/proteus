@@ -10,6 +10,7 @@ import (
 	"github.com/okaiser/proteus/internal/config"
 	"github.com/okaiser/proteus/internal/drift"
 	"github.com/okaiser/proteus/internal/estate"
+	"github.com/okaiser/proteus/internal/query"
 	"github.com/okaiser/proteus/internal/reason"
 	"github.com/okaiser/proteus/internal/resolve"
 	"github.com/okaiser/proteus/internal/store"
@@ -154,11 +155,11 @@ type snapshotShowAnswer struct {
 }
 
 func (a *app) runSnapshotShow(ctx context.Context, o snapshotShowOptions) (answer, error) {
-	s, err := a.settings(o.sel.file == "")
+	env, err := a.selectionEnv(o.sel.input())
 	if err != nil {
 		return nil, err
 	}
-	ts, holes, err := a.targets(ctx, o.sel, s)
+	ts, holes, err := query.Targets(ctx, env, o.sel.input())
 	if err != nil {
 		return nil, err
 	}
@@ -177,7 +178,7 @@ func (a *app) runSnapshotShow(ctx context.Context, o snapshotShowOptions) (answe
 		}
 		ans.rows = append(ans.rows, r)
 	}
-	ans.un, ans.notes = targetQualifiers(ts)
+	ans.un, ans.notes = query.TargetQualifiers(ts)
 	return ans, nil
 }
 

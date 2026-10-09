@@ -10,10 +10,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/okaiser/proteus/internal/card"
-	"github.com/okaiser/proteus/internal/estate"
-	"github.com/okaiser/proteus/internal/reason"
-	"github.com/okaiser/proteus/internal/resolve"
-	"github.com/okaiser/proteus/internal/runlog"
+	"github.com/okaiser/proteus/internal/query"
 )
 
 // Limits of a rendered card (spec §16 K3, K5). JSON always carries the whole card.
@@ -57,123 +54,54 @@ func (a *app) lookupCmd() *cobra.Command {
 
 // lookupAnswer is the cards found per target, in target order.
 type lookupAnswer struct {
-	o        lookupOptions
-	name     string
-	found    int
-	ts       []estate.Target
-	byTarget [][]card.Card
-	holes    []estate.Hole
-	un       []unresolved
-	notes    []note
+	enveloped[query.LookupInput, query.LookupResult]
 }
 
 func (a *app) runLookup(ctx context.Context, o lookupOptions) (answer, error) {
-	s, err := a.settings(o.sel.file == "")
+	in := query.LookupInput{Name: o.name, Kind: o.kind, Expand: o.expand, Full: o.full, Selection: o.sel.input()}
+	if u := in.Validate(); u != nil {
+		return nil, u
+	}
+	env, err := a.selectionEnv(in.Selection)
 	if err != nil {
 		return nil, err
 	}
-	ts, holes, err := a.targets(ctx, o.sel, s)
+	e, err := query.Lookup(ctx, env, in)
 	if err != nil {
 		return nil, err
 	}
-	ans, err := a.lookupTargets(ctx, o.name, o.kind, ts, holes)
-	if err != nil {
-		return nil, err
-	}
-	ans.o = o
-	return ans, nil
+	return lookupAnswer{enveloped[query.LookupInput, query.LookupResult]{e}}, nil
 }
-
-func (l lookupAnswer) Command() string { return "lookup" }
 
 func (l lookupAnswer) Input() any {
-	return lookupInput{Name: l.name, Kind: l.o.kind, Expand: l.o.expand, Full: l.o.full, Selection: l.o.sel.input()}
-}
-
-func (l lookupAnswer) Results() any {
-	results := []lookupResult{}
-	for i, t := range l.ts {
-		for _, cd := range l.byTarget[i] {
-			results = append(results, lookupResult{target: targetOf(t), Scope: cd.Scope.String(), Card: cd})
-		}
-	}
-	return results
-}
-
-func (l lookupAnswer) Qualifiers() qualifiers {
-	return qualifiers{Holes: l.holes, Unresolved: l.un, Notes: l.notes}
+	in := l.e.Input
+	return lookupInput{Name: in.Name, Kind: in.Kind, Expand: in.Expand, Full: in.Full, Selection: in.Selection}
 }
 
 func (l lookupAnswer) Text(t *textOut) error {
-	r := renderer{w: t, expand: l.o.expand, full: l.o.full}
-	with, without := 0, 0
-	for i, tg := range l.ts {
-		if len(l.byTarget[i]) == 0 {
-			without++
+	in := l.e.Input
+	r := renderer{w: t, expand: in.Expand, full: in.Full}
+	byTarget := make([][]card.Card, len(l.e.Targets))
+	for _, res := range l.e.Results {
+		byTarget[res.TargetIndex] = append(byTarget[res.TargetIndex], res.Card)
+	}
+	for i, tg := range l.e.Targets {
+		if len(byTarget[i]) == 0 {
 			continue
 		}
-		with++
 		fmt.Fprintln(t, t.pal.head(header(tg, t.now)))
 		printNotes(t, tg)
-		for _, cd := range l.byTarget[i] {
+		for _, cd := range byTarget[i] {
 			r.card(cd)
 			fmt.Fprintln(t)
 		}
 	}
-	if l.found == 0 {
-		fmt.Fprintf(t, "no element named %q in the selection\n\n", l.name)
+	if l.e.Summary.Found == 0 {
+		fmt.Fprintf(t, "no element named %q in the selection\n\n", in.Name)
 	}
 	printQualifiers(t, l.Qualifiers())
-	fmt.Fprintf(t, "%d with it, %d without, %d holes\n", with, without, len(l.holes))
+	fmt.Fprintf(t, "%d with it, %d without, %d holes\n", l.e.Summary.With, l.e.Summary.Without, len(l.e.Holes))
 	return t.err
-}
-
-// lookupTargets finds the element on each target. A name that means different kinds
-// on different targets is a usage error: the user has to pick one.
-func (a *app) lookupTargets(ctx context.Context, name, kind string, ts []estate.Target, holes []estate.Hole) (lookupAnswer, error) {
-	ans := lookupAnswer{name: name, ts: ts, byTarget: make([][]card.Card, len(ts)), holes: holes}
-	kinds := map[string][]string{} // kind -> where it was found
-	found := 0
-	sets := indexSets{}
-	for i, t := range ts {
-		if err := ctx.Err(); err != nil {
-			return lookupAnswer{}, err
-		}
-		idx, err := sets.of(t.Config).Index(t.Scope, resolve.Security)
-		if err != nil {
-			ans.holes = append(ans.holes, estate.NewHole(t.Device, t.Vsys, reason.New("gap.load-failed", err.Error())))
-			continue
-		}
-		cs, err := card.Find(t.Config, idx, name, kind)
-		if err != nil {
-			return lookupAnswer{}, usageErr("--kind: %w", err)
-		}
-		ans.byTarget[i] = cs
-		var here []string
-		for _, cd := range cs {
-			here = append(here, cd.Kind)
-			kinds[cd.Kind] = append(kinds[cd.Kind], where(t.Device, t.Vsys))
-		}
-		found += len(cs)
-		a.log.Infof(runlog.TagFind, "%s/%s: lookup %q found %v", t.Device, t.Vsys, name, here)
-	}
-	if len(kinds) > 1 {
-		var lines []string
-		for _, k := range sorted(kinds) {
-			lines = append(lines, fmt.Sprintf("  %s on %s", k, strings.Join(kinds[k], ", ")))
-		}
-		return lookupAnswer{}, usageErr("%q names more than one kind; pick one with --kind:\n%s", name, strings.Join(lines, "\n"))
-	}
-	ans.un, ans.notes = targetQualifiers(ts)
-	ans.found = found
-	return ans, nil
-}
-
-// lookupResult is one card in the JSON envelope.
-type lookupResult struct {
-	target
-	Scope string    `json:"scope"`
-	Card  card.Card `json:"card"`
 }
 
 // renderer writes a card as text. Three columns: the section title, the row
@@ -322,13 +250,4 @@ func plural(n int, one string) string {
 		return "1 " + one
 	}
 	return fmt.Sprintf("%d %ss", n, one)
-}
-
-func sorted[V any](m map[string]V) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	slices.Sort(out)
-	return out
 }

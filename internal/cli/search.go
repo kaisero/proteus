@@ -2,20 +2,15 @@ package cli
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
-	"regexp"
 	"time"
 
 	"github.com/spf13/cobra"
 
-	"github.com/okaiser/proteus/internal/config"
 	"github.com/okaiser/proteus/internal/estate"
 	"github.com/okaiser/proteus/internal/index"
-	"github.com/okaiser/proteus/internal/reason"
-	"github.com/okaiser/proteus/internal/resolve"
-	"github.com/okaiser/proteus/internal/runlog"
+	"github.com/okaiser/proteus/internal/query"
 	"github.com/okaiser/proteus/internal/search"
 )
 
@@ -57,161 +52,74 @@ func (a *app) searchCmd() *cobra.Command {
 	return cmd
 }
 
-// query turns the flags and the term into a search query.
-func (o searchOptions) query(term string) (search.Query, error) {
-	q := search.Query{Term: term, Kinds: o.kinds, Fields: o.fields, Direct: o.direct}
-	switch { // the flags exclude each other; the root command checks that
+// input is the search the flags ask. The mode flags exclude each other; the
+// root command checks that.
+func (o searchOptions) input() query.SearchInput {
+	in := query.SearchInput{
+		Term: o.term, Kinds: o.kinds, Fields: o.fields, Show: o.show, Direct: o.direct, Selection: o.sel.input(),
+	}
+	switch {
 	case o.exact:
-		q.Mode = search.Exact
+		in.Mode = "exact"
 	case o.within:
-		q.Mode = search.Within
+		in.Mode = "within"
 	case o.contains:
-		q.Mode = search.Contains
+		in.Mode = "contains"
 	}
-	for _, st := range o.show {
-		stage, ok := showNames[st]
-		if !ok {
-			return q, usageErr("--show %q: want objects, groups, refs or literals", st)
-		}
-		q.Show = append(q.Show, stage)
-	}
-	return q, nil
+	return in
 }
 
 // searchAnswer is a search over the selected targets: findings per target, in
 // target order.
 type searchAnswer struct {
-	o        searchOptions
-	q        search.Query
-	ts       []estate.Target
-	byTarget [][]search.Finding
-	holes    []estate.Hole
-	un       []unresolved
-	notes    []note
+	enveloped[query.SearchInput, query.Finding]
 }
 
 func (a *app) runSearch(ctx context.Context, o searchOptions) (answer, error) {
-	q, err := o.query(o.term)
+	in := o.input()
+	if u := in.Validate(); u != nil {
+		return nil, u
+	}
+	env, err := a.selectionEnv(in.Selection)
 	if err != nil {
 		return nil, err
 	}
-	s, err := a.settings(o.sel.file == "")
+	e, err := query.Search(ctx, env, in)
 	if err != nil {
 		return nil, err
 	}
-	ts, holes, err := a.targets(ctx, o.sel, s)
-	if err != nil {
-		return nil, err
-	}
-	ans, err := a.searchTargets(ctx, q, ts, holes)
-	if err != nil {
-		return nil, err
-	}
-	ans.o = o
-	return ans, nil
+	return searchAnswer{enveloped[query.SearchInput, query.Finding]{e}}, nil
 }
-
-func (s searchAnswer) Command() string { return "search" }
 
 func (s searchAnswer) Input() any {
+	in := s.e.Input
 	return searchInput{
-		Term: s.q.Term, Mode: modeName(s.q), Kinds: s.o.kinds, Fields: s.o.fields, Show: s.o.show,
-		Direct: s.o.direct, Selection: s.o.sel.input(),
+		Term: in.Term, Mode: in.Matching(), Kinds: in.Kinds, Fields: in.Fields, Show: in.Show,
+		Direct: in.Direct, Selection: in.Selection,
 	}
-}
-
-func (s searchAnswer) Results() any {
-	results := []searchResult{}
-	for i, t := range s.ts {
-		for _, f := range s.byTarget[i] {
-			results = append(results, searchResult{target: targetOf(t), Finding: f, Scope: f.Scope.String()})
-		}
-	}
-	return results
-}
-
-func (s searchAnswer) Qualifiers() qualifiers {
-	return qualifiers{Holes: s.holes, Unresolved: s.un, Notes: s.notes}
 }
 
 func (s searchAnswer) Text(t *textOut) error {
-	fmt.Fprintf(t, "search %s (%s)\n\n", s.q.Term, modeName(s.q))
-	with, without := 0, 0
-	for i, tg := range s.ts {
-		if len(s.byTarget[i]) == 0 {
-			without++
+	fmt.Fprintf(t, "search %s (%s)\n\n", s.e.Input.Term, s.e.Input.Matching())
+	byTarget := make([][]search.Finding, len(s.e.Targets))
+	for _, r := range s.e.Results {
+		byTarget[r.TargetIndex] = append(byTarget[r.TargetIndex], r.Finding)
+	}
+	for i, tg := range s.e.Targets {
+		if len(byTarget[i]) == 0 {
 			continue
 		}
-		with++
 		fmt.Fprintln(t, t.pal.head(header(tg, t.now)))
 		printNotes(t, tg)
 		var tb table
-		for _, f := range s.byTarget[i] {
-			tb.row(plain(string(f.Stage)), plain(f.Kind), plain(f.Name), plain(detail(f)))
+		for _, f := range byTarget[i] {
+			tb.row(plain(string(f.Stage)), plain(f.Kind), plain(f.Name), plain(query.Detail(f)))
 		}
 		_ = tb.write(t, "  ", 1)
 	}
 	printQualifiers(t, s.Qualifiers())
-	fmt.Fprintf(t, "%d with results, %d without, %d holes\n", with, without, len(s.holes))
+	fmt.Fprintf(t, "%d with results, %d without, %d holes\n", s.e.Summary.With, s.e.Summary.Without, len(s.e.Holes))
 	return t.err
-}
-
-// searchTargets runs the query on each target. A target whose index cannot be built
-// becomes a hole.
-func (a *app) searchTargets(ctx context.Context, q search.Query, ts []estate.Target, holes []estate.Hole) (searchAnswer, error) {
-	users, err := a.userSnapshot()
-	if err != nil {
-		return searchAnswer{}, err
-	}
-	ans := searchAnswer{q: q, ts: ts, byTarget: make([][]search.Finding, len(ts)), holes: holes}
-	sets := indexSets{}
-	for i, t := range ts {
-		if err := ctx.Err(); err != nil {
-			return searchAnswer{}, err
-		}
-		q.Providers = index.Providers{Users: users}
-		if t.Snapshot != nil {
-			if z, err := t.Snapshot.Zones(); err == nil {
-				q.Providers.Zones = z
-			}
-		}
-		idx, err := sets.of(t.Config).Index(t.Scope, resolve.Security)
-		if err != nil {
-			ans.holes = append(ans.holes, estate.NewHole(t.Device, t.Vsys, reason.New("gap.load-failed", err.Error())))
-			continue
-		}
-		fs, err := search.Run(t.Config, idx, q)
-		if err != nil {
-			// Only a term --within cannot read is the user's to fix.
-			if errors.Is(err, search.ErrWithinNeedsAddress) {
-				err = usageErr("--within: %w", err)
-			}
-			return searchAnswer{}, err
-		}
-		ans.byTarget[i] = fs
-		a.log.Infof(runlog.TagFind, "%s/%s: %d findings for %q (%s)", t.Device, t.Vsys, len(fs), q.Term, modeName(q))
-		for _, f := range fs {
-			a.log.Debugf(runlog.TagFind, "%s/%s: %s %s %s %s", t.Device, t.Vsys, f.Stage, f.Kind, f.Name, detail(f))
-		}
-	}
-	ans.un, ans.notes = targetQualifiers(ts)
-	return ans, nil
-}
-
-// searchResult is one finding in the JSON envelope.
-type searchResult struct {
-	target
-	search.Finding
-	Scope string `json:"scope"`
-}
-
-// portTerm is a port, bare or with its protocol: 443, tcp/443.
-var portTerm = regexp.MustCompile(`^((tcp|udp|sctp)/)?[0-9]+$`)
-
-// showNames are the --show values of spec §15 C6.
-var showNames = map[string]search.Stage{
-	"objects": search.StageObject, "groups": search.StageGroup,
-	"refs": search.StageReference, "literals": search.StageLiteral,
 }
 
 // userSnapshot reads PROTEUS_USERS, the user-to-group mapping a configuration does
@@ -233,36 +141,6 @@ func (a *app) userSnapshot() (index.UserDirectory, error) {
 	return snap, nil
 }
 
-// modeName says how the term was matched, for the header.
-func modeName(q search.Query) string {
-	switch q.Mode {
-	case search.Exact:
-		return "exact"
-	case search.Within:
-		return "within"
-	case search.Contains:
-		return "contains"
-	}
-	switch ps := index.PrefixesOf(q.Term); {
-	case len(ps) == 1 && ps[0].IsSingleIP(), portTerm.MatchString(q.Term):
-		return "covers"
-	case len(ps) > 0:
-		return "overlaps"
-	}
-	return "matches"
-}
-
-// detail is the last column of a finding's line.
-func detail(f search.Finding) string {
-	switch f.Stage {
-	case search.StageReference:
-		return f.Field + " -> " + f.Via
-	case search.StageLiteral:
-		return f.Field + " " + f.Via
-	}
-	return f.Via
-}
-
 // header names a target: device, vsys, and where its configuration came from.
 func header(t estate.Target, now time.Time) string {
 	return t.Device + " / " + t.Vsys + "   " + source(t, now)
@@ -282,18 +160,4 @@ func where(device, vsys string) string {
 		return device
 	}
 	return device + "/" + vsys
-}
-
-// indexSets keeps one index set per configuration a run reads, so the run builds
-// each (configuration, scope, rulebase) index at most once. The run owns it: one
-// process answers one command, so it lives as long as the command.
-type indexSets map[*config.Config]*index.Set
-
-func (m indexSets) of(cfg *config.Config) *index.Set {
-	s, ok := m[cfg]
-	if !ok {
-		s = index.NewSet(cfg)
-		m[cfg] = s
-	}
-	return s
 }

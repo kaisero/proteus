@@ -92,14 +92,8 @@ func (in PolicyFileInput) Validate() *UsageError {
 	if sel.File == "" {
 		return usage("give a configuration file with --file", "give file")
 	}
-	for _, f := range []struct {
-		given bool
-		flag  string
-	}{{len(sel.Device) > 0, "device"}, {len(sel.Label) > 0, "label"}, {sel.At != "", "at"}, {sel.Fresh, "fresh"}} {
-		if f.given {
-			return usage(fmt.Sprintf("--%s selects from the store; --file reads one configuration", f.flag),
-				f.flag+" selects from the store; file reads one configuration")
-		}
+	if u := sel.validateFile(); u != nil {
+		return u
 	}
 	if in.Router != "" {
 		return usage("--router picks the start router of --device; --file has no path", "router picks the start router of device; file has no path")
@@ -194,7 +188,7 @@ func PolicyFile(ctx context.Context, env Env, in PolicyFileInput) (Envelope[Poli
 	}
 	in.Simulated = flow
 	e := envelope[PolicyFileInput, SecurityResult](policyCommand, in)
-	ts, holes, err := targets(ctx, env, in.Selection)
+	ts, holes, err := Targets(ctx, env, in.Selection)
 	if err != nil {
 		return none, err
 	}

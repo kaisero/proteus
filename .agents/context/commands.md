@@ -141,7 +141,10 @@ type Check struct{ ... }
 type Checks []Check
 type Env struct{ ... }
 type Envelope[In, Res any] struct{ ... }
+type Finding struct{ ... }
 type FlowInput struct{ ... }
+type LookupInput struct{ ... }
+type LookupResult struct{ ... }
 type NATInput struct{ ... }
 type NATResult struct{ ... }
 type Note struct{ ... }
@@ -153,6 +156,7 @@ type PolicyInput struct{ ... }
 type RoutingInput struct{ ... }
 type RoutingResult struct{ ... }
 type Rule struct{ ... }
+type SearchInput struct{ ... }
 type Security struct{ ... }
 type SecurityResult struct{ ... }
 type Selection struct{ ... }
@@ -165,19 +169,27 @@ type UsageError struct{ ... }
 func (cs Checks) MarshalJSON() ([]byte, error)
 func (e *UsageError) Error() string
 func (e *UsageError) Unwrap() error
+func (in LookupInput) Validate() *UsageError
 func (in NATInput) Validate() *UsageError
 func (in PolicyFileInput) Validate() *UsageError
 func (in PolicyInput) Validate() *UsageError
 func (in RoutingInput) Validate() *UsageError
+func (in SearchInput) Matching() string
+func (in SearchInput) Validate() *UsageError
+func Detail(f search.Finding) string
+func Lookup(ctx context.Context, env Env, in LookupInput) (Envelope[LookupInput, LookupResult], error)
 func NAT(ctx context.Context, env Env, in NATInput) (Envelope[NATInput, NATResult], error)
 func NoteOf(device, vsys string, r reason.Reason) Note
 func PointHop(r pathpolicy.Result) (routing.Hop, bool)
 func Policy(ctx context.Context, env Env, in PolicyInput) (Envelope[PolicyInput, PathResult], error)
 func PolicyFile(ctx context.Context, env Env, in PolicyFileInput) (Envelope[PolicyFileInput, SecurityResult], error)
 func Routing(ctx context.Context, env Env, in RoutingInput) (Envelope[RoutingInput, RoutingResult], error)
+func Search(ctx context.Context, env Env, in SearchInput) (Envelope[SearchInput, Finding], error)
 func SimStages(stages []simulate.Stage) []Stage
 func Summarize[In, R, S any](e Envelope[In, R], f func(R) S) Envelope[In, S]
 func TargetOf(t estate.Target) Target
+func TargetQualifiers(ts []estate.Target) ([]Unresolved, []Note)
+func Targets(ctx context.Context, env Env, sel Selection) ([]estate.Target, []estate.Hole, error)
 func UnresolvedOf(device, vsys string, r reason.Reason) Unresolved
 ```
 <!-- /GENERATED:api -->

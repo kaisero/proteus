@@ -34,29 +34,7 @@ type (
 
 func noteOf(device, vsys string, r reason.Reason) note { return query.NoteOf(device, vsys, r) }
 
-func unresolvedOf(device, vsys string, r reason.Reason) unresolved {
-	return query.UnresolvedOf(device, vsys, r)
-}
-
 func targetOf(t estate.Target) target { return query.TargetOf(t) }
-
-// targetQualifiers splits each target's notes: a version gap can make an answer
-// miss rules, so it is unresolved; a stale snapshot or a failed fresh fetch is a
-// note.
-func targetQualifiers(ts []estate.Target) ([]unresolved, []note) {
-	var un []unresolved
-	var notes []note
-	for _, t := range ts {
-		for _, n := range t.Notes {
-			if n.Code == "gap.version" {
-				un = append(un, unresolvedOf(t.Device, t.Vsys, n))
-				continue
-			}
-			notes = append(notes, noteOf(t.Device, t.Vsys, n))
-		}
-	}
-	return un, notes
-}
 
 // normalize turns nil slices into empty ones, so every key prints [] rather than
 // null (spec U5). writeJSON and writeYAML both call it.
