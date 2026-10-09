@@ -119,8 +119,42 @@ simulate nat <src> <dst> --device <fw>      the NAT rule and the translated pack
 
 ## Public API
 
-None. `cmd/proteus` is `main` only; the commands live in `internal/cli` behind
+`cmd/proteus` is `main` only; the commands live in `internal/cli` behind
 `cli.Run`.
+
+**Query layer** (`internal/query`, spec 2026-10-09 §3.7). Each question is a
+function from a typed input and an `Env` to a typed `Envelope[In, Res]`: the
+command line and the MCP server call the same functions. `cli` keeps Cobra, the
+flags, the text renderers, `emit` and the exit codes, and wraps each envelope in
+a local type that implements `answer`. A full result keeps the native values the
+renderers need in `json:"-"` fields, and the envelope keeps every target read
+(`Targets`). Input rules live in each input's `Validate()`; a refused input is a
+`*query.UsageError` with code `call.usage`, the command line's `Text`, and a
+`ToolText` with the input's field names where `Text` names a flag. `cli` maps it
+to exit 2. A choice only the user can make stays a `*simulate.ChoiceError`,
+whose `Kind` says what is chosen (`device`, `router`, or empty for a question
+with no choice).
+
+<!-- GENERATED:api ./internal/query -->
+```go
+type Env struct{ ... }
+type Envelope[In, Res any] struct{ ... }
+type Note struct{ ... }
+type Stage struct{ ... }
+type Summary struct{ ... }
+type Target struct{ ... }
+type Unresolved struct{ ... }
+type UsageError struct{ ... }
+
+func (e *UsageError) Error() string
+func (e *UsageError) Unwrap() error
+func NoteOf(device, vsys string, r reason.Reason) Note
+func SimStages(stages []simulate.Stage) []Stage
+func Summarize[In, R, S any](e Envelope[In, R], f func(R) S) Envelope[In, S]
+func TargetOf(t estate.Target) Target
+func UnresolvedOf(device, vsys string, r reason.Reason) Unresolved
+```
+<!-- /GENERATED:api -->
 
 ## Gotchas / invariants
 

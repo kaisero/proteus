@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/okaiser/proteus/internal/inventory"
+	"github.com/okaiser/proteus/internal/query"
 )
 
 // exitCode maps a command's error to the exit code and the message to print; a nil
@@ -22,6 +23,10 @@ func (a *app) exitCode(ctx context.Context, err error) (int, error) {
 	}
 	if e, ok := errors.AsType[*exitErr](err); ok {
 		return e.code, e.err
+	}
+	// A question the query layer cannot take is the user's to fix.
+	if u, ok := errors.AsType[*query.UsageError](err); ok {
+		return exitUsage, u
 	}
 	if strings.HasPrefix(err.Error(), "unknown command ") {
 		return exitUsage, err

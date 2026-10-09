@@ -3,10 +3,9 @@ package cli
 import (
 	"encoding/json"
 	"io"
-	"time"
 
 	"github.com/okaiser/proteus/internal/estate"
-	"github.com/okaiser/proteus/internal/index"
+	"github.com/okaiser/proteus/internal/query"
 	"github.com/okaiser/proteus/internal/reason"
 	"github.com/okaiser/proteus/internal/simulate"
 )
@@ -26,51 +25,21 @@ type envelope struct {
 	Notes      []note        `json:"notes"`
 }
 
-// unresolved is something that makes an answer incomplete: it can be missing
-// matches. It turns the exit code to 3.
-type unresolved struct {
-	Device string      `json:"device"`
-	Vsys   string      `json:"vsys,omitempty"`
-	Value  string      `json:"value,omitempty"`
-	Reason string      `json:"reason"`
-	Code   reason.Code `json:"-"` // the kind of Reason; out of the JSON until format 2
-}
+// The qualifiers, the target and the stage of a result are the query layer's.
+type (
+	unresolved = query.Unresolved
+	note       = query.Note
+	target     = query.Target
+	stageJSON  = query.Stage
+)
 
-// note qualifies an answer without making it incomplete, such as a snapshot past
-// its age limit.
-type note struct {
-	Device string      `json:"device"`
-	Vsys   string      `json:"vsys,omitempty"`
-	Note   string      `json:"note"`
-	Code   reason.Code `json:"-"` // the kind of Note; out of the JSON until format 2
-}
+func noteOf(device, vsys string, r reason.Reason) note { return query.NoteOf(device, vsys, r) }
 
-// noteOf is a note for a device and vsys with r's code and text.
-func noteOf(device, vsys string, r reason.Reason) note {
-	return note{Device: device, Vsys: vsys, Note: r.Text, Code: r.Code}
-}
-
-// unresolvedOf is an unresolved entry for a device and vsys with r's code and text.
 func unresolvedOf(device, vsys string, r reason.Reason) unresolved {
-	return unresolved{Device: device, Vsys: vsys, Reason: r.Text, Code: r.Code}
+	return query.UnresolvedOf(device, vsys, r)
 }
 
-// target is how a result names where it came from.
-type target struct {
-	Device   string `json:"device"`
-	Vsys     string `json:"vsys"`
-	Snapshot string `json:"snapshot,omitempty"`
-	TakenAt  string `json:"taken_at,omitempty"`
-}
-
-func targetOf(t estate.Target) target {
-	out := target{Device: t.Device, Vsys: t.Vsys}
-	if t.Snapshot != nil {
-		out.Snapshot = t.Snapshot.ID
-		out.TakenAt = t.Snapshot.Meta.TakenAt.Format(time.RFC3339)
-	}
-	return out
-}
+func targetOf(t estate.Target) target { return query.TargetOf(t) }
 
 // targetQualifiers splits each target's notes: a version gap can make an answer
 // miss rules, so it is unresolved; a stale snapshot or a failed fresh fetch is a
@@ -90,33 +59,7 @@ func targetQualifiers(ts []estate.Target) ([]unresolved, []note) {
 	return un, notes
 }
 
-// stageJSON is one stage of any staged operation in the JSON envelope (spec §3.4).
-// Simulations set Fidelity and Candidates; fetch sets Status.
-type stageJSON struct {
-	Slug       string             `json:"slug"`
-	Name       string             `json:"name"`
-	Status     string             `json:"status,omitempty"`
-	Fidelity   *simulate.Fidelity `json:"fidelity,omitempty"`
-	Candidates *uint64            `json:"candidates,omitempty"`
-	Detail     string             `json:"detail,omitempty"`
-	Notes      []string           `json:"notes,omitempty"`
-	Unresolved []index.Unresolved `json:"unresolved,omitempty"`
-	ElapsedMS  float64            `json:"elapsed_ms"`
-}
-
-// simStages is a simulation's stages. Candidates keeps its meaning: the count after
-// the stage, carried forward when a stage does not narrow it.
-func simStages(stages []simulate.Stage) []stageJSON {
-	out := make([]stageJSON, len(stages))
-	for i, st := range stages {
-		fid, cand := st.Fidelity, st.State.Candidates
-		out[i] = stageJSON{
-			Slug: st.Slug, Name: st.Name, Fidelity: &fid, Candidates: &cand, Detail: st.Detail,
-			Unresolved: st.Unresolved, ElapsedMS: float64(st.Elapsed.Microseconds()) / 1000,
-		}
-	}
-	return out
-}
+func simStages(stages []simulate.Stage) []stageJSON { return query.SimStages(stages) }
 
 // normalize turns nil slices into empty ones, so every key prints [] rather than
 // null (spec U5). writeJSON and writeYAML both call it.

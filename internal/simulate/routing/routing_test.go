@@ -165,25 +165,26 @@ func TestTheStartNeedsAChoice(t *testing.T) {
 		f      simulate.Flow
 		params map[string]string
 		want   string
+		kind   string
 	}{
-		"tie":            {flow("198.18.100.50", "8.8.8.8"), nil, "fw01 ethernet1/5, fw02 vlan.100"},
-		"default only":   {flow("8.8.4.4", "198.18.10.5"), nil, "only default routes reach 8.8.4.4"},
-		"no source":      {flow("", "8.8.8.8"), nil, "give a source, or a start device with --device"},
-		"routers":        {flow("", "8.8.8.8"), map[string]string{"device": "fw01"}, "fw01 has several routers; name one with --router: default, lte"},
-		"no such router": {flow("", "8.8.8.8"), map[string]string{"device": "fw01", "router": "x"}, `fw01 has no router "x"`},
-		"no such device": {flow("", "8.8.8.8"), map[string]string{"device": "fw09"}, "cannot start on fw09"},
-		"ipv6":           {simulate.Flow{Destination: simulate.Addr(netip.MustParseAddr("2001:db8::1"))}, nil, "IPv6"},
+		"tie":            {flow("198.18.100.50", "8.8.8.8"), nil, "fw01 ethernet1/5, fw02 vlan.100", simulate.ChoiceDevice},
+		"default only":   {flow("8.8.4.4", "198.18.10.5"), nil, "only default routes reach 8.8.4.4", simulate.ChoiceDevice},
+		"no source":      {flow("", "8.8.8.8"), nil, "give a source, or a start device with --device", ""},
+		"routers":        {flow("", "8.8.8.8"), map[string]string{"device": "fw01"}, "fw01 has several routers; name one with --router: default, lte", simulate.ChoiceRouter},
+		"no such router": {flow("", "8.8.8.8"), map[string]string{"device": "fw01", "router": "x"}, `fw01 has no router "x"`, simulate.ChoiceRouter},
+		"no such device": {flow("", "8.8.8.8"), map[string]string{"device": "fw09"}, "cannot start on fw09", simulate.ChoiceDevice},
+		"ipv6":           {simulate.Flow{Destination: simulate.Addr(netip.MustParseAddr("2001:db8::1"))}, nil, "IPv6", ""},
 		"ipv6 source": {simulate.Flow{
 			Source:      simulate.Addr(netip.MustParseAddr("2001:db8::1")),
 			Destination: simulate.Addr(netip.MustParseAddr("192.0.2.1")),
-		}, nil, "IPv6"},
+		}, nil, "IPv6", ""},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			_, _, err := simulateOn(t, labNet(), tc.f, tc.params)
 			var ce *simulate.ChoiceError
-			if !errors.As(err, &ce) || !strings.Contains(err.Error(), tc.want) {
-				t.Errorf("err = %v", err)
+			if !errors.As(err, &ce) || !strings.Contains(err.Error(), tc.want) || ce.Kind != tc.kind {
+				t.Errorf("err = %v (kind %q)", err, ce.Kind)
 			}
 		})
 	}

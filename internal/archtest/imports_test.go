@@ -74,7 +74,24 @@ var rules = []rule{
 	},
 	{from: "internal/task", forbid: ioPackages, allowIn: []string{"internal/runlog", reasonPkg}},
 	{from: reasonPkg, stdlib: true},
+	{from: "internal/query", forbid: queryForbids, direct: queryImports},
 }
+
+// queryImports are the packages of this module the query layer may import: the
+// questions' engines and their data, never a front end (spec 2026-10-09 §3.7).
+var queryImports = []string{
+	"internal/simulate", "internal/simulate/securitypolicy", "internal/simulate/routing",
+	"internal/simulate/nat", "internal/simulate/pathpolicy", "internal/simulate/topology",
+	"internal/simulate/rulebase", "internal/estate", "internal/store", "internal/inventory",
+	"internal/search", "internal/drift", "internal/card", "internal/resolve", "internal/index",
+	"internal/config", "internal/runlog", reasonPkg,
+}
+
+// queryForbids are the front ends and the fetcher: the query layer serves the
+// command line and the MCP server alike, so it reaches neither, nor Cobra or a
+// terminal.
+var queryForbids = append(mod("internal/fetch", "internal/cli", "internal/mcp"),
+	"github.com/spf13/cobra", "github.com/spf13/pflag", "golang.org/x/term")
 
 // testOnly are helper packages for tests. They import testing, so no package's
 // non-test code may reach them.
@@ -165,12 +182,16 @@ func TestViolationsCatchesABreach(t *testing.T) {
 		module + "/internal/simulate/nat":        {"fmt"},
 		// reason may import neither this module nor another module.
 		module + "/" + reasonPkg: {"fmt", module + "/internal/simulate/nat", "github.com/RoaringBitmap/roaring/v2"},
+		// query may import the estate, but no front end, fetch or Cobra.
+		module + "/internal/query":  {module + "/internal/estate", module + "/internal/fetch", "github.com/spf13/cobra"},
+		module + "/internal/estate": {"fmt"},
+		module + "/internal/fetch":  {"net/http"},
 	}
 	got := violations(graph, rules)
 	// config reaches helper, which is outside the core, and through it net/http.
 	// index reaches simulate, which both the core rule and the direction rule
-	// forbid, so it is reported twice. resolve, fetch and store are absent, so
-	// their rules pass.
+	// forbid, so it is reported twice. resolve and store are absent, so their
+	// rules pass; fetch reaches net/http, which its rule allows.
 	want := []string{
 		"internal/config reaches " + module + "/internal/helper, outside the read-only core",
 		"internal/config reaches net/http",
@@ -179,6 +200,9 @@ func TestViolationsCatchesABreach(t *testing.T) {
 		"internal/simulate/pathpolicy imports " + module + "/internal/simulate/nat, outside its list",
 		reasonPkg + " imports " + module + "/internal/simulate/nat, outside the standard library",
 		reasonPkg + " imports github.com/RoaringBitmap/roaring/v2, outside the standard library",
+		"internal/query imports " + module + "/internal/fetch, outside its list",
+		"internal/query reaches " + module + "/internal/fetch",
+		"internal/query reaches github.com/spf13/cobra",
 	}
 	slices.Sort(got)
 	slices.Sort(want)

@@ -149,7 +149,10 @@ answers a flow along its path: it may import `simulate`, `simulate/routing`,
 `simulate/securitypolicy`, `resolve`, `simulate/topology`, `config`, `index` and
 `reason`,
 and imports none of `estate`, `store`, `fetch`, `search`, `drift`, `card`, and no
-I/O package. `internal/reason` names the reason codes answers carry. It imports only the
+I/O package. `internal/query` answers the questions for every front end: it may
+import the simulations, `estate`, `store`, `inventory`, `search`, `drift`, `card`,
+`resolve`, `index`, `config`, `runlog` and `reason`, and reaches none of `fetch`,
+`cli`, `mcp`, Cobra or a terminal package; `cli` imports it. `internal/reason` names the reason codes answers carry. It imports only the
 standard library, and every package may import it: each rule above allows it.
 The test helpers `internal/fakepanos` and `internal/simulate/pathlab`
 import `testing`; only tests import them. `internal/reason` also imports

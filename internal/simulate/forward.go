@@ -53,9 +53,19 @@ type Forward struct {
 // ChoiceError is a question only the user can answer: which device, which router,
 // which of several starts. A command turns it into a usage error.
 type ChoiceError struct {
+	// Kind is what the user chooses: ChoiceDevice or ChoiceRouter, from
+	// Options. It is empty for a question that offers no choice, such as an
+	// input the simulation cannot take; that stays a usage error.
+	Kind     string
 	Question string
 	Options  []string
 }
+
+// The kinds of choice.
+const (
+	ChoiceDevice = "device"
+	ChoiceRouter = "router"
+)
 
 func (e *ChoiceError) Error() string {
 	if len(e.Options) == 0 {

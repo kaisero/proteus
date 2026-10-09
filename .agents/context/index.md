@@ -64,6 +64,7 @@ Repo map:
 - `internal/task/` — staged operations: `Run` runs named steps in order, records
   each step's status, detail and time, logs them, and stops at the first error.
   `fetch` uses it per device.
+- `internal/query/` — the questions as typed inputs and envelopes, for the command line and the MCP server; no flags, no rendering.
 - `internal/estate/` — selectors and a time to targets and holes; `internal/search/` — five-stage findings for one term; `internal/card/` — the whole element behind one name, for `lookup`; `internal/drift/` — changes between two configurations.
 - `internal/inventory/` — the YAML device list and credentials; `internal/fetch/` — the read-only XML
   API client and the `Document` list; `internal/store/` — timestamped snapshots, `latest`.

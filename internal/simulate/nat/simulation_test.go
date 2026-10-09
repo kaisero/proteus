@@ -172,7 +172,12 @@ func TestSimulatePBFAndChoices(t *testing.T) {
 		"ipv6":        {env, "", "2001:db8::1", nil},
 		"ipv6 source": {env, "2001:db8::1", "8.8.8.8", nil},
 	} {
-		if _, _, err := run(t, tc.env, tc.src, tc.dst, 443, tc.params); !errors.As(err, &ce) {
+		// Only the router is a choice; the others are inputs NAT cannot take.
+		kind := ""
+		if name == "routers" {
+			kind = simulate.ChoiceRouter
+		}
+		if _, _, err := run(t, tc.env, tc.src, tc.dst, 443, tc.params); !errors.As(err, &ce) || ce.Kind != kind {
 			t.Errorf("%s: %v", name, err)
 		}
 	}

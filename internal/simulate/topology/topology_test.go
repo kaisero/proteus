@@ -197,10 +197,10 @@ func TestStart(t *testing.T) {
 	t.Parallel()
 	topo := lab()
 	var ce *simulate.ChoiceError
-	if _, _, _, err := topo.Start("fw01", "", ip("8.8.8.8")); !errors.As(err, &ce) || !strings.Contains(err.Error(), "default, lte") {
+	if _, _, _, err := topo.Start("fw01", "", ip("8.8.8.8")); !errors.As(err, &ce) || !strings.Contains(err.Error(), "default, lte") || ce.Kind != simulate.ChoiceRouter {
 		t.Errorf("several routers: %v", err)
 	}
-	if _, _, _, err := topo.Start("fw01", "x", netip.Addr{}); !errors.As(err, &ce) {
+	if _, _, _, err := topo.Start("fw01", "x", netip.Addr{}); !errors.As(err, &ce) || ce.Kind != simulate.ChoiceRouter {
 		t.Errorf("no such router: %v", err)
 	}
 	if p, via, connected, err := topo.Start("fw02", "", ip("198.18.100.7")); err != nil || !connected || p.Interface != "vlan.100" || via.IsValid() {

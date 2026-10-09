@@ -4,11 +4,15 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
+	"io"
 	"os"
 	"slices"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/okaiser/proteus/internal/query"
 )
 
 // name returns a completion value's command name, without its tab-separated
@@ -161,5 +165,16 @@ func TestASignalDuringACommandEndsTheRunLog(t *testing.T) {
 	}
 	if !strings.Contains(string(logContent), "exit 130") {
 		t.Errorf("run log must record exit 130:\n%s", logContent)
+	}
+}
+
+// A question the query layer refuses exits 2 with the command line's text.
+func TestAQueryUsageErrorExitsTwo(t *testing.T) {
+	t.Parallel()
+	a := newApp(io.Discard, io.Discard, getenv, time.Now)
+	u := &query.UsageError{Code: "call.usage", Text: "--port \"x\": want 443 or tcp/443", ToolText: "port \"x\": want 443 or tcp/443"}
+	code, msg := a.exitCode(context.Background(), fmt.Errorf("simulate: %w", u))
+	if code != exitUsage || msg == nil || msg.Error() != u.Text {
+		t.Errorf("exit %d, %v", code, msg)
 	}
 }
