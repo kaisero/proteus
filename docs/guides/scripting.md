@@ -86,8 +86,9 @@ A simulate result that is undecided, or whose fidelity is `undermatch`, has a
 `needs` list: the inputs that, given in a second question, can change the
 answer. Each entry has a `code` (`input.port`, `input.protocol`, `input.url`),
 the `input` name and a `text` that names the rules it decides. The list stops at
-the first rule in doubt that no input can settle, such as a rule that names an
-application or a user: past that rule, no input changes the verdict. An empty
+the first rule in doubt that no input can settle, such as a rule that names only
+an application or a user: past that rule, no input changes the verdict. A rule
+in doubt for a port and for a user still lists the port, which can rule it out. An empty
 list means no input can help. A result that is decided and not `undermatch` has
 no `needs` key; a decided result with fidelity `undermatch` can have one.
 `simulate nat` asked without a protocol lists `input.protocol` beside

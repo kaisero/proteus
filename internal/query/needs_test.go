@@ -191,10 +191,18 @@ func TestSecurityCausesStopAtAnUnfixableDoubt(t *testing.T) {
 	if len(cs) != 1 || cs[0].rule.name != "early" || !blocked {
 		t.Errorf("causes %+v, blocked %v", cs, blocked)
 	}
-	// A doubt with a fixable and an unfixable reason is not fixed by the input.
-	v.Doubts = []securitypolicy.Doubt{{Position: 2, Rule: "both", Reasons: simulate.Reasons{noPort, user}}}
-	if cs, blocked := securityCauses(tcp, v); len(cs) != 0 || !blocked {
+	// A doubt with a fixable and an unfixable reason keeps its fixable cause:
+	// the port can rule the rule out. The walk goes on past it.
+	v.Doubts = []securitypolicy.Doubt{
+		{Position: 2, Rule: "both", Reasons: simulate.Reasons{noPort, user}},
+		{Position: 3, Rule: "next", Reasons: simulate.Reasons{noPort}},
+	}
+	cs, blocked = securityCauses(tcp, v)
+	if len(cs) != 2 || cs[0].rule.name != "both" || cs[1].rule.name != "next" || blocked {
 		t.Errorf("mixed: %+v %v", cs, blocked)
+	}
+	if ns := needsOf(tcp, cs); len(ns) != 1 || ns[0].Code != "input.port" {
+		t.Errorf("mixed needs: %+v", ns)
 	}
 	v.Doubts = []securitypolicy.Doubt{{Position: 10, Rule: "after", Reasons: simulate.Reasons{user}}}
 	if cs, blocked := securityCauses(tcp, v); len(cs) != 0 || blocked {

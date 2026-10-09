@@ -165,10 +165,44 @@ func typeSchemas() (map[reflect.Type]*jsonschema.Schema, error) {
 	return out, nil
 }
 
+// anyTypes marks the terminal of an unrolled type while it is built: every
+// JSON type, null included, so the generator keeps it as it is for a pointer.
+var anyTypes = []string{"null", "boolean", "object", "array", "number", "string"}
+
+// permissive replaces every terminal under s with the empty schema, true.
+func permissive(s *jsonschema.Schema) {
+	swap := func(c *jsonschema.Schema) *jsonschema.Schema {
+		if slices.Equal(c.Types, anyTypes) {
+			return &jsonschema.Schema{}
+		}
+		permissive(c)
+		return c
+	}
+	v := reflect.ValueOf(s).Elem()
+	for i := range v.NumField() {
+		f := v.Field(i)
+		switch f.Type() {
+		case schemaPtr:
+			if c := f.Interface().(*jsonschema.Schema); c != nil {
+				f.Set(reflect.ValueOf(swap(c)))
+			}
+		case schemaSlice:
+			for j, c := range f.Interface().([]*jsonschema.Schema) {
+				f.Index(j).Set(reflect.ValueOf(swap(c)))
+			}
+		case schemaMap:
+			m := f.Interface().(map[string]*jsonschema.Schema)
+			for k, c := range m {
+				m[k] = swap(c)
+			}
+		}
+	}
+}
+
 // unrolled is a recursive struct type's schema, its recursion cut after depth
-// levels: below them a slice holds anything and a pointer is null. The
-// schema is built from a copy of the struct, so the override of t applies to
-// its fields only.
+// levels: below them a value may be anything (true), so a deeper nesting
+// still validates. The schema is built from a copy of the struct, so the
+// override of t applies to its fields only.
 func unrolled(t reflect.Type, depth int, base map[reflect.Type]*jsonschema.Schema) (*jsonschema.Schema, error) {
 	fields := make([]reflect.StructField, t.NumField())
 	for i := range fields {
@@ -176,7 +210,7 @@ func unrolled(t reflect.Type, depth int, base map[reflect.Type]*jsonschema.Schem
 	}
 	shell := reflect.StructOf(fields)
 	m := maps.Clone(base)
-	m[t] = &jsonschema.Schema{}
+	m[t] = &jsonschema.Schema{Types: anyTypes}
 	for range depth {
 		s, err := jsonschema.ForType(shell, &jsonschema.ForOptions{TypeSchemas: m})
 		if err != nil {
@@ -184,6 +218,7 @@ func unrolled(t reflect.Type, depth int, base map[reflect.Type]*jsonschema.Schem
 		}
 		m[t] = s
 	}
+	permissive(m[t])
 	return m[t], nil
 }
 
@@ -247,7 +282,9 @@ func outputSchema(sh shape) (*jsonschema.Schema, error) {
 }
 
 // sharedPointers lists every schema reached twice in s's tree. A shared
-// pointer makes the SDK's AddTool panic (S2).
+// pointer makes the SDK's AddTool panic (S2). The walk follows every field of
+// type *Schema, []*Schema and map[string]*Schema, so a child kind added to
+// jsonschema-go is walked too.
 func sharedPointers(s *jsonschema.Schema) []string {
 	seen := map[*jsonschema.Schema]bool{}
 	var out []string
@@ -261,24 +298,101 @@ func sharedPointers(s *jsonschema.Schema) []string {
 			return
 		}
 		seen[s] = true
-		for _, k := range slices.Sorted(func(yield func(string) bool) {
-			for k := range s.Properties {
-				if !yield(k) {
-					return
+		v := reflect.ValueOf(s).Elem()
+		for i := range v.NumField() {
+			f, name := v.Field(i), v.Type().Field(i).Name
+			switch f.Type() {
+			case schemaPtr:
+				walk(f.Interface().(*jsonschema.Schema), path+"/"+name)
+			case schemaSlice:
+				for j, c := range f.Interface().([]*jsonschema.Schema) {
+					walk(c, fmt.Sprintf("%s/%s/%d", path, name, j))
+				}
+			case schemaMap:
+				m := f.Interface().(map[string]*jsonschema.Schema)
+				for _, k := range slices.Sorted(maps.Keys(m)) {
+					walk(m[k], path+"/"+name+"/"+k)
 				}
 			}
-		}) {
-			walk(s.Properties[k], path+"/"+k)
-		}
-		walk(s.Items, path+"/items")
-		walk(s.AdditionalProperties, path+"/additionalProperties")
-		walk(s.Not, path+"/not")
-		for i, o := range s.OneOf {
-			walk(o, fmt.Sprintf("%s/oneOf/%d", path, i))
 		}
 	}
 	walk(s, "")
 	return out
+}
+
+var (
+	schemaPtr   = reflect.TypeFor[*jsonschema.Schema]()
+	schemaSlice = reflect.TypeFor[[]*jsonschema.Schema]()
+	schemaMap   = reflect.TypeFor[map[string]*jsonschema.Schema]()
+)
+
+// sharedPointers finds a pointer shared through any child field.
+func TestSharedPointersCatchesABreach(t *testing.T) {
+	t.Parallel()
+	for name, mk := range map[string]func(c *jsonschema.Schema) *jsonschema.Schema{
+		"items": func(c *jsonschema.Schema) *jsonschema.Schema { return &jsonschema.Schema{Items: c, Not: c} },
+		"anyOf": func(c *jsonschema.Schema) *jsonschema.Schema {
+			return &jsonschema.Schema{AnyOf: []*jsonschema.Schema{c, c}}
+		},
+		"allOf": func(c *jsonschema.Schema) *jsonschema.Schema {
+			return &jsonschema.Schema{AllOf: []*jsonschema.Schema{c}, Items: c}
+		},
+		"prefixItems": func(c *jsonschema.Schema) *jsonschema.Schema {
+			return &jsonschema.Schema{PrefixItems: []*jsonschema.Schema{c, c}}
+		},
+		"patternProperties": func(c *jsonschema.Schema) *jsonschema.Schema {
+			return &jsonschema.Schema{PatternProperties: map[string]*jsonschema.Schema{"a": c, "b": c}}
+		},
+		"defs": func(c *jsonschema.Schema) *jsonschema.Schema {
+			return &jsonschema.Schema{Defs: map[string]*jsonschema.Schema{"a": c}, Items: c}
+		},
+		"nested": func(c *jsonschema.Schema) *jsonschema.Schema {
+			return object(map[string]*jsonschema.Schema{"a": {Items: c}, "b": {AnyOf: []*jsonschema.Schema{c}}})
+		},
+	} {
+		if got := sharedPointers(mk(str(""))); len(got) != 1 {
+			t.Errorf("%s: shared = %v, want one", name, got)
+		}
+	}
+	if got := sharedPointers(object(map[string]*jsonschema.Schema{"a": str(""), "b": str("")})); len(got) != 0 {
+		t.Errorf("a tree: shared = %v", got)
+	}
+}
+
+// A card nested deeper than the unrolled levels still validates: below them
+// an item may be anything. So does a NAT fallback below its levels.
+func TestDeepNestingValidates(t *testing.T) {
+	t.Parallel()
+	item := map[string]any{"name": "leaf", "kind": "address", "value": "192.0.2.1"}
+	for i := range 10 {
+		item = map[string]any{"name": fmt.Sprintf("group-%d", i), "kind": "address-group", "children": []any{item}}
+	}
+	gen := generated(t)
+	b, err := os.ReadFile(filepath.Join(goldenDir, "lookup.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc map[string]any
+	if err := json.Unmarshal(b, &doc); err != nil {
+		t.Fatal(err)
+	}
+	card := doc["results"].([]any)[0].(map[string]any)["card"].(map[string]any)
+	row := card["sections"].([]any)[0].(map[string]any)["rows"].([]any)[1].(map[string]any)
+	row["items"] = []any{item}
+	validate(t, gen["lookup.full.json"], doc, "a card nested 10 levels")
+
+	nat, err := unrolled(reflect.TypeFor[resolve.SourceTranslation](), 2, map[reflect.Type]*jsonschema.Schema{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fb := map[string]any{"Kind": "dynamic-ip-and-port"}
+	for range 4 {
+		fb = map[string]any{
+			"Kind": "dynamic-ip", "Addresses": nil, "Interface": "", "InterfaceIP": "", "FloatingIP": "",
+			"IPv6Interface": "", "BiDirectional": false, "Fallback": fb,
+		}
+	}
+	validate(t, nat, fb, "a fallback nested 4 levels")
 }
 
 // generated is every schema file: <name>.<detail>.json per envelope and

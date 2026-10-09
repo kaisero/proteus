@@ -205,20 +205,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **JSON format 2: every reason has a code, and every result says its answer.**
-  Holes, unresolved entries, notes, doubts and fidelity reasons are `{code, text}`
-  objects whose codes come from one registry, so a script matches the code, not the
-  text. Each result starts with a one-line `answer`; a held-back simulate result
-  lists in `needs` the port, protocol or URL that a second question can give; and
-  `--detail summary` prints a short form of every question's results. The text
-  output gains the same answer lines, and `search --why` shows them. The JSON error
-  line on stderr says `"format":2` too.
+  Reasons are `{code, text}` objects a script can match by code, each result has a
+  one-line `answer` and, when held back, the `needs` a second question can give;
+  see the scripting guide.
 - **A rule matched only through an FQDN object is in doubt.** The firewall resolves
   an FQDN address object itself, so its addresses can differ from this machine's
   DNS answer. `simulate policy` keeps such a rule as a candidate in doubt instead of
   treating the match as certain.
 - **A flag given an empty value counts as not given.** `--router ""`, `--at ""` and
   `--from-zone ""` now act as if the flag were left out.
-
 - **`simulate policy --device X --vsys V` now exits 2.** Without `--file` the command
   answers along the path, so `--vsys`, `--label` and the zone flags exit 2; use
   `--file <path> --vsys <name>` for one configuration. `--file` does not check NAT: a

@@ -357,11 +357,7 @@
                       "IPv6Interface": {
                         "type": "string"
                       },
-                      "Fallback": {
-                        "type": [
-                          "null"
-                        ]
-                      },
+                      "Fallback": true,
                       "BiDirectional": {
                         "type": "boolean"
                       }

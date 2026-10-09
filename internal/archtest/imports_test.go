@@ -4,6 +4,7 @@ import (
 	"errors"
 	"go/build"
 	"io/fs"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -245,7 +246,7 @@ func loadGraph(t *testing.T, root string) map[string][]string {
 			name == "docs" || name == "bin" || name == "schemas") {
 			return filepath.SkipDir
 		}
-		pkg, err := build.ImportDir(path, 0)
+		pkg, err := allFiles.ImportDir(path, 0)
 		if _, ok := errors.AsType[*build.NoGoError](err); ok {
 			return nil
 		}
@@ -328,6 +329,14 @@ func sdkImporters(imports map[string][]string) []string {
 	return out
 }
 
+// allFiles reads every Go file of a package, those behind a build tag too
+// (resolve's live test), so a tag cannot hide an import from R12.
+var allFiles = func() build.Context {
+	c := build.Default
+	c.UseAllFiles = true
+	return c
+}()
+
 // loadAllImports reads every package's imports, its tests' included.
 func loadAllImports(t *testing.T, root string) map[string][]string {
 	t.Helper()
@@ -340,7 +349,7 @@ func loadAllImports(t *testing.T, root string) map[string][]string {
 		if path != root && (strings.HasPrefix(name, ".") || name == "testdata" || name == "docs" || name == "bin" || name == "schemas") {
 			return filepath.SkipDir
 		}
-		pkg, err := build.ImportDir(path, 0)
+		pkg, err := allFiles.ImportDir(path, 0)
 		if _, ok := errors.AsType[*build.NoGoError](err); ok {
 			return nil
 		}
@@ -392,5 +401,26 @@ func TestSDKImportersCatchesABreach(t *testing.T) {
 	}
 	if !slices.Equal(got, want) {
 		t.Errorf("got %v\nwant %v", got, want)
+	}
+}
+
+// A file behind a build tag cannot hide an import: both loaders read it.
+func TestLoadersReadTaggedFiles(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	for name, src := range map[string]string{
+		"plain.go":     "package x\n",
+		"tagged.go":    "//go:build live\n\npackage x\n\nimport _ \"example.com/hidden\"\n",
+		"live_test.go": "//go:build live\n\npackage x_test\n\nimport _ \"example.com/hiddentest\"\n",
+	} {
+		if err := os.WriteFile(filepath.Join(root, name), []byte(src), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := loadGraph(t, root)[module]; !slices.Contains(got, "example.com/hidden") {
+		t.Errorf("loadGraph = %v", got)
+	}
+	if got := loadAllImports(t, root)[module]; !slices.Contains(got, "example.com/hidden") || !slices.Contains(got, "example.com/hiddentest") {
+		t.Errorf("loadAllImports = %v", got)
 	}
 }

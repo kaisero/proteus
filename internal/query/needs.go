@@ -129,7 +129,9 @@ func fidelityCauses(f simulate.Fidelity) []cause {
 // securityCauses are the doubts of the candidates before the first certain
 // match, in rule order, up to the first doubt no input can fix: past that
 // candidate no second call changes the verdict, so its doubts and the ones
-// after it need nothing. blocked says such a doubt was met.
+// after it need nothing. blocked says such a doubt was met. A doubt with one
+// reason an input settles does not block: that input can rule the rule out,
+// so its fixable causes count and the walk goes on.
 func securityCauses(flow simulate.Flow, v *securitypolicy.Verdict) (out []cause, blocked bool) {
 	if v == nil {
 		return nil, false
@@ -142,25 +144,16 @@ func securityCauses(flow simulate.Flow, v *securitypolicy.Verdict) (out []cause,
 		}
 		var cs []cause
 		for _, r := range d.Reasons {
-			cs = append(cs, cause{code: r.Code, rule: ruleName{"rule", d.Rule}})
+			if c := (cause{code: r.Code, rule: ruleName{"rule", d.Rule}}); len(needsOf(flow, []cause{c})) > 0 {
+				cs = append(cs, c)
+			}
 		}
-		if !fixable(flow, cs) {
+		if len(cs) == 0 {
 			return out, true
 		}
 		out = append(out, cs...)
 	}
 	return out, false
-}
-
-// fixable says whether a second call can settle every cause: each one needs
-// an input.
-func fixable(flow simulate.Flow, cs []cause) bool {
-	for _, c := range cs {
-		if len(needsOf(flow, []cause{c})) == 0 {
-			return false
-		}
-	}
-	return len(cs) > 0
 }
 
 // natCauses are NAT doubts: rules that may match instead of the one taken.

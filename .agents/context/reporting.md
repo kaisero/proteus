@@ -200,8 +200,9 @@ not defined is `doubt.service-application-default` or
 `doubt.service-predefined`, a category that is not defined is
 `doubt.category-undefined`, with or without a port or URL. A file check lists
 the doubts in rule order before the first certain match and stops at the first
-rule whose doubts no input settles; when that is the first rule in doubt,
-`needs` is `[]`.
+rule with no reason an input settles; when that is the first rule in doubt,
+`needs` is `[]`. A rule with a fixable and an unfixable reason keeps its fixable
+causes, since that input alone can rule the rule out, and the walk goes on.
 
 `reason` imports only the standard library, so every package may import it; the
 archtest allows it in every R12 rule.
