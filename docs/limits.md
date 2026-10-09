@@ -93,6 +93,58 @@ hop's firewall the same question with `test security-policy-match`. On fw02,
   `doubt.fqdn-resolution`, also when the name resolves to nothing. A rule that
   also matches the address by an address object or `any` is not in doubt.
 
+## The MCP server
+
+`proteus mcp` answers with the limits above. These limits are its own:
+
+- **No authorisation.** proteus does not decide who can call a tool. The gateway
+  in front of it, such as Portkey, owns that.
+- **A token holder can forge the identity.** The token proves that a request comes
+  through the gateway. proteus does not verify the identity header, and the audit
+  records the identity as the gateway claimed it.
+- **Data is as fresh as the fetch schedule.** The server reads the store and never
+  contacts a firewall. A note says when a snapshot is older than
+  `max_snapshot_age`.
+- **Application and predefined services stay undecidable.** A rule that names an
+  application, `application-default` or a predefined service can leave a flow
+  undecided, and no input can decide it (`needs: []`).
+- **Configuration text reaches the model unchanged.** Rule names, descriptions
+  and object names go into the answer as the configuration holds them.
+- **An inventory change needs a restart.** The device enum of the tools comes from
+  the export when the server starts.
+- **A host name: only its first IPv4 address is checked.** See
+  [Host names](#host-names).
+- **The timeout cannot interrupt a load or an index build.** A call past
+  `call_timeout` gets `call.timeout` at once. Its work keeps the call's slot until
+  it returns, and a load it started still fills the cache.
+
+### Lab acceptance
+
+On 2026-10-10 a scripted MCP client called the server on a copy of the lab store,
+over stdio and over Streamable HTTP. fw02 (PAN-OS 12.2.3) was fetched fresh. fw01
+was unreachable, so its snapshot was 33 hours old, and its answers carried the
+stale-snapshot note.
+
+- 10 tool calls over six tools (five policy flows, routing, NAT, search, lookup and
+  a snapshot diff), with `detail: full`: the structured envelope equalled
+  `proteus … --output json --detail full` in 10 of 10 calls over stdio and 10 of 10
+  over HTTP, apart from `elapsed_ms`.
+- The answers matched the policy path probe: fw02 to fw01 on tcp/443 allowed; the
+  reverse on tcp/22 undecided at fw01 (service `application-default`); a
+  destination outside the estate undecided; udp/443 denied by a rule.
+- A device name outside the enum was refused and audited as `usage`.
+- HTTP: no token and a wrong token gave 401, a wrong Host 403, `/healthz` 200, a
+  2 MB body 413. The audit file had mode 0600, and the token was in no audit line
+  and no log. SIGTERM exited 143.
+- Not tested: the path through the Portkey SaaS gateway, which needs a public URL.
+
+### Model check
+
+The [model check](guides/mcp.md#model-check) asks a model 12 questions through the
+server and checks its replies against four rules. It has not run yet. Record each
+run here: the date, the model and its version, the gateway, the proteus version,
+and the result per question.
+
 ## URL matching
 
 The URL matching rules come from PAN-OS documentation. A firewall's validator

@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Let an AI agent ask proteus questions.** `proteus mcp` serves simulate,
+  search, lookup and snapshot diff as MCP tools, over stdio or token-protected
+  HTTP behind a TLS proxy, with an audit line per call and a container sample.
+- **Fetch can write the inventory without credentials for the server.** With
+  `export_inventory: true`, every fetch writes a credential-free copy into the
+  store; a run that stored its snapshots but could not write the copy exits 3.
 - **Ask whether the estate allows a flow end to end.** `proteus simulate policy
   <source> <destination>` now follows the routed path and checks the security policy
   of every firewall and vsys on it, and answers allowed, denied or undecided, with the
@@ -214,6 +220,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   treating the match as certain.
 - **A flag given an empty value counts as not given.** `--router ""`, `--at ""` and
   `--from-zone ""` now act as if the flag were left out.
+- **A NAT answer asks only for what can decide it.** When a NAT rule needs the
+  port, the answer says "give the destination port", and `needs` stops at the first
+  rule in doubt that no input can decide.
+- **Run log names end in a sequence number.** A log is now
+  `<command>-<time>-<seq>.log`, so runs that start in the same millisecond write
+  separate files.
 - **`simulate policy --device X --vsys V` now exits 2.** Without `--file` the command
   answers along the path, so `--vsys`, `--label` and the zone flags exit 2; use
   `--file <path> --vsys <name>` for one configuration. `--file` does not check NAT: a

@@ -78,8 +78,8 @@ because a device name starts with a letter or a digit.
 
 ## The mcp section
 
-The `mcp:` section configures `proteus mcp`. Write it in this inventory; the export
-carries it to the server. Each key is optional. The values below are the defaults,
+The `mcp:` section configures `proteus mcp` (see the [MCP guide](guides/mcp.md)).
+Write it in this inventory; the export carries it to the server. Each key is optional. The values below are the defaults,
 except `token_file`, `allowed_hosts` and `audit_log`, which have none.
 
 ```yaml
@@ -148,9 +148,11 @@ the claims of `identity_header` (`auth: token`, `identity_source: header`), or t
 identity `unknown` when the header is missing or is not a JSON object
 (`identity_source: none`). A JSON object with none of the `audit_claims` gives the
 identity `unknown` with `identity_source: header`. proteus makes an existing audit
-file mode 0600. The `--max-age`,
-`--log-level` and `--store` settings apply to the server too; `max_snapshot_age` comes
-from the export's `defaults:`.
+file mode 0600. The [MCP guide](guides/mcp.md#audit-and-run-logs) lists the fields
+of an audit line.
+
+The `--max-age`, `--log-level` and `--store` settings apply to the server too;
+`max_snapshot_age` comes from the export's `defaults:`.
 
 ## Settings
 
