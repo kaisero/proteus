@@ -123,6 +123,34 @@ func TestSetDoesNotKeepAFailure(t *testing.T) {
 	}
 }
 
+// A build that panics is not kept: every caller of it panics on, and the next
+// call builds again. A kept entry would answer nil with no error from then on.
+func TestSetDoesNotKeepAPanic(t *testing.T) {
+	t.Parallel()
+	cfg, _, err := config.Load("../../testdata/config/firewall-multivsys.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := NewSet(cfg)
+	s.build = func(*config.Config, *Edges, config.Scope, resolve.Rulebase) (*Index, error) { panic("build bug") }
+	sc := config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}
+	func() {
+		defer func() {
+			if p := recover(); p != "build bug" {
+				t.Errorf("recovered %v, want the build's panic", p)
+			}
+		}()
+		_, _ = s.Index(sc, resolve.Security)
+	}()
+	if len(s.built) != 0 {
+		t.Errorf("the set kept %d panicked builds", len(s.built))
+	}
+	s.build = nil
+	if idx, err := s.Index(sc, resolve.Security); err != nil || idx == nil {
+		t.Errorf("the next call: %v %v", idx, err)
+	}
+}
+
 // Edges read from one configuration cannot build another's index: the positions
 // the index keeps would point into the wrong file.
 func TestBuildRefusesEdgesOfAnotherConfiguration(t *testing.T) {

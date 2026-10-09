@@ -90,6 +90,10 @@ func (v view) text() string {
 		if r.Fidelity != nil {
 			line("  fidelity: ", r.Fidelity.Level)
 		}
+		if r.Needs != nil && len(r.Needs) == 0 {
+			// Held back, and no second call can change it.
+			line("  needs: none; no input can decide this")
+		}
 		for _, n := range r.Needs {
 			line("  needs ", n.Input, ": ", n.Text)
 		}

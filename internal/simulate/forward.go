@@ -61,6 +61,10 @@ type ChoiceError struct {
 	// line flag; empty where it names none.
 	ToolText string
 	Options  []string
+	// Starts are the equally good starts behind a tie of placement, one per
+	// option, so a front end can offer what its own inputs accept: a device,
+	// or a router of one device. Nil for any other choice.
+	Starts []Port
 }
 
 // The kinds of choice.

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"slices"
@@ -368,6 +369,20 @@ func TestEndpointOrdersAndNamesTheAlias(t *testing.T) {
 	}
 	if err != nil || !slices.Contains(codes, "dns.canonical-name") || slices.Contains(codes, "dns.other-addresses") {
 		t.Errorf("file notes: %+v %v", e.Notes, err)
+	}
+}
+
+// A lookup that fails because the call ended is the call's error, not a name
+// with no address.
+func TestEndpointStopsWhenTheCallEnds(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(context.Background())
+	env := Env{Resolve: func(ctx context.Context, _ string) ([]netip.Addr, error) {
+		cancel()
+		return nil, ctx.Err()
+	}}
+	if _, err := endpoint(ctx, env, "app.example.test", false); !errors.Is(err, context.Canceled) {
+		t.Errorf("err = %v, want the call's", err)
 	}
 }
 

@@ -411,6 +411,39 @@ func TestErrorsAreStructured(t *testing.T) {
 	}
 }
 
+// A tie of placement offers the devices the device input accepts, and the
+// text keeps each start's interface. The client can call again with one.
+func TestATieOffersDevices(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	cs, rec := serve(t, labEnv(t, snap{pathlab.FW01, pathlab.ConfigFile(pathlab.FW01)}, snap{pathlab.FW02, pathlab.ConfigFile(pathlab.FW02)}), true)
+	res, err := cs.CallTool(ctx, &sdk.CallToolParams{Name: "simulate_routing", Arguments: map[string]any{"source": "198.18.100.50", "destination": "8.8.8.8"}})
+	if err != nil || !res.IsError {
+		t.Fatalf("%v %+v", err, res)
+	}
+	got, _ := plain(t, res.StructuredContent).(map[string]any)
+	want := toolError{
+		Code:    "call.choice",
+		Text:    "198.18.100.50 could enter at several firewalls; name one in device (starts: fw01 ethernet1/5, fw02 vlan.100)",
+		Options: []string{"fw01", "fw02"}, Needs: []query.Need{choiceNeeds[simulate.ChoiceDevice]},
+	}
+	if !reflect.DeepEqual(got["error"], plain(t, want)) {
+		t.Errorf("%v", got)
+	}
+	if c := rec.last(t); c.Status != StatusChoice {
+		t.Errorf("audit %+v", c)
+	}
+	// An option passes the device enum; fw01 then asks for its router.
+	res, err = cs.CallTool(ctx, &sdk.CallToolParams{Name: "simulate_routing", Arguments: map[string]any{"source": "198.18.100.50", "destination": "8.8.8.8", "device": "fw01"}})
+	if err != nil || res.StructuredContent == nil || !strings.HasPrefix(text(res), "call.choice: fw01 has several routers") {
+		t.Errorf("the option was refused: %v %s", err, text(res))
+	}
+	res, err = cs.CallTool(ctx, &sdk.CallToolParams{Name: "simulate_routing", Arguments: map[string]any{"source": "198.18.100.50", "destination": "8.8.8.8", "device": "fw01", "router": "default"}})
+	if err != nil || res.IsError {
+		t.Errorf("the option was refused: %v %s", err, text(res))
+	}
+}
+
 // A call without detail answers in summary.
 func TestDetailDefaultsToSummary(t *testing.T) {
 	t.Parallel()
@@ -446,6 +479,10 @@ func TestTextContent(t *testing.T) {
 	}
 	if got := v.codes(); !slices.Equal(got, []reason.Code{"gap.no-snapshot", "gap.edl", "note.tls-off"}) {
 		t.Errorf("codes %v", got)
+	}
+	held := map[string]any{"results": []any{map[string]any{"answer": "fw01: undecided", "needs": []any{}}}}
+	if got := viewOf(held).text(); got != "fw01: undecided\n  needs: none; no input can decide this" {
+		t.Errorf("held back, no input helps: %q", got)
 	}
 	if got := viewOf(map[string]any{"results": []any{}}).text(); got != "no result" {
 		t.Errorf("empty: %q", got)
@@ -559,6 +596,19 @@ func TestTheMiddleware(t *testing.T) {
 		strict := middleware{audit: rec, now: time.Now, strict: true}
 		_, _ = strict.receive(boom)(ctx, "tools/call", req)
 	}()
+	// A handler that filled the record and then panicked gave no answer.
+	half := func(ctx context.Context, _ string, _ sdk.Request) (sdk.Result, error) {
+		callOf(ctx).set(func(c *Call) {
+			c.Answers, c.Codes, c.Snapshots = []string{"allowed"}, []reason.Code{"note.ha-peer"}, []string{"fw01@x"}
+		})
+		panic("late")
+	}
+	if _, err := m.receive(half)(ctx, "tools/call", req); err != nil {
+		t.Error(err)
+	}
+	if c := rec.last(t); c.Status != StatusInternal || c.Answers != nil || c.Codes != nil || c.Snapshots != nil {
+		t.Errorf("panic after answers: %+v", c)
+	}
 	if _, err := m.receive(boom)(ctx, "resources/read", nil); err == nil || !strings.Contains(err.Error(), internalText) {
 		t.Errorf("resources/read: %v", err)
 	}
@@ -626,10 +676,28 @@ func TestErrorOf(t *testing.T) {
 		{errors.New("store: unreadable"), "call.internal", "store: unreadable"},
 		{&simulate.ChoiceError{Question: "the source must be an IPv4 address"}, "call.usage", "the source must be an IPv4 address"},
 		{&simulate.ChoiceError{Kind: simulate.ChoiceDevice, Question: "pick --device", ToolText: "pick device", Options: []string{"fw01"}}, "call.choice", "pick device"},
+		{fmt.Errorf("call: %w", context.Canceled), "call.timeout", "the call was cancelled before it answered"},
 	} {
 		if got := errorOf(tc.err); got.Code != tc.code || got.Text != tc.text || got.Options == nil || got.Needs == nil {
 			t.Errorf("%v: %+v", tc.err, got)
 		}
+	}
+	// Ties: starts on one device differ by router, or by interface alone.
+	tie := func(starts ...simulate.Port) *simulate.ChoiceError {
+		c := &simulate.ChoiceError{Kind: simulate.ChoiceDevice, Question: "q", ToolText: "t", Starts: starts}
+		for _, p := range starts {
+			c.Options = append(c.Options, p.Device+" "+p.Interface)
+		}
+		return c
+	}
+	e := errorOf(tie(simulate.Port{Device: "fw01", Router: "default", Interface: "ethernet1/1"}, simulate.Port{Device: "fw01", Router: "lte", Interface: "ethernet1/7"}))
+	if e.Code != "call.choice" || !slices.Equal(e.Options, []string{"default", "lte"}) || len(e.Needs) != 1 || e.Needs[0].Input != "router" ||
+		!strings.Contains(e.Text, "name device fw01 and one router (starts: fw01 ethernet1/1, fw01 ethernet1/7)") {
+		t.Errorf("routers: %+v", e)
+	}
+	e = errorOf(tie(simulate.Port{Device: "fw01", Router: "default", Interface: "ethernet1/1"}, simulate.Port{Device: "fw01", Router: "default", Interface: "ethernet1/2"}))
+	if e.Code != "call.usage" || len(e.Options) != 0 || !strings.Contains(e.Text, "fw01 at several interfaces of one router") {
+		t.Errorf("one router: %+v", e)
 	}
 	if _, err := toolOf("no_such_tool", nil); err == nil {
 		t.Error("toolOf of an unknown tool")

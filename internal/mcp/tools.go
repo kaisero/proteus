@@ -4,7 +4,10 @@ import (
 	"cmp"
 	"context"
 	"errors"
+	"fmt"
+	"slices"
 	"strconv"
+	"strings"
 
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -127,6 +130,9 @@ func errorOf(err error) *toolError {
 			// No choice to offer: the question cannot be taken (C5).
 			return newError("call.usage", cmp.Or(c.ToolText, c.Question))
 		}
+		if c.Starts != nil {
+			return tieError(c)
+		}
 		e := newError("call.choice", cmp.Or(c.ToolText, c.Question))
 		e.Options = append(e.Options, c.Options...)
 		e.Needs = append(e.Needs, need)
@@ -135,7 +141,42 @@ func errorOf(err error) *toolError {
 	if errors.Is(err, context.DeadlineExceeded) {
 		return newError("call.timeout", "the call ran longer than its time limit")
 	}
+	if errors.Is(err, context.Canceled) {
+		// The client cancelled the call, or the server stops: no answer
+		// came in time, as at the time limit.
+		return newError("call.timeout", "the call was cancelled before it answered")
+	}
 	return newError("call.internal", err.Error())
+}
+
+// tieError is a tie of placement in the tool's inputs. Its options name a
+// device and an interface, which the device input does not take: the options
+// become the devices, and the text keeps the interfaces. Starts on one device
+// are a choice of router when their routers differ; else no input picks one.
+func tieError(c *simulate.ChoiceError) *toolError {
+	var devices, routers []string
+	for _, p := range c.Starts {
+		if !slices.Contains(devices, p.Device) {
+			devices = append(devices, p.Device)
+		}
+		if !slices.Contains(routers, p.Router) {
+			routers = append(routers, p.Router)
+		}
+	}
+	starts := " (starts: " + strings.Join(c.Options, ", ") + ")"
+	switch {
+	case len(devices) > 1:
+		e := newError("call.choice", cmp.Or(c.ToolText, c.Question)+starts)
+		e.Options = devices
+		e.Needs = append(e.Needs, choiceNeeds[simulate.ChoiceDevice])
+		return e
+	case len(routers) > 1:
+		e := newError("call.choice", fmt.Sprintf("the source could enter %s through several routers; name device %s and one router%s", devices[0], devices[0], starts))
+		e.Options = routers
+		e.Needs = append(e.Needs, query.Need{Code: "input.router", Input: "router", Text: fmt.Sprintf("give device %s and router: one of the options", devices[0])})
+		return e
+	}
+	return newError("call.usage", fmt.Sprintf("the source could enter %s at several interfaces of one router, and no input picks one%s; give a source address that only one of them reaches", devices[0], starts))
 }
 
 // statuses maps an error code to its audit status (spec §4.9).

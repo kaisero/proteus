@@ -165,6 +165,9 @@ func (m middleware) receive(next sdk.MethodHandler) sdk.MethodHandler {
 					panic(p)
 				}
 				c.Status, c.Code = StatusInternal, "call.internal"
+				// The handler may have filled the record before it failed;
+				// the call gave no answer.
+				c.Answers, c.Codes, c.Snapshots = nil, nil, nil
 				c.Stack = fmt.Appendf(nil, "panic: %v\n\n%s", p, debug.Stack())
 				te := newError("call.internal", internalText)
 				res, err = &sdk.CallToolResult{

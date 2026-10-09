@@ -85,10 +85,15 @@ func endpoint(ctx context.Context, env Env, s string, noDNS bool) (simulate.Endp
 		env.Log.Infof(runlog.TagRun, "dns: %s not resolved (no resolver)", ep.Name)
 		return ep, nil
 	}
-	ctx, cancel := context.WithTimeout(ctx, dnsTimeout)
+	rctx, cancel := context.WithTimeout(ctx, dnsTimeout)
 	defer cancel()
-	addrs, err := env.Resolve(ctx, ep.Name)
+	addrs, err := env.Resolve(rctx, ep.Name)
 	if err != nil {
+		if cerr := ctx.Err(); cerr != nil {
+			// The call ended, not the lookup: the name is not known to have
+			// no address.
+			return ep, cerr
+		}
 		env.Log.Warnf(runlog.TagRun, "dns: %s: %v", ep.Name, err)
 		return ep, nil
 	}
@@ -108,7 +113,7 @@ func endpoint(ctx context.Context, env Env, s string, noDNS bool) (simulate.Endp
 	ep.Resolved = len(ep.Addrs) > 0
 	env.Log.Infof(runlog.TagRun, "dns: %s -> %v", ep.Name, ep.Addrs)
 	if ep.Resolved {
-		ep.Canonical = canonical(ctx, env, ep.Name)
+		ep.Canonical = canonical(rctx, env, ep.Name)
 	}
 	return ep, nil
 }

@@ -141,7 +141,7 @@ func place(_ context.Context, s *state) (simulate.Outcome, error) {
 			}
 			return out, &simulate.ChoiceError{
 				Kind: simulate.ChoiceDevice, Question: fmt.Sprintf("%s could enter at several firewalls; name one with --device", s.src),
-				ToolText: fmt.Sprintf("%s could enter at several firewalls; name one in device", s.src), Options: opts,
+				ToolText: fmt.Sprintf("%s could enter at several firewalls; name one in device", s.src), Options: opts, Starts: pl.Ties,
 			}
 		}
 		s.port, s.router, s.path.Placed = pl.Port, pl.Port.Router, pl.How

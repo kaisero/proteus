@@ -1,6 +1,7 @@
 package index
 
 import (
+	"fmt"
 	"sync"
 
 	"github.com/okaiser/proteus/internal/config"
@@ -19,6 +20,9 @@ type Set struct {
 
 	mu    sync.Mutex
 	built map[setKey]*setEntry
+
+	// build is Build; a test replaces it.
+	build func(*config.Config, *Edges, config.Scope, resolve.Rulebase) (*Index, error)
 }
 
 type setKey struct {
@@ -27,9 +31,10 @@ type setKey struct {
 }
 
 type setEntry struct {
-	once sync.Once
-	idx  *Index
-	err  error
+	once  sync.Once
+	idx   *Index
+	err   error
+	panic any // a build's panic, which every caller of the entry repeats
 }
 
 // NewSet returns an empty set over a configuration.
@@ -54,12 +59,23 @@ func (s *Set) Index(sc config.Scope, rb resolve.Rulebase) (*Index, error) {
 	s.mu.Unlock()
 
 	e.once.Do(func() {
+		// A panic must not leave a done entry with no index and no error: a
+		// set a server shares would answer nil to every later call.
+		defer func() {
+			if p := recover(); p != nil {
+				e.idx, e.err, e.panic = nil, fmt.Errorf("index %s %s: build failed: %v", sc, rb, p), p
+			}
+		}()
 		edges, err := s.readEdges()
 		if err != nil {
 			e.err = err
 			return
 		}
-		e.idx, e.err = Build(s.cfg, edges, sc, rb)
+		build := s.build
+		if build == nil {
+			build = Build
+		}
+		e.idx, e.err = build(s.cfg, edges, sc, rb)
 	})
 	if e.err != nil {
 		s.mu.Lock()
@@ -67,6 +83,11 @@ func (s *Set) Index(sc config.Scope, rb resolve.Rulebase) (*Index, error) {
 			delete(s.built, k)
 		}
 		s.mu.Unlock()
+		if e.panic != nil {
+			// Not kept, so a later call builds again; the panic goes on to
+			// the caller's recover with its value.
+			panic(e.panic)
+		}
 		return nil, e.err
 	}
 	return e.idx, nil
