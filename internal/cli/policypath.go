@@ -13,6 +13,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/okaiser/proteus/internal/estate"
+	"github.com/okaiser/proteus/internal/reason"
 	"github.com/okaiser/proteus/internal/runlog"
 	"github.com/okaiser/proteus/internal/simulate"
 	"github.com/okaiser/proteus/internal/simulate/pathpolicy"
@@ -188,7 +189,7 @@ func (a *app) runPolicyPath(ctx context.Context, o policyOptions) (answer, error
 	ans := pathAnswer{o: o, flow: flow}
 	if u, ok := errors.AsType[*simulate.UnavailableError](err); ok {
 		for _, m := range u.Missing {
-			ans.holes = append(ans.holes, estate.Hole{Device: m.Device, Reason: m.Reason})
+			ans.holes = append(ans.holes, estate.NewHole(m.Device, "", m.Why()))
 		}
 		return ans, nil
 	}
@@ -210,7 +211,7 @@ func (a *app) runPolicyPath(ctx context.Context, o policyOptions) (answer, error
 		a.log.Infof(runlog.TagStep, "path verdict: %s", res.Verdict)
 	}
 	for _, m := range res.Holes {
-		ans.holes = append(ans.holes, estate.Hole{Device: m.Device, Reason: m.Reason})
+		ans.holes = append(ans.holes, estate.NewHole(m.Device, "", m.Why()))
 	}
 	ans.un = pathUnresolved(res, stages)
 	ans.notes = pathNotes(res)
@@ -243,7 +244,7 @@ func pathUnresolved(res pathpolicy.Result, stages []simulate.Stage) []unresolved
 	var un []unresolved
 	for _, h := range res.Hops {
 		if why, ok := hopUndecided(h); ok {
-			un = append(un, unresolved{Device: h.Routing.Device, Vsys: h.Routing.Vsys, Reason: why})
+			un = append(un, unresolvedOf(h.Routing.Device, h.Routing.Vsys, why))
 		}
 		for _, c := range h.Checks {
 			un = append(un, runUnresolved(simulate.Run{Stages: c.Stages}, h.Routing.Device, h.Routing.Vsys, false)...)
@@ -251,7 +252,7 @@ func pathUnresolved(res pathpolicy.Result, stages []simulate.Stage) []unresolved
 	}
 	if at := res.At; res.Verdict == pathpolicy.VerdictUndecided && at.Check == "routing" {
 		h, _ := pointHop(res)
-		un = append(un, unresolved{Device: h.Device, Vsys: h.Vsys, Reason: at.Reason.Text})
+		un = append(un, unresolvedOf(h.Device, h.Vsys, at.Reason))
 	}
 	var device string
 	if len(res.Hops) > 0 {
@@ -263,16 +264,16 @@ func pathUnresolved(res pathpolicy.Result, stages []simulate.Stage) []unresolved
 
 // hopUndecided says whether a hop is undecided, and why: the path's or the
 // zones' doubts first, then the first undecided check.
-func hopUndecided(h pathpolicy.Hop) (string, bool) {
+func hopUndecided(h pathpolicy.Hop) (reason.Reason, bool) {
 	if len(h.Doubts) > 0 {
-		return h.Doubts[0].Text, true
+		return h.Doubts[0], true
 	}
 	for _, c := range h.Checks {
 		if c.Verdict == pathpolicy.Undecided {
-			return c.Reason.Text, true
+			return c.Reason, true
 		}
 	}
-	return "", false
+	return reason.Reason{}, false
 }
 
 func (p pathAnswer) Command() string { return "simulate " + p.o.sim.Kind() }
@@ -325,16 +326,16 @@ func pathNotes(res pathpolicy.Result) []note {
 		device = res.Hops[0].Routing.Device
 	}
 	var out []note
-	out = append(out, runNotes(device, res.Path.Notes.Texts())...)
+	out = append(out, runNotes(device, res.Path.Notes)...)
 	for _, h := range res.Hops {
-		out = append(out, runNotes(h.Routing.Device, h.Routing.Notes.Texts())...)
+		out = append(out, runNotes(h.Routing.Device, h.Routing.Notes)...)
 		for _, c := range h.Checks {
 			for _, n := range c.Notes {
-				out = append(out, note{Device: h.Routing.Device, Vsys: h.Routing.Vsys, Note: n})
+				out = append(out, noteOf(h.Routing.Device, h.Routing.Vsys, n))
 			}
 		}
 	}
-	out = append(out, runNotes(device, res.Notes.Texts())...)
+	out = append(out, runNotes(device, res.Notes)...)
 	seen := map[note]bool{}
 	return slices.DeleteFunc(out, func(n note) bool {
 		dup := seen[n]
@@ -360,12 +361,12 @@ func (p pathAnswer) text(t *textOut) {
 	for _, h := range r.Hops {
 		for _, c := range h.Checks {
 			for _, n := range c.Notes {
-				fmt.Fprintf(t, "  %s\n", noteStyle(t.pal, n)(fmt.Sprintf("note: %s / %s: %s", h.Routing.Device, h.Routing.Vsys, n)))
+				fmt.Fprintf(t, "  %s\n", noteStyle(t.pal, n)(fmt.Sprintf("note: %s / %s: %s", h.Routing.Device, h.Routing.Vsys, n.Text)))
 			}
 		}
 	}
 	for _, n := range r.Notes {
-		fmt.Fprintf(t, "  %s\n", noteStyle(t.pal, n.Text)("note: "+n.Text))
+		fmt.Fprintf(t, "  %s\n", noteStyle(t.pal, n)("note: "+n.Text))
 	}
 	fmt.Fprintln(t)
 	title := fmt.Sprintf("simulate policy %s -> %s %s", sourceText(r.Path), r.Path.Destination, p.flow.Protocol)

@@ -128,7 +128,7 @@ func (a *app) runNAT(ctx context.Context, o natOptions) (answer, error) {
 	ans.un = dedupeUnresolved(runUnresolved(run, run.Device, run.Vsys, true))
 	d, _ := es.network.Device(run.Device)
 	ans.takenAt = d.TakenAt
-	ans.notes = runNotes(run.Device, append(append(append([]string{}, run.Notes...), d.Notes.Texts()...), ans.res.Notes.Texts()...))
+	ans.notes = runNotes(run.Device, append(append(append(simulate.Reasons{}, run.Notes...), d.Notes...), ans.res.Notes...))
 	return ans, nil
 }
 
@@ -159,13 +159,13 @@ func (n natAnswer) Text(t *textOut) error {
 
 // runNotes turns a run's note strings into envelope notes for one device, without
 // duplicates.
-func runNotes(device string, texts []string) []note {
+func runNotes(device string, rs simulate.Reasons) []note {
 	seen := map[string]bool{}
 	var out []note
-	for _, s := range texts {
-		if !seen[s] {
-			seen[s] = true
-			out = append(out, note{Device: device, Note: s})
+	for _, r := range rs {
+		if !seen[r.Text] {
+			seen[r.Text] = true
+			out = append(out, noteOf(device, "", r))
 		}
 	}
 	return out
@@ -228,7 +228,7 @@ func runEstate(ctx context.Context, sim simulate.Simulation, env *simulate.Env, 
 	if u, ok := errors.AsType[*simulate.UnavailableError](err); ok {
 		holes := make([]estate.Hole, len(u.Missing))
 		for i, m := range u.Missing {
-			holes[i] = estate.Hole{Device: m.Device, Reason: m.Reason}
+			holes[i] = estate.NewHole(m.Device, "", m.Why())
 		}
 		return run, holes, nil
 	}
@@ -247,12 +247,12 @@ func runUnresolved(run simulate.Run, device, vsys string, withReasons bool) []un
 	var un []unresolved
 	for _, stg := range run.Stages {
 		for _, u := range stg.Unresolved {
-			un = append(un, unresolved{Device: device, Vsys: vsys, Value: u.Value, Reason: u.Reason})
+			un = append(un, unresolved{Device: device, Vsys: vsys, Value: u.Value, Reason: u.Reason, Code: u.Code})
 		}
 	}
 	if withReasons && run.Fidelity.Level() == "undermatch" {
 		for _, r := range run.Fidelity.UnderMatchReasons() {
-			un = append(un, unresolved{Device: device, Vsys: vsys, Reason: r.Text})
+			un = append(un, unresolvedOf(device, vsys, r))
 		}
 	}
 	return un

@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"io"
 	"reflect"
-	"strings"
 	"time"
 
 	"github.com/okaiser/proteus/internal/estate"
+	"github.com/okaiser/proteus/internal/reason"
 	"github.com/okaiser/proteus/internal/runlog"
 )
 
@@ -119,16 +119,16 @@ func printQualifiers(t *textOut, q qualifiers) {
 // printQualifiers, because it makes the answer incomplete rather than qualifying it.
 func printNotes(t *textOut, tg estate.Target) {
 	for _, n := range tg.Notes {
-		if n != tg.Report.VersionGap {
-			fmt.Fprintf(t, "  %s\n", noteStyle(t.pal, n)("note: "+n))
+		if n.Code != "gap.version" {
+			fmt.Fprintf(t, "  %s\n", noteStyle(t.pal, n)("note: "+n.Text))
 		}
 	}
 }
 
 // noteStyle is a note's palette role (spec §9.2): warn for a stale snapshot, dim for
-// any other. A stale note is recognised by the wording of estate.StaleNote.
-func noteStyle(p palette, n string) func(string) string {
-	if strings.HasPrefix(n, "snapshot ") && strings.Contains(n, " old, past the ") && strings.HasSuffix(n, " limit") {
+// any other. A stale note is recognised by its code.
+func noteStyle(p palette, n reason.Reason) func(string) string {
+	if n.Code == "note.snapshot-stale" {
 		return p.warn
 	}
 	return p.dim

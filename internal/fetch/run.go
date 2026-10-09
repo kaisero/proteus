@@ -1,5 +1,7 @@
 package fetch
 
+import "github.com/okaiser/proteus/internal/reason"
+
 // Outcome is what happened to one document.
 type Outcome struct {
 	Name  string
@@ -20,7 +22,7 @@ type Result struct {
 	FetchedFrom string
 	// Notes say what a reader of the snapshot should know, such as an HA state that
 	// was not followed.
-	Notes []string
+	Notes []reason.Reason
 }
 
 // OK reports whether a document arrived.

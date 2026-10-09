@@ -87,7 +87,7 @@ func (Simulation) Run(ctx context.Context, env *simulate.Env, in simulate.Input)
 	run.Fidelity = simulate.Overall(stages)
 	s.result.Notes = append(s.notes, s.result.Notes...)
 	run.Output = s.result
-	run.Notes = d.Notes.Texts()
+	run.Notes = d.Notes
 	return run, err
 }
 

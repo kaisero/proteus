@@ -117,7 +117,7 @@ func (n *Network) Device(name string) (simulate.DeviceData, error) {
 	}
 	d, err := n.read(node)
 	if err != nil {
-		err = &simulate.UnavailableError{Missing: []simulate.Missing{{Device: node, Reason: err.Error()}}}
+		err = &simulate.UnavailableError{Missing: []simulate.Missing{simulate.NewMissing(node, reason.New(GapOf(err), err.Error()))}}
 		n.errs[node] = err
 		n.w.Log.Warnf(runlog.TagSnap, "%s: hole: %v", node, err)
 		return simulate.DeviceData{}, err
@@ -135,14 +135,14 @@ func (n *Network) read(node string) (simulate.DeviceData, error) {
 	d := simulate.DeviceData{Name: node, Member: member, SnapshotID: sn.ID, TakenAt: sn.Meta.TakenAt}
 	b, err := os.ReadFile(sn.Path(store.InterfacesDoc))
 	if err != nil {
-		return d, fmt.Errorf("%s@%s has no interface state; fetch it again", member, sn.ID)
+		return d, coded("gap.interfaces-missing", fmt.Errorf("%s@%s has no interface state; fetch it again", member, sn.ID))
 	}
 	if d.Interfaces, err = resolve.ReadInterfaceStates(b); err != nil {
 		return d, fmt.Errorf("%s@%s: %w", member, sn.ID, err)
 	}
 	b, err = os.ReadFile(sn.Path(store.FIBDoc))
 	if err != nil {
-		return d, fmt.Errorf("%s@%s has no forwarding table; fetch it again", member, sn.ID)
+		return d, coded("gap.fib-missing", fmt.Errorf("%s@%s has no forwarding table; fetch it again", member, sn.ID))
 	}
 	if d.FIB, err = resolve.ReadFIBRoutes(b); err != nil {
 		return d, fmt.Errorf("%s@%s: %w", member, sn.ID, err)

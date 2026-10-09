@@ -10,6 +10,7 @@ import (
 	"github.com/okaiser/proteus/internal/config"
 	"github.com/okaiser/proteus/internal/drift"
 	"github.com/okaiser/proteus/internal/estate"
+	"github.com/okaiser/proteus/internal/reason"
 	"github.com/okaiser/proteus/internal/resolve"
 	"github.com/okaiser/proteus/internal/store"
 )
@@ -72,7 +73,7 @@ func (a *app) runSnapshotList(_ context.Context, o snapshotListOptions) (answer,
 	}
 	ids, err := st.List(o.device)
 	if err != nil {
-		ans.holes = []estate.Hole{{Device: o.device, Reason: err.Error()}}
+		ans.holes = []estate.Hole{estate.NewHole(o.device, "", reason.New(estate.GapOf(err), err.Error()))}
 		return ans, nil
 	}
 	latest, _ := st.Latest(o.device)
@@ -276,19 +277,19 @@ func (a *app) runSnapshotDiff(ctx context.Context, o snapshotDiffOptions) (answe
 		}
 		older, newer, err := pair(st, d, o.from, o.to)
 		if err != nil {
-			ans.holes = append(ans.holes, estate.Hole{Device: d, Reason: err.Error()})
+			ans.holes = append(ans.holes, estate.NewHole(d, "", reason.New(estate.GapOf(err), err.Error())))
 			continue
 		}
 		// After an HA failover the entry's snapshots come from the other member,
 		// whose configuration is synced but not identical.
 		if was, now := older.Meta.Serial, newer.Meta.Serial; was != "" && now != "" && was != now {
-			ans.notes = append(ans.notes, note{Device: d, Note: fmt.Sprintf(
-				"the snapshots come from different firewalls (serial %s, then %s), as after an HA failover; settings an HA pair does not sync show as changes", was, now)})
+			ans.notes = append(ans.notes, noteOf(d, "", reason.New("note.serial-changed", fmt.Sprintf(
+				"the snapshots come from different firewalls (serial %s, then %s), as after an HA failover; settings an HA pair does not sync show as changes", was, now))))
 		}
 		before, _, err1 := config.Load(older.Path(store.ConfigDoc))
 		after, _, err2 := config.Load(newer.Path(store.ConfigDoc))
 		if err1 != nil || err2 != nil {
-			ans.holes = append(ans.holes, estate.Hole{Device: d, Reason: fmt.Sprintf("unreadable configuration: %v %v", err1, err2)})
+			ans.holes = append(ans.holes, estate.NewHole(d, "", reason.New("gap.load-failed", fmt.Sprintf("unreadable configuration: %v %v", err1, err2))))
 			continue
 		}
 		for _, sc := range diffScopes(before, after, o.sel.vsys) {

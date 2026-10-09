@@ -7,6 +7,7 @@ import (
 
 	"github.com/okaiser/proteus/internal/estate"
 	"github.com/okaiser/proteus/internal/index"
+	"github.com/okaiser/proteus/internal/reason"
 	"github.com/okaiser/proteus/internal/simulate"
 )
 
@@ -28,18 +29,30 @@ type envelope struct {
 // unresolved is something that makes an answer incomplete: it can be missing
 // matches. It turns the exit code to 3.
 type unresolved struct {
-	Device string `json:"device"`
-	Vsys   string `json:"vsys,omitempty"`
-	Value  string `json:"value,omitempty"`
-	Reason string `json:"reason"`
+	Device string      `json:"device"`
+	Vsys   string      `json:"vsys,omitempty"`
+	Value  string      `json:"value,omitempty"`
+	Reason string      `json:"reason"`
+	Code   reason.Code `json:"-"` // the kind of Reason; out of the JSON until format 2
 }
 
 // note qualifies an answer without making it incomplete, such as a snapshot past
 // its age limit.
 type note struct {
-	Device string `json:"device"`
-	Vsys   string `json:"vsys,omitempty"`
-	Note   string `json:"note"`
+	Device string      `json:"device"`
+	Vsys   string      `json:"vsys,omitempty"`
+	Note   string      `json:"note"`
+	Code   reason.Code `json:"-"` // the kind of Note; out of the JSON until format 2
+}
+
+// noteOf is a note for a device and vsys with r's code and text.
+func noteOf(device, vsys string, r reason.Reason) note {
+	return note{Device: device, Vsys: vsys, Note: r.Text, Code: r.Code}
+}
+
+// unresolvedOf is an unresolved entry for a device and vsys with r's code and text.
+func unresolvedOf(device, vsys string, r reason.Reason) unresolved {
+	return unresolved{Device: device, Vsys: vsys, Reason: r.Text, Code: r.Code}
 }
 
 // target is how a result names where it came from.
@@ -67,11 +80,11 @@ func targetQualifiers(ts []estate.Target) ([]unresolved, []note) {
 	var notes []note
 	for _, t := range ts {
 		for _, n := range t.Notes {
-			if n == t.Report.VersionGap {
-				un = append(un, unresolved{Device: t.Device, Vsys: t.Vsys, Reason: n})
+			if n.Code == "gap.version" {
+				un = append(un, unresolvedOf(t.Device, t.Vsys, n))
 				continue
 			}
-			notes = append(notes, note{Device: t.Device, Vsys: t.Vsys, Note: n})
+			notes = append(notes, noteOf(t.Device, t.Vsys, n))
 		}
 	}
 	return un, notes

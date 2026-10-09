@@ -872,7 +872,7 @@ func TestFetchNotesReachTheEnvelope(t *testing.T) {
 	t.Parallel()
 	c := newCLI(t)
 	c.inventory(inventoryFor(lab(t).Start(t)))
-	if got := fetchNotes(t, c.want(0, "fetch", "fw01", "--output", "json")); !slices.Contains(got, note{Device: "fw01", Note: tlsOffNote}) {
+	if got := fetchNotes(t, c.want(0, "fetch", "fw01", "--output", "json")); !slices.Contains(got, note{Device: "fw01", Note: tlsOff().Text}) {
 		t.Errorf("a lab fetch has the TLS note, got %+v", got)
 	}
 

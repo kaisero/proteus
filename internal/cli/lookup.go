@@ -12,6 +12,7 @@ import (
 	"github.com/okaiser/proteus/internal/card"
 	"github.com/okaiser/proteus/internal/estate"
 	"github.com/okaiser/proteus/internal/index"
+	"github.com/okaiser/proteus/internal/reason"
 	"github.com/okaiser/proteus/internal/runlog"
 )
 
@@ -139,7 +140,7 @@ func (a *app) lookupTargets(ctx context.Context, name, kind string, ts []estate.
 		}
 		idx, err := index.For(t.Config, t.Scope)
 		if err != nil {
-			ans.holes = append(ans.holes, estate.Hole{Device: t.Device, Vsys: t.Vsys, Reason: err.Error()})
+			ans.holes = append(ans.holes, estate.NewHole(t.Device, t.Vsys, reason.New("gap.load-failed", err.Error())))
 			continue
 		}
 		cs, err := card.Find(t.Config, idx, name, kind)

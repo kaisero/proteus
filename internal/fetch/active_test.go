@@ -53,21 +53,21 @@ func TestHAStepFollowsAConfirmedPeer(t *testing.T) {
 
 func TestHAStepStaysWhenInDoubt(t *testing.T) {
 	t.Parallel()
-	for name, tc := range map[string]struct{ passive, active, note string }{
-		"peer not active": {ha("active-passive", "passive", "A", "suspended", "B", "192.0.2.2"), "", `peer is "suspended"`},
+	for name, tc := range map[string]struct{ passive, active, note, code string }{
+		"peer not active": {ha("active-passive", "passive", "A", "suspended", "B", "192.0.2.2"), "", `peer is "suspended"`, "note.fetch-peer-unusable"},
 		"peer disagrees": {
 			ha("active-passive", "passive", "A", "active", "B", "192.0.2.2"),
-			ha("active-passive", "active", "B", "passive", "SOMEONE-ELSE", "192.0.2.1"), "does not confirm",
+			ha("active-passive", "active", "B", "passive", "SOMEONE-ELSE", "192.0.2.1"), "does not confirm", "note.fetch-peer-unconfirmed",
 		},
-		"active-active": {ha("Active-Active", "active-primary", "A", "active-secondary", "B", "192.0.2.2"), "", "only active-passive"},
-		"suspended":     {ha("active-passive", "suspended", "A", "active", "B", "192.0.2.2"), "", `HA state "suspended"`},
+		"active-active": {ha("Active-Active", "active-primary", "A", "active-secondary", "B", "192.0.2.2"), "", "only active-passive", "note.fetch-ha-mode"},
+		"suspended":     {ha("active-passive", "suspended", "A", "active", "B", "192.0.2.2"), "", `HA state "suspended"`, "note.fetch-ha-state"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			host, opts := pair(t, tc.passive, tc.active)
 			res, err := run(context.Background(), target(host), []Document{SystemInfo}, opts, nil)
 			if err != nil || hostname(res) != "passive" || res.FetchedFrom != "" ||
-				len(res.Notes) != 1 || !strings.Contains(res.Notes[0], tc.note) {
+				len(res.Notes) != 1 || !strings.Contains(res.Notes[0].Text, tc.note) || string(res.Notes[0].Code) != tc.code {
 				t.Errorf("res = %+v, err %v", res, err)
 			}
 		})

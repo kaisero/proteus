@@ -62,7 +62,7 @@ type Target struct {
 	Config    *config.Config
 	Index     *index.Index
 	Providers index.Providers
-	Notes     []string
+	Notes     Reasons
 }
 
 // Env bundles one run's dependencies. It is single-use and not safe for
@@ -135,7 +135,7 @@ type Run struct {
 	Stages   []Stage  `json:"stages"`
 	Output   any      `json:"output"`   // the type each kind documents
 	Fidelity Fidelity `json:"fidelity"` // the weakest stage's
-	Notes    []string `json:"notes,omitempty"`
+	Notes    Reasons  `json:"notes,omitempty"`
 }
 
 // Simulation is one kind of simulation.

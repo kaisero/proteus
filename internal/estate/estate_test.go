@@ -1,11 +1,14 @@
 package estate
 
 import (
+	"errors"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/okaiser/proteus/internal/reason"
 	"github.com/okaiser/proteus/internal/store"
 )
 
@@ -77,7 +80,8 @@ func TestOpenReportsHoles(t *testing.T) {
 	if got := names(ts); got != "fw01/vsys2" {
 		t.Errorf("targets = %s", got)
 	}
-	if len(holes) != 2 || holes[0].Vsys != "vsys9" || holes[1].Device != "nope" {
+	if len(holes) != 2 || holes[0].Vsys != "vsys9" || holes[1].Device != "nope" ||
+		holes[0].Code != "gap.vsys-missing" || holes[1].Why().Code != "gap.snapshot-missing" {
 		t.Errorf("holes = %+v", holes)
 	}
 }
@@ -86,7 +90,7 @@ func TestStaleSnapshotsCarryANote(t *testing.T) {
 	t.Parallel()
 	st := storeWith(t)
 	ts, _ := Open(st, []string{"fw02"}, nil, When{MaxAge: time.Hour, Now: t0.Add(3 * time.Hour)})
-	if len(ts) == 0 || len(ts[0].Notes) != 1 || !strings.Contains(ts[0].Notes[0], "past the 1h0m0s limit") {
+	if len(ts) == 0 || len(ts[0].Notes) != 1 || !strings.Contains(ts[0].Notes[0].Text, "past the 1h0m0s limit") || ts[0].Notes[0].Code != "note.snapshot-stale" {
 		t.Errorf("notes = %v", ts)
 	}
 	ts, _ = Open(st, []string{"fw02"}, nil, When{MaxAge: 24 * time.Hour, Now: t0.Add(3 * time.Hour)})
@@ -104,7 +108,7 @@ func TestOpenFile(t *testing.T) {
 	if names(ts) != "file/vsys1,file/vsys2" || ts[0].Snapshot != nil {
 		t.Errorf("targets = %s", names(ts))
 	}
-	if len(ts[0].Notes) != 1 || !strings.Contains(ts[0].Notes[0], "12.2.0") {
+	if len(ts[0].Notes) != 1 || !strings.Contains(ts[0].Notes[0].Text, "12.2.0") || ts[0].Notes[0].Code != "gap.version" {
 		t.Errorf("the version gap must be a note, got %v", ts[0].Notes)
 	}
 	if _, _, err := OpenFile("../../testdata/config/nope.xml", nil, nil); err == nil {
@@ -119,7 +123,7 @@ func TestOpenReportsAnUnreadableConfiguration(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, holes := Open(st, []string{"bad"}, nil, When{Now: t0})
-	if len(holes) != 1 {
+	if len(holes) != 1 || holes[0].Code != "gap.load-failed" {
 		t.Errorf("holes = %v", holes)
 	}
 }
@@ -175,7 +179,36 @@ func TestOpenSnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if ts, holes := OpenSnapshot(st, "fw01", sn.ID, nil, When{Now: t0}); len(ts) != 0 || len(holes) != 1 || !strings.Contains(holes[0].Reason, "has no configuration") {
+	if ts, holes := OpenSnapshot(st, "fw01", sn.ID, nil, When{Now: t0}); len(ts) != 0 || len(holes) != 1 || !strings.Contains(holes[0].Reason, "has no configuration") || holes[0].Code != "gap.config-missing" {
 		t.Errorf("no configuration: %v %v", ts, holes)
+	}
+}
+
+// A store failure names its gap; a device whose snapshots all lack a
+// configuration is a missing configuration, not a missing snapshot.
+func TestGapOf(t *testing.T) {
+	t.Parallel()
+	st, _ := store.Open(t.TempDir())
+	if _, err := st.Write(store.Meta{Device: "bare"}, map[string][]byte{store.FIBDoc: []byte("<x/>")}, 20); err != nil {
+		t.Fatal(err)
+	}
+	_, noConfig := st.Latest("bare")
+	_, noSnapshot := st.Latest("nope")
+	inner := errors.New("inner")
+	for _, c := range []struct {
+		err  error
+		want reason.Code
+	}{
+		{noConfig, "gap.config-missing"},
+		{noSnapshot, "gap.snapshot-missing"},
+		{errors.New("other"), "gap.load-failed"},
+		{fmt.Errorf("wrapped: %w", coded("gap.fib-missing", inner)), "gap.fib-missing"},
+	} {
+		if got := GapOf(c.err); got != c.want {
+			t.Errorf("GapOf(%v) = %s, want %s", c.err, got, c.want)
+		}
+	}
+	if !errors.Is(coded("gap.fib-missing", inner), inner) {
+		t.Error("a coded error must keep its cause")
 	}
 }

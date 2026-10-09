@@ -62,8 +62,8 @@ func (Security) Evaluate(ctx context.Context, env *simulate.Env, h routing.Hop, 
 	if gap := t.Index.VersionGap(); gap != "" {
 		// Read with the nearest older schema: inferred, not undecided (spec E25).
 		fs = append(fs, simulate.Inferred)
-		if !slices.Contains(out.Notes, gap) {
-			out.Notes = append(out.Notes, gap)
+		if !slices.ContainsFunc(out.Notes, func(n reason.Reason) bool { return n.Code == "gap.version" }) {
+			out.Notes = append(out.Notes, reason.New("gap.version", gap))
 		}
 	}
 	out.Fidelity = simulate.Weakest(fs...)

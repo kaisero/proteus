@@ -54,7 +54,12 @@ func newState(env *simulate.Env, in simulate.Input) *state {
 	for _, name := range env.Network.Devices() {
 		d, err := env.Network.Device(name)
 		if err != nil {
-			s.holes = append(s.holes, index.NewUnresolved(name, "", reason.New("gap.load-failed",
+			// The device's own failure names the kind, when it says one.
+			code := reason.Code("gap.load-failed")
+			if u, ok := errors.AsType[*simulate.UnavailableError](err); ok && len(u.Missing) == 1 && reason.Known(u.Missing[0].Code) {
+				code = u.Missing[0].Code
+			}
+			s.holes = append(s.holes, index.NewUnresolved(name, "", reason.New(code,
 				fmt.Sprintf("%s cannot be read (%v); a path through it is not seen", name, err))))
 			continue
 		}

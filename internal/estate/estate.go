@@ -5,13 +5,16 @@
 package estate
 
 import (
+	"errors"
 	"fmt"
 	"slices"
 	"time"
 
 	"github.com/okaiser/proteus/internal/config"
+	"github.com/okaiser/proteus/internal/reason"
 	"github.com/okaiser/proteus/internal/resolve"
 	"github.com/okaiser/proteus/internal/runlog"
+	"github.com/okaiser/proteus/internal/simulate"
 	"github.com/okaiser/proteus/internal/store"
 )
 
@@ -27,14 +30,53 @@ type Target struct {
 	Config   *config.Config
 	Report   config.Report
 	// Notes qualify every answer from this target: a stale snapshot, a version gap.
-	Notes []string
+	Notes simulate.Reasons
 }
 
 // Hole is a device or vsys that was asked for and could not be answered.
 type Hole struct {
-	Device string `json:"device"`
-	Vsys   string `json:"vsys,omitempty"`
-	Reason string `json:"reason"`
+	Device string      `json:"device"`
+	Vsys   string      `json:"vsys,omitempty"`
+	Reason string      `json:"reason"`
+	Code   reason.Code `json:"-"` // the kind of Reason; out of the JSON until format 2
+}
+
+// NewHole returns a hole for a device and vsys with r's code and text.
+func NewHole(device, vsys string, r reason.Reason) Hole {
+	return Hole{Device: device, Vsys: vsys, Reason: r.Text, Code: r.Code}
+}
+
+// Why returns the hole's code and text as one reason.
+func (h Hole) Why() reason.Reason { return reason.Reason{Code: h.Code, Text: h.Reason} }
+
+// GapOf is the code of a failure to read a device's data: a missing
+// configuration, a missing snapshot, or a load that failed (spec §12 C10). A
+// device whose snapshots all lack a configuration is a missing configuration.
+func GapOf(err error) reason.Code {
+	var c *codedError
+	switch {
+	case errors.As(err, &c):
+		return c.code
+	case errors.Is(err, store.ErrNoConfig):
+		return "gap.config-missing"
+	case errors.Is(err, store.ErrNoSnapshot):
+		return "gap.snapshot-missing"
+	}
+	return "gap.load-failed"
+}
+
+// codedError is a read failure that names its own code.
+type codedError struct {
+	code reason.Code
+	err  error
+}
+
+func (e *codedError) Error() string { return e.err.Error() }
+func (e *codedError) Unwrap() error { return e.err }
+
+// coded marks err with code c, which GapOf returns.
+func coded(c reason.Code, err error) error {
+	return &codedError{code: reason.New(c, "").Code, err: err}
 }
 
 // When says which snapshot of each device to read.
@@ -74,18 +116,18 @@ func OpenSnapshot(st *store.Store, device, id string, vsys []string, w When) ([]
 func openSnapshot(d string, sn store.Snapshot, err error, vsys []string, w When) ([]Target, []Hole) {
 	if err != nil {
 		w.Log.Warnf(runlog.TagSnap, "%s: hole: %v", d, err)
-		return nil, []Hole{{Device: d, Reason: err.Error()}}
+		return nil, []Hole{NewHole(d, "", reason.New(GapOf(err), err.Error()))}
 	}
 	cfg, rep, err := config.Load(sn.Path(store.ConfigDoc))
 	if err != nil {
 		w.Log.Warnf(runlog.TagSnap, "%s: hole: %v", d, err)
-		return nil, []Hole{{Device: d, Reason: err.Error()}}
+		return nil, []Hole{NewHole(d, "", reason.New("gap.load-failed", err.Error()))}
 	}
 	w.Log.Infof(runlog.TagSnap, "%s: snapshot %s taken %s, PAN-OS %s read with the %s schema",
 		d, sn.ID, sn.Meta.TakenAt.Format(time.RFC3339), cfg.Version(), cfg.DigestVersion())
-	var notes []string
+	var notes simulate.Reasons
 	if age := w.Now.Sub(sn.Meta.TakenAt); w.MaxAge > 0 && age > w.MaxAge {
-		notes = append(notes, StaleNote(sn.ID, age, w.MaxAge))
+		notes = append(notes, reason.New("note.snapshot-stale", StaleNote(sn.ID, age, w.MaxAge)))
 	}
 	ts, hs := scopes(d, &sn, cfg, rep, vsys, notes)
 	for _, h := range hs {
@@ -115,11 +157,11 @@ func pick(st *store.Store, device string, at time.Time) (store.Snapshot, error) 
 // scopes returns a target per vsys the configuration defines, keeping only the
 // asked ones when vsys is not empty. An asked vsys the configuration lacks is a hole.
 func scopes(device string, sn *store.Snapshot, cfg *config.Config, rep config.Report,
-	vsys, notes []string,
+	vsys []string, notes simulate.Reasons,
 ) ([]Target, []Hole) {
 	have := resolve.Vsyses(cfg)
 	if rep.VersionGap != "" {
-		notes = append(notes, rep.VersionGap)
+		notes = append(notes, reason.New("gap.version", rep.VersionGap))
 	}
 	want := map[string]bool{}
 	for _, v := range vsys {
@@ -147,7 +189,7 @@ func scopes(device string, sn *store.Snapshot, cfg *config.Config, rep config.Re
 	}
 	slices.Sort(names)
 	for _, v := range names {
-		holes = append(holes, Hole{Device: device, Vsys: v, Reason: fmt.Sprintf("no vsys %s; it has %v", v, have)})
+		holes = append(holes, NewHole(device, v, reason.New("gap.vsys-missing", fmt.Sprintf("no vsys %s; it has %v", v, have))))
 	}
 	return out, holes
 }

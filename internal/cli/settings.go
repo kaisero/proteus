@@ -15,7 +15,9 @@ import (
 
 	"github.com/okaiser/proteus/internal/estate"
 	"github.com/okaiser/proteus/internal/inventory"
+	"github.com/okaiser/proteus/internal/reason"
 	"github.com/okaiser/proteus/internal/runlog"
+	"github.com/okaiser/proteus/internal/simulate"
 	"github.com/okaiser/proteus/internal/store"
 )
 
@@ -251,8 +253,10 @@ func (sel *selection) bind(cmd *cobra.Command, o selectOpts) {
 	}
 }
 
-// tlsOffNote is the note on a device fetched without TLS certificate verification.
-const tlsOffNote = "TLS certificate verification is off (insecure_tls)"
+// tlsOff is the note on a device fetched without TLS certificate verification.
+func tlsOff() reason.Reason {
+	return reason.New("note.tls-off", "TLS certificate verification is off (insecure_tls)")
+}
 
 // targets opens what a question runs against: one file, or the selected devices'
 // snapshots. What a --fresh fetch found becomes notes on that device's targets: TLS
@@ -286,20 +290,20 @@ func (a *app) targets(ctx context.Context, sel selection, s settings) ([]estate.
 	if err != nil {
 		return nil, nil, err
 	}
-	fresh := map[string][]string{}
+	fresh := map[string]simulate.Reasons{}
 	if sel.fresh {
 		for _, r := range a.fetcher(s.inv, st).each(ctx, names) {
-			var ns []string
+			var ns simulate.Reasons
 			if r.TLSVerification != nil && !*r.TLSVerification {
-				ns = append(ns, tlsOffNote)
+				ns = append(ns, tlsOff())
 			}
 			for _, d := range r.Documents {
 				if d.Error != "" {
-					ns = append(ns, "fresh fetch: "+d.Name+" failed: "+d.Error)
+					ns = append(ns, reason.New("note.fresh-document-failed", "fresh fetch: "+d.Name+" failed: "+d.Error))
 				}
 			}
 			if r.Error != "" {
-				ns = append(ns, "fresh fetch failed, answering from the previous snapshot: "+r.Error)
+				ns = append(ns, reason.New("note.fresh-failed", "fresh fetch failed, answering from the previous snapshot: "+r.Error))
 			}
 			fresh[r.Device] = ns
 		}

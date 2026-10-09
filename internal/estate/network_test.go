@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/okaiser/proteus/internal/reason"
 	"github.com/okaiser/proteus/internal/simulate"
 	"github.com/okaiser/proteus/internal/store"
 )
@@ -110,8 +111,16 @@ func TestNetworkNeedsInterfacesAndTables(t *testing.T) {
 		snap{dev: "d", at: t0, docs: map[string][]byte{store.InterfacesDoc: opdata(t, "fw02-interface-all.xml"), store.FIBDoc: []byte("<x/>")}},
 	)
 	n := NewNetwork(st, []string{"a", "b", "c", "d"}, When{})
-	for dev, want := range map[string]string{"a": "no interface state", "b": "no forwarding table", "c": "op data", "d": "op data"} {
-		if _, err := n.Device(dev); err == nil || !strings.Contains(err.Error(), want) {
+	for dev, want := range map[string]struct {
+		text string
+		code reason.Code
+	}{
+		"a": {"no interface state", "gap.interfaces-missing"}, "b": {"no forwarding table", "gap.fib-missing"},
+		"c": {"op data", "gap.load-failed"}, "d": {"op data", "gap.load-failed"},
+	} {
+		_, err := n.Device(dev)
+		u, ok := errors.AsType[*simulate.UnavailableError](err)
+		if !ok || !strings.Contains(err.Error(), want.text) || u.Missing[0].Code != want.code {
 			t.Errorf("%s: %v", dev, err)
 		}
 	}

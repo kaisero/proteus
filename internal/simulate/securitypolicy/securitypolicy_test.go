@@ -47,9 +47,9 @@ func envPath(t *testing.T, path string, zones bool) *simulate.Env {
 			}
 			p.Zones = z
 		}
-		var notes []string
+		var notes simulate.Reasons
 		if rep.VersionGap != "" {
-			notes = append(notes, rep.VersionGap)
+			notes = append(notes, reason.New("gap.version", rep.VersionGap))
 		}
 		return simulate.Target{Config: cfg, Index: idx, Providers: p, Notes: notes}, nil
 	}}
@@ -242,7 +242,7 @@ func TestAVersionGapIsInferred(t *testing.T) {
 			t.Errorf("%s: %s, unresolved %v", slug, st.Fidelity, st.Unresolved)
 		}
 	}
-	if len(r.Notes) != 1 || !strings.Contains(r.Notes[0], "12.2.0") {
+	if len(r.Notes) != 1 || !strings.Contains(r.Notes[0].Text, "12.2.0") {
 		t.Errorf("notes = %v", r.Notes)
 	}
 	if head(v) != "dc-to-home" {

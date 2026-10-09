@@ -95,9 +95,9 @@ func (l lab) env(t *testing.T) *simulate.Env {
 		if err != nil {
 			return simulate.Target{}, err
 		}
-		var notes []string
+		var notes simulate.Reasons
 		if rep.VersionGap != "" && !l.quiet {
-			notes = append(notes, rep.VersionGap)
+			notes = append(notes, reason.New("gap.version", rep.VersionGap))
 		}
 		return simulate.Target{Config: cfg, Index: idx, Notes: notes}, nil
 	}
@@ -257,7 +257,7 @@ func TestAVersionGapIsInferredNotUndecided(t *testing.T) {
 		if r.Verdict != VerdictDenied || c.Verdict != Stop || c.Fidelity.Level() != "inferred" || r.Fidelity.Level() != "inferred" {
 			t.Errorf("verdict %s, hop 1 %s %s, run %s", r.Verdict, c.Verdict, c.Fidelity, r.Fidelity)
 		}
-		if len(c.Notes) != 1 || !strings.Contains(c.Notes[0], "12.2.0") {
+		if len(c.Notes) != 1 || !strings.Contains(c.Notes[0].Text, "12.2.0") {
 			t.Errorf("the gap stays a note: %v", c.Notes)
 		}
 		if c2 := r.Hops[1].Checks[0]; c2.Fidelity.Level() != "exact" || len(c2.Notes) != 0 {

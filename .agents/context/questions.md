@@ -62,9 +62,12 @@ type Network struct{ ... }
 type Target struct{ ... }
 type When struct{ ... }
 
+func (h Hole) Why() reason.Reason
 func (n *Network) Device(name string) (simulate.DeviceData, error)
 func (n *Network) Devices() []string
+func GapOf(err error) reason.Code
 func Kinds() []string
+func NewHole(device, vsys string, r reason.Reason) Hole
 func NewNetwork(st *store.Store, devices []string, w When) *Network
 func Open(st *store.Store, devices, vsys []string, w When) ([]Target, []Hole)
 func OpenFile(path string, vsys []string, log *runlog.Logger) ([]Target, []Hole, error)

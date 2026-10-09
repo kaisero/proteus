@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/okaiser/proteus/internal/estate"
+	"github.com/okaiser/proteus/internal/reason"
+	"github.com/okaiser/proteus/internal/simulate"
 )
 
 type fakeAnswer struct {
@@ -83,14 +85,29 @@ type failWriter struct{}
 func (failWriter) Write([]byte) (int, error) { return 0, errors.New("closed pipe") }
 
 // A stale-snapshot note is a warning; any other note is dim (spec §9.2). The note is
-// built by estate, so a change of its wording breaks this test.
+// recognised by its code, not by its wording.
 func TestStaleNotesWarn(t *testing.T) {
 	t.Parallel()
 	p := palette{on: true}
 	stale := estate.StaleNote("2026-09-28T10-00-00Z", 50*time.Hour, 24*time.Hour)
 	var b bytes.Buffer
-	printNotes(&textOut{w: &b, pal: p}, estate.Target{Notes: []string{stale, "an HA pair"}})
+	notes := simulate.Reasons{reason.New("note.snapshot-stale", stale), reason.New("note.ha-peer", "an HA pair")}
+	printNotes(&textOut{w: &b, pal: p}, estate.Target{Notes: notes})
 	if want := "  " + p.warn("note: "+stale) + "\n  " + p.dim("note: an HA pair") + "\n"; b.String() != want {
 		t.Errorf("got  %q\nwant %q", b.String(), want)
+	}
+}
+
+// A version gap is unresolved by its code, not by its text: a note that reads
+// the same with another code stays a note.
+func TestTargetQualifiersUseTheCode(t *testing.T) {
+	t.Parallel()
+	gap := "the configuration is PAN-OS 12.2.0"
+	tg := estate.Target{Device: "fw01", Vsys: "vsys1", Notes: simulate.Reasons{
+		reason.New("gap.version", gap), reason.New("note.ha-peer", gap),
+	}}
+	un, notes := targetQualifiers([]estate.Target{tg})
+	if len(un) != 1 || un[0].Code != "gap.version" || len(notes) != 1 || notes[0].Code != "note.ha-peer" {
+		t.Errorf("unresolved %+v, notes %+v", un, notes)
 	}
 }

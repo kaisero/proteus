@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
-	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -159,7 +158,7 @@ func (p policyAnswer) Text(t *textOut) error {
 func policyNotes(t estate.Target) []note {
 	var out []note
 	for _, n := range t.Notes {
-		out = append(out, note{Device: t.Device, Vsys: t.Vsys, Note: n})
+		out = append(out, noteOf(t.Device, t.Vsys, n))
 	}
 	return out
 }
@@ -257,8 +256,10 @@ func printRun(w *textOut, run simulate.Run, t estate.Target, v securitypolicy.Ve
 	}
 	fmt.Fprintf(w, "\n%s\n", w.pal.head(header(t, w.now)))
 	printNotes(w, t)
-	if g := t.Report.VersionGap; g != "" && slices.Contains(t.Notes, g) {
-		fmt.Fprintf(w, "  %s\n", noteStyle(w.pal, g)("note: "+g))
+	for _, n := range t.Notes {
+		if n.Code == "gap.version" {
+			fmt.Fprintf(w, "  %s\n", noteStyle(w.pal, n)("note: "+n.Text))
+		}
 	}
 	for _, ep := range []simulate.Endpoint{flow.Source, flow.Destination} {
 		if ep.Name != "" {

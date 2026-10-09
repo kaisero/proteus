@@ -333,7 +333,7 @@ func TestADeviceWithoutASnapshotIsAHole(t *testing.T) {
 	n := labNet()
 	n.names = append(n.names, "fw03")
 	run, p, err := simulateOn(t, n, flow("198.18.10.5", "8.8.8.8"), nil)
-	if err != nil || len(run.Stages[0].Unresolved) != 1 || !strings.Contains(run.Stages[0].Unresolved[0].Reason, "fw03 cannot be read") ||
+	if err != nil || len(run.Stages[0].Unresolved) != 1 || !strings.Contains(run.Stages[0].Unresolved[0].Reason, "fw03 cannot be read") || run.Stages[0].Unresolved[0].Code != "gap.load-failed" ||
 		p.Outcome != LeftEstate {
 		t.Errorf("run = %+v, %v", run.Stages[0], err)
 	}
@@ -445,7 +445,9 @@ type unreadableNetwork []string
 
 func (n unreadableNetwork) Devices() []string { return n }
 func (n unreadableNetwork) Device(name string) (simulate.DeviceData, error) {
-	return simulate.DeviceData{}, &simulate.UnavailableError{Missing: []simulate.Missing{{Device: name, Reason: "no snapshot"}}}
+	return simulate.DeviceData{}, &simulate.UnavailableError{Missing: []simulate.Missing{
+		simulate.NewMissing(name, reason.New("gap.snapshot-missing", "no snapshot")),
+	}}
 }
 
 // When every device in the inventory is unreadable, the source cannot be placed
@@ -456,6 +458,12 @@ func TestAnUnreadableEstateIsUnavailableNotAQuestion(t *testing.T) {
 	u, ok := errors.AsType[*simulate.UnavailableError](err)
 	if !ok || len(u.Missing) != 2 {
 		t.Fatalf("err = %v, want an UnavailableError for both devices", err)
+	}
+	// Each hole keeps the kind its device reported.
+	for _, m := range u.Missing {
+		if m.Code != "gap.snapshot-missing" {
+			t.Errorf("%s: code %q", m.Device, m.Code)
+		}
 	}
 }
 

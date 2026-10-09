@@ -51,7 +51,7 @@ type CheckResult struct {
 	Fidelity simulate.Fidelity
 	Security *securitypolicy.Verdict // the security check's typed output
 	Stages   []simulate.Stage
-	Notes    []string // the notes of the target the check read, such as a version gap
+	Notes    simulate.Reasons // the notes of the target the check read, such as a version gap
 }
 
 // Hop is one routing hop with its checks, in list order.

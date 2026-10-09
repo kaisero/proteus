@@ -23,7 +23,7 @@ const minBox = 56
 func renderPath(t *textOut, title string, run simulate.Run, p routing.Path, now time.Time, why bool, rows func(i int) [][2]string) {
 	fmt.Fprintf(t, "%s            fidelity: %s\n\n", title, styledLevel(t.pal, run.Fidelity.Level()))
 	for _, n := range p.Notes {
-		fmt.Fprintf(t, "  %s\n", noteStyle(t.pal, n.Text)("note: "+n.Text))
+		fmt.Fprintf(t, "  %s\n", noteStyle(t.pal, n)("note: "+n.Text))
 	}
 	if len(p.Notes) > 0 {
 		fmt.Fprintln(t)
