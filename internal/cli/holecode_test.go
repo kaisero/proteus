@@ -8,9 +8,7 @@ import (
 	"testing"
 
 	"github.com/okaiser/proteus/internal/estate"
-	"github.com/okaiser/proteus/internal/reason"
 	"github.com/okaiser/proteus/internal/simulate"
-	"github.com/okaiser/proteus/internal/simulate/pathpolicy"
 	"github.com/okaiser/proteus/internal/store"
 )
 
@@ -43,15 +41,5 @@ func TestConfigGap(t *testing.T) {
 	}
 	if got := configGap(with, with); got != "gap.load-failed" {
 		t.Errorf("with: %s", got)
-	}
-}
-
-// Format 1 prints a note's text, not its code: two notes that print the same are
-// one.
-func TestPathNotesDropTheSameText(t *testing.T) {
-	t.Parallel()
-	res := pathpolicy.Result{Notes: simulate.Reasons{reason.New("note.ha-peer", "same"), reason.New("note.ha-binding", "same")}}
-	if got := pathNotes(res); len(got) != 1 || got[0].Code != "note.ha-peer" {
-		t.Errorf("%+v", got)
 	}
 }

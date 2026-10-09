@@ -137,18 +137,36 @@ with no choice).
 
 <!-- GENERATED:api ./internal/query -->
 ```go
+type Check struct{ ... }
+type Checks []Check
 type Env struct{ ... }
 type Envelope[In, Res any] struct{ ... }
+type FlowInput struct{ ... }
 type Note struct{ ... }
+type PathHop struct{ ... }
+type PathResult struct{ ... }
+type Point struct{ ... }
+type PolicyFileInput struct{ ... }
+type PolicyInput struct{ ... }
+type Rule struct{ ... }
+type Security struct{ ... }
+type SecurityResult struct{ ... }
+type Selection struct{ ... }
 type Stage struct{ ... }
 type Summary struct{ ... }
 type Target struct{ ... }
 type Unresolved struct{ ... }
 type UsageError struct{ ... }
 
+func (cs Checks) MarshalJSON() ([]byte, error)
 func (e *UsageError) Error() string
 func (e *UsageError) Unwrap() error
+func (in PolicyFileInput) Validate() *UsageError
+func (in PolicyInput) Validate() *UsageError
 func NoteOf(device, vsys string, r reason.Reason) Note
+func PointHop(r pathpolicy.Result) (routing.Hop, bool)
+func Policy(ctx context.Context, env Env, in PolicyInput) (Envelope[PolicyInput, PathResult], error)
+func PolicyFile(ctx context.Context, env Env, in PolicyFileInput) (Envelope[PolicyFileInput, SecurityResult], error)
 func SimStages(stages []simulate.Stage) []Stage
 func Summarize[In, R, S any](e Envelope[In, R], f func(R) S) Envelope[In, S]
 func TargetOf(t estate.Target) Target

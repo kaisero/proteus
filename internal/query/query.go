@@ -55,6 +55,22 @@ type Env struct {
 	Fresh func(ctx context.Context, devices []string) (map[string][]reason.Reason, error)
 }
 
+// now is the env's clock.
+func (e Env) now() time.Time {
+	if e.Now == nil {
+		return time.Now()
+	}
+	return e.Now()
+}
+
+// users is the user directory, or none.
+func (e Env) users() (index.UserDirectory, error) {
+	if e.Users == nil {
+		return nil, nil
+	}
+	return e.Users()
+}
+
 // Envelope is the answer of one command. In and Res are the command's typed
 // input and result element. Detail is "full" for a query's own answer and
 // "summary" after Summarize.
@@ -98,6 +114,11 @@ func Summarize[In, R, S any](e Envelope[In, R], f func(R) S) Envelope[In, S] {
 	return out
 }
 
+// envelope starts a full envelope of a command.
+func envelope[In, Res any](command string, in In) Envelope[In, Res] {
+	return Envelope[In, Res]{Format: FormatVersion, Command: command, Detail: "full", Input: in}
+}
+
 // UsageError is an input that is not a valid question. Text is the command
 // line's message; ToolText says the same with the input's field names where
 // Text names a flag, and is empty where Text names none.
@@ -111,6 +132,20 @@ type UsageError struct {
 func (e *UsageError) Error() string { return e.Text }
 
 func (e *UsageError) Unwrap() error { return e.err }
+
+// usage is a usage error. Every usage error has the one code call.usage: a
+// caller acts on the code, and the text says what to change. A registry code
+// per message would name the same action many times over.
+func usage(text, toolText string) *UsageError {
+	return &UsageError{Code: "call.usage", Text: text, ToolText: toolText}
+}
+
+// usageOf is a usage error that keeps err for errors.Is and errors.As.
+func usageOf(err error, text, toolText string) *UsageError {
+	u := usage(text, toolText)
+	u.err = err
+	return u
+}
 
 // Unresolved is something that makes an answer incomplete: it can be missing
 // matches.

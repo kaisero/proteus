@@ -1,6 +1,9 @@
 package cli
 
-import "github.com/okaiser/proteus/internal/simulate"
+import (
+	"github.com/okaiser/proteus/internal/query"
+	"github.com/okaiser/proteus/internal/simulate"
+)
 
 // The input block of each command's JSON envelope (spec §15 C10). The envelope is a
 // contract, so each command has a struct rather than a map: a renamed key is then a
@@ -8,14 +11,7 @@ import "github.com/okaiser/proteus/internal/simulate"
 // key order, which is the order a map was written in before.
 
 // selectionInput records the selection flags. Only the flags given appear.
-type selectionInput struct {
-	At     string   `json:"at,omitempty"`
-	Device []string `json:"device,omitempty"`
-	File   string   `json:"file,omitempty"`
-	Fresh  bool     `json:"fresh,omitempty"`
-	Label  []string `json:"label,omitempty"`
-	Vsys   []string `json:"vsys,omitempty"`
-}
+type selectionInput = query.Selection
 
 func (sel selection) input() selectionInput {
 	return selectionInput{

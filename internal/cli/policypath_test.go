@@ -467,16 +467,11 @@ func TestPrintRunRelevanceAndDefault(t *testing.T) {
 	}
 }
 
-// A check without a security verdict names no action; checks marshal in list
-// order.
-func TestCheckActionAndChecksJSON(t *testing.T) {
+// A check without a security verdict names no action.
+func TestCheckActionWithoutAVerdict(t *testing.T) {
 	t.Parallel()
 	if got := checkAction(pathpolicy.CheckResult{}); got != "" {
 		t.Errorf("checkAction = %q", got)
-	}
-	b, err := json.Marshal(checksJSON{{name: "security"}, {name: "nat"}})
-	if err != nil || !strings.HasPrefix(string(b), `{"security":{`) || !strings.Contains(string(b), `},"nat":{`) {
-		t.Errorf("%v %s", err, b)
 	}
 }
 
@@ -495,8 +490,5 @@ func TestVerdictLineEdges(t *testing.T) {
 	r = pathpolicy.Result{Verdict: pathpolicy.VerdictUndecided, At: &pathpolicy.Point{Hop: 0, Check: "routing", Reason: reason.New("path.unresolved", "no hop")}}
 	if got := verdictLine(palette{}, r); got != "undecided at hop 0: no hop" {
 		t.Errorf("no hop: %s", got)
-	}
-	if un := pathUnresolved(r, nil); len(un) != 1 || un[0].Reason != "no hop" {
-		t.Errorf("unresolved: %+v", un)
 	}
 }
