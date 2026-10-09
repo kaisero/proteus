@@ -21,6 +21,8 @@ type Index struct {
 	// addrRes is the address resolver, kept directly because address containment is
 	// also exposed on its own and every scope has one.
 	addrRes *addressResolver
+	// opaque records the rules naming addresses the configuration does not hold.
+	opaque *opaqueIndex
 	// gap is the configuration's version gap, empty when its schema matched.
 	gap string
 }
@@ -150,6 +152,12 @@ func build(cfg *config.Config, sc config.Scope, rb resolve.Rulebase) (*Index, er
 		}
 	}
 
+	lists := resolve.ObjectsInScope(cfg, sc, "external-list")
+	lists = append(lists, resolve.ObjectsInScope(cfg, sc, "ip-block-list-v2")...)
+	opaque := newOpaqueIndex(rules, opaqueObjects{
+		addrs: addrs, groups: groups, lists: lists, regions: resolve.ObjectsInScope(cfg, sc, "region"),
+	})
+
 	profs := resolve.URLFilteringProfilesInScope(cfg, sc)
 	pgroups := resolve.ProfileGroupsInScope(cfg, sc)
 
@@ -162,6 +170,7 @@ func build(cfg *config.Config, sc config.Scope, rb resolve.Rulebase) (*Index, er
 		resolvers: wireResolvers(cfg.FieldKinds("rulebase/"+rb.String()+"/rules"), byKind),
 		profiles:  newProfileIndex(rules, profs, pgroups),
 		addrRes:   addrRes,
+		opaque:    opaque,
 		gap:       cfg.VersionGap(),
 	}, nil
 }

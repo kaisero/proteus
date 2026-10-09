@@ -295,33 +295,34 @@ func hasDevice[T any](in []T, dev string, of func(T) string) bool {
 
 // Start is the start of a path or a NAT answer on a named node: its only router or
 // the one named, and the ingress for src — the interface src is connected to
-// (connected is true), else the one its return route leaves by. With no source, or
-// no route back in that router, the ingress is the router alone.
-func (t *Topology) Start(node, router string, src netip.Addr) (simulate.Port, bool, error) {
+// (connected is true), else the one its return route leaves by, with that route's
+// prefix. With no source, or no route back in that router, the ingress is the
+// router alone. The prefix is zero unless a route gave the ingress.
+func (t *Topology) Start(node, router string, src netip.Addr) (simulate.Port, netip.Prefix, bool, error) {
 	routers := t.Routers(node)
 	switch {
 	case router != "" && !slices.Contains(routers, router):
-		return simulate.Port{}, false, &simulate.ChoiceError{Question: fmt.Sprintf("%s has no router %q", node, router), Options: routers}
+		return simulate.Port{}, netip.Prefix{}, false, &simulate.ChoiceError{Question: fmt.Sprintf("%s has no router %q", node, router), Options: routers}
 	case router == "" && len(routers) == 1:
 		router = routers[0]
 	case router == "":
-		return simulate.Port{}, false, &simulate.ChoiceError{Question: fmt.Sprintf("%s has several routers; name one with --router", node), Options: routers}
+		return simulate.Port{}, netip.Prefix{}, false, &simulate.ChoiceError{Question: fmt.Sprintf("%s has several routers; name one with --router", node), Options: routers}
 	}
 	start := simulate.Port{Device: node, Router: router}
 	if !src.IsValid() {
-		return start, false, nil
+		return start, netip.Prefix{}, false, nil
 	}
 	for _, p := range t.Connected(src) {
 		if p.Device == node && p.Router == router {
-			return p, true, nil
+			return p, netip.Prefix{}, true, nil
 		}
 	}
 	if m, ok := t.Lookup(node, router, src); ok {
 		if p, ok := t.Interface(node, m.First().Interface); ok && p.Router == router {
-			return p, false, nil
+			return p, m.Destination, false, nil
 		}
 	}
-	return start, false, nil
+	return start, netip.Prefix{}, false, nil
 }
 
 // Next-hop types a lookup knows (spec §17.2, verified on fw01 and fw02).

@@ -449,8 +449,8 @@ func TestSimulatePolicy(t *testing.T) {
 	file := "../../testdata/config/firewall-zones.xml"
 	out := c.want(0, "simulate", "policy", "10.1.0.5", "10.2.0.5", "--file", file, "--vsys", "vsys1", "--why")
 	for _, want := range []string{
-		"zones      from inside, to dmz (configuration)", "fidelity   inferred; not evaluated: service, application",
-		"derive-zones        inferred", "first-match         overmatch", "first match: from-inside (allow)",
+		"zones      from inside, to dmz (configuration)", "fidelity   inferred; not evaluated: service",
+		"derive-zones        inferred", "first-match         exact", "first match: from-inside (allow)",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("missing %q in:\n%s", want, out)
@@ -466,10 +466,10 @@ func TestSimulatePolicy(t *testing.T) {
 	c.want(3, "simulate", "policy", "1.1.1.1", "2.2.2.2", "--file", file, "--vsys", "vsys9")
 	out = c.want(0, "simulate", "policy", "10.1.0.5", "10.2.0.5", "--file", file, "--from-zone", "dmz", "--to-zone", "inside")
 	c.want(2, "simulate", "policy", "10.1.0.5", "10.2.0.5", "--file", file, "--from-zone", "dmz")
-	if !strings.Contains(out, "no enabled rule matches") {
-		t.Errorf("no match:\n%s", out)
+	if !strings.Contains(out, "first match: interzone-default (deny), default rule (built-in)") {
+		t.Errorf("no match, the default rule decides:\n%s", out)
 	}
-	out = c.want(0, "simulate", "policy", "198.18.10.100", "198.18.1.5", "--file", "../../testdata/config/firewall-lab.xml",
+	out = c.want(0, "simulate", "policy", "10.1.0.5", "10.2.0.5", "--file", file,
 		"--vsys", "vsys1", "--port", "tcp/443", "--output", "json")
 	var env struct {
 		Results []struct {
@@ -479,8 +479,41 @@ func TestSimulatePolicy(t *testing.T) {
 		}
 	}
 	if err := json.Unmarshal([]byte(out), &env); err != nil || len(env.Results) != 1 || env.Results[0].FirstMatch == nil ||
-		env.Results[0].FirstMatch.Name != "dc-to-home" || len(env.Results[0].Stages) != 8 || env.Results[0].Fidelity.Level == "" {
+		env.Results[0].FirstMatch.Name != "from-inside" || len(env.Results[0].Stages) != 8 || env.Results[0].Fidelity.Level == "" {
 		t.Errorf("json: %v %s", err, out)
+	}
+}
+
+// A version gap is a note, not an unresolved entry, so a decided flow exits 0
+// (spec E25).
+func TestSimulatePolicyVersionGap(t *testing.T) {
+	t.Parallel()
+	src, err := os.ReadFile("../../testdata/config/firewall-doubt.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	file := filepath.Join(t.TempDir(), "doubt-12.2.xml")
+	doc := strings.Replace(string(src), `version="11.2.0" urldb="paloaltonetworks" detail-version="11.2.5"`,
+		`version="12.2.0" urldb="paloaltonetworks" detail-version="12.2.3"`, 1)
+	if err := os.WriteFile(file, []byte(doc), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c := newCLI(t)
+	args := []string{"simulate", "policy", "198.18.1.68", "192.0.2.1", "--port", "udp/443", "--from-zone", "home", "--to-zone", "wan", "--file", file}
+	out := c.want(0, args...)
+	if !strings.Contains(out, "note: ") || !strings.Contains(out, "12.2.0") || strings.Contains(out, "unresolved:") ||
+		!strings.Contains(out, "fidelity   inferred") || !strings.Contains(out, "first match: block-udp-443 (deny)") {
+		t.Errorf("text:\n%s", out)
+	}
+	out = c.want(0, append(args, "--output", "json")...)
+	var env struct {
+		Unresolved []any
+		Notes      []struct{ Note string }
+		Results    []struct{ Verdict, Reason string }
+	}
+	if err := json.Unmarshal([]byte(out), &env); err != nil || len(env.Unresolved) != 0 || len(env.Notes) != 1 ||
+		!strings.Contains(env.Notes[0].Note, "12.2.0") || env.Results[0].Verdict != "stop" {
+		t.Errorf("json: %v\n%s", err, out)
 	}
 }
 
@@ -498,8 +531,10 @@ func TestSimulateDimensions(t *testing.T) {
 		t.Errorf("port:\n%s", out)
 	}
 	out = c.want(3, "simulate", "policy", "10.0.0.1", "www.example.com", "--file", file, "--no-dns")
-	if strings.Count(out, "resolved to no address") != 2 { // the fidelity line and one unresolved line
-		t.Errorf("an unresolved FQDN is an incomplete answer, said once:\n%s", out)
+	// The fidelity line, one unresolved line, and the undecided line that the
+	// undermatch causes.
+	if strings.Count(out, "resolved to no address") != 3 || !strings.Contains(out, "undecided: www.example.com resolved to no address") {
+		t.Errorf("an unresolved FQDN is an incomplete answer, said once, and undecided:\n%s", out)
 	}
 }
 
@@ -531,26 +566,6 @@ func TestSimulateResolvesAnFQDN(t *testing.T) {
 		"--file", "../../testdata/config/firewall-simulate.xml",
 	}); code != 3 {
 		t.Errorf("a failed lookup leaves the FQDN unresolved: exit %d", code)
-	}
-}
-
-// Zones derive from a fetched device's forwarding table.
-func TestSimulateDerivesZonesFromTheStore(t *testing.T) {
-	t.Parallel()
-	c := newCLI(t)
-	d := lab(t)
-	d.Config = read(t, "../../testdata/config/firewall-fw01-zones.xml")
-	c.inventory(inventoryFor(d.Start(t)))
-	c.want(0, "fetch", "fw01")
-	out := c.want(0, "simulate", "policy", "198.18.11.5", "198.18.10.5", "--device", "fw01", "--why")
-	for _, want := range []string{"zones      from client, to server (forwarding table)", "relevant   198.18.", "first match: client-to-server (allow)"} {
-		if !strings.Contains(out, want) {
-			t.Errorf("missing %q in:\n%s", want, out)
-		}
-	}
-	out = c.want(0, "simulate", "policy", "8.8.8.8", "1.1.1.1", "--device", "fw01")
-	if !strings.Contains(out, "not relevant: only a default route") {
-		t.Errorf("relevance:\n%s", out)
 	}
 }
 

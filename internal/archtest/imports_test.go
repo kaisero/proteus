@@ -26,6 +26,7 @@ type rule struct {
 	from    string   // module-relative package path
 	forbid  []string // full import paths it must not reach
 	allowIn []string // when set, the only module-relative packages it may reach
+	direct  []string // when set, the only module-relative packages it may import directly
 }
 
 func mod(rel ...string) []string {
@@ -54,8 +55,17 @@ var rules = []rule{
 	{from: "internal/simulate/securitypolicy", forbid: mod("internal/estate", "internal/store", "internal/fetch")},
 	{from: "internal/simulate/routing", forbid: append(mod("internal/estate", "internal/store", "internal/fetch", "internal/search", "internal/drift", "internal/simulate/securitypolicy"), ioPackages...)},
 	{from: "internal/simulate/nat", forbid: append(mod("internal/estate", "internal/store", "internal/fetch", "internal/search", "internal/drift", "internal/simulate/routing", "internal/simulate/securitypolicy"), ioPackages...)},
+	{
+		from:   "internal/simulate/pathpolicy",
+		forbid: append(mod("internal/estate", "internal/store", "internal/fetch", "internal/search", "internal/drift", "internal/card"), ioPackages...),
+		direct: []string{"internal/simulate", "internal/simulate/routing", "internal/simulate/securitypolicy", "internal/resolve", "internal/simulate/topology", "internal/config", "internal/index"},
+	},
 	{from: "internal/task", forbid: ioPackages, allowIn: []string{"internal/runlog"}},
 }
+
+// testOnly are helper packages for tests. They import testing, so no package's
+// non-test code may reach them.
+var testOnly = []string{"internal/fakepanos", "internal/simulate/pathlab"}
 
 // violations reports every rule a graph breaks. graph maps a package of this
 // module to its direct, non-test imports.
@@ -73,6 +83,17 @@ func violations(graph map[string][]string, rules []rule) []string {
 		allowed := map[string]bool{from: true}
 		for _, a := range r.allowIn {
 			allowed[module+"/"+a] = true
+		}
+		if r.direct != nil {
+			direct := map[string]bool{}
+			for _, d := range r.direct {
+				direct[module+"/"+d] = true
+			}
+			for _, imp := range graph[from] {
+				if strings.HasPrefix(imp, module+"/") && !direct[imp] {
+					out = append(out, r.from+" imports "+imp+", outside its list")
+				}
+			}
 		}
 		for _, reached := range reach(graph, from) {
 			switch {
@@ -119,6 +140,9 @@ func TestViolationsCatchesABreach(t *testing.T) {
 		module + "/internal/helper":   {"net/http"},
 		module + "/internal/index":    {module + "/internal/simulate"},
 		module + "/internal/simulate": {"fmt"},
+		// pathpolicy may import simulate, but not nat directly.
+		module + "/internal/simulate/pathpolicy": {module + "/internal/simulate", module + "/internal/simulate/nat"},
+		module + "/internal/simulate/nat":        {"fmt"},
 	}
 	got := violations(graph, rules)
 	// config reaches helper, which is outside the core, and through it net/http.
@@ -130,6 +154,7 @@ func TestViolationsCatchesABreach(t *testing.T) {
 		"internal/config reaches net/http",
 		"internal/index reaches " + module + "/internal/simulate, outside the read-only core",
 		"internal/index reaches " + module + "/internal/simulate",
+		"internal/simulate/pathpolicy imports " + module + "/internal/simulate/nat, outside its list",
 	}
 	slices.Sort(got)
 	slices.Sort(want)
@@ -190,5 +215,22 @@ func TestImportDirection(t *testing.T) {
 	}
 	for _, v := range violations(graph, rules) {
 		t.Error(v)
+	}
+}
+
+// A test helper imports testing, so only tests may import it, directly or not.
+func TestTestHelpersStayInTests(t *testing.T) {
+	t.Parallel()
+	graph := loadGraph(t, "../..")
+	for _, h := range testOnly {
+		helper := module + "/" + h
+		if _, ok := graph[helper]; !ok {
+			t.Fatalf("the walk did not find %s, so its check would pass vacuously", h)
+		}
+		for p := range graph {
+			if p != helper && slices.Contains(reach(graph, p), helper) {
+				t.Errorf("%s reaches the test helper %s", p, h)
+			}
+		}
 	}
 }

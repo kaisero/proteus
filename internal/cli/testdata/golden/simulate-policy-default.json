@@ -1,0 +1,147 @@
+{
+  "format": 1,
+  "command": "simulate policy",
+  "input": {
+    "flow": {
+      "source": {
+        "addrs": [
+          "10.2.0.5"
+        ],
+        "resolved": false
+      },
+      "destination": {
+        "addrs": [
+          "10.1.0.5"
+        ],
+        "resolved": false
+      },
+      "protocol": "tcp",
+      "port": 443,
+      "from_zone": "dmz",
+      "to_zone": "inside"
+    },
+    "selection": {
+      "file": "../../testdata/config/firewall-zones.xml"
+    }
+  },
+  "results": [
+    {
+      "verdict": "stop",
+      "reason": "default rule interzone-default (deny), built-in",
+      "rule": "interzone-default",
+      "default": "interzone-default",
+      "default_action": "deny",
+      "default_source": "built-in",
+      "fidelity": {
+        "level": "exact"
+      },
+      "first_match": null,
+      "candidates": [],
+      "doubts": [],
+      "zones": {
+        "from": [
+          "dmz"
+        ],
+        "to": [
+          "inside"
+        ],
+        "source": "given"
+      },
+      "stages": [
+        {
+          "slug": "resolve-source",
+          "name": "Resolve the source",
+          "fidelity": {
+            "level": "exact"
+          },
+          "candidates": 2,
+          "detail": "10.2.0.5: 0 hits, 0 negated rules",
+          "elapsed_ms": 0
+        },
+        {
+          "slug": "resolve-destination",
+          "name": "Resolve the destination",
+          "fidelity": {
+            "level": "exact"
+          },
+          "candidates": 2,
+          "detail": "10.1.0.5: 0 hits, 0 negated rules",
+          "elapsed_ms": 0
+        },
+        {
+          "slug": "derive-zones",
+          "name": "Derive the zones",
+          "fidelity": {
+            "level": "exact"
+          },
+          "candidates": 0,
+          "detail": "from dmz, to inside, as given",
+          "elapsed_ms": 0
+        },
+        {
+          "slug": "match-service",
+          "name": "Match the service",
+          "fidelity": {
+            "level": "exact"
+          },
+          "candidates": 0,
+          "detail": "tcp/443",
+          "elapsed_ms": 0
+        },
+        {
+          "slug": "match-url",
+          "name": "Match the URL category",
+          "fidelity": {
+            "level": "exact"
+          },
+          "candidates": 0,
+          "detail": "no candidate names a URL category",
+          "elapsed_ms": 0
+        },
+        {
+          "slug": "drop-disabled",
+          "name": "Drop disabled rules",
+          "fidelity": {
+            "level": "exact"
+          },
+          "candidates": 0,
+          "detail": "0 disabled",
+          "elapsed_ms": 0
+        },
+        {
+          "slug": "order",
+          "name": "Order by evaluation",
+          "fidelity": {
+            "level": "exact"
+          },
+          "candidates": 0,
+          "detail": "0 in order",
+          "elapsed_ms": 0
+        },
+        {
+          "slug": "first-match",
+          "name": "Take the first match",
+          "fidelity": {
+            "level": "exact"
+          },
+          "candidates": 0,
+          "detail": "no enabled rule matches; default rule interzone-default (deny), built-in",
+          "elapsed_ms": 0
+        }
+      ],
+      "kind": "policy",
+      "relevance": {
+        "known": false,
+        "relevant": false,
+        "reason": "no stored forwarding table"
+      },
+      "target": {
+        "device": "file",
+        "vsys": "vsys1"
+      }
+    }
+  ],
+  "holes": [],
+  "unresolved": [],
+  "notes": []
+}

@@ -15,29 +15,34 @@ input:
   selection:
     file: ../../testdata/config/firewall-zones.xml
 results:
-  - candidates:
-      - position: 1
-        name: from-inside
-        action: allow
-        layer: local
-        scope: vsys:vsys1
+  - verdict: pass
+    reason: rule from-inside (allow)
+    rule: from-inside
+    default: ""
+    default_action: ""
+    default_source: ""
     fidelity:
       level: inferred
-      reasons:
-        - 'kept rules whose service is application-default, predefined or absent: from-inside'
-      not_evaluated:
-        - application
     first_match:
       position: 1
       name: from-inside
       action: allow
       layer: local
       scope: vsys:vsys1
-    kind: policy
-    relevance:
-      known: false
-      relevant: false
-      reason: no stored forwarding table
+    candidates:
+      - position: 1
+        name: from-inside
+        action: allow
+        layer: local
+        scope: vsys:vsys1
+    doubts: []
+    zones:
+      from:
+        - inside
+      to:
+        - dmz
+      source: configuration
+      detail: '10.1.0.5: inside via ethernet1/1 10.1.0.1/24; 10.2.0.5: dmz via ethernet1/2.20 10.2.0.1/24'
     stages:
       - slug: resolve-source
         name: Resolve the source
@@ -63,9 +68,7 @@ results:
       - slug: match-service
         name: Match the service
         fidelity:
-          level: overmatch
-          reasons:
-            - 'kept rules whose service is application-default, predefined or absent: from-inside'
+          level: exact
         candidates: 1
         detail: tcp/443
         elapsed_ms: 0
@@ -93,22 +96,18 @@ results:
       - slug: first-match
         name: Take the first match
         fidelity:
-          level: overmatch
-          not_evaluated:
-            - application
+          level: exact
         candidates: 1
         detail: from-inside (allow), position 1
         elapsed_ms: 0
+    kind: policy
+    relevance:
+      known: false
+      relevant: false
+      reason: no stored forwarding table
     target:
       device: file
       vsys: vsys1
-    zones:
-      from:
-        - inside
-      to:
-        - dmz
-      source: configuration
-      detail: '10.1.0.5: inside via ethernet1/1 10.1.0.1/24; 10.2.0.5: dmz via ethernet1/2.20 10.2.0.1/24'
 holes: []
 unresolved: []
 notes: []

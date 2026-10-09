@@ -1,0 +1,120 @@
+format: 1
+command: simulate policy
+input:
+  flow:
+    source:
+      addrs:
+        - 198.19.0.254
+      resolved: false
+    destination:
+      addrs:
+        - 10.2.0.5
+      resolved: false
+    protocol: tcp
+    port: 443
+    from_zone: labor
+    to_zone: dmz
+  selection:
+    file: ../../testdata/config/firewall-doubt.xml
+results:
+  - verdict: stop
+    reason: default rule interzone-default (deny), built-in
+    rule: interzone-default
+    default: interzone-default
+    default_action: deny
+    default_source: built-in
+    fidelity:
+      level: overmatch
+      reasons:
+        - 'earlier candidates in doubt share the action deny: labor-app'
+      not_evaluated:
+        - application
+    first_match: null
+    candidates:
+      - position: 14
+        name: labor-app
+        action: deny
+        layer: local
+        scope: vsys:vsys1
+    doubts:
+      - position: 14
+        rule: labor-app
+        reason: application not evaluated (dropbox)
+    zones:
+      from:
+        - labor
+      to:
+        - dmz
+      source: given
+    stages:
+      - slug: resolve-source
+        name: Resolve the source
+        fidelity:
+          level: exact
+        candidates: 13
+        detail: '198.19.0.254: 1 hits, 0 negated rules'
+        elapsed_ms: 0
+      - slug: resolve-destination
+        name: Resolve the destination
+        fidelity:
+          level: exact
+        candidates: 11
+        detail: '10.2.0.5: 0 hits, 0 negated rules'
+        elapsed_ms: 0
+      - slug: derive-zones
+        name: Derive the zones
+        fidelity:
+          level: exact
+        candidates: 1
+        detail: from labor, to dmz, as given
+        elapsed_ms: 0
+      - slug: match-service
+        name: Match the service
+        fidelity:
+          level: exact
+        candidates: 1
+        detail: tcp/443
+        elapsed_ms: 0
+      - slug: match-url
+        name: Match the URL category
+        fidelity:
+          level: exact
+        candidates: 1
+        detail: no candidate names a URL category
+        elapsed_ms: 0
+      - slug: drop-disabled
+        name: Drop disabled rules
+        fidelity:
+          level: exact
+        candidates: 1
+        detail: 0 disabled
+        elapsed_ms: 0
+      - slug: order
+        name: Order by evaluation
+        fidelity:
+          level: exact
+        candidates: 1
+        detail: 1 in order
+        elapsed_ms: 0
+      - slug: first-match
+        name: Take the first match
+        fidelity:
+          level: overmatch
+          reasons:
+            - 'earlier candidates in doubt share the action deny: labor-app'
+          not_evaluated:
+            - application
+        candidates: 1
+        detail: every candidate is in doubt; default rule interzone-default (deny), built-in
+        elapsed_ms: 0
+    kind: policy
+    relevance:
+      known: false
+      relevant: false
+      reason: no stored forwarding table
+    target:
+      device: file
+      vsys: vsys1
+holes: []
+unresolved: []
+notes: []

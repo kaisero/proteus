@@ -32,7 +32,8 @@ var levelNames = map[level]string{
 // UnderMatch may be missing matches, the most dangerous for a verdict.
 type Fidelity struct {
 	level  level
-	reason []string // UnderMatch: why matches may be missing
+	reason []string // why the output is weaker than exact, at any level
+	under  []string // the reasons given at UnderMatch, a subset of reason
 	skip   []string // NotEvaluated: the dimensions skipped
 }
 
@@ -48,7 +49,7 @@ var (
 
 // UnderMatch declares that the output may be missing matches, and why.
 func UnderMatch(reason string) Fidelity {
-	return Fidelity{level: underMatch, reason: []string{reason}}
+	return Fidelity{level: underMatch, reason: []string{reason}, under: []string{reason}}
 }
 
 // NotEvaluated declares that the stage skipped dimensions. Skipping a matching
@@ -76,6 +77,11 @@ func (f Fidelity) Skipped() []string { return append([]string{}, f.skip...) }
 // Reasons lists why the output is weaker than exact, where a stage said.
 func (f Fidelity) Reasons() []string { return append([]string{}, f.reason...) }
 
+// UnderMatchReasons lists only the reasons given at UnderMatch: why matches may
+// be missing. Weakest keeps the reasons of every level, so an undermatch can also
+// carry an overmatch reason that says nothing about what is missing.
+func (f Fidelity) UnderMatchReasons() []string { return append([]string{}, f.under...) }
+
 func (f Fidelity) String() string {
 	s := f.Level()
 	if len(f.reason) > 0 {
@@ -98,6 +104,11 @@ func Weakest(fs ...Fidelity) Fidelity {
 		for _, r := range f.reason {
 			if !slices.Contains(out.reason, r) {
 				out.reason = append(out.reason, r)
+			}
+		}
+		for _, r := range f.under {
+			if !slices.Contains(out.under, r) {
+				out.under = append(out.under, r)
 			}
 		}
 		for _, d := range f.skip {

@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Ask whether the estate allows a flow end to end.** `proteus simulate policy
+  <source> <destination>` now follows the routed path and checks the security policy
+  of every firewall and vsys on it, and answers allowed, denied or undecided, with the
+  hop that decided. Each box of the path shows that hop's policy answer, and an
+  undecided answer exits 3.
 - **Colour shows what needs attention.** On a terminal, holes, failures and denies are
   red, unresolved and partial results yellow, allows and successes green, and target
   headers bold. `--color auto|always|never`, `PROTEUS_COLOR` or the inventory's
@@ -199,6 +204,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **`simulate policy --device X --vsys V` now exits 2.** Without `--file` the command
+  answers along the path, so `--vsys`, `--label` and the zone flags exit 2; use
+  `--file <path> --vsys <name>` for one configuration. `--file` does not check NAT: a
+  derived zone is the zone before NAT, and a given zone gets no NAT note.
+- **Default rules decide a flow that no rule matches, and rule-type is applied.**
+  The answer names `interzone-default` or `intrazone-default` with its action, from
+  a local or pushed override or the built-in one. Local and pushed overrides that
+  disagree leave the flow undecided.
+- **A policy answer says when it cannot decide.** A rule that names an application,
+  `application-default`, a predefined or absent service, or a user above the match
+  can leave the flow undecided (exit 3), and rules naming an external list, a region
+  or a dynamic group stay as candidates in doubt instead of being dropped. A schema
+  version gap is now a note and no longer forces exit 3.
 - **`snapshot diff` no longer offers `--file`, `--at` or `--fresh`.** It always
   refused them; they are now unknown flags. Shared flags have one help text in every
   command.

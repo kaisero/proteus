@@ -10,10 +10,28 @@ type HandModel struct {
 
 // handModelled is the complete list. Adding an entry is a deliberate act: every
 // other field in the library comes from the schema (R1).
-//
-// It is empty. The registry and its check stay, so the next entry is declared
-// rather than slipped in.
-var handModelled = []HandModel{}
+var handModelled = []HandModel{
+	{
+		Path: "/config/devices/entry/vsys/entry/rulebase/default-security-rules/rules/entry/action",
+		Reason: "the schema declares default allow for both default rules; the built-in action of " +
+			"interzone-default is deny (PAN-OS admin guide, \"Default Security Policy Rules\"), " +
+			"so an absent action takes the built-in action of its rule name",
+		Owner: "internal/simulate/securitypolicy",
+	},
+	{
+		Path: "/config/shared/post-rulebase/default-security-rules/rules/entry",
+		Reason: "the firewall schema does not declare pushed default security rules; " +
+			"Panorama keeps them at this path (cms-schema.xml), next to the other pushed post-rules",
+		Owner: "internal/resolve",
+	},
+	{
+		Path: "/config/devices/entry/vsys/entry/rulebase/security/rules/entry",
+		Reason: "the schema says what each child of a security rule holds, not whether the device " +
+			"matches a flow on it nor whether the security check evaluates it; the check classifies " +
+			"every child, and a candidate that sets a matching field no stage evaluates has a doubt",
+		Owner: "internal/simulate/securitypolicy",
+	},
+}
 
 // HandModelled returns the registered hand-modelled nodes.
 func HandModelled() []HandModel {

@@ -69,19 +69,21 @@ type NotFollowed struct {
 
 // Hop is one device and vsys on the path: one box of the output (spec §17 R16).
 type Hop struct {
-	Device     string             `json:"device"`
-	Vsys       string             `json:"vsys"`
-	SnapshotID string             `json:"snapshot,omitempty"`
-	TakenAt    time.Time          `json:"taken_at,omitzero"`
-	In         simulate.Port      `json:"in"`
-	Out        simulate.Port      `json:"out"`
-	Lookups    []Lookup           `json:"lookups"`
-	Flow       simulate.Flow      `json:"flow"`     // pre-NAT, with this hop's zones
-	PostNAT    *simulate.Flow     `json:"post_nat"` // nil until NAT is simulated
-	ECMP       []NotFollowed      `json:"ecmp_not_followed,omitempty"`
-	Alternates []resolve.RIBRoute `json:"alternates,omitempty"`
-	Notes      []string           `json:"notes,omitempty"`
-	Fidelity   simulate.Fidelity  `json:"fidelity"`
+	Device          string             `json:"device"`
+	Vsys            string             `json:"vsys"`
+	SnapshotID      string             `json:"snapshot,omitempty"`
+	TakenAt         time.Time          `json:"taken_at,omitzero"`
+	In              simulate.Port      `json:"in"`
+	Out             simulate.Port      `json:"out"`
+	Lookups         []Lookup           `json:"lookups"`
+	Flow            simulate.Flow      `json:"flow"`     // pre-NAT, with this hop's zones
+	PostNAT         *simulate.Flow     `json:"post_nat"` // nil until NAT is simulated
+	ECMP            []NotFollowed      `json:"ecmp_not_followed,omitempty"`
+	Alternates      []resolve.RIBRoute `json:"alternates,omitempty"`
+	Notes           []string           `json:"notes,omitempty"`
+	PBF             []string           `json:"pbf,omitempty"`              // PBF rules that can redirect the flow here
+	ZonePlaceholder bool               `json:"zone_placeholder,omitempty"` // a zone name is a placeholder
+	Fidelity        simulate.Fidelity  `json:"fidelity"`
 }
 
 // Path is a run's output.
@@ -90,6 +92,7 @@ type Path struct {
 	Destination simulate.Endpoint `json:"destination"`
 	Placed      topology.Placed   `json:"placed"`
 	PlacedVia   string            `json:"placed_via,omitempty"`
+	StartVia    netip.Prefix      `json:"start_via,omitzero"` // the route that placed the start or gave its ingress
 	Outcome     Outcome           `json:"outcome"`
 	End         string            `json:"end"` // the end line's text
 	Hops        []Hop             `json:"hops"`

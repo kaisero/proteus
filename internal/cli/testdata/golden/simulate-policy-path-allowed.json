@@ -1,0 +1,526 @@
+{
+  "format": 1,
+  "command": "simulate policy",
+  "input": {
+    "mode": "path",
+    "flow": {
+      "source": {
+        "addrs": [
+          "198.18.1.10"
+        ],
+        "resolved": false
+      },
+      "destination": {
+        "addrs": [
+          "198.18.10.100"
+        ],
+        "resolved": false
+      },
+      "protocol": "tcp",
+      "port": 443
+    },
+    "device": "",
+    "router": "",
+    "at": ""
+  },
+  "results": [
+    {
+      "mode": "path",
+      "verdict": "allowed",
+      "at": null,
+      "fidelity": {
+        "level": "exact"
+      },
+      "source": {
+        "addrs": [
+          "198.18.1.10"
+        ],
+        "resolved": false
+      },
+      "destination": {
+        "addrs": [
+          "198.18.10.100"
+        ],
+        "resolved": false
+      },
+      "placed": "connected",
+      "outcome": "delivered",
+      "end": "198.18.10.100   delivered",
+      "stages": [
+        {
+          "slug": "place",
+          "name": "place the start",
+          "fidelity": {
+            "level": "exact"
+          },
+          "candidates": 0,
+          "detail": "connected: 198.18.1.10 on fw02 vlan.1",
+          "elapsed_ms": 0
+        },
+        {
+          "slug": "hop1/pbf",
+          "name": "policy-based forwarding",
+          "fidelity": {
+            "level": "exact"
+          },
+          "candidates": 0,
+          "detail": "no PBF rule could match",
+          "elapsed_ms": 0
+        },
+        {
+          "slug": "hop1/lookup",
+          "name": "route lookup",
+          "fidelity": {
+            "level": "exact"
+          },
+          "candidates": 0,
+          "detail": "198.18.10.100 in router default: 198.18.0.0/15 via 198.19.0.254 on vlan.32",
+          "elapsed_ms": 0
+        },
+        {
+          "slug": "hop1/zones",
+          "name": "zones",
+          "fidelity": {
+            "level": "exact"
+          },
+          "candidates": 0,
+          "detail": "home -\u003e labor",
+          "elapsed_ms": 0
+        },
+        {
+          "slug": "hop1/nat",
+          "name": "NAT",
+          "fidelity": {
+            "level": "exact"
+          },
+          "candidates": 0,
+          "detail": "no NAT rule matches",
+          "elapsed_ms": 0
+        },
+        {
+          "slug": "hop1/next",
+          "name": "next hop",
+          "fidelity": {
+            "level": "exact"
+          },
+          "candidates": 0,
+          "detail": "next: fw01 ethernet1/1",
+          "elapsed_ms": 0
+        },
+        {
+          "slug": "hop2/pbf",
+          "name": "policy-based forwarding",
+          "fidelity": {
+            "level": "exact"
+          },
+          "candidates": 0,
+          "detail": "no PBF rule could match",
+          "elapsed_ms": 0
+        },
+        {
+          "slug": "hop2/lookup",
+          "name": "route lookup",
+          "fidelity": {
+            "level": "exact"
+          },
+          "candidates": 0,
+          "detail": "198.18.10.100 in router default: 198.18.10.0/24 via 0.0.0.0 on ethernet1/2",
+          "elapsed_ms": 0
+        },
+        {
+          "slug": "hop2/zones",
+          "name": "zones",
+          "fidelity": {
+            "level": "exact"
+          },
+          "candidates": 0,
+          "detail": "transport -\u003e server",
+          "elapsed_ms": 0
+        },
+        {
+          "slug": "hop2/nat",
+          "name": "NAT",
+          "fidelity": {
+            "level": "exact"
+          },
+          "candidates": 0,
+          "detail": "no NAT rule matches",
+          "elapsed_ms": 0
+        },
+        {
+          "slug": "hop2/next",
+          "name": "next hop",
+          "fidelity": {
+            "level": "exact"
+          },
+          "candidates": 0,
+          "detail": "delivered in 198.18.10.0/24",
+          "elapsed_ms": 0
+        }
+      ],
+      "hops": [
+        {
+          "index": 1,
+          "device": "fw02",
+          "vsys": "vsys1",
+          "snapshot": "2026-09-28T10-00-00Z",
+          "taken_at": "2026-09-28T10:00:00Z",
+          "in": {
+            "device": "fw02",
+            "vsys": "1",
+            "router": "default",
+            "interface": "vlan.1",
+            "zone": "home",
+            "address": "198.18.1.1/24"
+          },
+          "out": {
+            "device": "fw02",
+            "vsys": "1",
+            "router": "default",
+            "interface": "vlan.32",
+            "zone": "labor",
+            "address": "198.19.0.1/24"
+          },
+          "lookups": [
+            {
+              "router": "default",
+              "route": {
+                "destination": "198.18.0.0/15",
+                "next_hops": [
+                  {
+                    "Router": "default",
+                    "IPv6": false,
+                    "Destination": "198.18.0.0/15",
+                    "Interface": "vlan.32",
+                    "NextHop": "198.19.0.254",
+                    "Flags": "ug",
+                    "NextHopType": "0",
+                    "ECMP": false
+                  }
+                ]
+              },
+              "protocol": "static"
+            }
+          ],
+          "flow": {
+            "source": {
+              "addrs": [
+                "198.18.1.10"
+              ],
+              "resolved": false
+            },
+            "destination": {
+              "addrs": [
+                "198.18.10.100"
+              ],
+              "resolved": false
+            },
+            "protocol": "tcp",
+            "port": 443,
+            "from_zone": "home",
+            "to_zone": "labor"
+          },
+          "post_nat": null,
+          "fidelity": {
+            "level": "exact"
+          },
+          "notes": [],
+          "pbf": [],
+          "ecmp_not_followed": [],
+          "zone_placeholder": false,
+          "doubts": [],
+          "after_deny": false,
+          "checks": {
+            "security": {
+              "verdict": "pass",
+              "reason": "default rule interzone-default (allow), local",
+              "rule": "interzone-default",
+              "default": "interzone-default",
+              "default_action": "allow",
+              "default_source": "local",
+              "fidelity": {
+                "level": "exact"
+              },
+              "first_match": null,
+              "candidates": [],
+              "doubts": [],
+              "zones": {
+                "from": [
+                  "home"
+                ],
+                "to": [
+                  "labor"
+                ],
+                "source": "path"
+              },
+              "stages": [
+                {
+                  "slug": "resolve-source",
+                  "name": "Resolve the source",
+                  "fidelity": {
+                    "level": "exact"
+                  },
+                  "candidates": 0,
+                  "detail": "198.18.1.10: 2 hits, 0 negated rules",
+                  "elapsed_ms": 0
+                },
+                {
+                  "slug": "resolve-destination",
+                  "name": "Resolve the destination",
+                  "fidelity": {
+                    "level": "exact"
+                  },
+                  "candidates": 0,
+                  "detail": "198.18.10.100: 1 hits, 0 negated rules",
+                  "elapsed_ms": 0
+                },
+                {
+                  "slug": "derive-zones",
+                  "name": "Derive the zones",
+                  "fidelity": {
+                    "level": "exact"
+                  },
+                  "candidates": 0,
+                  "detail": "from home, to labor, as given",
+                  "elapsed_ms": 0
+                },
+                {
+                  "slug": "match-service",
+                  "name": "Match the service",
+                  "fidelity": {
+                    "level": "exact"
+                  },
+                  "candidates": 0,
+                  "detail": "tcp/443",
+                  "elapsed_ms": 0
+                },
+                {
+                  "slug": "match-url",
+                  "name": "Match the URL category",
+                  "fidelity": {
+                    "level": "exact"
+                  },
+                  "candidates": 0,
+                  "detail": "no candidate names a URL category",
+                  "elapsed_ms": 0
+                },
+                {
+                  "slug": "drop-disabled",
+                  "name": "Drop disabled rules",
+                  "fidelity": {
+                    "level": "exact"
+                  },
+                  "candidates": 0,
+                  "detail": "0 disabled",
+                  "elapsed_ms": 0
+                },
+                {
+                  "slug": "order",
+                  "name": "Order by evaluation",
+                  "fidelity": {
+                    "level": "exact"
+                  },
+                  "candidates": 0,
+                  "detail": "0 in order",
+                  "elapsed_ms": 0
+                },
+                {
+                  "slug": "first-match",
+                  "name": "Take the first match",
+                  "fidelity": {
+                    "level": "exact"
+                  },
+                  "candidates": 0,
+                  "detail": "no enabled rule matches; default rule interzone-default (allow), local",
+                  "elapsed_ms": 0
+                }
+              ]
+            }
+          }
+        },
+        {
+          "index": 2,
+          "device": "fw01",
+          "vsys": "vsys1",
+          "snapshot": "2026-09-28T10-00-00Z",
+          "taken_at": "2026-09-28T10:00:00Z",
+          "in": {
+            "device": "fw01",
+            "vsys": "1",
+            "router": "default",
+            "interface": "ethernet1/1",
+            "zone": "transport",
+            "address": "198.19.0.254/24"
+          },
+          "out": {
+            "device": "fw01",
+            "vsys": "1",
+            "router": "default",
+            "interface": "ethernet1/2",
+            "zone": "server",
+            "address": "198.18.10.1/24"
+          },
+          "lookups": [
+            {
+              "router": "default",
+              "route": {
+                "destination": "198.18.10.0/24",
+                "next_hops": [
+                  {
+                    "Router": "default",
+                    "IPv6": false,
+                    "Destination": "198.18.10.0/24",
+                    "Interface": "ethernet1/2",
+                    "NextHop": "0.0.0.0",
+                    "Flags": "u",
+                    "NextHopType": "0",
+                    "ECMP": false
+                  }
+                ]
+              },
+              "protocol": "connected"
+            }
+          ],
+          "flow": {
+            "source": {
+              "addrs": [
+                "198.18.1.10"
+              ],
+              "resolved": false
+            },
+            "destination": {
+              "addrs": [
+                "198.18.10.100"
+              ],
+              "resolved": false
+            },
+            "protocol": "tcp",
+            "port": 443,
+            "from_zone": "transport",
+            "to_zone": "server"
+          },
+          "post_nat": null,
+          "fidelity": {
+            "level": "exact"
+          },
+          "notes": [],
+          "pbf": [],
+          "ecmp_not_followed": [],
+          "zone_placeholder": false,
+          "doubts": [],
+          "after_deny": false,
+          "checks": {
+            "security": {
+              "verdict": "pass",
+              "reason": "default rule interzone-default (allow), local",
+              "rule": "interzone-default",
+              "default": "interzone-default",
+              "default_action": "allow",
+              "default_source": "local",
+              "fidelity": {
+                "level": "exact"
+              },
+              "first_match": null,
+              "candidates": [],
+              "doubts": [],
+              "zones": {
+                "from": [
+                  "transport"
+                ],
+                "to": [
+                  "server"
+                ],
+                "source": "path"
+              },
+              "stages": [
+                {
+                  "slug": "resolve-source",
+                  "name": "Resolve the source",
+                  "fidelity": {
+                    "level": "exact"
+                  },
+                  "candidates": 0,
+                  "detail": "198.18.1.10: 0 hits, 0 negated rules",
+                  "elapsed_ms": 0
+                },
+                {
+                  "slug": "resolve-destination",
+                  "name": "Resolve the destination",
+                  "fidelity": {
+                    "level": "exact"
+                  },
+                  "candidates": 0,
+                  "detail": "198.18.10.100: 1 hits, 0 negated rules",
+                  "elapsed_ms": 0
+                },
+                {
+                  "slug": "derive-zones",
+                  "name": "Derive the zones",
+                  "fidelity": {
+                    "level": "exact"
+                  },
+                  "candidates": 0,
+                  "detail": "from transport, to server, as given",
+                  "elapsed_ms": 0
+                },
+                {
+                  "slug": "match-service",
+                  "name": "Match the service",
+                  "fidelity": {
+                    "level": "exact"
+                  },
+                  "candidates": 0,
+                  "detail": "tcp/443",
+                  "elapsed_ms": 0
+                },
+                {
+                  "slug": "match-url",
+                  "name": "Match the URL category",
+                  "fidelity": {
+                    "level": "exact"
+                  },
+                  "candidates": 0,
+                  "detail": "no candidate names a URL category",
+                  "elapsed_ms": 0
+                },
+                {
+                  "slug": "drop-disabled",
+                  "name": "Drop disabled rules",
+                  "fidelity": {
+                    "level": "exact"
+                  },
+                  "candidates": 0,
+                  "detail": "0 disabled",
+                  "elapsed_ms": 0
+                },
+                {
+                  "slug": "order",
+                  "name": "Order by evaluation",
+                  "fidelity": {
+                    "level": "exact"
+                  },
+                  "candidates": 0,
+                  "detail": "0 in order",
+                  "elapsed_ms": 0
+                },
+                {
+                  "slug": "first-match",
+                  "name": "Take the first match",
+                  "fidelity": {
+                    "level": "exact"
+                  },
+                  "candidates": 0,
+                  "detail": "no enabled rule matches; default rule interzone-default (allow), local",
+                  "elapsed_ms": 0
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "holes": [],
+  "unresolved": [],
+  "notes": []
+}

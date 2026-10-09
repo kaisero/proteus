@@ -93,7 +93,7 @@ unresolved: file/vsys1: the configuration is PAN-OS 12.2.0 but was read with the
 proteus simulate policy 10.20.1.5 10.1.250.10 --port 443 --output json > answer.json
 case $? in
   0) echo "complete" ;;
-  3) echo "incomplete: check holes and unresolved"; exit 1 ;;
+  3) echo "incomplete or undecided: check holes and unresolved"; exit 1 ;;
   *) echo "error"; exit 1 ;;
 esac
 ```

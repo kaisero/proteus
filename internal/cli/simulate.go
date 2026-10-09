@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -30,61 +31,21 @@ type flowFlags struct {
 	why, noDNS                             bool
 }
 
-// kindCommands are the kinds whose flags differ from the flow command's, and so
-// need a command of their own.
+// kindCommands builds each registered simulation kind's command: each kind's
+// flags differ, so each has a builder of its own.
 var kindCommands = map[string]func(*app, simulate.Simulation) *cobra.Command{
-	routing.Kind: (*app).routingCmd,
-	nat.Kind:     (*app).natCmd,
+	securitypolicy.Kind: (*app).policyCmd,
+	routing.Kind:        (*app).routingCmd,
+	nat.Kind:            (*app).natCmd,
 }
 
-// simulateCmds returns one subcommand per registered simulation kind. A kind takes
-// the flow command unless it has its own; a new flow kind is a registry entry, not a
-// command change.
+// simulateCmds returns one subcommand per registered simulation kind.
 func (a *app) simulateCmds() []*cobra.Command {
 	var out []*cobra.Command
 	for _, kind := range estate.Kinds() {
-		build := (*app).simulateCmd
-		if own, ok := kindCommands[kind]; ok {
-			build = own
-		}
-		out = append(out, build(a, estate.Simulations[kind]))
+		out = append(out, kindCommands[kind](a, estate.Simulations[kind]))
 	}
 	return out
-}
-
-// policyOptions are simulate policy's flags and arguments.
-type policyOptions struct {
-	sim      simulate.Simulation
-	sel      selection
-	fl       flowFlags
-	src, dst string
-}
-
-func (a *app) simulateCmd(sim simulate.Simulation) *cobra.Command {
-	var o policyOptions
-	o.sim = sim
-	cmd := &cobra.Command{
-		Use:   sim.Kind() + " <source> <destination>",
-		Short: sim.Describe(),
-		Long: "Source and destination are an address or an FQDN; an FQDN is resolved with this\n" +
-			"machine's DNS unless --no-dns. Zones are derived from the stored forwarding table,\n" +
-			"or from the configuration, when --from-zone and --to-zone are not given.\n\n" +
-			"Stages: " + strings.Join(sim.Stages(), ", "),
-		Args: args(cobra.ExactArgs(2)),
-		RunE: func(c *cobra.Command, argv []string) error {
-			o.src, o.dst = argv[0], argv[1]
-			return a.emitRun(a.runSimulation(c.Context(), o))
-		},
-	}
-	o.sel.bind(cmd, selectOpts{file: true, at: true, fresh: true})
-	o.fl.bindProtocol(cmd)
-	o.fl.bindPort(cmd)
-	o.fl.bindSourcePort(cmd)
-	o.fl.bindZones(cmd)
-	o.fl.bindL7(cmd)
-	bindWhy(cmd, &o.fl.why)
-	bindNoDNS(cmd, &o.fl.noDNS)
-	return cmd
 }
 
 // policyAnswer is simulate policy's answer: one result when a target could be read,
@@ -100,12 +61,14 @@ type policyAnswer struct {
 	notes   []note
 }
 
+// runSimulation is simulate policy on one configuration file (--file): one
+// target, its zones given or derived from the configuration.
 func (a *app) runSimulation(ctx context.Context, o policyOptions) (answer, error) {
 	flow, err := parseFlow(o.fl)
 	if err != nil {
 		return nil, err
 	}
-	s, err := a.settings(o.sel.file == "")
+	s, err := a.settings(false)
 	if err != nil {
 		return nil, err
 	}
@@ -129,10 +92,10 @@ func (a *app) runSimulation(ctx context.Context, o policyOptions) (answer, error
 	case len(ts) == 0:
 		return nil, errors.New("the selection has no device and vsys to simulate on")
 	case len(ts) > 1:
-		return nil, usageErr("the selection has %d device and vsys pairs; estate simulation arrives in M5, so select one device and one vsys", len(ts))
+		return nil, usageErr("the file has %d vsys; select one with --vsys", len(ts))
 	}
 	t := ts[0]
-	env, err := a.policyEnv(t, s, o.fl.noDNS)
+	env, err := a.policyEnv(t, o.fl.noDNS)
 	if err != nil {
 		return nil, err
 	}
@@ -144,8 +107,8 @@ func (a *app) runSimulation(ctx context.Context, o policyOptions) (answer, error
 	a.log.Infof(runlog.TagStep, "%s: fidelity %s", o.sim.Kind(), run.Fidelity)
 	ans.run, ans.target = run, &t
 	ans.verdict, _ = run.Output.(securitypolicy.Verdict)
-	ans.un, ans.notes = targetQualifiers([]estate.Target{t})
-	ans.un = dedupeUnresolved(append(ans.un, runUnresolved(run, t.Device, t.Vsys, true)...))
+	ans.notes = policyNotes(t)
+	ans.un = dedupeUnresolved(runUnresolved(run, t.Device, t.Vsys, true))
 	return ans, nil
 }
 
@@ -171,18 +134,40 @@ func (p policyAnswer) Text(t *textOut) error {
 	}
 	printRun(t, p.run, *p.target, p.verdict, p.flow, p.o.fl.why)
 	printQualifiers(t, p.Qualifiers())
-	if p.verdict.Rule == nil {
+	// Behind candidates in doubt, the first match is only the first certain one.
+	lead := "first match:"
+	if p.verdict.Undecided != "" {
+		lead = "first certain match:"
+	}
+	switch v := p.verdict; {
+	case v.Rule != nil:
+		fmt.Fprintf(t, "%s %s (%s)\n", lead, t.pal.accent(v.Rule.Name), v.Rule.Action)
+	case v.Default != "":
+		fmt.Fprintf(t, "%s %s (%s), default rule (%s)\n", lead, t.pal.accent(v.Default), v.DefaultAction, v.DefaultSource)
+	case len(v.Candidates) == 0:
 		fmt.Fprintln(t, "no enabled rule matches")
-	} else {
-		fmt.Fprintf(t, "first match: %s (%s)\n", t.pal.accent(p.verdict.Rule.Name), p.verdict.Rule.Action)
+	}
+	if v := p.verdict; v.Undecided != "" {
+		fmt.Fprintf(t, "%s %s\n", t.pal.warn("undecided:"), v.Undecided)
 	}
 	return t.err
 }
 
-// policyEnv is the simulation environment for one target: its configuration, the
-// user and zone providers, and the device's stored tables, so NAT can give the
-// post-NAT zone (spec §18 N10).
-func (a *app) policyEnv(t estate.Target, s settings, noDNS bool) (*simulate.Env, error) {
+// policyNotes are a target's notes. A version gap is one of them, not an
+// unresolved entry: the security check lowers its fidelity to inferred instead
+// (spec E25).
+func policyNotes(t estate.Target) []note {
+	var out []note
+	for _, n := range t.Notes {
+		out = append(out, note{Device: t.Device, Vsys: t.Vsys, Note: n})
+	}
+	return out
+}
+
+// policyEnv is the simulation environment for one target read from a file: its
+// configuration and the user provider. A file has no stored tables, so zones
+// derive from the configuration.
+func (a *app) policyEnv(t estate.Target, noDNS bool) (*simulate.Env, error) {
 	users, err := a.userSnapshot()
 	if err != nil {
 		return nil, err
@@ -192,23 +177,10 @@ func (a *app) policyEnv(t estate.Target, s settings, noDNS bool) (*simulate.Env,
 		if err != nil {
 			return simulate.Target{}, err
 		}
-		p := index.Providers{Users: users}
-		if t.Snapshot != nil {
-			if z, err := t.Snapshot.Zones(); err == nil {
-				p.Zones = z
-			} else {
-				a.log.Infof(runlog.TagStep, "%s: no stored zones: %v", t.Device, err)
-			}
-		}
-		return simulate.Target{Config: t.Config, Index: idx, Providers: p, Notes: t.Notes}, nil
+		return simulate.Target{Config: t.Config, Index: idx, Providers: index.Providers{Users: users}, Notes: t.Notes}, nil
 	}, Resolve: a.lookup}
 	if noDNS {
 		env.Resolve = nil
-	}
-	if t.Snapshot != nil {
-		if st, err := a.openStore(s.storeRoot); err == nil {
-			env.Network = estate.NewNetwork(st, []string{t.Device}, estate.When{At: t.Snapshot.Meta.TakenAt, Now: a.now(), Log: a.log})
-		}
 	}
 	return env, nil
 }
@@ -285,6 +257,9 @@ func printRun(w *textOut, run simulate.Run, t estate.Target, v securitypolicy.Ve
 	}
 	fmt.Fprintf(w, "\n%s\n", w.pal.head(header(t, w.now)))
 	printNotes(w, t)
+	if g := t.Report.VersionGap; g != "" && slices.Contains(t.Notes, g) {
+		fmt.Fprintf(w, "  %s\n", noteStyle(w.pal, g)("note: "+g))
+	}
 	for _, ep := range []simulate.Endpoint{flow.Source, flow.Destination} {
 		if ep.Name != "" {
 			fmt.Fprintf(w, "  dns        %s -> %v\n", ep.Name, ep.Addrs)
@@ -305,14 +280,25 @@ func printRun(w *textOut, run simulate.Run, t estate.Target, v securitypolicy.Ve
 	}
 	fmt.Fprintf(w, "  fidelity   %s\n", run.Fidelity)
 	if why {
-		var stages table
-		for _, st := range run.Stages {
-			lvl := st.Fidelity.Level()
-			stages.row(plain(st.Slug), cell{text: lvl, style: fidelityStyle(w.pal, lvl)},
-				plain(fmt.Sprintf("%d", st.State.Candidates)), plain(st.Detail))
-		}
-		_ = stages.write(w, "  ", 1)
+		printStageTable(w, run.Stages)
 	}
+	printCandidates(w, v, why)
+}
+
+// printStageTable lists a security run's stages: level, candidates left, detail.
+func printStageTable(w *textOut, stages []simulate.Stage) {
+	var tb table
+	for _, st := range stages {
+		lvl := st.Fidelity.Level()
+		tb.row(plain(st.Slug), cell{text: lvl, style: fidelityStyle(w.pal, lvl)},
+			plain(fmt.Sprintf("%d", st.State.Candidates)), plain(st.Detail))
+	}
+	_ = tb.write(w, "  ", 1)
+}
+
+// printCandidates lists a verdict's candidates in rule order; with why, each
+// one's doubts and then the default rule that follows them.
+func printCandidates(w *textOut, v securitypolicy.Verdict, why bool) {
 	var tb table
 	for _, r := range v.Candidates {
 		action := cell{text: r.Action, style: w.pal.bad}
@@ -320,6 +306,22 @@ func printRun(w *textOut, run simulate.Run, t estate.Target, v securitypolicy.Ve
 			action.style = w.pal.ok
 		}
 		tb.row(plain(fmt.Sprintf("%d.", r.Position)), plain(r.Name), action, plain(fmt.Sprintf("[%s %s]", r.Layer, r.Scope)))
+		if !why {
+			continue
+		}
+		for _, d := range v.Doubts {
+			if d.Position == r.Position {
+				tb.row(plain(""), cell{text: "doubt: " + d.Reason, style: w.pal.warn})
+			}
+		}
+	}
+	// The default rules follow the last candidate in evaluation order (spec §4.6).
+	if why && v.Default != "" {
+		action := cell{text: v.DefaultAction, style: w.pal.bad}
+		if v.DefaultAction == "allow" {
+			action.style = w.pal.ok
+		}
+		tb.row(plain("-"), plain(v.Default), action, plain(fmt.Sprintf("[default %s]", v.DefaultSource)))
 	}
 	_ = tb.write(w, "  ", 1)
 }
@@ -367,31 +369,76 @@ func toRuleJSON(r resolve.Rule) ruleJSON {
 	return ruleJSON{r.Position, r.Name, r.Action, r.Layer.String(), r.Scope.String()}
 }
 
+// securityJSON is a security check's answer: one type for a --file target and
+// for each hop of a path (spec 2026-10-07 E14, §8.2).
+type securityJSON struct {
+	// Verdict is pass, stop, undecided or, on a hop, not-evaluated; Reason says
+	// why (spec §4.7).
+	Verdict string `json:"verdict"`
+	Reason  string `json:"reason"`
+	// Rule is the rule or default rule that decides; empty when undecided.
+	Rule string `json:"rule"`
+	// Default is the default rule that decides when no rule matches, empty when
+	// none does; DefaultSource says where its action came from.
+	Default       string            `json:"default"`
+	DefaultAction string            `json:"default_action"`
+	DefaultSource string            `json:"default_source"`
+	Fidelity      simulate.Fidelity `json:"fidelity"`
+	FirstMatch    *ruleJSON         `json:"first_match"`
+	Candidates    []ruleJSON        `json:"candidates"`
+	// Doubts names the candidates that set a matching field no stage evaluates.
+	Doubts []securitypolicy.Doubt        `json:"doubts"`
+	Zones  securitypolicy.ZoneDerivation `json:"zones"`
+	Stages []stageJSON                   `json:"stages"`
+}
+
+// securityOf is a security answer's JSON. v is nil when the check did not run.
+func securityOf(v *securitypolicy.Verdict, verdict, reason, rule string, fid simulate.Fidelity, stages []simulate.Stage) securityJSON {
+	out := securityJSON{
+		Verdict: verdict, Reason: reason, Rule: rule, Fidelity: fid, Stages: simStages(stages),
+		Candidates: []ruleJSON{}, Doubts: []securitypolicy.Doubt{},
+	}
+	// Zones print [] rather than null, as every list of the block does.
+	out.Zones.From, out.Zones.To = []string{}, []string{}
+	if v == nil {
+		return out
+	}
+	if v.Rule != nil {
+		r := toRuleJSON(*v.Rule)
+		out.FirstMatch = &r
+	}
+	for _, r := range v.Candidates {
+		out.Candidates = append(out.Candidates, toRuleJSON(r))
+	}
+	if v.Doubts != nil {
+		out.Doubts = v.Doubts
+	}
+	out.Default, out.DefaultAction, out.DefaultSource = v.Default, v.DefaultAction, v.DefaultSource
+	out.Zones = v.Zones
+	out.Zones.From, out.Zones.To = nonNil(v.Zones.From), nonNil(v.Zones.To)
+	return out
+}
+
 // policyResult is one device and vsys's simulate policy answer in the JSON envelope.
 type policyResult struct {
-	Candidates []ruleJSON                    `json:"candidates"`
-	Fidelity   simulate.Fidelity             `json:"fidelity"`
-	FirstMatch *ruleJSON                     `json:"first_match"`
-	Kind       string                        `json:"kind"`
-	Relevance  securitypolicy.Relevance      `json:"relevance"`
-	Stages     []stageJSON                   `json:"stages"`
-	Target     target                        `json:"target"`
-	Zones      securitypolicy.ZoneDerivation `json:"zones"`
+	securityJSON
+	Kind      string                   `json:"kind"`
+	Relevance securitypolicy.Relevance `json:"relevance"`
+	Target    target                   `json:"target"`
 }
 
 func runJSON(run simulate.Run, t estate.Target, v securitypolicy.Verdict) policyResult {
-	var first *ruleJSON
-	if v.Rule != nil {
-		r := toRuleJSON(*v.Rule)
-		first = &r
-	}
-	cands := make([]ruleJSON, len(v.Candidates))
-	for i, r := range v.Candidates {
-		cands[i] = toRuleJSON(r)
+	outcome, reason := v.Decision()
+	var rule string
+	if outcome != securitypolicy.Undecided {
+		rule = v.Default
+		if v.Rule != nil {
+			rule = v.Rule.Name
+		}
 	}
 	return policyResult{
-		Kind: run.Kind, Target: targetOf(t), Fidelity: run.Fidelity, Stages: simStages(run.Stages),
-		FirstMatch: first, Candidates: cands, Zones: v.Zones, Relevance: v.Relevance,
+		securityJSON: securityOf(&v, string(outcome), reason, rule, run.Fidelity, run.Stages),
+		Kind:         run.Kind, Target: targetOf(t), Relevance: v.Relevance,
 	}
 }
 
@@ -425,7 +472,6 @@ func (fl *flowFlags) bindSourcePort(cmd *cobra.Command) {
 func (fl *flowFlags) bindZones(cmd *cobra.Command) {
 	cmd.Flags().StringVar(&fl.fromZone, "from-zone", "", "source zone; derived when absent")
 	cmd.Flags().StringVar(&fl.toZone, "to-zone", "", "destination zone; derived when absent")
-	cmd.MarkFlagsRequiredTogether("from-zone", "to-zone")
 }
 
 func (fl *flowFlags) bindL7(cmd *cobra.Command) {

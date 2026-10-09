@@ -131,7 +131,7 @@ func (n *Network) read(node string) (simulate.DeviceData, error) {
 	if err != nil {
 		return simulate.DeviceData{}, err
 	}
-	d := simulate.DeviceData{Name: node, SnapshotID: sn.ID, TakenAt: sn.Meta.TakenAt}
+	d := simulate.DeviceData{Name: node, Member: member, SnapshotID: sn.ID, TakenAt: sn.Meta.TakenAt}
 	b, err := os.ReadFile(sn.Path(store.InterfacesDoc))
 	if err != nil {
 		return d, fmt.Errorf("%s@%s has no interface state; fetch it again", member, sn.ID)

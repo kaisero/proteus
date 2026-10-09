@@ -11,6 +11,8 @@ import (
 	"context"
 	"fmt"
 	"net/netip"
+	"slices"
+	"strings"
 
 	"github.com/RoaringBitmap/roaring/v2"
 
@@ -47,10 +49,56 @@ func (Simulation) Stages() []string {
 
 // Verdict is the output of a run.
 type Verdict struct {
-	Rule       *resolve.Rule  `json:"rule"` // first match; nil when none
-	Candidates []resolve.Rule `json:"candidates"`
-	Zones      ZoneDerivation `json:"zones"`
-	Relevance  Relevance      `json:"relevance"`
+	Rule *resolve.Rule `json:"rule"` // first match; nil when none
+	// Undecided says why no rule or default rule decides the flow, empty when one
+	// does (spec §4.7): a stage that may miss matches, or candidates in doubt. Rule
+	// or Default may still be set: the first certain match.
+	Undecided string `json:"undecided,omitempty"`
+	// Default is the default rule that decides when no rule matches, empty when
+	// none decides; DefaultAction is its action, and DefaultSource where the action
+	// came from: built-in, local or pushed.
+	Default       string         `json:"default"`
+	DefaultAction string         `json:"default_action"`
+	DefaultSource string         `json:"default_source"`
+	Candidates    []resolve.Rule `json:"candidates"`
+	// Doubts names the candidates that set a matching field no stage evaluates, in
+	// rule order (spec §4.7).
+	Doubts    []Doubt        `json:"doubts"`
+	Zones     ZoneDerivation `json:"zones"`
+	Relevance Relevance      `json:"relevance"`
+}
+
+// Outcome is what a decided flow meets: it passes, or it stops.
+type Outcome string
+
+// The outcomes of a security check (spec §4.7).
+const (
+	Pass      Outcome = "pass"
+	Stop      Outcome = "stop"
+	Undecided Outcome = "undecided"
+)
+
+// Decision is the verdict's outcome and why. allow passes; deny, drop and the
+// reset actions stop (spec §4.6, PAN-OS admin guide, "Security Policy Actions").
+// Any other action, or no deciding rule, is undecided.
+func (v Verdict) Decision() (Outcome, string) {
+	if v.Undecided != "" {
+		return Undecided, v.Undecided
+	}
+	what, action := fmt.Sprintf("default rule %s (%s), %s", v.Default, v.DefaultAction, v.DefaultSource), v.DefaultAction
+	switch {
+	case v.Rule != nil:
+		what, action = fmt.Sprintf("rule %s (%s)", v.Rule.Name, v.Rule.Action), v.Rule.Action
+	case v.Default == "":
+		return Undecided, "no rule decides"
+	}
+	switch {
+	case action == "allow":
+		return Pass, what
+	case slices.Contains(validActions, action):
+		return Stop, what
+	}
+	return Undecided, what + " is not a security rule action"
 }
 
 // ZoneDerivation says which zones were used and where they came from.
@@ -71,12 +119,19 @@ type Relevance struct {
 
 // state is what the stages share.
 type state struct {
-	env     *simulate.Env
-	in      simulate.Input
-	target  simulate.Target
-	view    *index.View
-	rules   []resolve.Rule
-	cand    *roaring.Bitmap
+	env    *simulate.Env
+	in     simulate.Input
+	target simulate.Target
+	view   *index.View
+	rules  []resolve.Rule
+	cand   *roaring.Bitmap
+	// known is whether the flow's zones are single and known: given, one name
+	// each, and defined in the vsys. Only then do rule-type and the default rules
+	// decide (spec §4.6).
+	known bool
+	// opaque holds, per address field, the candidates kept because they name
+	// addresses the configuration does not hold, and why, by rule position.
+	opaque  map[string]map[uint32]string
 	verdict Verdict
 }
 
@@ -93,8 +148,27 @@ func (Simulation) Run(ctx context.Context, env *simulate.Env, in simulate.Input)
 	stages, err := simulate.Execute(ctx, Kind, s, steps, false, env.Log)
 	run.Stages = stages
 	run.Fidelity = simulate.Overall(stages)
+	if u := undermatched(stages); err == nil && u != "" {
+		s.verdict.Undecided = u
+	}
 	run.Output = s.verdict
 	return run, err
+}
+
+// undermatched is the reason of the first stage that may be missing matches, or
+// empty when none is. Such a stage may have dropped the rule the device would hit,
+// so no rule after it decides the flow: the tree's first question (spec §4.7), so
+// its reason wins over a doubt first-match found. Only the undermatch reasons
+// count: an overmatch reason of the same stage says nothing about what is
+// missing. A version gap does not count: withoutGap has already made it inferred
+// (E25).
+func undermatched(stages []simulate.Stage) string {
+	for _, st := range stages {
+		if f := st.Fidelity; f.Level() == "undermatch" {
+			return strings.Join(f.UnderMatchReasons(), "; ")
+		}
+	}
+	return ""
 }
 
 // relevance reads the forwarding table's placements of both endpoints.

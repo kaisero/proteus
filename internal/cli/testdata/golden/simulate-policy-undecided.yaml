@@ -1,0 +1,206 @@
+format: 1
+command: simulate policy
+input:
+  flow:
+    source:
+      addrs:
+        - 10.0.0.5
+      resolved: false
+    destination:
+      addrs:
+        - 203.0.113.5
+      resolved: false
+    protocol: tcp
+    port: 443
+    from_zone: dmz
+    to_zone: wan
+  selection:
+    file: ../../testdata/config/firewall-doubt.xml
+results:
+  - verdict: undecided
+    reason: 'dmz-user (deny) at position 7 may match first: user not evaluated (corp\alice)'
+    rule: ""
+    default: ""
+    default_action: ""
+    default_source: ""
+    fidelity:
+      level: undermatch
+      reasons:
+        - 'kept rules whose service is application-default, predefined or absent: app-one, app-two, dmz-predefined, dmz-no-service'
+        - 'dmz-user (deny) at position 7 may match first: user not evaluated (corp\alice)'
+      not_evaluated:
+        - url category
+        - application
+        - user
+    first_match:
+      position: 13
+      name: dmz-plain
+      action: allow
+      layer: local
+      scope: vsys:vsys1
+    candidates:
+      - position: 3
+        name: app-one
+        action: allow
+        layer: local
+        scope: vsys:vsys1
+      - position: 4
+        name: app-two
+        action: allow
+        layer: local
+        scope: vsys:vsys1
+      - position: 7
+        name: dmz-user
+        action: deny
+        layer: local
+        scope: vsys:vsys1
+      - position: 8
+        name: dmz-schedule
+        action: deny
+        layer: local
+        scope: vsys:vsys1
+      - position: 9
+        name: dmz-pandb
+        action: deny
+        layer: local
+        scope: vsys:vsys1
+      - position: 10
+        name: dmz-custom
+        action: deny
+        layer: local
+        scope: vsys:vsys1
+      - position: 11
+        name: dmz-predefined
+        action: deny
+        layer: local
+        scope: vsys:vsys1
+      - position: 12
+        name: dmz-no-service
+        action: deny
+        layer: local
+        scope: vsys:vsys1
+      - position: 13
+        name: dmz-plain
+        action: allow
+        layer: local
+        scope: vsys:vsys1
+    doubts:
+      - position: 3
+        rule: app-one
+        reason: service application-default
+      - position: 3
+        rule: app-one
+        reason: application not evaluated (dropbox)
+      - position: 4
+        rule: app-two
+        reason: service application-default
+      - position: 4
+        rule: app-two
+        reason: application not evaluated (zoom)
+      - position: 7
+        rule: dmz-user
+        reason: user not evaluated (corp\alice)
+      - position: 7
+        rule: dmz-user
+        reason: destination-hip not evaluated (hip-a)
+      - position: 8
+        rule: dmz-schedule
+        reason: schedule not evaluated (work-hours)
+      - position: 9
+        rule: dmz-pandb
+        reason: url category not evaluated without a URL (news)
+      - position: 10
+        rule: dmz-custom
+        reason: url category not evaluated without a URL (my-cat)
+      - position: 11
+        rule: dmz-predefined
+        reason: service predefined or not defined in the configuration (service-https)
+      - position: 12
+        rule: dmz-no-service
+        reason: service absent
+    zones:
+      from:
+        - dmz
+      to:
+        - wan
+      source: given
+    stages:
+      - slug: resolve-source
+        name: Resolve the source
+        fidelity:
+          level: exact
+        candidates: 12
+        detail: '10.0.0.5: 0 hits, 0 negated rules'
+        elapsed_ms: 0
+      - slug: resolve-destination
+        name: Resolve the destination
+        fidelity:
+          level: exact
+        candidates: 10
+        detail: '203.0.113.5: 0 hits, 0 negated rules'
+        elapsed_ms: 0
+      - slug: derive-zones
+        name: Derive the zones
+        fidelity:
+          level: exact
+        candidates: 9
+        detail: from dmz, to wan, as given
+        elapsed_ms: 0
+      - slug: match-service
+        name: Match the service
+        fidelity:
+          level: overmatch
+          reasons:
+            - 'kept rules whose service is application-default, predefined or absent: app-one, app-two, dmz-predefined, dmz-no-service'
+        candidates: 9
+        detail: tcp/443
+        elapsed_ms: 0
+      - slug: match-url
+        name: Match the URL category
+        fidelity:
+          level: overmatch
+          not_evaluated:
+            - url category
+        candidates: 9
+        detail: no URL given
+        elapsed_ms: 0
+      - slug: drop-disabled
+        name: Drop disabled rules
+        fidelity:
+          level: exact
+        candidates: 9
+        detail: 0 disabled
+        elapsed_ms: 0
+      - slug: order
+        name: Order by evaluation
+        fidelity:
+          level: exact
+        candidates: 9
+        detail: 9 in order
+        elapsed_ms: 0
+      - slug: first-match
+        name: Take the first match
+        fidelity:
+          level: undermatch
+          reasons:
+            - 'dmz-user (deny) at position 7 may match first: user not evaluated (corp\alice)'
+          not_evaluated:
+            - application
+            - user
+        candidates: 9
+        detail: 'dmz-plain (allow), position 13; undecided: dmz-user (deny) at position 7 may match first: user not evaluated (corp\alice)'
+        elapsed_ms: 0
+    kind: policy
+    relevance:
+      known: false
+      relevant: false
+      reason: no stored forwarding table
+    target:
+      device: file
+      vsys: vsys1
+holes: []
+unresolved:
+  - device: file
+    vsys: vsys1
+    reason: 'dmz-user (deny) at position 7 may match first: user not evaluated (corp\alice)'
+notes: []

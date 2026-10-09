@@ -1,0 +1,95 @@
+package pathpolicy
+
+import (
+	"context"
+	"slices"
+
+	"github.com/okaiser/proteus/internal/simulate"
+	"github.com/okaiser/proteus/internal/simulate/routing"
+	"github.com/okaiser/proteus/internal/simulate/securitypolicy"
+)
+
+// Security is the security policy check: which rule, or default rule, the hop's
+// vsys applies to the hop's flow, in the zones routing gave it (spec E4).
+type Security struct{}
+
+var _ Check = Security{}
+
+// Name implements Check.
+func (Security) Name() string { return checkSecurity }
+
+// decisionStages are the stages whose fidelity a hop's security answer takes: the
+// addresses, the zones, and the decision (spec §4.7, "Check fidelity"). The
+// service and URL stages say only which candidates were kept; the decision
+// already accounts for those in doubt.
+var decisionStages = []string{"resolve-source", "resolve-destination", "derive-zones", "first-match"}
+
+// Evaluate implements Check. It runs securitypolicy on the hop's device and vsys
+// with the hop's zones given, so they are single and known when the vsys defines
+// them, and each endpoint trimmed to the address routing traced (spec §3.3, §4.4).
+func (Security) Evaluate(ctx context.Context, env *simulate.Env, h routing.Hop, flow simulate.Flow) (CheckResult, error) {
+	out := CheckResult{Name: checkSecurity}
+	if h.Vsys == "" || flow.FromZone == "" || flow.ToZone == "" {
+		// Without both zones securitypolicy would derive them; the path gives the
+		// zones, or the hop has none to check (spec §4.4).
+		out.Verdict, out.Reason, out.Fidelity = NotEvaluated, "the hop's vsys or zones are not known", simulate.Exact
+		return out, nil
+	}
+	t, miss := load(env, h)
+	if miss != nil {
+		out.Verdict, out.Reason, out.Fidelity = Undecided, miss.Reason, simulate.UnderMatch(miss.Reason)
+		return out, &simulate.UnavailableError{Missing: []simulate.Missing{*miss}}
+	}
+	run, err := securitypolicy.Simulation{}.Run(ctx, env, simulate.Input{Device: h.Device, Vsys: h.Vsys, Flow: trim(flow)})
+	if err != nil {
+		return out, err
+	}
+	v := run.Output.(securitypolicy.Verdict)
+	v.Zones.Source = "path"
+	out.Security, out.Stages, out.Notes = &v, run.Stages, run.Notes
+
+	var fs []simulate.Fidelity
+	for _, st := range run.Stages {
+		if slices.Contains(decisionStages, st.Slug) || st.Fidelity.Level() == "undermatch" {
+			fs = append(fs, st.Fidelity)
+		}
+	}
+	if gap := t.Index.VersionGap(); gap != "" {
+		// Read with the nearest older schema: inferred, not undecided (spec E25).
+		fs = append(fs, simulate.Inferred)
+		if !slices.Contains(out.Notes, gap) {
+			out.Notes = append(out.Notes, gap)
+		}
+	}
+	out.Fidelity = simulate.Weakest(fs...)
+
+	o, why := v.Decision()
+	out.Reason = why
+	switch o {
+	case securitypolicy.Pass:
+		out.Verdict = Pass
+	case securitypolicy.Stop:
+		out.Verdict = Stop
+	default:
+		out.Verdict = Undecided
+		out.Fidelity = simulate.Weakest(out.Fidelity, simulate.UnderMatch(why))
+	}
+	if out.Verdict != Undecided {
+		out.Rule = v.Default
+		if v.Rule != nil {
+			out.Rule = v.Rule.Name
+		}
+	}
+	return out, nil
+}
+
+// trim keeps the address routing traced for each endpoint, the first one, and
+// the FQDN's name for matching FQDN objects (spec §3.3).
+func trim(f simulate.Flow) simulate.Flow {
+	for _, ep := range []*simulate.Endpoint{&f.Source, &f.Destination} {
+		if len(ep.Addrs) > 1 {
+			ep.Addrs = ep.Addrs[:1:1]
+		}
+	}
+	return f
+}

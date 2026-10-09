@@ -122,9 +122,10 @@ then refuse to act on the answer. See [Scripting](guides/scripting.md).
 ## Relevance
 
 A firewall is **relevant** to a flow when it has a route to the source or the
-destination that is more specific than the default route. `simulate policy`
-prints a `relevance` line per device. It says `unknown` when the snapshot holds no
-forwarding table, for example with `--file`.
+destination that is more specific than the default route. `simulate policy
+--file` prints a `relevance` line. It says `unknown`, because one configuration holds
+no forwarding table. Path mode needs no relevance: it checks the firewalls on the
+path.
 
 ## The schema digest
 

@@ -86,8 +86,8 @@ Check: `go test -bench . ./...`
 A node modelled by hand rather than read from the schema is registered in
 `internal/schema.HandModelled`, with the reason and the schema path.
 
-There is none today. The registry and its check stay, so the next one is
-declared rather than slipped in.
+Today two nodes are registered: the built-in action of the default security rules,
+and the pushed default security rules under `shared/post-rulebase`.
 
 Check: `go test ./internal/schema -run TestHandModelledIsDeclared`
 
@@ -144,11 +144,16 @@ the command line; it imports no I/O package and no package of this module except
 leaf packages `internal/simulate/topology` (interfaces, forwarding tables, placement) and
 `internal/simulate/rulebase` (rulebase matching, PBF), which import no simulation and no I/O
 package. `internal/simulate/nat` is also the NAT engine: `routing` and `securitypolicy` may
-import it, and it imports neither of them, nor I/O.
+import it, and it imports neither of them, nor I/O. `internal/simulate/pathpolicy`
+answers a flow along its path: it may import `simulate`, `simulate/routing`,
+`simulate/securitypolicy`, `resolve`, `simulate/topology`, `config` and `index`,
+and imports none of `estate`, `store`, `fetch`, `search`, `drift`, `card`, and no
+I/O package. The test helpers `internal/fakepanos` and `internal/simulate/pathlab`
+import `testing`; only tests import them.
 
 The core's freedom from I/O is an absolute property today. A fetcher in the same
 module makes it a conditional one, and conditional invariants decay unless a test
 holds them. A rule for a package that does not exist yet passes; it binds when
 the package lands.
 
-Check: `go test ./internal/archtest -run TestImportDirection`
+Check: `go test ./internal/archtest -run 'TestImportDirection|TestTestHelpersStayInTests'`

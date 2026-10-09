@@ -1,0 +1,17 @@
+198.19.0.254 -> 10.2.0.5 tcp/443
+file / vsys1   ../../testdata/config/firewall-doubt.xml
+  zones      from labor, to dmz (given)
+  relevance  unknown: no stored forwarding table
+  fidelity   overmatch: earlier candidates in doubt share the action deny: labor-app; not evaluated: application
+  resolve-source      exact     13 198.19.0.254: 1 hits, 0 negated rules
+  resolve-destination exact     11 10.2.0.5: 0 hits, 0 negated rules
+  derive-zones        exact     1  from labor, to dmz, as given
+  match-service       exact     1  tcp/443
+  match-url           exact     1  no candidate names a URL category
+  drop-disabled       exact     1  0 disabled
+  order               exact     1  1 in order
+  first-match         overmatch 1  every candidate is in doubt; default rule interzone-default (deny), built-in
+  14. labor-app         deny [local vsys:vsys1]
+      doubt: application not evaluated (dropbox)
+  -   interzone-default deny [default built-in]
+first match: interzone-default (deny), default rule (built-in)

@@ -45,6 +45,11 @@ type Rule struct {
 	Name     string
 	Action   string
 	Disabled bool
+	// RuleType is a security rule's rule-type: universal, intrazone or interzone.
+	// The schema declares universal as the default, so an absent element reads
+	// universal. Empty for the other rulebases, which have no rule-type, and then
+	// left out of JSON, so a NAT rule's output does not gain a field it lacks.
+	RuleType string `json:",omitempty"`
 	// NegateSource and NegateDestination invert a side: the rule matches every
 	// address except those listed. Source: PAN-OS documentation, "Security Policy
 	// Rule", Source and Destination tabs, "Negate".
@@ -75,7 +80,8 @@ type Rule struct {
 }
 
 // Rules returns the target's policy in evaluation order: shared pre-rules, then
-// the vsys's own rulebase, then shared post-rules, then the defaults.
+// the vsys's own rulebase, then shared post-rules. The default rules come after
+// them; DefaultRules reads those.
 //
 // Source: PAN-OS documentation, "Device Group Policies". Where a Panorama-managed
 // firewall keeps pushed rules is not yet observed on a device: the 11.2.0
@@ -128,10 +134,15 @@ func readRules(root *config.Element, sc config.Scope, rulebase string, rb Ruleba
 			continue
 		}
 		for _, e := range container.Find(rulebase, rb.String(), "rules", "entry") {
+			ruleType := ""
+			if rb == Security {
+				ruleType = e.Child("rule-type").TextOr("universal")
+			}
 			out = append(out, ruleEntry{e: e, Rule: Rule{
 				Name:     e.Attr("name"),
 				Action:   e.Child("action").TextOr(""),
 				Disabled: e.Child("disabled").TextOr("") == "yes",
+				RuleType: ruleType,
 
 				NegateSource:      e.Child("negate-source").TextOr("") == "yes",
 				NegateDestination: e.Child("negate-destination").TextOr("") == "yes",
@@ -150,6 +161,45 @@ func readRules(root *config.Element, sc config.Scope, rulebase string, rb Ruleba
 			}})
 		}
 	}
+	return out
+}
+
+// DefaultRule is one entry for a predefined default security rule,
+// intrazone-default or interzone-default, as the configuration stores it.
+type DefaultRule struct {
+	Name string
+	// Action is the stored action, empty when the entry has none. The caller
+	// applies the built-in action then; the schema's default is not used, because
+	// it declares allow for both names.
+	Action string
+	Source string // local or pushed
+}
+
+// DefaultRules returns the entries that override the default security rules, local
+// first, then pushed. A firewall without overrides stores none.
+//
+// Local entries sit at vsys/entry/rulebase/default-security-rules (schema.xml,
+// "default-security-rules"). Pushed entries are read where Rules reads the other
+// pushed post-rules, shared/post-rulebase/default-security-rules; Panorama keeps
+// them there (cms-schema.xml), and the firewall schema does not declare the path.
+// As observed on fw01 (PAN-OS 11.2.5, 2026-10-08), both local entries carry action,
+// log-start, log-end and a uuid attribute; fw02 (PAN-OS 12.2.3) stores only
+// interzone-default.
+func (t *Target) DefaultRules() []DefaultRule {
+	var out []DefaultRule
+	read := func(sc config.Scope, rulebase, source string) {
+		path, _ := scopeContainer(sc)
+		for _, container := range t.root.Find(path...) {
+			if sc.Name != "" && container.Attr("name") != sc.Name {
+				continue
+			}
+			for _, e := range container.Find(rulebase, "default-security-rules", "rules", "entry") {
+				out = append(out, DefaultRule{Name: e.Attr("name"), Action: e.Child("action").TextOr(""), Source: source})
+			}
+		}
+	}
+	read(t.Scope(), "rulebase", "local")
+	read(config.Scope{Sort: config.ScopeShared}, "post-rulebase", "pushed")
 	return out
 }
 

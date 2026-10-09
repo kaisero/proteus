@@ -25,7 +25,7 @@ Every item names its **component** (the package or area it changes) and one **ta
 | 6 | test | resolve, fetch | Verify the legacy (non-Advanced-Routing) RIB shape |
 | 7 | feature | simulate/routing | Follow a route into another logical router |
 | 8 | feature | simulate/routing | Drop at a discard route |
-| 9 | feature | simulate/routing | Gap check: security policy on every hop of a path |
+| 9 | done | simulate/routing | ~~Gap check: security policy on every hop of a path~~ (path mode of `simulate policy`, item 21) |
 | 10 | feature | simulate/routing, simulate | Simulate policy-based forwarding |
 | 11 | done | simulate/nat, simulate/routing, simulate/securitypolicy | ~~Simulate NAT~~ (branch nat-simulation, spec §18) |
 | 12 | feature | inventory, simulate/routing, simulate | Bridge a known hop outside the inventory (`links:`) |
@@ -37,10 +37,10 @@ Every item names its **component** (the package or area it changes) and one **ta
 | 18 | done | simulate/nat | ~~NAT detection: service, nat64 and nptv6~~ (the NAT engine decides them) |
 | 19 | feature | fetch, estate, simulate/routing | Active/active HA pairs |
 | 20 | feature | inventory, fetch | Skip the RIB for a device with a full BGP table |
-| 21 | feature | simulate, estate, cmd | Estate simulation for policy (M5) |
+| 21 | feature | simulate, estate, cmd | Estate simulation for policy (M5): path mode done, fan-out open |
 | 22 | feature | simulate/securitypolicy, index | Evaluate application and user |
 | 23 | qa | simulate/securitypolicy, index | Derived zones on overlay networks |
-| 24 | feature | resolve, card, simulate/securitypolicy | Table of predefined services |
+| 24 | feature | resolve, card, simulate/securitypolicy | Table of predefined services (high priority) |
 | 25 | feature | card, cmd | NAT and PBF rules in `lookup` |
 | 26 | feature | search, drift, cmd | `--compare` across devices and time |
 | 27 | feature | cmd | MCP server |
@@ -52,6 +52,10 @@ Every item names its **component** (the package or area it changes) and one **ta
 | 33 | test | simulate/nat | Verify the dataplane with a dynamic destination whose FQDN resolves to nothing |
 | 34 | feature | simulate/nat, fetch | Use the device's FQDN cache for dynamic destination NAT |
 | 35 | test | simulate/nat | Verify persistent DIPP needs no global setting, and a service object's source port |
+| 36 | feature | simulate/pathpolicy, simulate/routing | Return-path asymmetry check |
+| 37 | test | simulate/routing, simulate/pathpolicy | Verify a shared-gateway path on a device |
+| 38 | test | resolve, simulate/securitypolicy | Verify pushed default rules and their precedence on a managed firewall |
+| 39 | test | simulate/pathpolicy | Probe fw01 with the path probe |
 
 ---
 
@@ -142,10 +146,9 @@ item 7, and delete the fetched data and API keys from the scratch directory.
 
 ### 9. Gap check: security policy on every hop of a path
 
-- **Tag:** feature · **Component:** simulate/routing (new command, e.g. `simulate path-policy`) · **Source:** spec R14
-- Run `simulate policy` on each hop with that hop's `flow` (device, vsys, zones,
-  pre-NAT addresses) and report the firewalls without an allowing rule. The JSON hop
-  already carries the input.
+- **Tag:** done · **Component:** simulate/routing · **Source:** spec R14
+- Done as path mode of `simulate policy` (item 21): it checks every hop of the path
+  with that hop's flow and zones and gives one verdict.
 
 ### 10. Simulate policy-based forwarding
 
@@ -225,10 +228,14 @@ item 7, and delete the fetched data and API keys from the scratch directory.
 
 ### 21. Estate simulation for policy (M5)
 
-- **Tag:** feature · **Component:** simulate, estate, cmd · **Source:** spec §12 M5, S4, S14
-- Run `simulate policy` across the selected devices: relevance ordering, hidden
-  rows that are not relevant, the summary, `EstateResult`. Today the command asks for
-  one device and one vsys.
+- **Tag:** feature · **Component:** simulate, estate, cmd · **Source:** spec
+  `docs/specs/2026-10-07-estate-policy-simulation.md` §12
+- **M5a, path mode: done.** `simulate policy` checks every firewall and vsys on the
+  flow's routed path and gives one verdict.
+- **M5b, fan-out: open.** `--each` checks each selected firewall on its own:
+  `--device`, `--label` and `--vsys` filters, relevance order, hidden rows that are
+  not relevant, `--all-devices`, `--fresh`, and the zone flags. `--file` moves to the
+  fan-out result shape.
 
 ### 22. Evaluate application and user
 
@@ -251,6 +258,10 @@ item 7, and delete the fetched data and API keys from the scratch directory.
 - A table of PAN-OS predefined services and their ports (`service-http`,
   `service-https`, …), so `lookup --expand` shows their ports and the service stage
   evaluates them. Hand-written data: needs an explicit exception to AGENTS.md R1.
+- **High priority.** A predefined, absent or `application-default` service puts a
+  rule in doubt, and a doubtful rule can leave a path hop undecided. In the first lab
+  run of the path probe (fw02, 2026-10-08), the one undecided hop came from a rule
+  with service `application-default`.
 
 ### 25. NAT and PBF rules in `lookup`
 
@@ -285,6 +296,9 @@ item 7, and delete the fetched data and API keys from the scratch directory.
 - fw02 (12.2.2) loads with the 11.2 digest and a version-gap warning. Ship a 12.2
   digest, and decide whether `fetch` should pull a device's own `schema.xml` to
   generate one.
+- Since E25 (spec `docs/specs/2026-10-07-estate-policy-simulation.md`), the gap
+  makes `simulate policy` `inferred` with a note, not undecided. Other commands
+  still report it as unresolved.
 
 ### 30. URL matching beyond the documentation
 
@@ -326,3 +340,32 @@ item 7, and delete the fetched data and API keys from the scratch directory.
   setting. The engine also ignores a service object's source port. Check both on a
   device.
 
+## Estate policy follow-ups
+
+Source for each: spec `docs/specs/2026-10-07-estate-policy-simulation.md` §13.
+
+### 36. Return-path asymmetry check
+
+- **Tag:** feature · **Component:** simulate/pathpolicy, simulate/routing · **Source:** spec §11, §13, D11
+- Path mode checks the forward path only. Trace the return path too, and say when it
+  crosses other firewalls than the forward path.
+
+### 37. Verify a shared-gateway path on a device
+
+- **Tag:** test · **Component:** simulate/routing, simulate/pathpolicy · **Source:** spec §11, §13
+- A shared gateway's vsys name comes from routing's `vsysName`. Needs a firewall with
+  a shared gateway; compare a path through it with `scripts/device-probe.sh --path`.
+
+### 38. Verify pushed default rules and their precedence on a managed firewall
+
+- **Tag:** test · **Component:** resolve, simulate/securitypolicy · **Source:** spec §4.6, §10.2, §13, E24
+- proteus reads pushed default-rule overrides from
+  `shared/post-rulebase/default-security-rules`, which the firewall schema does not
+  declare. Confirm the path and whether a local override wins over a pushed one.
+  Until then a disagreement leaves the hop undecided. Related to item 28.
+
+### 39. Probe fw01 with the path probe
+
+- **Tag:** test · **Component:** simulate/pathpolicy · **Source:** spec §10.2
+- The first `--path` run (2026-10-08) probed fw02 only. Run it with fw01's
+  credentials, also for a flow that a default rule denies on fw01.

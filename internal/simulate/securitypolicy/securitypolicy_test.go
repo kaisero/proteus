@@ -3,8 +3,10 @@ package securitypolicy
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/netip"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -17,8 +19,14 @@ import (
 // env loads one fixture's vsys1, with the fw01 forwarding table when zones is set.
 func env(t *testing.T, fixture string, zones bool) *simulate.Env {
 	t.Helper()
+	return envPath(t, "../../../testdata/config/"+fixture, zones)
+}
+
+// envPath is env for a configuration at any path.
+func envPath(t *testing.T, path string, zones bool) *simulate.Env {
+	t.Helper()
 	return &simulate.Env{Load: func(_, vsys string) (simulate.Target, error) {
-		cfg, rep, err := config.Load("../../../testdata/config/" + fixture)
+		cfg, rep, err := config.Load(path)
 		if err != nil {
 			return simulate.Target{}, err
 		}
@@ -87,7 +95,7 @@ func TestGivenZones(t *testing.T) {
 	if stage(r, "derive-zones").Fidelity.Level() != "exact" || v.Zones.Source != "given" {
 		t.Errorf("given zones are exact: %s %s", stage(r, "derive-zones").Fidelity, v.Zones.Source)
 	}
-	if got := r.Fidelity.String(); got != "overmatch; not evaluated: service, application" {
+	if got := r.Fidelity.String(); got != "overmatch; not evaluated: service" {
 		t.Errorf("overall = %s", got)
 	}
 	var prev uint64 = 1 << 62
@@ -190,7 +198,7 @@ func TestServicesByPort(t *testing.T) {
 		t.Errorf("match-service = %s", svc)
 	}
 	_, v = run(t, e, simulate.Flow{Source: ep("10.0.0.1"), Destination: ep("10.5.0.1"), DestPort: 9999})
-	if strings.Contains(ruleNames(v), "custom-port") || first(v) != "app-default" {
+	if strings.Contains(ruleNames(v), "custom-port") || head(v) != "app-default" {
 		t.Errorf("a port no service holds drops custom-port: %s", ruleNames(v))
 	}
 	r, _ = run(t, e, simulate.Flow{Source: ep("10.0.0.1"), Destination: ep("10.5.0.1"), Protocol: "icmp", DestPort: 8})
@@ -203,14 +211,14 @@ func TestURLCategories(t *testing.T) {
 	t.Parallel()
 	e := env(t, "firewall-simulate.xml", false)
 	r, v := run(t, e, simulate.Flow{Source: ep("10.0.0.1"), Destination: ep("10.6.0.1"), URL: "shop.example.com/cart"})
-	if first(v) != "shop" || !strings.Contains(ruleNames(v), "social") {
+	if head(v) != "shop" || !strings.Contains(ruleNames(v), "social") {
 		t.Errorf("custom category matches, PAN-DB category kept: %s", ruleNames(v))
 	}
 	if f := stage(r, "match-url").Fidelity; f.Level() != "overmatch" || !strings.Contains(f.String(), "social") {
 		t.Errorf("match-url = %s", f)
 	}
 	_, v = run(t, e, simulate.Flow{Source: ep("10.0.0.1"), Destination: ep("10.6.0.1"), URL: "other.example.org"})
-	if strings.Contains(ruleNames(v), "shop") || first(v) != "social" {
+	if strings.Contains(ruleNames(v), "shop") || head(v) != "social" {
 		t.Errorf("another URL drops shop: %s", ruleNames(v))
 	}
 	r, _ = run(t, e, simulate.Flow{Source: ep("10.0.0.1"), Destination: ep("10.6.0.1")})
@@ -223,22 +231,34 @@ func TestURLCategories(t *testing.T) {
 	}
 }
 
-func TestAnUnrecognisedValueIsUnderMatch(t *testing.T) {
+// A version gap lowers the address stages to inferred and stays a note; it is not
+// an unresolved entry (spec E25).
+func TestAVersionGapIsInferred(t *testing.T) {
 	t.Parallel()
-	r, v := run(t, env(t, "firewall-version-12.2.xml", false), simulate.Flow{Source: ep("198.18.10.100"), Destination: ep("198.18.1.5")})
-	if r.Fidelity.Level() != "undermatch" || !strings.Contains(r.Fidelity.String(), "12.2.0") {
-		t.Errorf("a version gap is undermatch: %s", r.Fidelity)
+	r, v := run(t, env(t, "firewall-version-12.2.xml", false), simulate.Flow{Source: ep("198.18.10.100"), Destination: ep("198.18.1.5"), DestPort: 443})
+	for _, slug := range []string{"resolve-source", "resolve-destination", "match-service"} {
+		if st := stage(r, slug); st.Fidelity.Level() != "inferred" || len(st.Unresolved) != 0 {
+			t.Errorf("%s: %s, unresolved %v", slug, st.Fidelity, st.Unresolved)
+		}
 	}
-	if first(v) != "dc-to-home" {
-		t.Errorf("first match = %s", first(v))
+	if len(r.Notes) != 1 || !strings.Contains(r.Notes[0], "12.2.0") {
+		t.Errorf("notes = %v", r.Notes)
+	}
+	if head(v) != "dc-to-home" {
+		t.Errorf("candidates = %s", ruleNames(v))
+	}
+	r, _ = run(t, env(t, "firewall-version-12.2.xml", false), simulate.Flow{Source: ep("198.18.10.100"), Destination: ep("198.18.1.5"), URL: "shop.example.com"})
+	if st := stage(r, "match-url"); st.Fidelity.Level() != "inferred" || len(st.Unresolved) != 0 {
+		t.Errorf("match-url: %s, unresolved %v", st.Fidelity, st.Unresolved)
 	}
 }
 
 func TestNoMatch(t *testing.T) {
 	t.Parallel()
 	r, v := run(t, env(t, "firewall-zones.xml", false), simulate.Flow{Source: ep("10.1.0.5"), Destination: ep("10.2.0.5"), FromZone: "dmz", ToZone: "inside"})
-	if v.Rule != nil || stage(r, "first-match").Detail != "no enabled rule matches" {
-		t.Errorf("got %s", first(v))
+	if v.Rule != nil || v.Default != "interzone-default" || v.DefaultAction != "deny" || v.DefaultSource != "built-in" ||
+		stage(r, "first-match").Detail != "no enabled rule matches; default rule interzone-default (deny), built-in" {
+		t.Errorf("got %s, default %s: %s", first(v), v.Default, stage(r, "first-match").Detail)
 	}
 	_, v = run(t, env(t, "firewall-zones.xml", false), simulate.Flow{Source: ep("10.1.0.5"), Destination: ep("10.2.0.5"), User: "alice"})
 	_ = v
@@ -264,6 +284,14 @@ func TestALoadFailureNamesTheDevice(t *testing.T) {
 	}
 }
 
+// head is the first candidate, whether or not it decides.
+func head(v Verdict) string {
+	if len(v.Candidates) == 0 {
+		return "none"
+	}
+	return v.Candidates[0].Name
+}
+
 func ruleNames(v Verdict) string {
 	var out []string
 	for _, r := range v.Candidates {
@@ -282,7 +310,7 @@ func TestAbsentFields(t *testing.T) {
 		t.Errorf("a rule without a category matches a URL: %s", ruleNames(v))
 	}
 	r, v := run(t, env(t, "firewall-lab.xml", false), simulate.Flow{Source: ep("198.18.10.100"), Destination: ep("198.18.1.5"), DestPort: 443})
-	if first(v) != "dc-to-home" || !strings.Contains(stage(r, "match-service").Fidelity.String(), "absent") {
+	if head(v) != "dc-to-home" || !strings.Contains(stage(r, "match-service").Fidelity.String(), "absent") {
 		t.Errorf("a rule without a service stays: %s; %s", ruleNames(v), stage(r, "match-service").Fidelity)
 	}
 }
@@ -304,5 +332,187 @@ func TestADefaultRouteDoesNotPlaceTheSource(t *testing.T) {
 	}
 	if !viaDefault("ethernet1/1 via default 0.0.0.0/0") || viaDefault("ethernet1/3 via default 198.18.11.0/24") || viaDefault("") {
 		t.Error("viaDefault")
+	}
+}
+
+// rule-type with single and known zones: each type with equal and with different
+// zones.
+func TestRuleTypeWithGivenZones(t *testing.T) {
+	t.Parallel()
+	e := env(t, "firewall-ruletype.xml", false)
+	for _, c := range []struct {
+		from, to string
+		want     string // the candidates, in order
+	}{
+		{"inside", "inside", "intra-inside"}, // intrazone, equal: to is not read
+		{"inside", "dmz", "inter-inside"},    // intrazone, different: no; interzone, different: yes
+		{"dmz", "dmz", ""},                   // intrazone needs from in rule.from
+		{"out", "out", "universal-out"},      // universal, equal
+		{"out", "dmz", "universal-out"},      // universal, different
+		{"dmz", "inside", ""},                // nothing names dmz as from
+	} {
+		r, v := run(t, e, simulate.Flow{Source: ep("10.1.0.5"), Destination: ep("10.2.0.5"), FromZone: c.from, ToZone: c.to})
+		if got := ruleNames(v); got != c.want {
+			t.Errorf("%s -> %s: candidates %q, want %q", c.from, c.to, got, c.want)
+		}
+		if lvl := stage(r, "derive-zones").Fidelity.Level(); lvl != "exact" {
+			t.Errorf("%s -> %s: derive-zones = %s", c.from, c.to, lvl)
+		}
+	}
+}
+
+// Without single and known zones a rule of another type stays a candidate, and the
+// zone stage says so.
+func TestRuleTypeWithoutKnownZones(t *testing.T) {
+	t.Parallel()
+	e := env(t, "firewall-ruletype.xml", false)
+	for _, c := range []struct {
+		name   string
+		flow   simulate.Flow
+		want   string
+		reason string
+	}{
+		{
+			// intra-inside does not read its to zone; inter-inside does not name out.
+			"derived inside to out",
+			simulate.Flow{Source: ep("10.1.0.5"), Destination: ep("10.3.0.5")},
+			"intra-inside", "the zones are derived, so rule-type could not compare from and to for: intra-inside",
+		},
+		{
+			"derived inside to inside",
+			simulate.Flow{Source: ep("10.1.0.5"), Destination: ep("10.1.0.6")},
+			"intra-inside,inter-inside", "the zones are derived, so rule-type could not compare from and to for: intra-inside, inter-inside",
+		},
+		{
+			// No rule names dmz as its from zone, whatever its type.
+			"derived dmz to inside",
+			simulate.Flow{Source: ep("10.2.0.5"), Destination: ep("10.1.0.5")},
+			"", "",
+		},
+		{
+			"given but undefined from",
+			simulate.Flow{Source: ep("10.1.0.5"), Destination: ep("10.2.0.5"), FromZone: "nowhere", ToZone: "dmz"},
+			"", "",
+		},
+		{
+			"given but undefined to",
+			simulate.Flow{Source: ep("10.1.0.5"), Destination: ep("10.2.0.5"), FromZone: "inside", ToZone: "nowhere"},
+			"intra-inside", "a given zone is not defined in the vsys, so rule-type could not compare from and to for: intra-inside",
+		},
+	} {
+		r, v := run(t, e, c.flow)
+		if got := ruleNames(v); got != c.want {
+			t.Errorf("%s: candidates %q, want %q", c.name, got, c.want)
+		}
+		f := stage(r, "derive-zones").Fidelity
+		// Derived zones are inferred, which is weaker than overmatch; the reason stays.
+		if f.Level() == "exact" && c.reason != "" || !strings.Contains(f.String(), c.reason) ||
+			c.reason == "" && strings.Contains(f.String(), "rule-type") {
+			t.Errorf("%s: derive-zones = %s", c.name, f)
+		}
+	}
+}
+
+// ruleTypeWith is the rule-type fixture with default rule entries added, local
+// under the vsys rulebase and pushed under the shared post-rulebase.
+func ruleTypeWith(t *testing.T, local, pushed string) *simulate.Env {
+	t.Helper()
+	src, err := os.ReadFile("../../../testdata/config/firewall-ruletype.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc := strings.Replace(string(src), "<shared/>",
+		"<shared><post-rulebase><default-security-rules><rules>"+pushed+"</rules></default-security-rules></post-rulebase></shared>", 1)
+	doc = strings.Replace(doc, "</security>",
+		"</security><default-security-rules><rules>"+local+"</rules></default-security-rules>", 1)
+	path := filepath.Join(t.TempDir(), "defaults.xml")
+	if err := os.WriteFile(path, []byte(doc), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return envPath(t, path, false)
+}
+
+func entry(name, action string) string {
+	if action == "" {
+		return `<entry name="` + name + `"><log-end>yes</log-end></entry>`
+	}
+	return `<entry name="` + name + `"><action>` + action + `</action></entry>`
+}
+
+// With no candidate and single, known zones, the default rule for the zone pair
+// decides, with the action its sources give.
+func TestDefaultRuleDecides(t *testing.T) {
+	t.Parallel()
+	const intra, inter = "intrazone-default", "interzone-default"
+	for _, c := range []struct {
+		name          string
+		local, pushed string
+		to            string // from is dmz
+		want          string // default (action), source; or the undermatch reason
+	}{
+		{"built-in intrazone", "", "", "dmz", "intrazone-default (allow), built-in"},
+		{"built-in interzone; vsys2's entry does not count", "", "", "inside", "interzone-default (deny), built-in"},
+		{"the other rule's entry does not count", entry(intra, "deny"), "", "inside", "interzone-default (deny), built-in"},
+		{"local overrides", entry(inter, "allow"), "", "inside", "interzone-default (allow), local"},
+		{"local without action keeps the built-in", entry(inter, ""), "", "inside", "interzone-default (deny), local"},
+		{"pushed overrides", "", entry(intra, "reset-both"), "dmz", "intrazone-default (reset-both), pushed"},
+		{"pushed without action keeps the built-in", "", entry(inter, ""), "inside", "interzone-default (deny), pushed"},
+		{"local and pushed agree", entry(intra, "drop"), entry(intra, "drop"), "dmz", "intrazone-default (drop), local"},
+		{"local and pushed disagree", entry(intra, "drop"), entry(intra, "allow"), "dmz", "local and pushed default rules disagree; precedence not verified"},
+		{"not an action", entry(inter, "maybe"), "", "inside", `interzone-default has the action "maybe", which is not a security rule action`},
+	} {
+		r, v := run(t, ruleTypeWith(t, c.local, c.pushed), simulate.Flow{
+			Source: ep("10.2.0.5"), Destination: ep("10.1.0.5"), FromZone: "dmz", ToZone: c.to,
+		})
+		fm := stage(r, "first-match")
+		got := fmt.Sprintf("%s (%s), %s", v.Default, v.DefaultAction, v.DefaultSource)
+		if v.Default == "" {
+			if fm.Fidelity.Level() != "undermatch" {
+				t.Errorf("%s: an undecided default is undermatch, got %s", c.name, fm.Fidelity)
+			}
+			got = strings.TrimPrefix(fm.Detail, "no enabled rule matches; ")
+		}
+		if got != c.want || v.Rule != nil {
+			t.Errorf("%s: got %q, want %q", c.name, got, c.want)
+		}
+	}
+}
+
+// Without single, known zones no default rule decides.
+func TestDefaultRuleNeedsKnownZones(t *testing.T) {
+	t.Parallel()
+	e := env(t, "firewall-zones.xml", false)
+	for _, f := range []simulate.Flow{
+		{Source: ep("10.2.0.5"), Destination: ep("10.1.0.5")},                                        // derived
+		{Source: ep("10.2.0.5"), Destination: ep("10.1.0.5"), FromZone: "nowhere", ToZone: "inside"}, // undefined
+	} {
+		r, v := run(t, e, f)
+		fm := stage(r, "first-match").Fidelity
+		if v.Default != "" || fm.Level() != "undermatch" || !strings.Contains(fm.String(), "the default rule depends on the zones") {
+			t.Errorf("%+v: default %q, first-match %s", f, v.Default, fm)
+		}
+	}
+}
+
+// A configuration without the index's vsys has unknown default rules: the
+// built-in action would be a guess.
+func TestDefaultRuleWithoutTheVsys(t *testing.T) {
+	t.Parallel()
+	cfg, _, err := config.Load("../../../testdata/config/firewall-ruletype.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, _, err := config.Load("../../../testdata/config/firewall-zones.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	idx, err := index.For(cfg, config.Scope{Sort: config.ScopeVsys, Name: "vsys2"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := &state{known: true, target: simulate.Target{Config: other, Index: idx}}
+	s.in.Flow.FromZone, s.in.Flow.ToZone = "inside", "dmz"
+	if d, why := s.defaultRule(); d.Name != "" || why != "the configuration has no vsys:vsys2, so its default rules are not known" {
+		t.Errorf("got %+v, %q", d, why)
 	}
 }

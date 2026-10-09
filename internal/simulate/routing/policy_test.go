@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/netip"
+	"slices"
 	"strings"
 	"testing"
 
@@ -64,7 +65,8 @@ func TestPBFForwardAndSourceNAT(t *testing.T) {
 	h := p.Hops[0]
 	want := "pbf rule branch-to-zscaler may forward this packet to tunnel.1 via 198.19.255.254; " +
 		"nat rule snat-out (branch-vpn -> datacenter): source 10.20.5.5 -> 203.0.113.9"
-	if notes(h) != want || h.Fidelity.Level() != "inferred" || h.PostNAT == nil || h.PostNAT.Source.String() != "203.0.113.9" {
+	if notes(h) != want || h.Fidelity.Level() != "inferred" || h.PostNAT == nil || h.PostNAT.Source.String() != "203.0.113.9" ||
+		!slices.Equal(h.PBF, []string{"branch-to-zscaler"}) {
 		t.Errorf("notes = %q, fidelity %s", notes(h), h.Fidelity)
 	}
 }
@@ -72,11 +74,12 @@ func TestPBFForwardAndSourceNAT(t *testing.T) {
 // A PBF rule by interface, with a negated destination.
 func TestPBFByInterface(t *testing.T) {
 	t.Parallel()
-	if h := policyRun(t, "firewall-routing.xml", "10.99.0.5", "10.1.10.50").Hops[0]; notes(h) != "pbf rule lab-by-interface may drop this packet" {
+	if h := policyRun(t, "firewall-routing.xml", "10.99.0.5", "10.1.10.50").Hops[0]; notes(h) != "pbf rule lab-by-interface may drop this packet" ||
+		!slices.Equal(h.PBF, []string{"lab-by-interface"}) {
 		t.Errorf("notes = %q", notes(h))
 	}
 	// dc01 is the negated destination: the rule does not match, and nothing else does.
-	if h := policyRun(t, "firewall-routing.xml", "10.99.0.5", "10.1.10.100").Hops[0]; notes(h) != "" || h.Fidelity.Level() != "exact" {
+	if h := policyRun(t, "firewall-routing.xml", "10.99.0.5", "10.1.10.100").Hops[0]; notes(h) != "" || h.Fidelity.Level() != "exact" || h.PBF != nil {
 		t.Errorf("notes = %q, fidelity %s", notes(h), h.Fidelity)
 	}
 }
@@ -86,7 +89,7 @@ func TestPBFByInterface(t *testing.T) {
 func TestNoPBFAndATranslationCarriesOn(t *testing.T) {
 	t.Parallel()
 	p := policyRun(t, "firewall-routing.xml", "10.1.100.250", "8.8.8.8")
-	if notes(p.Hops[0]) != "nat rule static-pve (datacenter -> sdwan): source 10.1.100.250 -> 198.51.100.20" {
+	if notes(p.Hops[0]) != "nat rule static-pve (datacenter -> sdwan): source 10.1.100.250 -> 198.51.100.20" || p.Hops[0].PBF != nil {
 		t.Errorf("hop 1 notes = %q", notes(p.Hops[0]))
 	}
 	if len(p.Hops) != 2 || p.Hops[1].Flow.Source.String() != "198.51.100.20" || notes(p.Hops[1]) != "" {

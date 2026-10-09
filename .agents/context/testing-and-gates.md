@@ -24,7 +24,9 @@ ci: tidy-check lint test-race test-cov context-check build vuln
 | `context-check` | these agent docs drifting from the real API |
 
 `go test ./internal/archtest -run TestImportDirection` is R12: the read-only core
-imports no I/O, and the packages above it point one way. It runs in `test-race`.
+imports no I/O, and the packages above it point one way. `TestTestHelpersStayInTests`
+keeps the test helpers `internal/fakepanos` and `internal/simulate/pathlab`, which
+import `testing`, out of every package's non-test code. It runs in `test-race`.
 
 ### The coverage ratchet
 
@@ -68,6 +70,7 @@ The fetcher's tests run against `internal/fakepanos`, a fake XML API over TLS on
 | `unsupported-version.xml` | a version older than every digest, read with the lowest |
 | `firewall-version-12.2.xml` | a version newer than every digest, and the gap it reports |
 | `panorama-rejected.xml` | a Panorama refusal |
+| `path-fw01.xml`, `path-fw02.xml` | the two-firewall path fixture: zones as in the lab's operational data, no security rule; `internal/simulate/pathlab` serves them with default-rule variants to the path and CLI tests |
 
 ### The device probe
 

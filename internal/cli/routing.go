@@ -147,7 +147,7 @@ func (r routingAnswer) Qualifiers() qualifiers {
 
 func (r routingAnswer) Text(t *textOut) error {
 	if r.ok {
-		renderPath(t, r.run, r.path, t.now, r.o.why)
+		renderPath(t, routingTitle(r.path), r.run, r.path, t.now, r.o.why, nil)
 	}
 	printQualifiers(t, r.Qualifiers())
 	return t.err

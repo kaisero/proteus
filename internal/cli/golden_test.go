@@ -103,6 +103,9 @@ func TestGoldenJSON(t *testing.T) {
 		{"lookup", 0, []string{"lookup", "branch-to-dc", "--file", fixture("firewall-lookup.xml")}},
 		{"snapshot-show-file", 0, []string{"snapshot", "show", "--file", fixture("firewall-multivsys.xml")}},
 		{"simulate-policy", 0, []string{"simulate", "policy", "10.1.0.5", "10.2.0.5", "--port", "443", "--file", fixture("firewall-zones.xml")}},
+		{"simulate-policy-default", 0, []string{"simulate", "policy", "10.2.0.5", "10.1.0.5", "--port", "443", "--from-zone", "dmz", "--to-zone", "inside", "--file", fixture("firewall-zones.xml")}},
+		{"simulate-policy-doubt", 0, []string{"simulate", "policy", "198.19.0.254", "10.2.0.5", "--port", "443", "--from-zone", "labor", "--to-zone", "dmz", "--file", fixture("firewall-doubt.xml")}},
+		{"simulate-policy-undecided", 3, []string{"simulate", "policy", "10.0.0.5", "203.0.113.5", "--port", "443", "--from-zone", "dmz", "--to-zone", "wan", "--file", fixture("firewall-doubt.xml")}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -158,6 +161,14 @@ func TestGoldenJSON(t *testing.T) {
 		goldenFile(t, "simulate-nat.yaml", outYAML)
 	})
 
+	for _, g := range pathGoldens(t) {
+		t.Run(g.name, func(t *testing.T) {
+			t.Parallel()
+			golden(t, g.name, pathVariant(t, g.pc, true).want(g.code, append(g.args, "--output", "json")...))
+			goldenFile(t, g.name+".yaml", pathVariant(t, g.pc, true).want(g.code, append(g.args, "--output", "yaml")...))
+		})
+	}
+
 	t.Run("simulate-routing", func(t *testing.T) {
 		t.Parallel()
 		out := routingLab(t, false).want(0, "simulate", "routing", "198.18.10.5", "8.8.8.8", "--output", "json")
@@ -170,7 +181,7 @@ func TestGoldenJSON(t *testing.T) {
 // colourFamilies are the table rows below that get a coloured golden twin (spec
 // §11.2). The other families with one (fetch, snapshot-diff, simulate-nat,
 // simulate-routing) get theirs in the store and simulate subtests.
-var colourFamilies = map[string]bool{"search": true, "lookup": true, "simulate-policy-why": true}
+var colourFamilies = map[string]bool{"search": true, "lookup": true, "simulate-policy-why": true, "simulate-policy-doubt": true}
 
 // Every command's text output, so a change of layout shows up as a reviewed diff.
 func TestGoldenText(t *testing.T) {
@@ -185,6 +196,9 @@ func TestGoldenText(t *testing.T) {
 		{"snapshot-show-file", 0, []string{"snapshot", "show", "--file", fixture("firewall-multivsys.xml")}},
 		{"simulate-policy", 0, []string{"simulate", "policy", "10.1.0.5", "10.2.0.5", "--port", "443", "--file", fixture("firewall-zones.xml")}},
 		{"simulate-policy-why", 0, []string{"simulate", "policy", "10.1.0.5", "10.2.0.5", "--port", "443", "--why", "--file", fixture("firewall-zones.xml")}},
+		{"simulate-policy-default", 0, []string{"simulate", "policy", "10.2.0.5", "10.1.0.5", "--port", "443", "--from-zone", "dmz", "--to-zone", "inside", "--file", fixture("firewall-zones.xml")}},
+		{"simulate-policy-doubt", 0, []string{"simulate", "policy", "198.19.0.254", "10.2.0.5", "--port", "443", "--from-zone", "labor", "--to-zone", "dmz", "--why", "--file", fixture("firewall-doubt.xml")}},
+		{"simulate-policy-undecided", 3, []string{"simulate", "policy", "10.0.0.5", "203.0.113.5", "--port", "443", "--from-zone", "dmz", "--to-zone", "wan", "--why", "--file", fixture("firewall-doubt.xml")}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -228,6 +242,14 @@ func TestGoldenText(t *testing.T) {
 		goldenColour(t, "simulate-nat", natLab(t).want(0, "simulate", "nat", "198.18.1.10", "198.18.250.10",
 			"--device", "fw01", "--router", "default", "--from-zone", "transport", "--port", "8443", "--why", "--color", "always"))
 	})
+
+	for _, g := range pathGoldens(t) {
+		t.Run(g.name, func(t *testing.T) {
+			t.Parallel()
+			goldenText(t, g.name, pathVariant(t, g.pc, true).want(g.code, g.args...))
+			goldenColour(t, g.name, pathVariant(t, g.pc, true).want(g.code, append(g.args, "--color", "always")...))
+		})
+	}
 
 	t.Run("simulate-routing", func(t *testing.T) {
 		t.Parallel()
