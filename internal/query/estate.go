@@ -26,12 +26,12 @@ var (
 // Selection is what a question runs against: one configuration file, or the
 // selected devices' snapshots. Only the fields given appear in JSON.
 type Selection struct {
-	At     string   `json:"at,omitempty"`
-	Device []string `json:"device,omitempty"`
-	File   string   `json:"file,omitempty"`
-	Fresh  bool     `json:"fresh,omitempty"`
-	Label  []string `json:"label,omitempty"`
-	Vsys   []string `json:"vsys,omitempty"`
+	At     string   `json:"at,omitempty" jsonschema:"read each device's newest snapshot at or before this time; empty for the latest"`
+	Device []string `json:"device,omitempty" jsonschema:"the devices to read; empty for every device"`
+	File   string   `json:"file,omitempty" jsonschema:"one configuration file to read in place of the store"`
+	Fresh  bool     `json:"fresh,omitempty" jsonschema:"fetch the devices before reading them"`
+	Label  []string `json:"label,omitempty" jsonschema:"select devices by label, key=value"`
+	Vsys   []string `json:"vsys,omitempty" jsonschema:"the vsys to read; empty for every vsys"`
 }
 
 // parseAt reads a point in time, or the zero time for none.

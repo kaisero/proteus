@@ -130,8 +130,7 @@ func (p pathAnswer) SummaryResults() any {
 }
 
 func (p pathAnswer) Input() any {
-	in := p.e.Input
-	return pathInput{Mode: "path", Flow: in.Simulated, Device: in.Device, Router: in.Router, At: in.At}
+	return p.e.Input.Echo()
 }
 
 func (p pathAnswer) Text(t *textOut) error {
@@ -223,13 +222,4 @@ func verdictLine(pal palette, r pathpolicy.Result) string {
 		return pal.warn(line)
 	}
 	return pal.bad(line)
-}
-
-// pathInput is the input block in path mode (spec §8.2).
-type pathInput struct {
-	Mode   string        `json:"mode"`
-	Flow   simulate.Flow `json:"flow"`
-	Device string        `json:"device"`
-	Router string        `json:"router"`
-	At     string        `json:"at"`
 }

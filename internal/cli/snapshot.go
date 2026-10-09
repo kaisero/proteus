@@ -271,7 +271,7 @@ func (d snapshotDiffAnswer) SummaryResults() any {
 }
 
 func (d snapshotDiffAnswer) Input() any {
-	return snapshotDiffInput{Selection: d.e.Input.Selection, From: d.e.Input.From, To: d.e.Input.To}
+	return d.e.Input.Echo()
 }
 
 // Text prints one block per device and one section per scope.

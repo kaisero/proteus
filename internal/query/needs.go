@@ -17,9 +17,9 @@ import (
 // its name as a tool takes it, and Text says what to give and which rules it
 // decides, in the tool's words.
 type Need struct {
-	Code  reason.Code `json:"code"`
-	Input string      `json:"input"`
-	Text  string      `json:"text"`
+	Code  reason.Code `json:"code" jsonschema:"the input's code: input.port, input.protocol or input.url"`
+	Input string      `json:"input" jsonschema:"the input to give in a second call"`
+	Text  string      `json:"text" jsonschema:"what to give and which rules it decides"`
 }
 
 // cause is a reason code that held an answer back, and the rule it belongs

@@ -81,8 +81,7 @@ func (l lookupAnswer) SummaryResults() any {
 }
 
 func (l lookupAnswer) Input() any {
-	in := l.e.Input
-	return lookupInput{Name: in.Name, Kind: in.Kind, Expand: in.Expand, Full: in.Full, Selection: in.Selection}
+	return l.e.Input.Echo()
 }
 
 func (l lookupAnswer) Text(t *textOut) error {

@@ -30,17 +30,17 @@ const oneConfig = "use --file <path> --vsys <name> for one configuration"
 
 // PolicyInput is simulate policy along the flow's path (spec 2026-10-07 §3).
 type PolicyInput struct {
-	Flow FlowInput `json:"flow"`
+	Flow FlowInput `json:"flow" jsonschema:"the flow to check"`
 	// Device is the firewall the path starts on; "" places the start by the
 	// source. Router picks its logical router.
-	Device string `json:"device,omitempty"`
-	Router string `json:"router,omitempty"`
+	Device string `json:"device,omitempty" jsonschema:"the firewall the path starts on; empty places the start by the source"`
+	Router string `json:"router,omitempty" jsonschema:"the start's logical router; needs device"`
 	// At reads each device's newest snapshot at or before this time.
-	At string `json:"at,omitempty"`
+	At string `json:"at,omitempty" jsonschema:"read each device's newest snapshot at or before this time (RFC 3339 or a date); empty for the latest"`
 	// Vsys and Label select for one configuration; path mode refuses them,
 	// because it checks every firewall and vsys on the path.
-	Vsys  []string `json:"vsys,omitempty"`
-	Label []string `json:"label,omitempty"`
+	Vsys  []string `json:"vsys,omitempty" jsonschema:"refused: path mode checks every vsys on the path"`
+	Label []string `json:"label,omitempty" jsonschema:"refused: path mode checks every firewall on the path"`
 	// Simulated is the flow as simulated, its endpoints resolved. The query
 	// sets it on the envelope's input; it is ignored on the way in.
 	Simulated simulate.Flow `json:"-"`
@@ -76,11 +76,11 @@ func (in PolicyInput) Validate() *UsageError {
 // PolicyFileInput is simulate policy on one configuration file: one vsys, its
 // zones given or derived from the configuration.
 type PolicyFileInput struct {
-	Flow FlowInput `json:"flow"`
+	Flow FlowInput `json:"flow" jsonschema:"the flow to check"`
 	// Selection names the file and its vsys. The store's selectors are refused.
-	Selection Selection `json:"selection"`
+	Selection Selection `json:"selection" jsonschema:"the configuration file and its vsys"`
 	// Router is refused: a file has no path to start.
-	Router string `json:"router,omitempty"`
+	Router string `json:"router,omitempty" jsonschema:"the logical router whose forwarding table derives the zones"`
 	// Simulated is the flow as simulated; see PolicyInput.
 	Simulated simulate.Flow `json:"-"`
 }
@@ -344,9 +344,10 @@ func nonNilReasons(rs simulate.Reasons) simulate.Reasons {
 	return rs
 }
 
-func nonNil(s []string) []string {
+// nonNil is s, or an empty slice for nil, so JSON prints [] (spec U5).
+func nonNil[T any](s []T) []T {
 	if s == nil {
-		return []string{}
+		return []T{}
 	}
 	return s
 }
@@ -355,23 +356,23 @@ func nonNil(s []string) []string {
 // was decided, routing's path fields, and the hops with their checks. Result
 // and RunStages are the native answer, for a renderer.
 type PathResult struct {
-	Answer      string            `json:"answer"`
-	Needs       []Need            `json:"needs,omitzero"`
-	Mode        string            `json:"mode"`
-	Verdict     string            `json:"verdict"`
-	At          *Point            `json:"at"`
-	Fidelity    simulate.Fidelity `json:"fidelity"`
-	Source      simulate.Endpoint `json:"source"`
-	Destination simulate.Endpoint `json:"destination"`
-	Placed      topology.Placed   `json:"placed"`
-	PlacedVia   string            `json:"placed_via,omitempty"`
-	StartVia    netip.Prefix      `json:"start_via,omitzero"`
-	Outcome     routing.Outcome   `json:"outcome"`
-	End         string            `json:"end"`
-	EndCode     reason.Code       `json:"end_code"`
-	Hidden      []string          `json:"hidden,omitempty"`
-	Stages      []Stage           `json:"stages"`
-	Hops        []PathHop         `json:"hops"`
+	Answer      string            `json:"answer" jsonschema:"one line that says what the result found, as the text output prints it"`
+	Needs       []Need            `json:"needs,omitzero" jsonschema:"present when the result is held back: the inputs a second call can give to change it; empty when none helps"`
+	Mode        string            `json:"mode" jsonschema:"path: the flow is checked on every firewall it crosses"`
+	Verdict     string            `json:"verdict" jsonschema:"allowed, denied, undecided or another path verdict; undecided means the answer cannot say"`
+	At          *Point            `json:"at" jsonschema:"where the verdict was decided or became undecided; null when no check decided"`
+	Fidelity    simulate.Fidelity `json:"fidelity" jsonschema:"how certain the result is: exact, overmatch, inferred or undermatch, with the reasons; never report undermatch or inferred as a firm answer"`
+	Source      simulate.Endpoint `json:"source" jsonschema:"the source endpoint as simulated"`
+	Destination simulate.Endpoint `json:"destination" jsonschema:"the destination endpoint as simulated"`
+	Placed      topology.Placed   `json:"placed" jsonschema:"how the path's start was placed"`
+	PlacedVia   string            `json:"placed_via,omitempty" jsonschema:"the route or interface that placed the start"`
+	StartVia    netip.Prefix      `json:"start_via,omitzero" jsonschema:"the prefix that placed the start"`
+	Outcome     routing.Outcome   `json:"outcome" jsonschema:"how the path ended"`
+	End         string            `json:"end" jsonschema:"where and why the path ended, in words"`
+	EndCode     reason.Code       `json:"end_code" jsonschema:"the reason code of the path end"`
+	Hidden      []string          `json:"hidden,omitempty" jsonschema:"firewalls the path crossed that the inventory does not hold"`
+	Stages      []Stage           `json:"stages" jsonschema:"the run's stages: what each one did, its fidelity and its candidate count"`
+	Hops        []PathHop         `json:"hops" jsonschema:"the firewalls the path crossed, in order"`
 
 	Result    pathpolicy.Result `json:"-"`
 	RunStages []simulate.Stage  `json:"-"`
@@ -380,25 +381,25 @@ type PathResult struct {
 // Point is where the verdict was decided, or became undecided, and why: one
 // reason, or the parts of a composite one, each with its code.
 type Point struct {
-	Hop     int              `json:"hop"`
-	Check   string           `json:"check"`
-	Rule    string           `json:"rule"`
-	Reasons simulate.Reasons `json:"reasons"`
+	Hop     int              `json:"hop" jsonschema:"the hop index"`
+	Check   string           `json:"check" jsonschema:"the check that decided"`
+	Rule    string           `json:"rule" jsonschema:"the deciding rule"`
+	Reasons simulate.Reasons `json:"reasons" jsonschema:"why, each reason with its code"`
 }
 
 // PathHop is one hop: routing's keys, with its notes, PBF rules, ECMP next
 // hops and placeholder flag present even when empty, then what the path mode
 // adds. A field declared here wins over routing.Hop's field of the same key.
 type PathHop struct {
-	Index int `json:"index"`
+	Index int `json:"index" jsonschema:"the hop's place on the path"`
 	routing.Hop
-	Notes           simulate.Reasons      `json:"notes"`
-	PBF             []string              `json:"pbf"`
-	ECMP            []routing.NotFollowed `json:"ecmp_not_followed"`
-	ZonePlaceholder bool                  `json:"zone_placeholder"`
-	Doubts          simulate.Reasons      `json:"doubts"`
-	AfterDeny       bool                  `json:"after_deny"`
-	Checks          Checks                `json:"checks"`
+	Notes           simulate.Reasons      `json:"notes" jsonschema:"notes on the hop, each with its code"`
+	PBF             []string              `json:"pbf" jsonschema:"policy-based forwarding rules that applied"`
+	ECMP            []routing.NotFollowed `json:"ecmp_not_followed" jsonschema:"equal-cost next hops the path did not follow"`
+	ZonePlaceholder bool                  `json:"zone_placeholder" jsonschema:"whether the zones are placeholders"`
+	Doubts          simulate.Reasons      `json:"doubts" jsonschema:"doubts on the hop, each with its code"`
+	AfterDeny       bool                  `json:"after_deny" jsonschema:"whether the hop comes after a deny, checked only to show the rest of the path"`
+	Checks          Checks                `json:"checks" jsonschema:"each check's answer under its name, such as security"`
 }
 
 // Check is one check's answer under its name.
@@ -466,11 +467,11 @@ func pathResultOf(r pathpolicy.Result, stages []simulate.Stage) PathResult {
 
 // Rule is a rule in a simulation's answer.
 type Rule struct {
-	Position int    `json:"position"`
-	Name     string `json:"name"`
-	Action   string `json:"action"`
-	Layer    string `json:"layer"`
-	Scope    string `json:"scope"`
+	Position int    `json:"position" jsonschema:"the rule's position in the effective order"`
+	Name     string `json:"name" jsonschema:"the rule name"`
+	Action   string `json:"action" jsonschema:"the rule's action"`
+	Layer    string `json:"layer" jsonschema:"the rulebase layer: pre, local or post"`
+	Scope    string `json:"scope" jsonschema:"the scope the rule comes from"`
 }
 
 func ruleOf(r resolve.Rule) Rule {
@@ -482,22 +483,22 @@ func ruleOf(r resolve.Rule) Rule {
 type Security struct {
 	// Verdict is pass, stop, undecided or, on a hop, not-evaluated; Reasons say
 	// why (spec 2026-10-07 §4.7): one reason, or a composite one's parts.
-	Verdict string           `json:"verdict"`
-	Reasons simulate.Reasons `json:"reasons"`
+	Verdict string           `json:"verdict" jsonschema:"pass, stop, undecided or, on a hop, not-evaluated"`
+	Reasons simulate.Reasons `json:"reasons" jsonschema:"why, each reason with its code"`
 	// Rule is the rule or default rule that decides; empty when undecided.
-	Rule string `json:"rule"`
+	Rule string `json:"rule" jsonschema:"the rule or default rule that decides; empty when undecided"`
 	// Default is the default rule that decides when no rule matches, empty when
 	// none does; DefaultSource says where its action came from.
-	Default       string            `json:"default"`
-	DefaultAction string            `json:"default_action"`
-	DefaultSource string            `json:"default_source"`
-	Fidelity      simulate.Fidelity `json:"fidelity"`
-	FirstMatch    *Rule             `json:"first_match"`
-	Candidates    []Rule            `json:"candidates"`
+	Default       string            `json:"default" jsonschema:"the default rule that decides when no rule matches; empty when none does"`
+	DefaultAction string            `json:"default_action" jsonschema:"the default rule's action"`
+	DefaultSource string            `json:"default_source" jsonschema:"where the default action came from: built-in, local or pushed"`
+	Fidelity      simulate.Fidelity `json:"fidelity" jsonschema:"how certain the result is: exact, overmatch, inferred or undermatch, with the reasons; never report undermatch or inferred as a firm answer"`
+	FirstMatch    *Rule             `json:"first_match" jsonschema:"the first certain match; null when none"`
+	Candidates    []Rule            `json:"candidates" jsonschema:"the rules that may match the flow, in order"`
 	// Doubts names the candidates that set a matching field no stage evaluates.
-	Doubts []securitypolicy.Doubt        `json:"doubts"`
-	Zones  securitypolicy.ZoneDerivation `json:"zones"`
-	Stages []Stage                       `json:"stages"`
+	Doubts []securitypolicy.Doubt        `json:"doubts" jsonschema:"rules that may match first, with the reasons the answer cannot rule them out"`
+	Zones  securitypolicy.ZoneDerivation `json:"zones" jsonschema:"the zones used and where they came from"`
+	Stages []Stage                       `json:"stages" jsonschema:"the run's stages: what each one did, its fidelity and its candidate count"`
 }
 
 // securityOf is a security answer. v is nil when the check did not run.
@@ -530,12 +531,12 @@ func securityOf(v *securitypolicy.Verdict, verdict string, why simulate.Reasons,
 // SecurityResult is one device and vsys's simulate policy answer on a file. Run,
 // Check and From are the native answer, for a renderer.
 type SecurityResult struct {
-	Answer string `json:"answer"`
-	Needs  []Need `json:"needs,omitzero"`
+	Answer string `json:"answer" jsonschema:"one line that says what the result found, as the text output prints it"`
+	Needs  []Need `json:"needs,omitzero" jsonschema:"present when the result is held back: the inputs a second call can give to change it; empty when none helps"`
 	Security
-	Kind      string                   `json:"kind"`
-	Relevance securitypolicy.Relevance `json:"relevance"`
-	Target    Target                   `json:"target"`
+	Kind      string                   `json:"kind" jsonschema:"the question kind: policy"`
+	Relevance securitypolicy.Relevance `json:"relevance" jsonschema:"whether the device routes either endpoint by more than a default route"`
+	Target    Target                   `json:"target" jsonschema:"the device, vsys and snapshot the result came from"`
 
 	Run   simulate.Run           `json:"-"`
 	Check securitypolicy.Verdict `json:"-"`

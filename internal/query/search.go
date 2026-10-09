@@ -17,17 +17,17 @@ import (
 
 // SearchInput is search: every place a value or name appears.
 type SearchInput struct {
-	Term string `json:"term"`
+	Term string `json:"term" jsonschema:"the value or name to search for: an address, a prefix, a port or a name"`
 	// Mode overrides the match the term's type sets: exact, within or contains.
-	Mode string `json:"mode,omitempty"`
+	Mode string `json:"mode,omitempty" jsonschema:"exact, within or contains; empty lets the term's type decide"`
 	// Kinds, Fields and Show narrow the findings; Direct keeps groups one level
 	// up.
-	Kinds  []string `json:"kinds,omitempty"`
-	Fields []string `json:"fields,omitempty"`
-	Show   []string `json:"show,omitempty"`
-	Direct bool     `json:"direct,omitempty"`
+	Kinds  []string `json:"kinds,omitempty" jsonschema:"object kinds to search; empty for every kind"`
+	Fields []string `json:"fields,omitempty" jsonschema:"rule fields to search; empty for every field"`
+	Show   []string `json:"show,omitempty" jsonschema:"finding stages to show: objects, groups, refs, literals"`
+	Direct bool     `json:"direct,omitempty" jsonschema:"follow groups one level up only"`
 	// Selection is what the search runs against.
-	Selection Selection `json:"selection"`
+	Selection Selection `json:"selection" jsonschema:"the file or the devices to search"`
 }
 
 // searchModes are the modes a search takes, by name.
@@ -105,10 +105,10 @@ func (in SearchInput) Matching() string {
 // Finding is one finding with the target it came from. TargetIndex is the
 // target's place in the envelope's Targets, for a renderer.
 type Finding struct {
-	Answer string `json:"answer"`
+	Answer string `json:"answer" jsonschema:"one line that says what the result found, as the text output prints it"`
 	Target
 	search.Finding
-	Scope string `json:"scope"`
+	Scope string `json:"scope" jsonschema:"the configuration scope the result came from"`
 
 	TargetIndex int `json:"-"`
 }

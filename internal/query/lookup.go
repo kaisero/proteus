@@ -16,15 +16,15 @@ import (
 
 // LookupInput is lookup: the whole rule or object a name refers to.
 type LookupInput struct {
-	Name string `json:"name"`
+	Name string `json:"name" jsonschema:"the rule or object name"`
 	// Kind picks one kind when several share the name: security-rule or an
 	// object kind.
-	Kind string `json:"kind,omitempty"`
+	Kind string `json:"kind,omitempty" jsonschema:"pick one kind when several share the name: security-rule or an object kind"`
 	// Expand and Full shape the rendered card; the result always holds all of it.
-	Expand bool `json:"expand,omitempty"`
-	Full   bool `json:"full,omitempty"`
+	Expand bool `json:"expand,omitempty" jsonschema:"expand groups in the text card"`
+	Full   bool `json:"full,omitempty" jsonschema:"show every field in the text card"`
 	// Selection is what the lookup runs against.
-	Selection Selection `json:"selection"`
+	Selection Selection `json:"selection" jsonschema:"the file or the devices to read"`
 }
 
 // Validate holds lookup's input rules: a file without the store's selectors.
@@ -38,10 +38,10 @@ func (in LookupInput) Validate() *UsageError {
 // LookupResult is one card with the target it came from. TargetIndex is the
 // target's place in the envelope's Targets, for a renderer.
 type LookupResult struct {
-	Answer string `json:"answer"`
+	Answer string `json:"answer" jsonschema:"one line that says what the result found, as the text output prints it"`
 	Target
-	Scope string    `json:"scope"`
-	Card  card.Card `json:"card"`
+	Scope string    `json:"scope" jsonschema:"the configuration scope the result came from"`
+	Card  card.Card `json:"card" jsonschema:"the rule or object with every field"`
 
 	TargetIndex int `json:"-"`
 }

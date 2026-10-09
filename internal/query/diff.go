@@ -18,11 +18,11 @@ import (
 type DiffInput struct {
 	// Selection names the devices and, optionally, the vsys. A diff reads the
 	// store: a file, a time and a fresh fetch are refused.
-	Selection Selection `json:"selection"`
+	Selection Selection `json:"selection" jsonschema:"the devices and, optionally, the vsys to compare"`
 	// From and To are points in time; "" compares the snapshot before To with
 	// To, and To "" is the latest.
-	From string `json:"from,omitempty"`
-	To   string `json:"to,omitempty"`
+	From string `json:"from,omitempty" jsonschema:"the older point in time; empty for the snapshot before the newer one"`
+	To   string `json:"to,omitempty" jsonschema:"the newer point in time; empty for the latest"`
 }
 
 // Validate holds the diff's input rules: the store's devices only, picked by
@@ -42,12 +42,12 @@ func (in DiffInput) Validate() *UsageError {
 
 // DiffResult is what changed in one scope of one device.
 type DiffResult struct {
-	Answer  string         `json:"answer"`
-	Device  string         `json:"device"`
-	From    string         `json:"from"`
-	To      string         `json:"to"`
-	Scope   string         `json:"scope"`
-	Changes []drift.Change `json:"changes"`
+	Answer  string         `json:"answer" jsonschema:"one line that says what the result found, as the text output prints it"`
+	Device  string         `json:"device" jsonschema:"the device name"`
+	From    string         `json:"from" jsonschema:"the older snapshot ID"`
+	To      string         `json:"to" jsonschema:"the newer snapshot ID"`
+	Scope   string         `json:"scope" jsonschema:"the configuration scope the result came from"`
+	Changes []drift.Change `json:"changes" jsonschema:"what was added, removed or changed"`
 }
 
 // SnapshotDiff compares two snapshots of each selected device, per scope. A

@@ -93,11 +93,10 @@ type Envelope[In, Res any] struct {
 
 // Summary counts a search's or a lookup's results over the targets read.
 type Summary struct {
-	// Answer is the count line of the text output.
-	Answer  string `json:"answer"`
-	Found   int    `json:"found"`   // results over every target
-	With    int    `json:"with"`    // targets with a result
-	Without int    `json:"without"` // targets read without one
+	Answer  string `json:"answer" jsonschema:"the count line of the text output"`
+	Found   int    `json:"found" jsonschema:"results over every target"`
+	With    int    `json:"with" jsonschema:"targets with a result"`
+	Without int    `json:"without" jsonschema:"targets read without a result"`
 }
 
 // Summarize converts a full envelope into its summary form: each result through
@@ -154,21 +153,21 @@ func usageOf(err error, text, toolText string) *UsageError {
 // A composite reason is one entry per part; Part marks each entry after the
 // first, so a renderer can print the parts on one line.
 type Unresolved struct {
-	Device string      `json:"device"`
-	Vsys   string      `json:"vsys,omitempty"`
-	Value  string      `json:"value,omitempty"`
-	Code   reason.Code `json:"code"`
-	Reason string      `json:"text"`
+	Device string      `json:"device" jsonschema:"the device"`
+	Vsys   string      `json:"vsys,omitempty" jsonschema:"the vsys; empty for the device as a whole"`
+	Value  string      `json:"value,omitempty" jsonschema:"the value that was not resolved"`
+	Code   reason.Code `json:"code" jsonschema:"the reason code"`
+	Reason string      `json:"text" jsonschema:"the reason in words"`
 	Part   bool        `json:"-"`
 }
 
 // Note qualifies an answer without making it incomplete, such as a snapshot
 // past its age limit. JSON writes {device, vsys, code, text}.
 type Note struct {
-	Device string      `json:"device"`
-	Vsys   string      `json:"vsys,omitempty"`
-	Code   reason.Code `json:"code"`
-	Note   string      `json:"text"`
+	Device string      `json:"device" jsonschema:"the device"`
+	Vsys   string      `json:"vsys,omitempty" jsonschema:"the vsys; empty for the device as a whole"`
+	Code   reason.Code `json:"code" jsonschema:"the reason code"`
+	Note   string      `json:"text" jsonschema:"the note in words"`
 }
 
 // NoteOf is a note for a device and vsys with r's code and text.
@@ -196,10 +195,10 @@ func UnresolvedOfParts(device, vsys string, rs simulate.Reasons) []Unresolved {
 
 // Target is how a result names where it came from.
 type Target struct {
-	Device   string `json:"device"`
-	Vsys     string `json:"vsys"`
-	Snapshot string `json:"snapshot,omitempty"`
-	TakenAt  string `json:"taken_at,omitempty"`
+	Device   string `json:"device" jsonschema:"the device name"`
+	Vsys     string `json:"vsys" jsonschema:"the vsys name"`
+	Snapshot string `json:"snapshot,omitempty" jsonschema:"the snapshot ID"`
+	TakenAt  string `json:"taken_at,omitempty" jsonschema:"when the snapshot was taken (RFC 3339)"`
 }
 
 // TargetOf is a target's name in a result.
@@ -215,15 +214,15 @@ func TargetOf(t estate.Target) Target {
 // Stage is one stage of any staged operation (spec 2026-09-27 §3.4).
 // Simulations set Fidelity and Candidates; a fetch sets Status.
 type Stage struct {
-	Slug       string             `json:"slug"`
-	Name       string             `json:"name"`
-	Status     string             `json:"status,omitempty"`
-	Fidelity   *simulate.Fidelity `json:"fidelity,omitempty"`
-	Candidates *uint64            `json:"candidates,omitempty"`
-	Detail     string             `json:"detail,omitempty"`
-	Notes      []reason.Reason    `json:"notes,omitempty"`
-	Unresolved []index.Unresolved `json:"unresolved,omitempty"`
-	ElapsedMS  float64            `json:"elapsed_ms"`
+	Slug       string             `json:"slug" jsonschema:"the stage's ID"`
+	Name       string             `json:"name" jsonschema:"the stage's name"`
+	Status     string             `json:"status,omitempty" jsonschema:"a fetch stage's status"`
+	Fidelity   *simulate.Fidelity `json:"fidelity,omitempty" jsonschema:"how certain the stage's output is"`
+	Candidates *uint64            `json:"candidates,omitempty" jsonschema:"the candidate count after the stage"`
+	Detail     string             `json:"detail,omitempty" jsonschema:"what the stage did, in words"`
+	Notes      []reason.Reason    `json:"notes,omitempty" jsonschema:"notes the stage left, each with its code"`
+	Unresolved []index.Unresolved `json:"unresolved,omitempty" jsonschema:"values the stage could not resolve"`
+	ElapsedMS  float64            `json:"elapsed_ms" jsonschema:"the stage's time in milliseconds"`
 }
 
 // SimStages is a simulation's stages. Candidates keeps its meaning: the count

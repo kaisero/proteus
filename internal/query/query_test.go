@@ -3,6 +3,7 @@ package query
 import (
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -86,5 +87,44 @@ func TestSimStages(t *testing.T) {
 	got := SimStages([]simulate.Stage{st})
 	if len(got) != 1 || got[0].Slug != "zones" || *got[0].Candidates != 3 || got[0].Fidelity.Level() != "exact" || got[0].ElapsedMS != 1.5 {
 		t.Errorf("%+v", got)
+	}
+}
+
+// DocOf gives the JSON form: the input block from the input, every list [] when
+// empty, the summary only where the envelope has one.
+func TestDocOfPrintsEmptyLists(t *testing.T) {
+	t.Parallel()
+	e := envelope[DiffInput, DiffResult]("snapshot diff", DiffInput{Selection: Selection{Device: []string{"fw01"}}, To: "2026-09-28"})
+	b, err := json.Marshal(DocOf(e))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `{"format":2,"command":"snapshot diff","detail":"full","input":{"from":"","selection":{"device":["fw01"]},"to":"2026-09-28"},` +
+		`"results":[],"holes":[],"unresolved":[],"notes":[]}`
+	if string(b) != want {
+		t.Errorf("got  %s\nwant %s", b, want)
+	}
+}
+
+// Each input gives its command's input block.
+func TestEchoes(t *testing.T) {
+	t.Parallel()
+	flow := simulate.Flow{Protocol: "tcp", DestPort: 443}
+	sel := Selection{File: "f.xml"}
+	for _, tc := range []struct {
+		got  any
+		want string
+	}{
+		{PolicyFileInput{Selection: sel, Simulated: flow}.Echo(), `"selection":{"file":"f.xml"}`},
+		{PolicyInput{Device: "fw01", Router: "r1", At: "x", Simulated: flow}.Echo(), `{"mode":"path",`},
+		{RoutingInput{Device: "fw01", RIB: true, Simulated: flow}.Echo(), `"rib":true`},
+		{NATInput{Device: "fw01", FromZone: "z", FromInterface: "i", Simulated: flow}.Echo(), `"from_interface":"i","from_zone":"z"`},
+		{SearchInput{Term: "198.18.1.10", Selection: sel}.Echo(), `"mode":"covers"`},
+		{LookupInput{Name: "web", Kind: "address", Selection: sel}.Echo(), `"kind":"address","name":"web"`},
+	} {
+		b, err := json.Marshal(tc.got)
+		if err != nil || !strings.Contains(string(b), tc.want) {
+			t.Errorf("%T: %s %v, want %s", tc.got, b, err, tc.want)
+		}
 	}
 }

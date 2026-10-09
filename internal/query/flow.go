@@ -19,18 +19,18 @@ const dnsTimeout = 5 * time.Second
 // FlowInput is a flow as asked: the endpoints as given, an address or an FQDN,
 // and the port as text, 443 or tcp/443.
 type FlowInput struct {
-	Source      string `json:"source"`
-	Destination string `json:"destination"`
-	Protocol    string `json:"protocol,omitempty"`
-	Port        string `json:"port,omitempty"`
-	SourcePort  int    `json:"source_port,omitempty"`
-	Application string `json:"application,omitempty"`
-	User        string `json:"user,omitempty"`
-	URL         string `json:"url,omitempty"`
-	FromZone    string `json:"from_zone,omitempty"`
-	ToZone      string `json:"to_zone,omitempty"`
+	Source      string `json:"source" jsonschema:"an address or a host name; a host name is resolved with DNS and its first IPv4 address is checked"`
+	Destination string `json:"destination" jsonschema:"an address or a host name; a host name is resolved with DNS and its first IPv4 address is checked"`
+	Protocol    string `json:"protocol,omitempty" jsonschema:"tcp, udp, icmp or sctp"`
+	Port        string `json:"port,omitempty" jsonschema:"the destination port: 443, or tcp/443 with the protocol"`
+	SourcePort  int    `json:"source_port,omitempty" jsonschema:"the source port"`
+	Application string `json:"application,omitempty" jsonschema:"recorded, not evaluated; it does not change the answer"`
+	User        string `json:"user,omitempty" jsonschema:"the source user, such as corp\\alice"`
+	URL         string `json:"url,omitempty" jsonschema:"the URL; it decides URL categories"`
+	FromZone    string `json:"from_zone,omitempty" jsonschema:"the source zone; derived when empty"`
+	ToZone      string `json:"to_zone,omitempty" jsonschema:"the destination zone; derived when empty"`
 	// NoDNS leaves an FQDN unresolved.
-	NoDNS bool `json:"no_dns,omitempty"`
+	NoDNS bool `json:"no_dns,omitempty" jsonschema:"leave a host name unresolved"`
 }
 
 // flow is the flow without its endpoints: protocol, ports, zones and the

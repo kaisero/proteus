@@ -13,17 +13,17 @@ import (
 type RoutingInput struct {
 	// Source is an address or an FQDN; "" starts the path on Device with no
 	// source.
-	Source      string `json:"source,omitempty"`
-	Destination string `json:"destination"`
+	Source      string `json:"source,omitempty" jsonschema:"an address or a host name; empty starts on device without a source"`
+	Destination string `json:"destination" jsonschema:"an address or a host name; a host name is resolved and its first IPv4 address traced"`
 	// Port decides NAT and PBF rules that name a service: 443 or tcp/443.
-	Port string `json:"port,omitempty"`
+	Port string `json:"port,omitempty" jsonschema:"the destination port, 443 or tcp/443; it decides NAT and PBF rules that name a service"`
 	// Device names the start, Router its logical router.
-	Device string `json:"device,omitempty"`
-	Router string `json:"router,omitempty"`
-	At     string `json:"at,omitempty"`
+	Device string `json:"device,omitempty" jsonschema:"the firewall the path starts on"`
+	Router string `json:"router,omitempty" jsonschema:"the start's logical router; needs device"`
+	At     string `json:"at,omitempty" jsonschema:"read each device's newest snapshot at or before this time; empty for the latest"`
 	// RIB lists the routing table's other routes to the destination per hop.
-	RIB   bool `json:"rib,omitempty"`
-	NoDNS bool `json:"no_dns,omitempty"`
+	RIB   bool `json:"rib,omitempty" jsonschema:"list the routing table's other routes to the destination per hop"`
+	NoDNS bool `json:"no_dns,omitempty" jsonschema:"leave a host name unresolved"`
 	// Simulated is the flow as simulated; see PolicyInput.
 	Simulated simulate.Flow `json:"-"`
 }
@@ -46,11 +46,11 @@ func (in RoutingInput) flow() FlowInput {
 // RoutingResult is simulate routing's result: the path, and the run's fidelity
 // and stages. Run is the native run, for a renderer.
 type RoutingResult struct {
-	Answer string `json:"answer"`
-	Needs  []Need `json:"needs,omitzero"`
+	Answer string `json:"answer" jsonschema:"one line that says what the result found, as the text output prints it"`
+	Needs  []Need `json:"needs,omitzero" jsonschema:"present when the result is held back: the inputs a second call can give to change it; empty when none helps"`
 	routing.Path
-	Fidelity simulate.Fidelity `json:"fidelity"`
-	Stages   []Stage           `json:"stages"`
+	Fidelity simulate.Fidelity `json:"fidelity" jsonschema:"how certain the result is: exact, overmatch, inferred or undermatch, with the reasons; never report undermatch or inferred as a firm answer"`
+	Stages   []Stage           `json:"stages" jsonschema:"the run's stages: what each one did, its fidelity and its candidate count"`
 
 	Run simulate.Run `json:"-"`
 }

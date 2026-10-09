@@ -70,7 +70,7 @@ func (p policyAnswer) SummaryResults() any {
 }
 
 func (p policyAnswer) Input() any {
-	return policyInput{Flow: p.e.Input.Simulated, Selection: p.e.Input.Selection}
+	return p.e.Input.Echo()
 }
 
 func (p policyAnswer) Text(t *textOut) error {

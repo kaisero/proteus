@@ -149,28 +149,41 @@ to exit 2. A choice only the user can make stays a `*simulate.ChoiceError`,
 whose `Kind` says what is chosen (`device`, `router`, or empty for a question
 with no choice).
 
+`Doc[Echo, Res]` is an envelope's JSON form, and `DocOf` builds it: the input
+block comes from the input's `Echo()` (`PathEcho`, `FileEcho`, `RoutingEcho`,
+`NATEcho`, `SearchEcho`, `LookupEcho`, `DiffEcho`, which the command line also
+prints), and every list prints `[]`. Inputs, input blocks and results carry
+`jsonschema` description tags for the generated schemas (spec §3.6).
+
 <!-- GENERATED:api ./internal/query -->
 ```go
 type Check struct{ ... }
 type CheckSummary struct{ ... }
 type Checks []Check
+type DiffEcho struct{ ... }
 type DiffInput struct{ ... }
 type DiffResult struct{ ... }
 type DiffSummary struct{ ... }
+type Doc[Echo, Res any] struct{ ... }
+type Echoer[E any] interface{ ... }
 type Env struct{ ... }
 type Envelope[In, Res any] struct{ ... }
+type FileEcho struct{ ... }
 type Finding struct{ ... }
 type FindingSummary struct{ ... }
 type FlowInput struct{ ... }
 type HopSummary struct{ ... }
+type LookupEcho struct{ ... }
 type LookupInput struct{ ... }
 type LookupResult struct{ ... }
 type LookupSummary struct{ ... }
+type NATEcho struct{ ... }
 type NATInput struct{ ... }
 type NATResult struct{ ... }
 type NATSummary struct{ ... }
 type Need struct{ ... }
 type Note struct{ ... }
+type PathEcho struct{ ... }
 type PathHop struct{ ... }
 type PathHopSummary struct{ ... }
 type PathResult struct{ ... }
@@ -178,10 +191,12 @@ type PathSummary struct{ ... }
 type Point struct{ ... }
 type PolicyFileInput struct{ ... }
 type PolicyInput struct{ ... }
+type RoutingEcho struct{ ... }
 type RoutingInput struct{ ... }
 type RoutingResult struct{ ... }
 type RoutingSummary struct{ ... }
 type Rule struct{ ... }
+type SearchEcho struct{ ... }
 type SearchInput struct{ ... }
 type Security struct{ ... }
 type SecurityResult struct{ ... }
@@ -197,12 +212,19 @@ func (cs Checks) MarshalJSON() ([]byte, error)
 func (e *UsageError) Error() string
 func (e *UsageError) Unwrap() error
 func (f Finding) Summary() FindingSummary
+func (in DiffInput) Echo() DiffEcho
 func (in DiffInput) Validate() *UsageError
+func (in LookupInput) Echo() LookupEcho
 func (in LookupInput) Validate() *UsageError
+func (in NATInput) Echo() NATEcho
 func (in NATInput) Validate() *UsageError
+func (in PolicyFileInput) Echo() FileEcho
 func (in PolicyFileInput) Validate() *UsageError
+func (in PolicyInput) Echo() PathEcho
 func (in PolicyInput) Validate() *UsageError
+func (in RoutingInput) Echo() RoutingEcho
 func (in RoutingInput) Validate() *UsageError
+func (in SearchInput) Echo() SearchEcho
 func (in SearchInput) Matching() string
 func (in SearchInput) Validate() *UsageError
 func (r DiffResult) Summary() DiffSummary
@@ -216,6 +238,7 @@ func DecisionLine(v securitypolicy.Verdict, name func(string) string) string
 func DestinationTranslation(d *nat.Translation, port uint16) string
 func Detail(f search.Finding) string
 func DiffAnswer(device, scope string, changes []drift.Change) string
+func DocOf[In Echoer[E], E, Res any](e Envelope[In, Res]) Doc[E, Res]
 func EndpointText(e simulate.Endpoint) string
 func FileAnswer(v securitypolicy.Verdict) string
 func FindingAnswer(t Target, kind, name, field string) string

@@ -274,7 +274,7 @@ func TestChecksMarshalInOrder(t *testing.T) {
 	if err != nil || !strings.HasPrefix(string(b), `{"security":{`) || !strings.Contains(string(b), `},"nat":{`) {
 		t.Errorf("%v %s", err, b)
 	}
-	if !slices.Equal(nonNil(nil), []string{}) {
+	if !slices.Equal(nonNil[string](nil), []string{}) {
 		t.Error("nonNil")
 	}
 }

@@ -98,8 +98,7 @@ func (n natAnswer) SummaryResults() any {
 }
 
 func (n natAnswer) Input() any {
-	in := n.e.Input
-	return natInput{Flow: in.Simulated, Device: in.Device, Router: in.Router, FromZone: in.FromZone, FromInterface: in.FromInterface, At: in.At}
+	return n.e.Input.Echo()
 }
 
 func (n natAnswer) Text(t *textOut) error {

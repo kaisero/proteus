@@ -99,8 +99,7 @@ func (r routingAnswer) SummaryResults() any {
 }
 
 func (r routingAnswer) Input() any {
-	in := r.e.Input
-	return routingInput{Flow: in.Simulated, Device: in.Device, Router: in.Router, RIB: in.RIB, At: in.At}
+	return r.e.Input.Echo()
 }
 
 func (r routingAnswer) Text(t *textOut) error {

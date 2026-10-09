@@ -100,11 +100,7 @@ func (s searchAnswer) SummaryResults() any {
 }
 
 func (s searchAnswer) Input() any {
-	in := s.e.Input
-	return searchInput{
-		Term: in.Term, Mode: in.Matching(), Kinds: in.Kinds, Fields: in.Fields, Show: in.Show,
-		Direct: in.Direct, Selection: in.Selection,
-	}
+	return s.e.Input.Echo()
 }
 
 func (s searchAnswer) Text(t *textOut) error {

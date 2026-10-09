@@ -15,13 +15,13 @@ type NATInput struct {
 	// Flow is the packet. A source of "" or "-" is any source. The flow's zones
 	// are not read: FromZone or FromInterface sets the ingress, and the stored
 	// forwarding table gives the rest.
-	Flow FlowInput `json:"flow"`
+	Flow FlowInput `json:"flow" jsonschema:"the packet; a source of \"\" or \"-\" is any source"`
 	// Device is the firewall; Router its logical router when it has several.
-	Device        string `json:"device"`
-	Router        string `json:"router,omitempty"`
-	FromZone      string `json:"from_zone,omitempty"`
-	FromInterface string `json:"from_interface,omitempty"`
-	At            string `json:"at,omitempty"`
+	Device        string `json:"device" jsonschema:"the firewall"`
+	Router        string `json:"router,omitempty" jsonschema:"its logical router when it has several"`
+	FromZone      string `json:"from_zone,omitempty" jsonschema:"the ingress zone; excludes from_interface"`
+	FromInterface string `json:"from_interface,omitempty" jsonschema:"the ingress interface; excludes from_zone"`
+	At            string `json:"at,omitempty" jsonschema:"read the newest snapshot at or before this time; empty for the latest"`
 	// Simulated is the flow as simulated; see PolicyInput.
 	Simulated simulate.Flow `json:"-"`
 }
@@ -43,11 +43,11 @@ func (in NATInput) Validate() *UsageError {
 // packet, and the run's fidelity and stages. Run and TakenAt are the native run
 // and the snapshot's time, for a renderer.
 type NATResult struct {
-	Answer string `json:"answer"`
-	Needs  []Need `json:"needs,omitzero"`
+	Answer string `json:"answer" jsonschema:"one line that says what the result found, as the text output prints it"`
+	Needs  []Need `json:"needs,omitzero" jsonschema:"present when the result is held back: the inputs a second call can give to change it; empty when none helps"`
 	nat.Result
-	Fidelity simulate.Fidelity `json:"fidelity"`
-	Stages   []Stage           `json:"stages"`
+	Fidelity simulate.Fidelity `json:"fidelity" jsonschema:"how certain the result is: exact, overmatch, inferred or undermatch, with the reasons; never report undermatch or inferred as a firm answer"`
+	Stages   []Stage           `json:"stages" jsonschema:"the run's stages: what each one did, its fidelity and its candidate count"`
 
 	Run     simulate.Run `json:"-"`
 	TakenAt time.Time    `json:"-"`
