@@ -24,6 +24,7 @@ defaults:
   log_keep: 20                   # run logs kept
   # log_dir: ~/.local/state/proteus/log
   # store: ~/.local/share/proteus
+  # export_inventory: true       # see "The inventory export" below
 
 devices:
   - name: fw01
@@ -61,6 +62,46 @@ on disk.
 Set `insecure_tls: false` when your firewalls present certificates that this
 machine trusts. You can set it per device.
 
+## The inventory export
+
+`proteus mcp` reads its device list from the store, not from this file. Set
+`export_inventory: true` under `defaults:`, and every `fetch` run writes
+`<store>/.proteus/inventory.yaml`, a failed run too. The export is this inventory
+without `username`, `password` and `password_env`, in the defaults and on every
+device. `fetch` writes it to a temporary file and renames it into place, mode
+`0600`. A run that cannot write it exits 1.
+
+The server refuses an export that holds a credential. It ignores the exported
+`store` and `log_dir`: it sets its own. `.proteus` cannot clash with a device,
+because a device name starts with a letter or a digit.
+
+## The mcp section
+
+The `mcp:` section configures `proteus mcp`. Write it in this inventory; the export
+carries it to the server. Each key is optional.
+
+```yaml
+mcp:
+  listen: 127.0.0.1:8765                 # host:port for --http
+  token_file: /run/secrets/proteus-mcp-token
+  allowed_hosts: [proteus.example.org]   # Host header values --http accepts
+  identity_header: X-User-Claims         # the header with the caller's claims
+  audit_claims: [sub]                    # the claims each audit line records
+  audit_log: /var/log/proteus/mcp-audit.jsonl
+  log_dir: /var/log/proteus/mcp          # run logs of the calls, apart from the CLI's
+  log_keep: 200
+  max_concurrent: 4                      # calls answered at once
+  max_queue: 16                          # calls waiting for a slot
+  max_wait: 10s
+  call_timeout: 60s
+  max_loads: 2                           # snapshot loads at once
+  max_cache: 2048                        # MB
+```
+
+The token is never in the inventory: `token_file` names the file that holds it.
+proteus refuses an unknown key, a negative number, a duration it cannot read and a
+`listen` without a port.
+
 ## Settings
 
 Each setting comes from, in rising precedence: the built-in default, the
@@ -75,6 +116,7 @@ inventory's `defaults:`, an environment variable, and a flag.
 | log level | `log_level` | `PROTEUS_LOG_LEVEL` | `--log-level` | `info` |
 | log directory | `log_dir` | `PROTEUS_LOG_DIR` | `--log-dir` | `~/.local/state/proteus/log` |
 | logs kept | `log_keep` | | | `20` |
+| inventory export | `export_inventory` | | | `false` |
 | user snapshot | | `PROTEUS_USERS` | | none |
 
 The `XDG_CONFIG_HOME`, `XDG_DATA_HOME` and `XDG_STATE_HOME` variables move the
@@ -103,4 +145,5 @@ A configuration does not say which directory groups a user belongs to.
 | --- | --- | --- |
 | `~/.config/proteus/config.yaml` | 0600 | the inventory, written once by `inventory init` |
 | `~/.local/share/proteus/<device>/<time>/` | 0700 / 0600 | one snapshot |
-| `~/.local/state/proteus/log/` | 0700 / 0600 | one log file per run |
+| `~/.local/state/proteus/log/` | 0700 / 0600 | one log file per run, `<command>-<time>-<seq>.log` |
+| `<store>/.proteus/inventory.yaml` | 0700 / 0600 | the inventory export, with `export_inventory: true` |

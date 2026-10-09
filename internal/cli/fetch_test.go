@@ -908,3 +908,56 @@ func TestFailedDeviceColoursItsPrefix(t *testing.T) {
 		t.Errorf("an error without a prefix is coloured whole, got %q", got)
 	}
 }
+
+// exporting turns on export_inventory in an inventory of inventoryFor.
+func exporting(doc string) string {
+	return strings.Replace(doc, "defaults:\n", "defaults:\n  export_inventory: true\n", 1)
+}
+
+// With export_inventory, every fetch run writes the inventory without
+// credentials into the store, a failed run too (spec 2026-10-09 §5).
+func TestFetchExportsTheInventory(t *testing.T) {
+	t.Parallel()
+	c := newCLI(t)
+	path := inventory.ExportPath(c.env["PROTEUS_STORE"])
+	c.inventory(inventoryFor(lab(t).Start(t)))
+	c.want(0, "fetch", "fw01")
+	if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("no export without the setting: %v", err)
+	}
+
+	c.inventory(exporting(inventoryFor(lab(t).Start(t))))
+	c.want(0, "fetch", "fw01")
+	b := read(t, path)
+	if strings.Contains(b, "reader") || strings.Contains(b, "LAB_PW") || !strings.Contains(b, "name: fw01") {
+		t.Errorf("export:\n%s", b)
+	}
+	if fi, err := os.Stat(path); err != nil || fi.Mode().Perm() != 0o600 {
+		t.Errorf("export mode: %v, %v", fi, err)
+	}
+	if inv, err := inventory.ReadExport(path); err != nil || !slices.Equal(inv.Names(), []string{"fw01"}) {
+		t.Errorf("ReadExport = %+v, %v", inv, err)
+	}
+
+	// A run whose every device fails still exports the inventory it read.
+	c.inventory(exporting(inventoryFor("127.0.0.1:1", "127.0.0.1:1")))
+	c.want(exitError, "fetch", "--all")
+	if inv, err := inventory.ReadExport(path); err != nil || !slices.Equal(inv.Names(), []string{"fw01", "fw02"}) {
+		t.Errorf("after a failed run: %+v, %v", inv, err)
+	}
+}
+
+// An export that cannot be written fails the run: the server would read a
+// stale device list.
+func TestAFailedExportFailsTheFetch(t *testing.T) {
+	t.Parallel()
+	c := newCLI(t)
+	c.inventory(exporting(inventoryFor(lab(t).Start(t))))
+	if err := os.MkdirAll(filepath.Join(inventory.ExportPath(c.env["PROTEUS_STORE"]), "x"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	out, errOut, code := c.run("fetch", "fw01")
+	if code != exitError || !strings.Contains(errOut, "inventory export") || !strings.Contains(out, "stored fw01@") {
+		t.Errorf("exit %d\nstdout:\n%s\nstderr:\n%s", code, out, errOut)
+	}
+}

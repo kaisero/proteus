@@ -82,7 +82,17 @@ func (a *app) runFetch(ctx context.Context, o fetchOptions) (answer, error) {
 	if err != nil {
 		return nil, err
 	}
-	return fetchAnswer{o: o, results: a.fetcher(s.inv, st).each(ctx, names)}, nil
+	ans := fetchAnswer{o: o, results: a.fetcher(s.inv, st).each(ctx, names)}
+	// The export follows every run, a failed one too, so the server's device
+	// list follows the inventory (spec 2026-10-09 §5).
+	if s.inv.Defaults.ExportInventory {
+		if ans.exportErr = inventory.WriteExport(s.storeRoot, s.inv); ans.exportErr != nil {
+			a.log.Errorf(runlog.TagRun, "%v", ans.exportErr)
+		} else {
+			a.log.Infof(runlog.TagRun, "inventory exported to %s", inventory.ExportPath(s.storeRoot))
+		}
+	}
+	return ans, nil
 }
 
 // fetcher fetches devices into one store.
@@ -268,8 +278,9 @@ type fetchInput struct {
 
 // fetchAnswer is fetch's answer: one result per device named.
 type fetchAnswer struct {
-	o       fetchOptions
-	results []fetchResult
+	o         fetchOptions
+	results   []fetchResult
+	exportErr error // the inventory export failed
 }
 
 func (f fetchAnswer) Command() string { return "fetch" }
@@ -299,6 +310,10 @@ func (f fetchAnswer) Qualifiers() qualifiers {
 // Status is C11: every device stored every document → complete; a failure with at
 // least one device stored → incomplete; no device stored → an error (spec §6.4).
 func (f fetchAnswer) Status() error {
+	if f.exportErr != nil {
+		// The server reads the export: a run that could not write it failed.
+		return &exitErr{code: exitError, err: f.exportErr}
+	}
 	stored, failed := 0, 0
 	for _, r := range f.results {
 		if r.Stored {
