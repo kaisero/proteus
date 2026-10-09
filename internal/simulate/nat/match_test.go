@@ -265,3 +265,37 @@ func withIndexes(cfg *config.Config, vsys string) simulate.Target {
 	sc := config.Scope{Sort: config.ScopeVsys, Name: vsys}
 	return simulate.Target{Config: cfg, Indexes: index.NewSet(cfg).Provider(sc)}
 }
+
+// A port decides only a service the configuration defines: a predefined
+// service, or a group of them, is a predefined doubt with or without a port,
+// so a caller is never asked for a port that cannot help.
+func TestServiceFitsAsksForAPortOnlyWhenItHelps(t *testing.T) {
+	t.Parallel()
+	svc := map[string]string{
+		"service:svc-443":           "tcp/443",
+		"service-group:g-defined":   "service-http, svc-443",
+		"service-group:g-undefined": "service-http, service-https",
+		"service-group:loop":        "loop",
+		"service-group:mixed-loop":  "loop, svc-443",
+	}
+	for _, tc := range []struct {
+		name string
+		port uint16
+		want reason.Code
+	}{
+		{"service-http", 0, "doubt.service-predefined"},
+		{"g-undefined", 0, "doubt.service-predefined"},
+		{"loop", 0, "doubt.service-predefined"},
+		{"svc-443", 0, "path.nat-no-port"},
+		{"g-defined", 0, "path.nat-no-port"},
+		{"service-http", 443, "doubt.service-predefined"},
+		{"g-defined", 443, "doubt.service-predefined"},
+		{"mixed-loop", 443, "doubt.service-predefined"},
+		{"svc-443", 443, ""},
+	} {
+		_, r := serviceFits(tc.name, simulate.Flow{Protocol: "tcp", DestPort: tc.port}, svc)
+		if r.Code != tc.want {
+			t.Errorf("%s port %d: %s, want %s", tc.name, tc.port, r.Code, tc.want)
+		}
+	}
+}

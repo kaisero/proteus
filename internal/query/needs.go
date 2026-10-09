@@ -127,21 +127,40 @@ func fidelityCauses(f simulate.Fidelity) []cause {
 }
 
 // securityCauses are the doubts of the candidates before the first certain
-// match: the ones that hold the verdict back.
-func securityCauses(v *securitypolicy.Verdict) []cause {
+// match, in rule order, up to the first doubt no input can fix: past that
+// candidate no second call changes the verdict, so its doubts and the ones
+// after it need nothing. blocked says such a doubt was met.
+func securityCauses(flow simulate.Flow, v *securitypolicy.Verdict) (out []cause, blocked bool) {
 	if v == nil {
-		return nil
+		return nil, false
 	}
-	var out []cause
-	for _, d := range v.Doubts {
+	ds := slices.Clone(v.Doubts)
+	slices.SortStableFunc(ds, func(a, b securitypolicy.Doubt) int { return a.Position - b.Position })
+	for _, d := range ds {
 		if v.Rule != nil && d.Position >= v.Rule.Position {
 			continue
 		}
+		var cs []cause
 		for _, r := range d.Reasons {
-			out = append(out, cause{code: r.Code, rule: ruleName{"rule", d.Rule}})
+			cs = append(cs, cause{code: r.Code, rule: ruleName{"rule", d.Rule}})
+		}
+		if !fixable(flow, cs) {
+			return out, true
+		}
+		out = append(out, cs...)
+	}
+	return out, false
+}
+
+// fixable says whether a second call can settle every cause: each one needs
+// an input.
+func fixable(flow simulate.Flow, cs []cause) bool {
+	for _, c := range cs {
+		if len(needsOf(flow, []cause{c})) == 0 {
+			return false
 		}
 	}
-	return out
+	return len(cs) > 0
 }
 
 // natCauses are NAT doubts: rules that may match instead of the one taken.
@@ -156,28 +175,38 @@ func natCauses(ds []nat.Doubt) []cause {
 }
 
 // securityNeeds is a file answer's needs; nil when it is decided and exact
-// enough.
+// enough. A doubt no input can fix ends the list, fidelity reasons included.
 func securityNeeds(flow simulate.Flow, verdict string, v *securitypolicy.Verdict, f simulate.Fidelity) []Need {
 	if !holdsBack(verdict == string(securitypolicy.Undecided), f) {
 		return nil
 	}
-	return needsOf(flow, append(securityCauses(v), fidelityCauses(f)...))
+	causes, blocked := securityCauses(flow, v)
+	if !blocked {
+		causes = append(causes, fidelityCauses(f)...)
+	}
+	return needsOf(flow, causes)
 }
 
 // pathNeeds is a path answer's needs: each undecided check's doubts and each
-// hop's NAT doubts.
+// hop's NAT doubts; the fidelity's reasons too unless a check met a doubt no
+// input can fix.
 func pathNeeds(flow simulate.Flow, r pathpolicy.Result) []Need {
 	if !holdsBack(r.Verdict == pathpolicy.VerdictUndecided, r.Fidelity) {
 		return nil
 	}
-	causes := fidelityCauses(r.Fidelity)
+	var causes []cause
+	blocked := false
 	for _, h := range r.Hops {
 		causes = append(causes, natCauses(h.Routing.NATDoubts)...)
 		for _, c := range h.Checks {
 			if c.Verdict == pathpolicy.Undecided {
-				causes = append(causes, securityCauses(c.Security)...)
+				cs, b := securityCauses(flow, c.Security)
+				causes, blocked = append(causes, cs...), blocked || b
 			}
 		}
+	}
+	if !blocked {
+		causes = append(fidelityCauses(r.Fidelity), causes...)
 	}
 	return needsOf(flow, causes)
 }

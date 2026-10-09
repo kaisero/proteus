@@ -172,6 +172,7 @@ type NATSummary struct{ ... }
 type Need struct{ ... }
 type Note struct{ ... }
 type PathHop struct{ ... }
+type PathHopSummary struct{ ... }
 type PathResult struct{ ... }
 type PathSummary struct{ ... }
 type Point struct{ ... }

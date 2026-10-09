@@ -85,9 +85,13 @@ Each result of `simulate`, `search`, `lookup` and `snapshot diff` has an
 A simulate result that is undecided, or whose fidelity is `undermatch`, has a
 `needs` list: the inputs that, given in a second question, can change the
 answer. Each entry has a `code` (`input.port`, `input.protocol`, `input.url`),
-the `input` name and a `text` that names the rules it decides. An empty list
-means no input can help, such as a rule that names an application. A decided
-result has no `needs` key.
+the `input` name and a `text` that names the rules it decides. The list stops at
+the first rule in doubt that no input can settle, such as a rule that names an
+application or a user: past that rule, no input changes the verdict. An empty
+list means no input can help. A result that is decided and not `undermatch` has
+no `needs` key; a decided result with fidelity `undermatch` can have one.
+`simulate nat` asked without a protocol lists `input.protocol` beside
+`input.port`.
 
 The questions also take `--detail summary`. The envelope then says
 `"detail": "summary"`, and each result keeps the answer, the verdict, the

@@ -218,6 +218,11 @@ func serviceFits(name string, f simulate.Flow, svc map[string]string) (string, r
 	if name == "" || name == "any" {
 		return "", reason.Reason{}
 	}
+	// A port decides only a service the configuration defines: when neither
+	// the service nor any group member is defined, no port helps.
+	if !anyDefined(name, svc, 0) {
+		return "", reason.New("doubt.service-predefined", "service "+name+" is not defined in the configuration (a predefined service?)")
+	}
 	if f.DestPort == 0 {
 		return "", reason.New("path.nat-no-port", "service "+name+" not known without a port: give --port")
 	}
@@ -229,6 +234,24 @@ func serviceFits(name string, f simulate.Flow, svc map[string]string) (string, r
 		return "service " + name, reason.Reason{}
 	}
 	return "", reason.Reason{}
+}
+
+// anyDefined reports whether the configuration defines a service or service
+// group of this name with at least one defined service in it.
+func anyDefined(name string, svc map[string]string, depth int) bool {
+	if depth > 8 {
+		return false
+	}
+	if members, ok := svc["service-group:"+name]; ok {
+		for m := range strings.SplitSeq(members, ", ") {
+			if anyDefined(m, svc, depth+1) {
+				return true
+			}
+		}
+		return false
+	}
+	_, ok := svc["service:"+name]
+	return ok
 }
 
 func serviceHolds(name, proto string, port int, svc map[string]string, depth int) (matched, known bool) {

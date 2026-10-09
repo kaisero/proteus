@@ -105,7 +105,7 @@ func TestDoubts(t *testing.T) {
 			`7 dmz-user: user not evaluated (corp\alice)`,
 			"7 dmz-user: destination-hip not evaluated (hip-a)",
 			"8 dmz-schedule: schedule not evaluated (work-hours)",
-			"9 dmz-pandb: url category not evaluated without a URL (news)",
+			"9 dmz-pandb: url category not defined in the configuration, such as a PAN-DB category (news)",
 			"10 dmz-custom: url category not evaluated without a URL (my-cat)",
 			"11 dmz-predefined: service predefined or not defined in the configuration (service-https)",
 			"12 dmz-no-service: service absent",
@@ -123,16 +123,16 @@ func TestDoubts(t *testing.T) {
 			"12 dmz-no-service: service absent",
 		}},
 		{"no port", flow(0, "icmp", ""), []string{
-			"3 app-one: service not evaluated without a tcp, udp or sctp port (application-default)",
+			"3 app-one: service application-default",
 			"3 app-one: application not evaluated (dropbox)",
-			"4 app-two: service not evaluated without a tcp, udp or sctp port (application-default)",
+			"4 app-two: service application-default",
 			"4 app-two: application not evaluated (zoom)",
 			`7 dmz-user: user not evaluated (corp\alice)`,
 			"7 dmz-user: destination-hip not evaluated (hip-a)",
 			"8 dmz-schedule: schedule not evaluated (work-hours)",
-			"9 dmz-pandb: url category not evaluated without a URL (news)",
+			"9 dmz-pandb: url category not defined in the configuration, such as a PAN-DB category (news)",
 			"10 dmz-custom: url category not evaluated without a URL (my-cat)",
-			"11 dmz-predefined: service not evaluated without a tcp, udp or sctp port (service-https)",
+			"11 dmz-predefined: service predefined or not defined in the configuration (service-https)",
 			"12 dmz-no-service: service absent",
 		}},
 	} {
@@ -147,7 +147,7 @@ func TestDoubts(t *testing.T) {
 			"3 doubt.service-application-default", "3 doubt.application",
 			"4 doubt.service-application-default", "4 doubt.application",
 			"7 doubt.not-evaluated.user", "7 doubt.hip", "8 doubt.schedule",
-			"9 doubt.category-no-url", "10 doubt.category-no-url",
+			"9 doubt.category-undefined", "10 doubt.category-no-url",
 			"11 doubt.service-predefined", "12 doubt.service-absent",
 		},
 		"port and URL": {
@@ -157,10 +157,11 @@ func TestDoubts(t *testing.T) {
 			"9 doubt.category-undefined", "11 doubt.service-predefined", "12 doubt.service-absent",
 		},
 		"no port": {
-			"3 doubt.service-no-port", "3 doubt.application", "4 doubt.service-no-port", "4 doubt.application",
+			"3 doubt.service-application-default", "3 doubt.application",
+			"4 doubt.service-application-default", "4 doubt.application",
 			"7 doubt.not-evaluated.user", "7 doubt.hip", "8 doubt.schedule",
-			"9 doubt.category-no-url", "10 doubt.category-no-url",
-			"11 doubt.service-no-port", "12 doubt.service-absent",
+			"9 doubt.category-undefined", "10 doubt.category-no-url",
+			"11 doubt.service-predefined", "12 doubt.service-absent",
 		},
 	}
 	for name, want := range codes {

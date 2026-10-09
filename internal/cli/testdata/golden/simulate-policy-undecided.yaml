@@ -19,10 +19,7 @@ input:
     file: ../../testdata/config/firewall-doubt.xml
 results:
   - answer: 'undecided: dmz-user (deny) at position 7 may match first: user not evaluated (corp\alice)'
-    needs:
-      - code: input.url
-        input: url
-        text: give the URL; it decides the URL category of rules dmz-pandb, dmz-custom
+    needs: []
     verdict: undecided
     reasons:
       - code: doubt.not-evaluated.user
@@ -133,8 +130,8 @@ results:
       - position: 9
         rule: dmz-pandb
         reasons:
-          - code: doubt.category-no-url
-            text: url category not evaluated without a URL (news)
+          - code: doubt.category-undefined
+            text: url category not defined in the configuration, such as a PAN-DB category (news)
       - position: 10
         rule: dmz-custom
         reasons:
@@ -161,14 +158,14 @@ results:
         name: Resolve the source
         fidelity:
           level: exact
-        candidates: 12
+        candidates: 13
         detail: '10.0.0.5: 0 hits, 0 negated rules'
         elapsed_ms: 0
       - slug: resolve-destination
         name: Resolve the destination
         fidelity:
           level: exact
-        candidates: 10
+        candidates: 11
         detail: '203.0.113.5: 0 hits, 0 negated rules'
         elapsed_ms: 0
       - slug: derive-zones

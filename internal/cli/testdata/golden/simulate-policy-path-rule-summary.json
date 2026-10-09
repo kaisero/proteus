@@ -67,6 +67,7 @@
           "from_zone": "home",
           "to_zone": "labor",
           "route": "198.18.0.0/15 via 198.19.0.254",
+          "doubts": [],
           "checks": [
             {
               "name": "security",
@@ -89,6 +90,7 @@
           "from_zone": "transport",
           "to_zone": "server",
           "route": "198.18.10.0/24 via ethernet1/2",
+          "doubts": [],
           "checks": [
             {
               "name": "security",

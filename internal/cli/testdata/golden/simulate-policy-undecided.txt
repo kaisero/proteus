@@ -3,8 +3,8 @@ file / vsys1   ../../testdata/config/firewall-doubt.xml
   zones      from dmz, to wan (given)
   relevance  unknown: no stored forwarding table
   fidelity   undermatch: kept rules whose service is application-default, predefined or absent: app-one, app-two, dmz-predefined, dmz-no-service; dmz-user (deny) at position 7 may match first: user not evaluated (corp\alice); not evaluated: url category, application, user
-  resolve-source      exact      12 10.0.0.5: 0 hits, 0 negated rules
-  resolve-destination exact      10 203.0.113.5: 0 hits, 0 negated rules
+  resolve-source      exact      13 10.0.0.5: 0 hits, 0 negated rules
+  resolve-destination exact      11 203.0.113.5: 0 hits, 0 negated rules
   derive-zones        exact      9  from dmz, to wan, as given
   match-service       overmatch  9  tcp/443
   match-url           overmatch  9  no URL given
@@ -23,7 +23,7 @@ file / vsys1   ../../testdata/config/firewall-doubt.xml
   8.  dmz-schedule   deny  [local vsys:vsys1]
       doubt: schedule not evaluated (work-hours)
   9.  dmz-pandb      deny  [local vsys:vsys1]
-      doubt: url category not evaluated without a URL (news)
+      doubt: url category not defined in the configuration, such as a PAN-DB category (news)
   10. dmz-custom     deny  [local vsys:vsys1]
       doubt: url category not evaluated without a URL (my-cat)
   11. dmz-predefined deny  [local vsys:vsys1]

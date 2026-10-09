@@ -164,8 +164,12 @@ func (s *state) serviceDoubt(vs []string, defined map[string]bool) reason.Reason
 	if len(vs) == 0 {
 		return reason.Reason{}
 	}
+	// A port decides only a service the configuration defines. When every
+	// value is application-default or not defined, no port helps, so that
+	// doubt comes first and the answer asks for no port.
+	judged := slices.ContainsFunc(vs, func(v string) bool { return v != "application-default" && defined[v] })
 	f := s.in.Flow
-	if proto := strings.ToLower(f.Protocol); f.DestPort == 0 || (proto != "tcp" && proto != "udp" && proto != "sctp") {
+	if proto := strings.ToLower(f.Protocol); judged && (f.DestPort == 0 || (proto != "tcp" && proto != "udp" && proto != "sctp")) {
 		return reason.New("doubt.service-no-port",
 			fmt.Sprintf("service not evaluated without a tcp, udp or sctp port (%s)", strings.Join(vs, ", ")))
 	}
@@ -193,7 +197,9 @@ func (s *state) categoryDoubt(vs []string, defined map[string]bool) reason.Reaso
 	if len(vs) == 0 {
 		return reason.Reason{}
 	}
-	if s.in.Flow.URL == "" {
+	// A URL decides only a category the configuration defines; when none is
+	// defined (PAN-DB categories), no URL helps, so that doubt comes first.
+	if s.in.Flow.URL == "" && slices.ContainsFunc(vs, func(v string) bool { return defined[v] }) {
 		return reason.New("doubt.category-no-url",
 			fmt.Sprintf("url category not evaluated without a URL (%s)", strings.Join(vs, ", ")))
 	}

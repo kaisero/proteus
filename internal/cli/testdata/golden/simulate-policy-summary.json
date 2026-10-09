@@ -28,13 +28,7 @@
   "results": [
     {
       "answer": "undecided: dmz-user (deny) at position 7 may match first: user not evaluated (corp\\alice)",
-      "needs": [
-        {
-          "code": "input.url",
-          "input": "url",
-          "text": "give the URL; it decides the URL category of rules dmz-pandb, dmz-custom"
-        }
-      ],
+      "needs": [],
       "verdict": "undecided",
       "reasons": [
         {
@@ -138,8 +132,8 @@
           "rule": "dmz-pandb",
           "reasons": [
             {
-              "code": "doubt.category-no-url",
-              "text": "url category not evaluated without a URL (news)"
+              "code": "doubt.category-undefined",
+              "text": "url category not defined in the configuration, such as a PAN-DB category (news)"
             }
           ]
         },

@@ -35,21 +35,26 @@ type PathSummary struct {
 	End         string            `json:"end"`
 	EndCode     reason.Code       `json:"end_code"`
 	Hidden      []string          `json:"hidden,omitempty"`
-	Hops        []HopSummary      `json:"hops"`
+	Hops        []PathHopSummary  `json:"hops"`
 }
 
-// HopSummary is one hop in summary: where, which zones, which route, and on a
-// path the doubts and each check's verdict.
+// HopSummary is one routing hop in summary: where, which zones, which route.
 type HopSummary struct {
-	Index    int              `json:"index,omitempty"`
-	Device   string           `json:"device"`
-	Vsys     string           `json:"vsys"`
-	Snapshot string           `json:"snapshot,omitempty"`
-	FromZone string           `json:"from_zone"`
-	ToZone   string           `json:"to_zone"`
-	Route    string           `json:"route"`
-	Doubts   simulate.Reasons `json:"doubts,omitempty"`
-	Checks   []CheckSummary   `json:"checks,omitempty"`
+	Device   string `json:"device"`
+	Vsys     string `json:"vsys"`
+	Snapshot string `json:"snapshot,omitempty"`
+	FromZone string `json:"from_zone"`
+	ToZone   string `json:"to_zone"`
+	Route    string `json:"route"`
+}
+
+// PathHopSummary is one hop of a path in summary: the routing hop, its doubts
+// and each check's verdict. Empty lists print [] as in the full hop (U5).
+type PathHopSummary struct {
+	Index int `json:"index"`
+	HopSummary
+	Doubts simulate.Reasons `json:"doubts"`
+	Checks []CheckSummary   `json:"checks"`
 }
 
 // CheckSummary is one check of a hop: its verdict, the deciding rule and why.
@@ -87,13 +92,12 @@ func (r PathResult) Summary() PathSummary {
 	out := PathSummary{
 		Answer: r.Answer, Needs: r.Needs, Mode: r.Mode, Verdict: r.Verdict, At: r.At, Fidelity: r.Fidelity,
 		Source: r.Source, Destination: r.Destination, Outcome: r.Outcome, End: r.End, EndCode: r.EndCode,
-		Hidden: r.Hidden, Hops: []HopSummary{},
+		Hidden: r.Hidden, Hops: []PathHopSummary{},
 	}
 	for _, h := range r.Hops {
-		s := hopSummary(h.Hop)
-		s.Index, s.Doubts, s.Checks = h.Index, h.Doubts, []CheckSummary{}
+		s := PathHopSummary{Index: h.Index, HopSummary: hopSummary(h.Hop), Doubts: nonNilReasons(h.Doubts), Checks: []CheckSummary{}}
 		for _, c := range h.Checks {
-			s.Checks = append(s.Checks, CheckSummary{Name: c.Name, Verdict: c.Security.Verdict, Rule: c.Security.Rule, Reasons: c.Security.Reasons})
+			s.Checks = append(s.Checks, CheckSummary{Name: c.Name, Verdict: c.Security.Verdict, Rule: c.Security.Rule, Reasons: nonNilReasons(c.Security.Reasons)})
 		}
 		out.Hops = append(out.Hops, s)
 	}

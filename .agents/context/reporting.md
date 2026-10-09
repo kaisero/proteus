@@ -191,6 +191,18 @@ code: `doubt.nat-rule` over NAT doubts, whose parts stay in the NAT doubts, and
 consecutive unresolved entries of one composite on one line; JSON lists them
 separately.
 
+`needs` (`query/needs.go`) reads codes only. `doubt.service-no-port` and
+`path.nat-no-port` need `input.port` (tcp, udp, sctp or no protocol) and
+`input.protocol` when the flow has none: `simulate nat` asked without a
+protocol lists both. `doubt.category-no-url` needs `input.url`. The emitters
+give the unfixable code first: a service that is only application-default or
+not defined is `doubt.service-application-default` or
+`doubt.service-predefined`, a category that is not defined is
+`doubt.category-undefined`, with or without a port or URL. A file check lists
+the doubts in rule order before the first certain match and stops at the first
+rule whose doubts no input settles; when that is the first rule in doubt,
+`needs` is `[]`.
+
 `reason` imports only the standard library, so every package may import it; the
 archtest allows it in every R12 rule.
 
