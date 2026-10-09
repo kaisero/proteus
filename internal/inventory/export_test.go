@@ -270,3 +270,23 @@ func TestEveryExportKeyIsClassified(t *testing.T) {
 		}
 	}
 }
+
+// syncDir fails on a directory that is not there.
+func TestSyncDirFails(t *testing.T) {
+	t.Parallel()
+	if err := syncDir(filepath.Join(t.TempDir(), "absent")); err == nil {
+		t.Error("syncDir of an absent directory")
+	}
+}
+
+// WriteTemplate fails where its directory cannot be made.
+func TestWriteTemplateNeedsADirectory(t *testing.T) {
+	t.Parallel()
+	file := filepath.Join(t.TempDir(), "file")
+	if err := os.WriteFile(file, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := WriteTemplate(filepath.Join(file, "proteus", "config.yaml")); err == nil {
+		t.Error("WriteTemplate below a file")
+	}
+}
