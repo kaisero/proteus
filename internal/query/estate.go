@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/okaiser/proteus/internal/config"
@@ -85,7 +86,8 @@ func Targets(ctx context.Context, env Env, sel Selection) ([]estate.Target, []es
 	}
 	ts, holes := estate.Open(env.Store, names, sel.Vsys, when)
 	for i := range ts {
-		ts[i].Notes = append(ts[i].Notes, fresh[ts[i].Device]...)
+		// A copy: the target's notes may share their array with a cached load.
+		ts[i].Notes = append(slices.Clone(ts[i].Notes), fresh[ts[i].Device]...)
 	}
 	return ts, holes, nil
 }

@@ -29,6 +29,9 @@ type LookupInput struct {
 
 // Validate holds lookup's input rules: a file without the store's selectors.
 func (in LookupInput) Validate() *UsageError {
+	if strings.TrimSpace(in.Name) == "" {
+		return usage("give a name to look up", "")
+	}
 	return in.Selection.validateFile()
 }
 

@@ -105,8 +105,9 @@ func TestPolicyInputRules(t *testing.T) {
 		{PolicyInput{Flow: FlowInput{FromZone: "a"}}, "--from-zone: the path gives the zones"},
 		{PolicyInput{Flow: FlowInput{ToZone: "a"}}, "--to-zone: the path gives the zones"},
 		{PolicyInput{Router: "default"}, "--router needs --device"},
-		{PolicyInput{Flow: FlowInput{Port: "https"}}, `--port "https": want 443 or tcp/443`},
-		{PolicyInput{Flow: FlowInput{SourcePort: 70000}}, "--source-port 70000 is not a port"},
+		{PolicyInput{Flow: FlowInput{Destination: "2.2.2.2", Port: "https"}}, `--port "https": want 443 or tcp/443`},
+		{PolicyInput{Flow: FlowInput{Destination: "2.2.2.2", SourcePort: 70000}}, "--source-port 70000 is not a port"},
+		{PolicyInput{Flow: FlowInput{Source: "1.1.1.1", Destination: " "}}, "give a destination"},
 	} {
 		usageOK(t, tc.in.Validate(), tc.want)
 		_, err := Policy(context.Background(), Env{}, tc.in)
@@ -379,4 +380,16 @@ func TestSystemResolve(t *testing.T) {
 	if as, err := SystemResolve(ctx, "localhost"); err != nil || len(as) == 0 {
 		t.Skipf("no local resolver: %v %v", as, err)
 	}
+}
+
+// Every question needs its subject: a destination, a search term, a name. The
+// command line always gives one; another caller may not.
+func TestAnEmptySubjectIsAUsageError(t *testing.T) {
+	t.Parallel()
+	file := Selection{File: fixture("firewall-zones.xml")}
+	usageOK(t, PolicyFileInput{Flow: FlowInput{Source: "1.1.1.1"}, Selection: file}.Validate(), "give a destination")
+	usageOK(t, RoutingInput{Source: "1.1.1.1"}.Validate(), "give a destination")
+	usageOK(t, NATInput{Device: "fw01", Flow: FlowInput{Source: "-"}}.Validate(), "give a destination")
+	usageOK(t, SearchInput{Selection: file}.Validate(), "give a search term")
+	usageOK(t, LookupInput{Name: "  ", Selection: file}.Validate(), "give a name to look up")
 }

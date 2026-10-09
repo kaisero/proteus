@@ -34,11 +34,15 @@ type FlowInput struct {
 }
 
 // flow is the flow without its endpoints: protocol, ports, zones and the
-// layer-7 fields. The port range is checked here.
+// layer-7 fields. The port range is checked here, and that a destination is
+// given: the command line always gives one, another caller may not.
 func (f FlowInput) flow() (simulate.Flow, *UsageError) {
 	out := simulate.Flow{
 		Protocol: strings.ToLower(f.Protocol), Application: f.Application, User: f.User,
 		URL: f.URL, FromZone: f.FromZone, ToZone: f.ToZone,
+	}
+	if strings.TrimSpace(f.Destination) == "" {
+		return out, usage("give a destination", "")
 	}
 	if f.SourcePort < 0 || f.SourcePort > 65535 {
 		return out, usage(fmt.Sprintf("--source-port %d is not a port", f.SourcePort),

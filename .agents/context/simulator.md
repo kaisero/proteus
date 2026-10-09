@@ -176,7 +176,7 @@ func (rs Reasons) MarshalJSON() ([]byte, error)
 func (rs Reasons) Prefixed(p string) Reasons
 func (rs Reasons) Text() string
 func (rs Reasons) Texts() []string
-func (t Target) Index(rb resolve.Rulebase) (*index.Index, error)
+func (t Target) Index(rb resolve.Rulebase, vsys string) (*index.Index, error)
 func Addr(a netip.Addr) Endpoint
 func DNSNotes(f Flow, traced bool) Reasons
 func Execute[S any](ctx context.Context, kind string, state *S, steps []Step[S], keepBitmaps bool, log *runlog.Logger) ([]Stage, error)

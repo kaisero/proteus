@@ -2,6 +2,9 @@ package cli
 
 import (
 	"context"
+	"errors"
+	"io/fs"
+	"os"
 
 	"github.com/okaiser/proteus/internal/inventory"
 	"github.com/okaiser/proteus/internal/query"
@@ -31,11 +34,16 @@ func (a *app) queryEnv(s settings) query.Env {
 	}
 }
 
-// storeEnv is queryEnv with the store, opened with the app's clock.
+// storeEnv is queryEnv with the store, with the app's clock. A question does not
+// create an absent store: a usage error must leave nothing behind, and an
+// absent store holds no snapshot. A fresh fetch's write creates it.
 func (a *app) storeEnv(s settings) (query.Env, error) {
 	env := a.queryEnv(s)
-	st, err := a.openStore(s.storeRoot)
-	if err != nil {
+	var st *store.Store
+	var err error
+	if _, serr := os.Stat(s.storeRoot); errors.Is(serr, fs.ErrNotExist) {
+		st = store.At(s.storeRoot).WithClock(a.now)
+	} else if st, err = a.openStore(s.storeRoot); err != nil {
 		return env, err
 	}
 	env.Store, env.Fresh = st, a.freshFetch(s.inv, st)

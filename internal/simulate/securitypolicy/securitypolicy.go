@@ -179,7 +179,7 @@ func (Simulation) Run(ctx context.Context, env *simulate.Env, in simulate.Input)
 		return run, fmt.Errorf("%s: %s/%s: %w", Kind, in.Device, in.Vsys, err)
 	}
 	run.Notes = t.Notes
-	idx, err := t.Index(resolve.Security)
+	idx, err := t.Index(resolve.Security, in.Vsys)
 	if err != nil {
 		return run, fmt.Errorf("%s: %s/%s: %w", Kind, in.Device, in.Vsys, err)
 	}

@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -46,5 +48,28 @@ func TestQuestionsStopAtABrokenSetting(t *testing.T) {
 		if _, errOut, code := c.run(q.args...); code != exitError || !strings.Contains(errOut, "store:") {
 			t.Errorf("%v: no store: exit %d\n%s", q.args, code, errOut)
 		}
+	}
+}
+
+// A broken inventory wins over a bad port, as before the query layer.
+func TestRoutingReadsSettingsBeforeItsInput(t *testing.T) {
+	t.Parallel()
+	c := newCLI(t)
+	c.inventory("version: 9\ndevices: []\n")
+	if _, errOut, code := c.run("simulate", "routing", "198.18.10.5", "8.8.8.8", "--port", "bad"); code != exitError || !strings.Contains(errOut, "version 9") {
+		t.Errorf("exit %d\n%s", code, errOut)
+	}
+}
+
+// A question leaves no store behind: not on a usage error, and not on an
+// answer from a store that does not exist.
+func TestAQuestionCreatesNoStore(t *testing.T) {
+	t.Parallel()
+	c := newCLI(t)
+	c.inventory(inventoryFor("fw01.example.test", "fw02.example.test"))
+	c.want(2, "simulate", "nat", "198.18.1.10", "198.18.250.10", "--device", "fw09")
+	c.want(3, "search", "10.0.0.1")
+	if _, err := os.Stat(c.env["PROTEUS_STORE"]); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("the store was created: %v", err)
 	}
 }

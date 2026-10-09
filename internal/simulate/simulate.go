@@ -3,6 +3,7 @@ package simulate
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/netip"
 	"time"
 
@@ -72,13 +73,22 @@ type Target struct {
 	Notes     Reasons
 }
 
-// Index is the target's index of a rulebase from its provider. A target without
-// a provider is a loader's mistake, reported as an error rather than built here.
-func (t Target) Index(rb resolve.Rulebase) (*index.Index, error) {
+// Index is the target's index of a rulebase of the vsys from its provider. A
+// target without a provider is a loader's mistake, reported as an error rather
+// than built here.
+func (t Target) Index(rb resolve.Rulebase, vsys string) (*index.Index, error) {
 	if t.Indexes == nil {
 		return nil, errors.New("no index provider")
 	}
-	return t.Indexes(rb)
+	idx, err := t.Indexes(rb)
+	if err != nil {
+		return nil, err
+	}
+	// A provider of another vsys would answer with that vsys's rules.
+	if idx.Scope().Name != vsys {
+		return nil, fmt.Errorf("the index provider gives %s, not vsys %s", idx.Scope(), vsys)
+	}
+	return idx, nil
 }
 
 // Env bundles one run's dependencies. It is single-use and not safe for

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"strings"
 
 	"github.com/okaiser/proteus/internal/estate"
 	"github.com/okaiser/proteus/internal/index"
@@ -41,6 +42,9 @@ var showNames = map[string]search.Stage{
 // Validate holds search's input rules: one known mode, known stages to show, and
 // a file without the store's selectors.
 func (in SearchInput) Validate() *UsageError {
+	if strings.TrimSpace(in.Term) == "" {
+		return usage("give a search term", "")
+	}
 	if _, ok := searchModes[in.Mode]; !ok && in.Mode != "" {
 		return usage(fmt.Sprintf("mode %q: want exact, within or contains", in.Mode), "")
 	}

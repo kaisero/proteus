@@ -48,6 +48,11 @@ func Open(root string) (*Store, error) {
 	return &Store{root: root, now: time.Now}, nil
 }
 
+// At returns the store at root without creating it, for a reader that must not
+// leave a directory behind. An absent root holds no snapshot; Write creates it,
+// private to its owner, as Open does.
+func At(root string) *Store { return &Store{root: root, now: time.Now} }
+
 // WithClock returns the store using another clock. Tests use it.
 func (s *Store) WithClock(now func() time.Time) *Store {
 	c := *s

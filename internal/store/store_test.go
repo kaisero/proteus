@@ -1,6 +1,8 @@
 package store
 
 import (
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -271,5 +273,25 @@ func TestAtOrBefore(t *testing.T) {
 	}
 	if _, err := s.AtOrBefore("fw02", at(11, 0)); err == nil {
 		t.Error("a device never fetched has none")
+	}
+}
+
+// At creates nothing: an absent root has no snapshot, and the first write
+// creates it private to its owner.
+func TestAtCreatesNothingUntilAWrite(t *testing.T) {
+	t.Parallel()
+	root := filepath.Join(t.TempDir(), "store")
+	s := At(root)
+	if _, err := s.Latest("fw01"); !errors.Is(err, ErrNoSnapshot) {
+		t.Errorf("latest of an absent root: %v", err)
+	}
+	if _, err := os.Stat(root); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("At created the root: %v", err)
+	}
+	if _, err := s.Write(Meta{Device: "fw01"}, map[string][]byte{ConfigDoc: []byte("<config/>")}, 0); err != nil {
+		t.Fatal(err)
+	}
+	if fi, err := os.Stat(root); err != nil || fi.Mode().Perm() != 0o700 {
+		t.Errorf("the write's root: %v %v", fi, err)
 	}
 }

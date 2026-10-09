@@ -70,12 +70,14 @@ func (a *app) runRouting(ctx context.Context, o routingOptions) (answer, error) 
 		Source: o.src, Destination: o.dst, Port: o.port, Device: o.device, Router: o.router, At: o.at,
 		RIB: o.rib, NoDNS: o.noDNS,
 	}
-	if u := in.Validate(); u != nil {
-		return nil, u
-	}
+	// Settings first, as before the query layer: a broken inventory wins over
+	// a bad port.
 	s, err := a.settings(true)
 	if err != nil {
 		return nil, err
+	}
+	if u := in.Validate(); u != nil {
+		return nil, u
 	}
 	env, err := a.storeEnv(s)
 	if err != nil {

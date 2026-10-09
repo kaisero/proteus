@@ -135,6 +135,7 @@ func (sn Snapshot) ConfigPath() (string, error)
 func (sn Snapshot) Has(doc string) bool
 func (sn Snapshot) Path(doc string) string
 func (sn Snapshot) Zones() (*index.ZoneSnapshot, error)
+func At(root string) *Store
 func DefaultRoot(getenv func(string) string) (string, error)
 func Open(root string) (*Store, error)
 ```
