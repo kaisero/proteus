@@ -242,3 +242,15 @@ func dedupeUnresolved(in []Unresolved) []Unresolved {
 	}
 	return out
 }
+
+// runEstate runs a simulation over the estate. Data the simulation could not
+// read is returned as holes with no error, so the query answers with them. A
+// choice only the caller can make, such as which of two firewalls a source
+// enters, is the simulation's *simulate.ChoiceError.
+func runEstate(ctx context.Context, sim simulate.Simulation, env *simulate.Env, in simulate.Input) (simulate.Run, []estate.Hole, error) {
+	run, err := sim.Run(ctx, env, in)
+	if u, ok := errors.AsType[*simulate.UnavailableError](err); ok {
+		return run, holesOf(u.Missing), nil
+	}
+	return run, nil, err
+}

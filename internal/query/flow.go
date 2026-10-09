@@ -114,3 +114,23 @@ func pathEndpoint(ctx context.Context, env Env, s string, noDNS bool) (simulate.
 	return ep, usage(fmt.Sprintf("path mode needs an address for %s; remove --no-dns or give an address", ep.Name),
 		fmt.Sprintf("path mode needs an address for %s; set no_dns to false or give an address", ep.Name))
 }
+
+// endpoints resolves a flow's source, when one is given, and its destination. An
+// FQDN that resolves to no address is a usage error: there is nothing to simulate.
+func endpoints(ctx context.Context, env Env, flow *simulate.Flow, src, dst string, noDNS bool) error {
+	var err error
+	if src != "" {
+		if flow.Source, err = endpoint(ctx, env, src, noDNS); err != nil {
+			return err
+		}
+	}
+	if flow.Destination, err = endpoint(ctx, env, dst, noDNS); err != nil {
+		return err
+	}
+	for _, ep := range []simulate.Endpoint{flow.Source, flow.Destination} {
+		if ep.Name != "" && len(ep.Addrs) == 0 {
+			return usage(ep.Name+" resolved to no address", "")
+		}
+	}
+	return nil
+}

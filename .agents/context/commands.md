@@ -148,6 +148,8 @@ type PathResult struct{ ... }
 type Point struct{ ... }
 type PolicyFileInput struct{ ... }
 type PolicyInput struct{ ... }
+type RoutingInput struct{ ... }
+type RoutingResult struct{ ... }
 type Rule struct{ ... }
 type Security struct{ ... }
 type SecurityResult struct{ ... }
@@ -163,10 +165,12 @@ func (e *UsageError) Error() string
 func (e *UsageError) Unwrap() error
 func (in PolicyFileInput) Validate() *UsageError
 func (in PolicyInput) Validate() *UsageError
+func (in RoutingInput) Validate() *UsageError
 func NoteOf(device, vsys string, r reason.Reason) Note
 func PointHop(r pathpolicy.Result) (routing.Hop, bool)
 func Policy(ctx context.Context, env Env, in PolicyInput) (Envelope[PolicyInput, PathResult], error)
 func PolicyFile(ctx context.Context, env Env, in PolicyFileInput) (Envelope[PolicyFileInput, SecurityResult], error)
+func Routing(ctx context.Context, env Env, in RoutingInput) (Envelope[RoutingInput, RoutingResult], error)
 func SimStages(stages []simulate.Stage) []Stage
 func Summarize[In, R, S any](e Envelope[In, R], f func(R) S) Envelope[In, S]
 func TargetOf(t estate.Target) Target
