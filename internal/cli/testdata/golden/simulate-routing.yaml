@@ -17,6 +17,7 @@ input:
   router: ""
 results:
   - answer: 192.168.0.1 leaves the estate (not in the inventory)
+    needs: []
     source:
       addrs:
         - 198.18.10.5

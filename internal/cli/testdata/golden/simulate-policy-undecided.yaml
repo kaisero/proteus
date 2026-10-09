@@ -18,6 +18,10 @@ input:
     file: ../../testdata/config/firewall-doubt.xml
 results:
   - answer: 'undecided: dmz-user (deny) at position 7 may match first: user not evaluated (corp\alice)'
+    needs:
+      - code: input.url
+        input: url
+        text: give the URL; it decides the URL category of rules dmz-pandb, dmz-custom
     verdict: undecided
     reasons:
       - code: doubt.not-evaluated.user

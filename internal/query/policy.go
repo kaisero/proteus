@@ -163,6 +163,7 @@ func Policy(ctx context.Context, env Env, in PolicyInput) (Envelope[PolicyInput,
 		env.Log.Infof(runlog.TagStep, "path verdict: %s", res.Verdict)
 	}
 	e.Results = []PathResult{pathResultOf(res, stages)}
+	e.Results[0].Needs = pathNeeds(flow, res)
 	e.Holes = holesOf(res.Holes)
 	e.Unresolved = pathUnresolved(res, stages)
 	e.Notes = pathNotes(res)
@@ -215,6 +216,7 @@ func PolicyFile(ctx context.Context, env Env, in PolicyFileInput) (Envelope[Poli
 	env.Log.Infof(runlog.TagStep, "%s: fidelity %s", securitypolicy.Kind, run.Fidelity)
 	v, _ := run.Output.(securitypolicy.Verdict)
 	e.Results = []SecurityResult{securityResultOf(run, t, v)}
+	e.Results[0].Needs = securityNeeds(flow, e.Results[0].Verdict, &v, run.Fidelity)
 	e.Targets = ts
 	// A version gap is a note, not an unresolved entry: the security check
 	// lowers its fidelity to inferred instead (spec E25).
@@ -354,6 +356,7 @@ func nonNil(s []string) []string {
 // and RunStages are the native answer, for a renderer.
 type PathResult struct {
 	Answer      string            `json:"answer"`
+	Needs       []Need            `json:"needs,omitzero"`
 	Mode        string            `json:"mode"`
 	Verdict     string            `json:"verdict"`
 	At          *Point            `json:"at"`
@@ -528,6 +531,7 @@ func securityOf(v *securitypolicy.Verdict, verdict string, why simulate.Reasons,
 // Check and From are the native answer, for a renderer.
 type SecurityResult struct {
 	Answer string `json:"answer"`
+	Needs  []Need `json:"needs,omitzero"`
 	Security
 	Kind      string                   `json:"kind"`
 	Relevance securitypolicy.Relevance `json:"relevance"`

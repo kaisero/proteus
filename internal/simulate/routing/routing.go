@@ -11,6 +11,7 @@ import (
 	"github.com/okaiser/proteus/internal/reason"
 	"github.com/okaiser/proteus/internal/resolve"
 	"github.com/okaiser/proteus/internal/simulate"
+	natsim "github.com/okaiser/proteus/internal/simulate/nat"
 	"github.com/okaiser/proteus/internal/simulate/topology"
 )
 
@@ -85,6 +86,9 @@ type Hop struct {
 	PBF             []string           `json:"pbf,omitempty"`              // PBF rules that can redirect the flow here
 	ZonePlaceholder bool               `json:"zone_placeholder,omitempty"` // a zone name is a placeholder
 	Fidelity        simulate.Fidelity  `json:"fidelity"`
+	// NATDoubts are the NAT rules that may match instead of the one the hop
+	// applies, each with its reasons; the notes name them as text.
+	NATDoubts []natsim.Doubt `json:"-"`
 }
 
 // Path is a run's output.

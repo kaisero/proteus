@@ -26,6 +26,7 @@
   "results": [
     {
       "answer": "undecided at hop 1: fw02 / vsys1, local and pushed default rules disagree; precedence not verified",
+      "needs": [],
       "mode": "path",
       "verdict": "undecided",
       "at": {

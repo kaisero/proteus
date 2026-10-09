@@ -96,6 +96,7 @@ func nat(ctx context.Context, s *state) (simulate.Outcome, error) {
 	}
 	r := natsim.Translate(in, m)
 	h.Notes = append(h.Notes, r.Notes...)
+	h.NATDoubts = append(h.NATDoubts, r.Doubts...)
 	for _, d := range r.Doubts {
 		h.Notes = append(h.Notes, reason.New("path.nat-undermatch", "nat rule "+d.Rule+" may match instead: "+d.Text()))
 	}

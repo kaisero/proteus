@@ -82,6 +82,13 @@ Each result of `simulate`, `search`, `lookup` and `snapshot diff` has an
 `lookup` also print a `summary` with the counts and the count line as its
 `answer`.
 
+A simulate result that is undecided, or whose fidelity is `undermatch`, has a
+`needs` list: the inputs that, given in a second question, can change the
+answer. Each entry has a `code` (`input.port`, `input.protocol`, `input.url`),
+the `input` name and a `text` that names the rules it decides. An empty list
+means no input can help, such as a rule that names an application. A decided
+result has no `needs` key.
+
 Format 2 gives every reason a stable code. A hole, an unresolved entry and a
 note are objects with `code` and `text` beside `device` and `vsys`. A list of
 reasons, such as `fidelity.reasons`, a doubt's `reasons` or a check's `reasons`,

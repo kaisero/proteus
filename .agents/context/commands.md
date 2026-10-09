@@ -72,7 +72,10 @@ simulate nat <src> <dst> --device <fw>      the NAT rule and the translated pack
   hole (exit 3).
 - **`simulate routing <src> <dst>`** (or `<dst> --device <name> [--router]`) has
   its own command (`kindCommands`): no selectors but `--device`, `--at`, `--rib`,
-  `--why`. It reads every inventory device's stored interfaces and tables, draws a
+  `--why`. An undecided or undermatched simulate result also carries `needs`
+  (`query/needs.go`, spec 2026-10-09 §3.4): the port, protocol or URL a second
+  call can give, found from the reason codes; `[]` when none helps, no key
+  when the result is decided. It reads every inventory device's stored interfaces and tables, draws a
   box per firewall and vsys, and exits 2 for a start it cannot choose (ties,
   default-only, several routers, IPv6); a start device without a snapshot is a hole
   (exit 3). `scripts/device-probe.sh --routing <device>
@@ -156,6 +159,7 @@ type LookupInput struct{ ... }
 type LookupResult struct{ ... }
 type NATInput struct{ ... }
 type NATResult struct{ ... }
+type Need struct{ ... }
 type Note struct{ ... }
 type PathHop struct{ ... }
 type PathResult struct{ ... }
