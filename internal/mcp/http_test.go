@@ -358,6 +358,39 @@ func TestServeHTTPDrainsOnShutdown(t *testing.T) {
 	}
 }
 
+// A request still open when the shutdown deadline (the call timeout) passes
+// is cut: the server closes its connection and ServeHTTP returns.
+func TestServeHTTPClosesWhatOutlivesTheShutdown(t *testing.T) {
+	t.Parallel()
+	url, _, stop := httpLab(t, Options{Limits: Limits{CallTimeout: 100 * time.Millisecond}})
+	conn, err := net.Dial("tcp", strings.TrimSuffix(strings.TrimPrefix(url, "http://"), "/"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	// A body that never arrives in full keeps the request active.
+	if _, err := fmt.Fprintf(conn, "POST / HTTP/1.1\r\nHost: 127.0.0.1\r\nAuthorization: Bearer %s\r\n"+
+		"Content-Type: application/json\r\nAccept: application/json, text/event-stream\r\nContent-Length: 1000\r\n\r\n{", testToken); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(50 * time.Millisecond)
+	stopped := make(chan error, 1)
+	go func() { stopped <- stop() }()
+	select {
+	case err := <-stopped:
+		if !errors.Is(err, context.Canceled) {
+			t.Errorf("ServeHTTP returned %v", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("the open request held the shutdown")
+	}
+	_ = conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+	// Closed: the read ends at once, with EOF or a reset, not the deadline.
+	if _, err := io.ReadAll(conn); errors.Is(err, os.ErrDeadlineExceeded) {
+		t.Errorf("the connection was not closed: %v", err)
+	}
+}
+
 // Refusals are audited at most 10 per minute per address; a summary line
 // counts the rest when the window ends.
 func TestRefusalsAreRateLimited(t *testing.T) {
