@@ -302,9 +302,10 @@ func TestTestHelpersStayInTests(t *testing.T) {
 	}
 }
 
-// sdkModules are the MCP Go SDK and the schema module it brings. Only the MCP
+// sdkModules are the MCP Go SDK, the schema module it brings, and x/sync, which
+// it brings too and whose singleflight the server's cache uses. Only the MCP
 // server imports them, in its code and in its tests (spec 2026-10-09 §12 S9).
-var sdkModules = []string{"github.com/modelcontextprotocol/go-sdk", "github.com/google/jsonschema-go"}
+var sdkModules = []string{"github.com/modelcontextprotocol/go-sdk", "github.com/google/jsonschema-go", "golang.org/x/sync"}
 
 // mcpPkg is the one package that may import them.
 const mcpPkg = module + "/internal/mcp"

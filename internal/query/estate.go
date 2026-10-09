@@ -71,7 +71,7 @@ func Targets(ctx context.Context, env Env, sel Selection) ([]estate.Target, []es
 	if u != nil {
 		return nil, nil, u
 	}
-	when.Now, when.MaxAge, when.Log, when.Ops = env.now(), env.MaxAge, env.Log, env.Ops
+	when.Now, when.MaxAge, when.Log, when.Ops, when.Configs = env.now(), env.MaxAge, env.Log, env.Ops, env.Configs
 	if env.Store == nil {
 		return nil, nil, errNoStore
 	}
@@ -112,16 +112,26 @@ func TargetQualifiers(ts []estate.Target) ([]Unresolved, []Note) {
 
 // indexSets keeps one index set per configuration a query reads, so it builds
 // each (configuration, scope, rulebase) index at most once. The query owns it
-// and drops it when it returns.
+// and drops it when it returns. A target whose source keeps its indexes, as a
+// server's cache does, uses those.
 type indexSets map[*config.Config]*index.Set
 
-func (m indexSets) of(cfg *config.Config) *index.Set {
-	s, ok := m[cfg]
+func (m indexSets) of(t estate.Target) estate.Indexes {
+	if t.Indexes != nil {
+		return t.Indexes
+	}
+	s, ok := m[t.Config]
 	if !ok {
-		s = index.NewSet(cfg)
-		m[cfg] = s
+		s = index.NewSet(t.Config)
+		m[t.Config] = s
 	}
 	return s
+}
+
+// provider is a scope's index of any rulebase, the shape a simulation's
+// target carries.
+func provider(ix estate.Indexes, sc config.Scope) func(resolve.Rulebase) (*index.Index, error) {
+	return func(rb resolve.Rulebase) (*index.Index, error) { return ix.Index(sc, rb) }
 }
 
 // fetchedEstate is the store at one point in time, for the simulations that
@@ -142,7 +152,7 @@ func openEstate(env Env, at string) (fetchedEstate, error) {
 	if u != nil {
 		return fetchedEstate{}, u
 	}
-	when.Now, when.MaxAge, when.Log, when.Ops = env.now(), env.MaxAge, env.Log, env.Ops
+	when.Now, when.MaxAge, when.Log, when.Ops, when.Configs = env.now(), env.MaxAge, env.Log, env.Ops, env.Configs
 	if env.Store == nil {
 		return fetchedEstate{}, errNoStore
 	}
@@ -165,7 +175,7 @@ func storeLoader(st *store.Store, when estate.When, net *estate.Network, users i
 	type key struct{ member, snapshot, vsys string }
 	type snap struct{ member, id string }
 	cache := map[key]simulate.Target{}
-	sets := map[snap]*index.Set{}
+	sets := map[snap]estate.Indexes{}
 	return func(dev, vsys string) (simulate.Target, error) {
 		k := key{member: dev, vsys: vsys}
 		if d, err := net.Device(dev); err == nil {
@@ -204,7 +214,7 @@ func storeLoader(st *store.Store, when estate.When, net *estate.Network, users i
 		}
 		set, ok := sets[sk]
 		if !ok {
-			set = index.NewSet(ts[0].Config)
+			set = indexSets{}.of(ts[0])
 			sets[sk] = set
 		}
 		// Built here, so a failed build is the load's error.
@@ -212,7 +222,7 @@ func storeLoader(st *store.Store, when estate.When, net *estate.Network, users i
 			return simulate.Target{}, err
 		}
 		t := simulate.Target{
-			Config: set.Config(), Indexes: set.Provider(ts[0].Scope),
+			Config: ts[0].Config, Indexes: provider(set, ts[0].Scope),
 			Providers: index.Providers{Users: users}, Notes: ts[0].Notes,
 		}
 		cache[k] = t

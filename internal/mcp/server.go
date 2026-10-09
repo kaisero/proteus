@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -26,6 +27,29 @@ type Options struct {
 	Version string
 	// Now is the audit clock; nil uses time.Now.
 	Now func() time.Time
+	// Limits bound the loads and the cache; a zero field takes its default.
+	Limits Limits
+}
+
+// Limits bound what the server does at once and keeps (spec §4.2, §4.7).
+type Limits struct {
+	// MaxLoads is how many configuration loads and index builds run at once.
+	MaxLoads int
+	// MaxQueue is how many loads may wait for one of them.
+	MaxQueue int
+	// MaxCacheMB is the cache's size limit in MB (spec §4.8).
+	MaxCacheMB int
+}
+
+// DefaultLimits are the limits of spec §4.2.
+var DefaultLimits = Limits{MaxLoads: 2, MaxQueue: 16, MaxCacheMB: 2048}
+
+// withDefaults is l with each zero field set to its default.
+func (l Limits) withDefaults() Limits {
+	l.MaxLoads = cmp.Or(l.MaxLoads, DefaultLimits.MaxLoads)
+	l.MaxQueue = cmp.Or(l.MaxQueue, DefaultLimits.MaxQueue)
+	l.MaxCacheMB = cmp.Or(l.MaxCacheMB, DefaultLimits.MaxCacheMB)
+	return l
 }
 
 // The audit statuses of a call (spec §4.9).
@@ -105,7 +129,9 @@ func newServer(o Options, strict bool) (*sdk.Server, error) {
 		return nil, errors.New("mcp: the inventory has no device")
 	}
 	s := sdk.NewServer(&sdk.Implementation{Name: "proteus", Version: o.Version}, &sdk.ServerOptions{Instructions: instructions})
-	if err := addTools(s, o.Env, o.Env.Inventory.Names()); err != nil {
+	lim := o.Limits.withDefaults()
+	cache := newCache(int64(lim.MaxCacheMB)<<20, lim.MaxLoads, lim.MaxQueue, strict)
+	if err := addTools(s, calls{env: o.Env, cache: cache}, o.Env.Inventory.Names()); err != nil {
 		return nil, err
 	}
 	if err := addResources(s); err != nil {

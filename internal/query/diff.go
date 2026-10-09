@@ -85,12 +85,13 @@ func SnapshotDiff(ctx context.Context, env Env, in DiffInput) (Envelope[DiffInpu
 			e.Notes = append(e.Notes, NoteOf(d, "", reason.New("note.serial-changed", fmt.Sprintf(
 				"the snapshots come from different firewalls (serial %s, then %s), as after an HA failover; settings an HA pair does not sync show as changes", was, now))))
 		}
-		before, _, err1 := config.Load(older.Path(store.ConfigDoc))
-		after, _, err2 := config.Load(newer.Path(store.ConfigDoc))
+		was, err1 := env.configs().Config(older)
+		now, err2 := env.configs().Config(newer)
 		if err1 != nil || err2 != nil {
 			e.Holes = append(e.Holes, estate.NewHole(d, "", reason.New(configGap(older, newer), fmt.Sprintf("unreadable configuration: %v %v", err1, err2))))
 			continue
 		}
+		before, after := was.Config, now.Config
 		for _, sc := range diffScopes(before, after, in.Selection.Vsys) {
 			ch := drift.Compare(before, after, sc)
 			if ch == nil {

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/okaiser/proteus/internal/config"
+	"github.com/okaiser/proteus/internal/index"
 	"github.com/okaiser/proteus/internal/reason"
 	"github.com/okaiser/proteus/internal/resolve"
 	"github.com/okaiser/proteus/internal/runlog"
@@ -29,6 +30,10 @@ type Target struct {
 	Snapshot *store.Snapshot // nil for a target read from a file
 	Config   *config.Config
 	Report   config.Report
+	// Indexes builds the configuration's indexes when the source that loaded
+	// it keeps them; nil leaves them to the caller. It is no data of the
+	// answer, so JSON leaves it out.
+	Indexes Indexes `json:"-"`
 	// Notes qualify every answer from this target: a stale snapshot, a version gap.
 	Notes simulate.Reasons
 }
@@ -88,6 +93,49 @@ type When struct {
 	// Ops reads the devices' operational data; nil reads it from the store on
 	// every ask. A server fills it with its cache.
 	Ops OpSource
+	// Configs loads the snapshots' configurations; nil loads each from the
+	// store on every ask. A server fills it with its cache.
+	Configs ConfigSource
+}
+
+// Indexes gives a configuration's indexes: each scope's index of a rulebase.
+type Indexes interface {
+	Index(sc config.Scope, rb resolve.Rulebase) (*index.Index, error)
+}
+
+// Loaded is a snapshot's configuration as a ConfigSource gives it.
+type Loaded struct {
+	Config *config.Config
+	Report config.Report
+	// Indexes builds the configuration's indexes; nil leaves them to the
+	// caller.
+	Indexes Indexes
+}
+
+// ConfigSource loads a snapshot's configuration. The answer depends only on
+// the snapshot (its device and id), so an implementation may cache by them.
+// The returned values are shared: a caller must not change them. A source a
+// server shares between questions must be safe for concurrent use. Notes do
+// not come from it: each question builds them (spec 2026-10-09 §4.8).
+type ConfigSource interface {
+	Config(sn store.Snapshot) (Loaded, error)
+}
+
+// DiskConfigs loads each configuration from the store on every ask.
+type DiskConfigs struct{}
+
+// Config implements ConfigSource.
+func (DiskConfigs) Config(sn store.Snapshot) (Loaded, error) {
+	cfg, rep, err := config.Load(sn.Path(store.ConfigDoc))
+	return Loaded{Config: cfg, Report: rep}, err
+}
+
+// configs is the source of configurations.
+func (w When) configs() ConfigSource {
+	if w.Configs == nil {
+		return DiskConfigs{}
+	}
+	return w.Configs
 }
 
 // ops is the source of operational data.
@@ -129,18 +177,19 @@ func openSnapshot(d string, sn store.Snapshot, err error, vsys []string, w When)
 		w.Log.Warnf(runlog.TagSnap, "%s: hole: %v", d, err)
 		return nil, []Hole{NewHole(d, "", reason.New(GapOf(err), err.Error()))}
 	}
-	cfg, rep, err := config.Load(sn.Path(store.ConfigDoc))
+	l, err := w.configs().Config(sn)
 	if err != nil {
 		w.Log.Warnf(runlog.TagSnap, "%s: hole: %v", d, err)
 		return nil, []Hole{NewHole(d, "", reason.New("gap.load-failed", err.Error()))}
 	}
+	cfg := l.Config
 	w.Log.Infof(runlog.TagSnap, "%s: snapshot %s taken %s, PAN-OS %s read with the %s schema",
 		d, sn.ID, sn.Meta.TakenAt.Format(time.RFC3339), cfg.Version(), cfg.DigestVersion())
 	var notes simulate.Reasons
 	if age := w.Now.Sub(sn.Meta.TakenAt); w.MaxAge > 0 && age > w.MaxAge {
 		notes = append(notes, reason.New("note.snapshot-stale", StaleNote(sn.ID, age, w.MaxAge)))
 	}
-	ts, hs := scopes(d, &sn, cfg, rep, vsys, notes)
+	ts, hs := scopes(d, &sn, cfg, l.Report, l.Indexes, vsys, notes)
 	for _, h := range hs {
 		w.Log.Warnf(runlog.TagSnap, "%s/%s: hole: %s", h.Device, h.Vsys, h.Reason)
 	}
@@ -154,7 +203,7 @@ func OpenFile(path string, vsys []string, log *runlog.Logger) ([]Target, []Hole,
 		return nil, nil, err
 	}
 	log.Infof(runlog.TagSnap, "file %s: PAN-OS %s read with the %s schema", path, cfg.Version(), cfg.DigestVersion())
-	ts, hs := scopes(FileDevice, nil, cfg, rep, vsys, nil)
+	ts, hs := scopes(FileDevice, nil, cfg, rep, nil, vsys, nil)
 	return ts, hs, nil
 }
 
@@ -168,7 +217,7 @@ func pick(st *store.Store, device string, at time.Time) (store.Snapshot, error) 
 // scopes returns a target per vsys the configuration defines, keeping only the
 // asked ones when vsys is not empty. An asked vsys the configuration lacks is a hole.
 func scopes(device string, sn *store.Snapshot, cfg *config.Config, rep config.Report,
-	vsys []string, notes simulate.Reasons,
+	ix Indexes, vsys []string, notes simulate.Reasons,
 ) ([]Target, []Hole) {
 	have := resolve.Vsyses(cfg)
 	if rep.VersionGap != "" {
@@ -190,7 +239,7 @@ func scopes(device string, sn *store.Snapshot, cfg *config.Config, rep config.Re
 		delete(missing, v)
 		out = append(out, Target{
 			Device: device, Vsys: v, Scope: config.Scope{Sort: config.ScopeVsys, Name: v},
-			Snapshot: sn, Config: cfg, Report: rep, Notes: notes,
+			Snapshot: sn, Config: cfg, Report: rep, Indexes: ix, Notes: notes,
 		})
 	}
 	var holes []Hole

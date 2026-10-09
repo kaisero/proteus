@@ -54,6 +54,10 @@ type Env struct {
 	// cache here. Notes are never cached: each question builds them from the
 	// snapshot meta and Now (spec 2026-10-09 §12 C13).
 	Ops estate.OpSource
+	// Configs loads the snapshots' configurations and keeps their indexes.
+	// Nil loads each from the store on every question; a server shares a
+	// cache here, bound to the call (spec 2026-10-09 §4.8).
+	Configs estate.ConfigSource
 	// Fresh fetches devices before a query reads them and returns the notes
 	// each device's fetch left, by device: TLS verification off, a failed
 	// document, a failed fetch. Nil takes no fresh fetch.
@@ -66,6 +70,14 @@ func (e Env) now() time.Time {
 		return time.Now()
 	}
 	return e.Now()
+}
+
+// configs is the env's source of configurations.
+func (e Env) configs() estate.ConfigSource {
+	if e.Configs == nil {
+		return estate.DiskConfigs{}
+	}
+	return e.Configs
 }
 
 // users is the user directory, or none.

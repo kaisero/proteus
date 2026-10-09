@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/okaiser/proteus/internal/index"
 	"github.com/okaiser/proteus/internal/reason"
 	"github.com/okaiser/proteus/internal/store"
 )
@@ -62,6 +63,32 @@ func TestOpenReadsLatest(t *testing.T) {
 	}
 	if ts[0].Snapshot == nil || ts[0].Scope.String() != "vsys:vsys1" {
 		t.Errorf("target = %+v", ts[0])
+	}
+}
+
+// countingConfigs loads from disk, counts the loads and hands out indexes.
+type countingConfigs struct{ loads int }
+
+func (c *countingConfigs) Config(sn store.Snapshot) (Loaded, error) {
+	c.loads++
+	l, err := DiskConfigs{}.Config(sn)
+	l.Indexes = index.NewSet(l.Config)
+	return l, err
+}
+
+// A source of configurations replaces the store's: every target of a
+// snapshot carries its indexes, and the notes stay the question's own.
+func TestOpenTakesAConfigSource(t *testing.T) {
+	t.Parallel()
+	src := &countingConfigs{}
+	ts, holes := Open(storeWith(t), []string{"fw01"}, nil, When{Now: t0.Add(2 * time.Hour), MaxAge: time.Minute, Configs: src})
+	if len(holes) != 0 || len(ts) != 3 || src.loads != 1 {
+		t.Fatalf("%v %v, %d loads", ts, holes, src.loads)
+	}
+	for _, tg := range ts {
+		if tg.Indexes == nil || len(tg.Notes) != 1 || tg.Notes[0].Code != "note.snapshot-stale" {
+			t.Errorf("target %+v", tg)
+		}
 	}
 }
 

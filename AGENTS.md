@@ -162,8 +162,9 @@ hook, which makes `reason.New` panic on an unregistered code in a test binary. I
 not a test helper, and production code imports it. `internal/mcp` imports `testing`
 for the same call: in a test binary its panic recover panics on, so a bug fails the
 test instead of hiding as `call.internal`. `internal/mcp` is the only
-package that imports the MCP Go SDK (`github.com/modelcontextprotocol/go-sdk`) or
-`github.com/google/jsonschema-go`, in its code and in its tests. They and the
+package that imports the MCP Go SDK (`github.com/modelcontextprotocol/go-sdk`),
+`github.com/google/jsonschema-go` or `golang.org/x/sync`, in its code and in its
+tests. They and the
 modules they bring (`segmentio/asm`, `segmentio/encoding`, `uritemplate`,
 `x/oauth2`, `x/sync`, `x/time`) are the one dependency added for the MCP server;
 any other new dependency needs its own decision.

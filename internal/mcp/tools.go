@@ -138,6 +138,12 @@ func errorOf(err error) *toolError {
 		e.Needs = append(e.Needs, need)
 		return e
 	}
+	if errors.Is(err, errLoadsBusy) {
+		return newError("call.busy", errLoadsBusy.Error())
+	}
+	if _, ok := errors.AsType[*panicError](err); ok {
+		return newError("call.internal", internalText)
+	}
 	if errors.Is(err, context.DeadlineExceeded) {
 		return newError("call.timeout", "the call ran longer than its time limit")
 	}
@@ -193,7 +199,12 @@ func answer[In query.Echoer[E], E, R, S any](ctx context.Context, e query.Envelo
 	c := callOf(ctx)
 	if err != nil {
 		te := errorOf(err)
-		c.set(func(c *Call) { c.Status, c.Code = statuses[te.Code], te.Code })
+		c.set(func(c *Call) {
+			c.Status, c.Code = statuses[te.Code], te.Code
+			if p, ok := errors.AsType[*panicError](err); ok {
+				c.Stack = fmt.Appendf(nil, "panic: %v\n\n%s", p.value, p.stack)
+			}
+		})
 		return &sdk.CallToolResult{IsError: true, Content: []sdk.Content{&sdk.TextContent{Text: errorText(te)}}}, output{Error: te}, nil
 	}
 	var doc any
@@ -216,9 +227,28 @@ func answer[In query.Echoer[E], E, R, S any](ctx context.Context, e query.Envelo
 	return &sdk.CallToolResult{Content: []sdk.Content{&sdk.TextContent{Text: v.text()}}}, output{Envelope: doc}, nil
 }
 
+// calls is what each call reads: the env, with the cache bound to the call.
+type calls struct {
+	env   query.Env
+	cache *Cache
+}
+
+// on is the env of one call: its configurations and operational data come
+// through the cache, and its loads wait no longer than ctx. The returned
+// view keeps the call's first server failure.
+func (c calls) on(ctx context.Context) (query.Env, *callCache) {
+	env := c.env
+	if c.cache == nil {
+		return env, nil
+	}
+	cc := c.cache.bind(ctx)
+	env.Configs, env.Ops = cc, c.cache
+	return env, cc
+}
+
 // addTools registers each question as a tool on s, answered by the query
-// layer over env, with the generated schemas and devices as the device enum.
-func addTools(s *sdk.Server, env query.Env, devices []string) error {
+// layer over c's env, with the generated schemas and devices as the device enum.
+func addTools(s *sdk.Server, c calls, devices []string) error {
 	var errs []error
 	add := func(name string, register func(*sdk.Tool)) {
 		t, err := toolOf(name, devices)
@@ -230,6 +260,7 @@ func addTools(s *sdk.Server, env query.Env, devices []string) error {
 	}
 	add("simulate_policy", func(t *sdk.Tool) {
 		sdk.AddTool(s, t, func(ctx context.Context, _ *sdk.CallToolRequest, a policyArgs) (*sdk.CallToolResult, output, error) {
+			env, cc := c.on(ctx)
 			e, err := query.Policy(ctx, env, query.PolicyInput{
 				Flow: query.FlowInput{
 					Source: a.Source, Destination: a.Destination, Protocol: a.Protocol, Port: port(a.Port),
@@ -237,30 +268,33 @@ func addTools(s *sdk.Server, env query.Env, devices []string) error {
 				},
 				Device: a.Device, Router: a.Router, At: a.At,
 			})
-			return answer(ctx, e, err, a.Detail, query.PathResult.Summary)
+			return answer(ctx, e, cc.settle(err), a.Detail, query.PathResult.Summary)
 		})
 	})
 	add("simulate_routing", func(t *sdk.Tool) {
 		sdk.AddTool(s, t, func(ctx context.Context, _ *sdk.CallToolRequest, a routingArgs) (*sdk.CallToolResult, output, error) {
+			env, cc := c.on(ctx)
 			e, err := query.Routing(ctx, env, query.RoutingInput{
 				Source: a.Source, Destination: a.Destination, Protocol: a.Protocol, Port: port(a.Port),
 				Device: a.Device, Router: a.Router, At: a.At,
 			})
-			return answer(ctx, e, err, a.Detail, query.RoutingResult.Summary)
+			return answer(ctx, e, cc.settle(err), a.Detail, query.RoutingResult.Summary)
 		})
 	})
 	add("simulate_nat", func(t *sdk.Tool) {
 		sdk.AddTool(s, t, func(ctx context.Context, _ *sdk.CallToolRequest, a natArgs) (*sdk.CallToolResult, output, error) {
+			env, cc := c.on(ctx)
 			// tcp when left out, as on the command line (spec §4.5).
 			e, err := query.NAT(ctx, env, query.NATInput{
 				Flow:   query.FlowInput{Source: a.Source, Destination: a.Destination, Protocol: cmp.Or(a.Protocol, "tcp"), Port: port(a.Port)},
 				Device: a.Device, Router: a.Router, At: a.At,
 			})
-			return answer(ctx, e, err, a.Detail, query.NATResult.Summary)
+			return answer(ctx, e, cc.settle(err), a.Detail, query.NATResult.Summary)
 		})
 	})
 	add("search", func(t *sdk.Tool) {
 		sdk.AddTool(s, t, func(ctx context.Context, _ *sdk.CallToolRequest, a searchArgs) (*sdk.CallToolResult, output, error) {
+			env, cc := c.on(ctx)
 			in := query.SearchInput{Term: a.Value, Selection: query.Selection{Device: a.Device, Label: a.Label, At: a.At}}
 			if a.Kind != "" {
 				in.Kinds = []string{a.Kind}
@@ -269,23 +303,25 @@ func addTools(s *sdk.Server, env query.Env, devices []string) error {
 				in.Selection.Vsys = []string{a.Vsys}
 			}
 			e, err := query.Search(ctx, env, in)
-			return answer(ctx, e, err, a.Detail, query.Finding.Summary)
+			return answer(ctx, e, cc.settle(err), a.Detail, query.Finding.Summary)
 		})
 	})
 	add("lookup", func(t *sdk.Tool) {
 		sdk.AddTool(s, t, func(ctx context.Context, _ *sdk.CallToolRequest, a lookupArgs) (*sdk.CallToolResult, output, error) {
+			env, cc := c.on(ctx)
 			in := query.LookupInput{Name: a.Name, Kind: a.Kind, Selection: query.Selection{Device: a.Device, At: a.At}}
 			if a.Vsys != "" {
 				in.Selection.Vsys = []string{a.Vsys}
 			}
 			e, err := query.Lookup(ctx, env, in)
-			return answer(ctx, e, err, a.Detail, query.LookupResult.Summary)
+			return answer(ctx, e, cc.settle(err), a.Detail, query.LookupResult.Summary)
 		})
 	})
 	add("snapshot_diff", func(t *sdk.Tool) {
 		sdk.AddTool(s, t, func(ctx context.Context, _ *sdk.CallToolRequest, a diffArgs) (*sdk.CallToolResult, output, error) {
+			env, cc := c.on(ctx)
 			e, err := query.SnapshotDiff(ctx, env, query.DiffInput{Selection: query.Selection{Device: []string{a.Device}}, From: a.From, To: a.To})
-			return answer(ctx, e, err, a.Detail, query.DiffResult.Summary)
+			return answer(ctx, e, cc.settle(err), a.Detail, query.DiffResult.Summary)
 		})
 	})
 	return errors.Join(errs...)

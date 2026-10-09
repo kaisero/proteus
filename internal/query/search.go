@@ -155,7 +155,7 @@ func Search(ctx context.Context, env Env, in SearchInput) (Envelope[SearchInput,
 				q.Providers.Zones = z
 			}
 		}
-		idx, err := sets.of(t.Config).Index(t.Scope, resolve.Security)
+		idx, err := sets.of(t).Index(t.Scope, resolve.Security)
 		if err != nil {
 			e.Holes = append(e.Holes, estate.NewHole(t.Device, t.Vsys, reason.New("gap.load-failed", err.Error())))
 			continue

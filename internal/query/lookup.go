@@ -66,7 +66,7 @@ func Lookup(ctx context.Context, env Env, in LookupInput) (Envelope[LookupInput,
 		if err := ctx.Err(); err != nil {
 			return none, err
 		}
-		idx, err := sets.of(t.Config).Index(t.Scope, resolve.Security)
+		idx, err := sets.of(t).Index(t.Scope, resolve.Security)
 		if err != nil {
 			e.Holes = append(e.Holes, estate.NewHole(t.Device, t.Vsys, reason.New("gap.load-failed", err.Error())))
 			continue
