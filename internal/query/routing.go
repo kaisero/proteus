@@ -1,6 +1,7 @@
 package query
 
 import (
+	"cmp"
 	"context"
 
 	"github.com/okaiser/proteus/internal/runlog"
@@ -15,6 +16,9 @@ type RoutingInput struct {
 	// source.
 	Source      string `json:"source,omitempty" jsonschema:"an address or a host name; empty starts on device without a source"`
 	Destination string `json:"destination" jsonschema:"an address or a host name; a host name is resolved and its first IPv4 address traced"`
+	// Protocol is the flow's protocol; empty is tcp. A port given as tcp/443
+	// names its own.
+	Protocol string `json:"protocol,omitempty" jsonschema:"tcp, udp, icmp or sctp; empty for tcp; a port such as udp/53 names its own"`
 	// Port decides NAT and PBF rules that name a service: 443 or tcp/443.
 	Port string `json:"port,omitempty" jsonschema:"the destination port, 443 or tcp/443; it decides NAT and PBF rules that name a service"`
 	// Device names the start, Router its logical router.
@@ -38,9 +42,10 @@ func (in RoutingInput) Validate() *UsageError {
 	return u
 }
 
-// flow is routing's flow as asked: TCP unless the port names another protocol.
+// flow is routing's flow as asked: TCP unless the protocol or the port names
+// another one.
 func (in RoutingInput) flow() FlowInput {
-	return FlowInput{Source: in.Source, Destination: in.Destination, Protocol: "tcp", Port: in.Port, NoDNS: in.NoDNS}
+	return FlowInput{Source: in.Source, Destination: in.Destination, Protocol: cmp.Or(in.Protocol, "tcp"), Port: in.Port, NoDNS: in.NoDNS}
 }
 
 // RoutingResult is simulate routing's result: the path, and the run's fidelity

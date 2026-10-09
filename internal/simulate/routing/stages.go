@@ -120,7 +120,7 @@ func place(_ context.Context, s *state) (simulate.Outcome, error) {
 		out.Detail = fmt.Sprintf("given: %s, router %s", s.port.Device, s.router)
 	} else {
 		if !s.src.IsValid() {
-			return out, &simulate.ChoiceError{Question: "give a source, or a start device with --device"}
+			return out, &simulate.ChoiceError{Question: "give a source, or a start device with --device", ToolText: "give source, or a start device"}
 		}
 		pl, err := s.topo.Place(s.src)
 		if errors.Is(err, topology.ErrUnplaced) {
@@ -129,14 +129,20 @@ func place(_ context.Context, s *state) (simulate.Outcome, error) {
 				// answer is missing data, not a question for the user.
 				return out, s.unavailable()
 			}
-			return out, &simulate.ChoiceError{Kind: simulate.ChoiceDevice, Question: fmt.Sprintf("only default routes reach %s, so its first firewall is unknown; name it with --device", s.src), Options: s.topo.Nodes()}
+			return out, &simulate.ChoiceError{
+				Kind: simulate.ChoiceDevice, Question: fmt.Sprintf("only default routes reach %s, so its first firewall is unknown; name it with --device", s.src),
+				ToolText: fmt.Sprintf("only default routes reach %s, so its first firewall is unknown; name it in device", s.src), Options: s.topo.Nodes(),
+			}
 		}
 		if len(pl.Ties) > 0 {
 			var opts []string
 			for _, p := range pl.Ties {
 				opts = append(opts, p.Device+" "+p.Interface)
 			}
-			return out, &simulate.ChoiceError{Kind: simulate.ChoiceDevice, Question: fmt.Sprintf("%s could enter at several firewalls; name one with --device", s.src), Options: opts}
+			return out, &simulate.ChoiceError{
+				Kind: simulate.ChoiceDevice, Question: fmt.Sprintf("%s could enter at several firewalls; name one with --device", s.src),
+				ToolText: fmt.Sprintf("%s could enter at several firewalls; name one in device", s.src), Options: opts,
+			}
 		}
 		s.port, s.router, s.path.Placed = pl.Port, pl.Port.Router, pl.How
 		if pl.How == topology.PlacedRouted {

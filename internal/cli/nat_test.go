@@ -82,7 +82,7 @@ func TestSimulateNATRows(t *testing.T) {
 		}},
 		{[]string{"-", "198.18.250.10", "--from-interface", "ethernet1/3"}, []string{
 			"simulate nat (no source) -> 198.18.250.10 tcp on fw01",
-			"│  doubt   t-dnat-port: service t-8443 not known without a port: give --port",
+			"│  doubt   t-dnat-port: service t-8443 not known without a port: give the destination port",
 			"may be incomplete: overmatch",
 		}},
 		{[]string{"198.18.11.5", "198.18.100.9", "--port", "443"}, []string{

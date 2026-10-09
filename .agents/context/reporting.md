@@ -202,7 +202,10 @@ not defined is `doubt.service-application-default` or
 the doubts in rule order before the first certain match and stops at the first
 rule with no reason an input settles; when that is the first rule in doubt,
 `needs` is `[]`. A rule with a fixable and an unfixable reason keeps its fixable
-causes, since that input alone can rule the rule out, and the walk goes on.
+causes, since that input alone can rule the rule out, and the walk goes on. NAT
+doubts (`simulate nat`, and each hop's NAT doubts in routing and path mode) come
+in rule order above the rule taken and are cut the same way (`doubtCauses`). A
+blocked walk drops the fidelity's causes too.
 
 `reason` imports only the standard library, so every package may import it; the
 archtest allows it in every R12 rule.

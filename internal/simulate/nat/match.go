@@ -224,7 +224,7 @@ func serviceFits(name string, f simulate.Flow, svc map[string]string) (string, r
 		return "", reason.New("doubt.service-predefined", "service "+name+" is not defined in the configuration (a predefined service?)")
 	}
 	if f.DestPort == 0 {
-		return "", reason.New("path.nat-no-port", "service "+name+" not known without a port: give --port")
+		return "", reason.New("path.nat-no-port", "service "+name+" not known without a port: give the destination port")
 	}
 	matched, known := serviceHolds(name, strings.ToLower(f.Protocol), int(f.DestPort), svc, 0)
 	switch {

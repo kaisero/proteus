@@ -59,7 +59,7 @@ func (Simulation) Run(ctx context.Context, env *simulate.Env, in simulate.Input)
 	case env.Network == nil:
 		return run, errors.New("nat: no network to read")
 	case in.Params["device"] == "":
-		return run, &simulate.ChoiceError{Question: "name the firewall with --device"}
+		return run, &simulate.ChoiceError{Question: "name the firewall with --device", ToolText: "name the firewall in device"}
 	case len(in.Flow.Destination.Addrs) == 0 || !in.Flow.Destination.Addrs[0].Is4():
 		return run, &simulate.ChoiceError{Question: "the destination must be an IPv4 address; IPv6 is not simulated yet"}
 	case len(in.Flow.Source.Addrs) > 0 && !in.Flow.Source.Addrs[0].Is4():

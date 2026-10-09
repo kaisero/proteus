@@ -15,7 +15,7 @@
     },
     "detail": {
       "type": "string",
-      "description": "summary or full: how much of each result to return",
+      "description": "summary or full: how much of each result to return; summary when left out",
       "enum": [
         "summary",
         "full"

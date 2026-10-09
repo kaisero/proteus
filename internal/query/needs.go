@@ -127,24 +127,52 @@ func fidelityCauses(f simulate.Fidelity) []cause {
 }
 
 // securityCauses are the doubts of the candidates before the first certain
-// match, in rule order, up to the first doubt no input can fix: past that
-// candidate no second call changes the verdict, so its doubts and the ones
-// after it need nothing. blocked says such a doubt was met. A doubt with one
-// reason an input settles does not block: that input can rule the rule out,
-// so its fixable causes count and the walk goes on.
+// match, in rule order, cut as doubtCauses cuts them. blocked says a doubt no
+// input can fix was met.
 func securityCauses(flow simulate.Flow, v *securitypolicy.Verdict) (out []cause, blocked bool) {
 	if v == nil {
 		return nil, false
 	}
 	ds := slices.Clone(v.Doubts)
 	slices.SortStableFunc(ds, func(a, b securitypolicy.Doubt) int { return a.Position - b.Position })
+	var before []ruleDoubt
 	for _, d := range ds {
 		if v.Rule != nil && d.Position >= v.Rule.Position {
 			continue
 		}
+		before = append(before, ruleDoubt{d.Rule, d.Reasons})
+	}
+	return doubtCauses(flow, "rule", before)
+}
+
+// natCauses are NAT doubts: rules that may match instead of the one taken.
+// The NAT rulebase is first match too, and the doubts come in rule order, all
+// above the rule taken, so they are cut as doubtCauses cuts them.
+func natCauses(flow simulate.Flow, ds []nat.Doubt) (out []cause, blocked bool) {
+	rds := make([]ruleDoubt, len(ds))
+	for i, d := range ds {
+		rds[i] = ruleDoubt{d.Rule, d.Reasons}
+	}
+	return doubtCauses(flow, "NAT rule", rds)
+}
+
+// ruleDoubt is a rule in doubt and why.
+type ruleDoubt struct {
+	rule    string
+	reasons simulate.Reasons
+}
+
+// doubtCauses are the causes of rules in doubt, given in rule order, up to the
+// first doubt no input can fix: past that rule no second call changes the
+// verdict, so its doubts and the ones after it need nothing. blocked says such
+// a doubt was met. A doubt with one reason an input settles does not block:
+// that input can rule the rule out, so its fixable causes count and the walk
+// goes on.
+func doubtCauses(flow simulate.Flow, kind string, ds []ruleDoubt) (out []cause, blocked bool) {
+	for _, d := range ds {
 		var cs []cause
-		for _, r := range d.Reasons {
-			if c := (cause{code: r.Code, rule: ruleName{"rule", d.Rule}}); len(needsOf(flow, []cause{c})) > 0 {
+		for _, r := range d.reasons {
+			if c := (cause{code: r.Code, rule: ruleName{kind, d.rule}}); len(needsOf(flow, []cause{c})) > 0 {
 				cs = append(cs, c)
 			}
 		}
@@ -154,17 +182,6 @@ func securityCauses(flow simulate.Flow, v *securitypolicy.Verdict) (out []cause,
 		out = append(out, cs...)
 	}
 	return out, false
-}
-
-// natCauses are NAT doubts: rules that may match instead of the one taken.
-func natCauses(ds []nat.Doubt) []cause {
-	var out []cause
-	for _, d := range ds {
-		for _, r := range d.Reasons {
-			out = append(out, cause{code: r.Code, rule: ruleName{"NAT rule", d.Rule}})
-		}
-	}
-	return out
 }
 
 // securityNeeds is a file answer's needs; nil when it is decided and exact
@@ -181,8 +198,8 @@ func securityNeeds(flow simulate.Flow, verdict string, v *securitypolicy.Verdict
 }
 
 // pathNeeds is a path answer's needs: each undecided check's doubts and each
-// hop's NAT doubts; the fidelity's reasons too unless a check met a doubt no
-// input can fix.
+// hop's NAT doubts; the fidelity's reasons too unless a check or a NAT rule met
+// a doubt no input can fix.
 func pathNeeds(flow simulate.Flow, r pathpolicy.Result) []Need {
 	if !holdsBack(r.Verdict == pathpolicy.VerdictUndecided, r.Fidelity) {
 		return nil
@@ -190,7 +207,8 @@ func pathNeeds(flow simulate.Flow, r pathpolicy.Result) []Need {
 	var causes []cause
 	blocked := false
 	for _, h := range r.Hops {
-		causes = append(causes, natCauses(h.Routing.NATDoubts)...)
+		cs, b := natCauses(flow, h.Routing.NATDoubts)
+		causes, blocked = append(causes, cs...), blocked || b
 		for _, c := range h.Checks {
 			if c.Verdict == pathpolicy.Undecided {
 				cs, b := securityCauses(flow, c.Security)
@@ -208,13 +226,19 @@ func pathNeeds(flow simulate.Flow, r pathpolicy.Result) []Need {
 // may replace leaves the path undecided there.
 func routingNeeds(flow simulate.Flow, p routing.Path, f simulate.Fidelity) []Need {
 	var causes []cause
+	doubted, blocked := false, false
 	for _, h := range p.Hops {
-		causes = append(causes, natCauses(h.NATDoubts)...)
+		cs, b := natCauses(flow, h.NATDoubts)
+		causes, blocked = append(causes, cs...), blocked || b
+		doubted = doubted || len(h.NATDoubts) > 0
 	}
-	if !holdsBack(len(causes) > 0, f) {
+	if !holdsBack(doubted, f) {
 		return nil
 	}
-	return needsOf(flow, append(causes, fidelityCauses(f)...))
+	if !blocked {
+		causes = append(causes, fidelityCauses(f)...)
+	}
+	return needsOf(flow, causes)
 }
 
 // natNeeds is a NAT answer's needs. A rule that may match instead leaves the
@@ -223,5 +247,9 @@ func natNeeds(flow simulate.Flow, r nat.Result, f simulate.Fidelity) []Need {
 	if !holdsBack(len(r.Doubts) > 0, f) {
 		return nil
 	}
-	return needsOf(flow, append(natCauses(r.Doubts), fidelityCauses(f)...))
+	causes, blocked := natCauses(flow, r.Doubts)
+	if !blocked {
+		causes = append(causes, fidelityCauses(f)...)
+	}
+	return needsOf(flow, causes)
 }

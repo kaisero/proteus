@@ -12,6 +12,7 @@ import (
 	"github.com/okaiser/proteus/internal/reason"
 	"github.com/okaiser/proteus/internal/resolve"
 	"github.com/okaiser/proteus/internal/simulate"
+	"github.com/okaiser/proteus/internal/simulate/nat"
 	"github.com/okaiser/proteus/internal/simulate/securitypolicy"
 )
 
@@ -207,5 +208,35 @@ func TestSecurityCausesStopAtAnUnfixableDoubt(t *testing.T) {
 	v.Doubts = []securitypolicy.Doubt{{Position: 10, Rule: "after", Reasons: simulate.Reasons{user}}}
 	if cs, blocked := securityCauses(tcp, v); len(cs) != 0 || blocked {
 		t.Errorf("after the match: %+v %v", cs, blocked)
+	}
+}
+
+// NAT doubts are cut like security doubts: in rule order, up to the first
+// doubt no input can fix. A blocked walk drops the fidelity's causes.
+func TestNATCausesStopAtAnUnfixableDoubt(t *testing.T) {
+	t.Parallel()
+	noPort := reason.New("path.nat-no-port", "service svc not known without a port: give the destination port")
+	zone := reason.New("zone.missing", "the ingress zone is unknown")
+	tcp := simulate.Flow{Protocol: "tcp"}
+	ds := []nat.Doubt{
+		{Rule: "early", Reasons: simulate.Reasons{noPort}},
+		{Rule: "zone", Reasons: simulate.Reasons{zone}},
+		{Rule: "late", Reasons: simulate.Reasons{noPort}},
+	}
+	cs, blocked := natCauses(tcp, ds)
+	if len(cs) != 1 || cs[0].rule != (ruleName{"NAT rule", "early"}) || !blocked {
+		t.Errorf("causes %+v, blocked %v", cs, blocked)
+	}
+	ds[1].Reasons = simulate.Reasons{zone, noPort}
+	if cs, blocked := natCauses(tcp, ds); len(cs) != 3 || blocked {
+		t.Errorf("mixed: %+v %v", cs, blocked)
+	}
+	// The fidelity's port cause goes with a blocked walk.
+	under := simulate.UnderMatch(reason.New("doubt.service-no-port", "service not evaluated without a tcp, udp or sctp port (svc)"))
+	if ns := natNeeds(tcp, nat.Result{MatchResult: nat.MatchResult{Doubts: []nat.Doubt{{Rule: "zone", Reasons: simulate.Reasons{zone}}}}}, under); len(ns) != 0 {
+		t.Errorf("blocked needs: %+v", ns)
+	}
+	if ns := natNeeds(tcp, nat.Result{}, under); len(ns) != 1 || ns[0].Code != "input.port" {
+		t.Errorf("unblocked needs: %+v", ns)
 	}
 }

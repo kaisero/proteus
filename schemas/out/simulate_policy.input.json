@@ -21,19 +21,19 @@
     },
     "port": {
       "type": "integer",
-      "description": "the destination port",
+      "description": "the destination port, a number; the protocol goes in protocol",
       "minimum": 1,
       "maximum": 65535
     },
     "source_port": {
       "type": "integer",
-      "description": "the source port",
+      "description": "the source port, a number",
       "minimum": 1,
       "maximum": 65535
     },
     "url": {
       "type": "string",
-      "description": "the URL; it decides URL categories"
+      "description": "the URL; it decides the rules that name a URL category the configuration defines"
     },
     "application": {
       "type": "string",
@@ -41,7 +41,7 @@
     },
     "user": {
       "type": "string",
-      "description": "the source user, such as corp\\alice"
+      "description": "the source user, such as corp\\alice; it decides the rules that name a user or a group of the user snapshot"
     },
     "device": {
       "type": "string",
@@ -57,7 +57,7 @@
     },
     "detail": {
       "type": "string",
-      "description": "summary or full: how much of each result to return",
+      "description": "summary or full: how much of each result to return; summary when left out",
       "enum": [
         "summary",
         "full"

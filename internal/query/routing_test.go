@@ -25,6 +25,21 @@ func TestRoutingAcrossTheLab(t *testing.T) {
 	}
 }
 
+// A protocol without a port reaches the flow; a port with its own protocol
+// wins over it, and none is tcp.
+func TestRoutingTakesAProtocolWithoutAPort(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct{ protocol, port, want string }{
+		{"udp", "", "udp"}, {"udp", "tcp/443", "tcp"}, {"", "", "tcp"},
+	} {
+		in := RoutingInput{Source: pathlab.Source, Destination: pathlab.Destination, Protocol: tc.protocol, Port: tc.port}
+		e, err := Routing(context.Background(), labEnv(t, pathlab.FW01, pathlab.FW02), in)
+		if err != nil || e.Input.Simulated.Protocol != tc.want {
+			t.Errorf("%+v: %q, %v", tc, e.Input.Simulated.Protocol, err)
+		}
+	}
+}
+
 // A start device without a snapshot is a hole, and there is no result.
 func TestRoutingFromAHole(t *testing.T) {
 	t.Parallel()

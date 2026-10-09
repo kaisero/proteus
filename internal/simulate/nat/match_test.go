@@ -117,7 +117,7 @@ func TestDoubts(t *testing.T) {
 	p := probe{src: "198.18.1.10", dst: "198.18.250.10", from: "transport", to: "transport", iface: "ethernet1/1"}
 	m := Match(input(cfg, p))
 	if m.Rule == nil || m.Rule.Name != "internet-a" || len(m.Doubts) != 1 || m.Doubts[0].Rule != "t-dnat-port" ||
-		!strings.Contains(m.Doubts[0].Text(), "give --port") || m.Doubts[0].Reasons[0].Code != "path.nat-no-port" || m.Fidelity.Level() != "overmatch" {
+		!strings.Contains(m.Doubts[0].Text(), "give the destination port") || m.Doubts[0].Reasons[0].Code != "path.nat-no-port" || m.Fidelity.Level() != "overmatch" {
 		t.Errorf("no port: %+v", m)
 	}
 	// The summary has its own code; the doubt keeps its reasons' codes.

@@ -307,7 +307,10 @@ func (t *Topology) Start(node, router string, src netip.Addr) (simulate.Port, ne
 	case router == "" && len(routers) == 1:
 		router = routers[0]
 	case router == "":
-		return simulate.Port{}, netip.Prefix{}, false, &simulate.ChoiceError{Kind: simulate.ChoiceRouter, Question: fmt.Sprintf("%s has several routers; name one with --router", node), Options: routers}
+		return simulate.Port{}, netip.Prefix{}, false, &simulate.ChoiceError{
+			Kind: simulate.ChoiceRouter, Question: fmt.Sprintf("%s has several routers; name one with --router", node),
+			ToolText: fmt.Sprintf("%s has several routers; name one in router", node), Options: routers,
+		}
 	}
 	start := simulate.Port{Device: node, Router: router}
 	if !src.IsValid() {

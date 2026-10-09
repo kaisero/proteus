@@ -3,7 +3,7 @@
   "properties": {
     "source": {
       "type": "string",
-      "description": "an address or a host name; left out, the path starts on device without a source"
+      "description": "an address or a host name; a host name is resolved with DNS and its first IPv4 address is checked; left out, the path starts on device without a source"
     },
     "destination": {
       "type": "string",
@@ -21,7 +21,7 @@
     },
     "port": {
       "type": "integer",
-      "description": "the destination port; it decides NAT and PBF rules that name a service",
+      "description": "the destination port, a number; it decides NAT and PBF rules that name a service",
       "minimum": 1,
       "maximum": 65535
     },
@@ -39,7 +39,7 @@
     },
     "detail": {
       "type": "string",
-      "description": "summary or full: how much of each result to return",
+      "description": "summary or full: how much of each result to return; summary when left out",
       "enum": [
         "summary",
         "full"

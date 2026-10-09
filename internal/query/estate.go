@@ -19,7 +19,7 @@ import (
 // Errors of an env that lacks what a query reads. The command line always
 // gives both; they say what a caller left out.
 var (
-	errNoInventory = errors.New("no inventory; run proteus inventory init, or pass --file")
+	errNoInventory = errors.New("no inventory: no device to read")
 	errNoStore     = errors.New("no snapshot store")
 )
 

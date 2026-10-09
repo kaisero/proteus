@@ -57,6 +57,9 @@ type ChoiceError struct {
 	// input the simulation cannot take; that stays a usage error.
 	Kind     string
 	Question string
+	// ToolText is Question in a tool's words where Question names a command
+	// line flag; empty where it names none.
+	ToolText string
 	Options  []string
 }
 
