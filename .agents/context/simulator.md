@@ -66,7 +66,10 @@ unknown and the post-NAT zone is not checked.
 
 Reads every device's interface state, FIB and RIB through `simulate.Network`
 (`estate.NewNetwork` over the store; an HA pair is one node, paired by serial) and a
-path device's configuration through `Env.Load`. `routing.Topology` is built once:
+path device's configuration through `Env.Load`. A `Network` is per question (its lazy
+maps have no lock). It reads the raw tables through `When.Ops` (`estate.OpSource`;
+nil reads the store, a server shares a cache keyed by member and snapshot id) and
+builds every note (stale, HA, unreadable RIB) per question from the meta and `Now`. `routing.Topology` is built once:
 address owners, connected nets, a `bart` table per router, and `Place` (connected,
 else the most specific non-default route, walking on while that route leads to
 another node; ties and default-only are `ChoiceError`, exit 2).
@@ -298,6 +301,12 @@ func FromFits(r resolve.PBFRule, in simulate.Port) bool
 func Load(load func(device, vsys string) (simulate.Target, error), device, vsys string) (Vsys, bool)
 ```
 <!-- /GENERATED:api -->
+
+`runlog.Open` names a file `<command>-<UTC ms timestamp>-<seq>.log`. The sequence
+number is a process-wide atomic counter, and a name another process holds is skipped,
+so runs in one millisecond never share a file. Rotation sorts by timestamp, then
+sequence number, ignores files not named so, and treats a file another run removed
+first as removed.
 
 <!-- GENERATED:api ./internal/runlog -->
 ```go

@@ -71,7 +71,7 @@ func Targets(ctx context.Context, env Env, sel Selection) ([]estate.Target, []es
 	if u != nil {
 		return nil, nil, u
 	}
-	when.Now, when.MaxAge, when.Log = env.now(), env.MaxAge, env.Log
+	when.Now, when.MaxAge, when.Log, when.Ops = env.now(), env.MaxAge, env.Log, env.Ops
 	if env.Store == nil {
 		return nil, nil, errNoStore
 	}
@@ -142,7 +142,7 @@ func openEstate(env Env, at string) (fetchedEstate, error) {
 	if u != nil {
 		return fetchedEstate{}, u
 	}
-	when.Now, when.MaxAge, when.Log = env.now(), env.MaxAge, env.Log
+	when.Now, when.MaxAge, when.Log, when.Ops = env.now(), env.MaxAge, env.Log, env.Ops
 	if env.Store == nil {
 		return fetchedEstate{}, errNoStore
 	}

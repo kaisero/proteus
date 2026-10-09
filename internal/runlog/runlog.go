@@ -13,13 +13,18 @@ package runlog
 
 import (
 	"cmp"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -89,8 +94,24 @@ type Logger struct {
 	now     func() time.Time
 }
 
-// Open creates the run's log file, <Dir>/<Command>-<UTC timestamp>.log, mode 0600,
-// and removes the oldest files beyond Keep.
+// maxTries bounds the names Open tries before it gives up.
+const maxTries = 999
+
+// seqs numbers the logs this process opens. It is the package's one mutable
+// value and is atomic: a server opens a log per call, concurrently, and a
+// sequence number that never repeats in a process keeps two calls in one
+// millisecond apart even while a rotation removes older files.
+var seqs atomic.Uint64
+
+// logName matches a run log's name: the command, the UTC timestamp and, since
+// the sequence number came in, the sequence number.
+var logName = regexp.MustCompile(`-(\d{8}T\d{6}\.\d{3}Z)(?:-(\d+))?\.log$`)
+
+// Open creates the run's log file, <Dir>/<Command>-<UTC timestamp>-<seq>.log,
+// mode 0600, and removes the oldest files beyond Keep. The sequence number
+// counts the logs this process opened; when another process holds the name,
+// Open takes the next number. So runs that open in the same millisecond each get
+// their own file (spec 2026-10-09 §4.9).
 func Open(o Options) (*Logger, error) {
 	now := o.Now
 	if now == nil {
@@ -99,9 +120,8 @@ func Open(o Options) (*Logger, error) {
 	if err := os.MkdirAll(o.Dir, 0o700); err != nil {
 		return nil, fmt.Errorf("runlog: %w", err)
 	}
-	name := fmt.Sprintf("%s-%s.log", fileSafe(o.Command), now().UTC().Format("20060102T150405.000Z"))
-	path := filepath.Join(o.Dir, name)
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_EXCL, 0o600)
+	base := fileSafe(o.Command) + "-" + now().UTC().Format("20060102T150405.000Z")
+	f, path, err := create(o.Dir, base, seqs.Add)
 	if err != nil {
 		return nil, fmt.Errorf("runlog: %w", err)
 	}
@@ -190,34 +210,60 @@ func (l *Logger) Close() error {
 	return err
 }
 
+// create makes <dir>/<base>-<seq>.log with the first free number next gives.
+func create(dir, base string, next func(uint64) uint64) (*os.File, string, error) {
+	for try := 1; ; try++ {
+		path := filepath.Join(dir, fmt.Sprintf("%s-%03d.log", base, next(1)))
+		f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_EXCL, 0o600)
+		if err == nil {
+			return f, path, nil
+		}
+		if !errors.Is(err, fs.ErrExist) || try == maxTries {
+			return nil, "", err
+		}
+	}
+}
+
 // rotate keeps the newest keep log files. The names embed a sortable timestamp
-// after the command, so the files are sorted by that timestamp, not by name.
+// and a sequence number after the command, so the files are sorted by those,
+// not by name. A file another run removed first is not an error: two runs that
+// open at once both rotate.
 func rotate(dir string, keep int) error {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return err
 	}
-	type file struct{ name, stamp string }
+	type file struct {
+		name, stamp string
+		seq         int
+	}
 	var logs []file
 	for _, e := range entries {
-		n := e.Name()
-		if e.IsDir() || !strings.HasSuffix(n, ".log") {
+		m := logName.FindStringSubmatch(e.Name())
+		if e.IsDir() || m == nil {
 			continue
 		}
-		i := strings.LastIndex(n, "-")
-		if i < 0 {
-			continue
-		}
-		logs = append(logs, file{n, n[i+1:]})
+		seq, _ := strconv.Atoi(m[2]) // a name from before the sequence number sorts first
+		logs = append(logs, file{e.Name(), m[1], seq})
 	}
 	if len(logs) <= keep {
 		return nil
 	}
-	slices.SortFunc(logs, func(a, b file) int { return cmp.Compare(a.stamp, b.stamp) })
+	slices.SortFunc(logs, func(a, b file) int {
+		return cmp.Or(cmp.Compare(a.stamp, b.stamp), cmp.Compare(a.seq, b.seq))
+	})
 	for _, f := range logs[:len(logs)-keep] {
-		if err := os.Remove(filepath.Join(dir, f.name)); err != nil {
+		if err := removeGone(filepath.Join(dir, f.name)); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+// removeGone removes a file; one that is already gone is not an error.
+func removeGone(path string) error {
+	if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return err
 	}
 	return nil
 }

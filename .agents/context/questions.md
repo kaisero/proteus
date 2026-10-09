@@ -57,11 +57,16 @@ what was added, removed or changed. Position is not compared.
 
 <!-- GENERATED:api ./internal/estate -->
 ```go
+type DiskOps struct{}
 type Hole struct{ ... }
 type Network struct{ ... }
+type OpSource interface{ ... }
+type OpTables struct{ ... }
 type Target struct{ ... }
 type When struct{ ... }
 
+func (DiskOps) HA(sn store.Snapshot) (resolve.HAState, error)
+func (DiskOps) Tables(sn store.Snapshot) (OpTables, error)
 func (h Hole) Why() reason.Reason
 func (n *Network) Device(name string) (simulate.DeviceData, error)
 func (n *Network) Devices() []string

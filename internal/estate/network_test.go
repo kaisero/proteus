@@ -4,11 +4,14 @@ import (
 	"errors"
 	"maps"
 	"os"
+	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/okaiser/proteus/internal/reason"
+	"github.com/okaiser/proteus/internal/resolve"
 	"github.com/okaiser/proteus/internal/simulate"
 	"github.com/okaiser/proteus/internal/store"
 )
@@ -212,5 +215,77 @@ func TestAnUnreadableDeviceIsUnavailable(t *testing.T) {
 		t.Fatal("fw9 is not in the inventory")
 	} else if _, ok := errors.AsType[*simulate.UnavailableError](err); ok {
 		t.Error("a name not in the inventory is the user's mistake, not missing data")
+	}
+}
+
+// countingOps caches DiskOps by snapshot, as a server cache would, and counts
+// the reads that reach the store.
+type countingOps struct {
+	mu     sync.Mutex
+	tables map[string]OpTables
+	ha     map[string]resolve.HAState
+	reads  int
+}
+
+func (c *countingOps) HA(sn store.Snapshot) (resolve.HAState, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if h, ok := c.ha[sn.Device+"@"+sn.ID]; ok {
+		return h, nil
+	}
+	h, err := DiskOps{}.HA(sn)
+	if err == nil {
+		c.ha[sn.Device+"@"+sn.ID] = h
+	}
+	return h, err
+}
+
+func (c *countingOps) Tables(sn store.Snapshot) (OpTables, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if t, ok := c.tables[sn.Device+"@"+sn.ID]; ok {
+		return t, nil
+	}
+	c.reads++
+	t, err := DiskOps{}.Tables(sn)
+	if err == nil {
+		c.tables[sn.Device+"@"+sn.ID] = t
+	}
+	return t, err
+}
+
+// A shared source holds the tables; every network builds its notes from its own
+// clock, so a cached snapshot turns stale when the clock passes the limit.
+func TestNetworkBuildsNotesPerQuestionOverSharedTables(t *testing.T) {
+	t.Parallel()
+	garbage := []byte("<response status=\"success\"><result>")
+	st := networkStore(t,
+		snap{dev: "fw-a", serial: "A", at: t0, docs: routingDocs(t, "fw01", map[string][]byte{
+			store.HADoc: haDoc("active", "A", "B"), store.RIBDoc: garbage,
+		})},
+		snap{dev: "fw-b", serial: "B", at: t0, docs: routingDocs(t, "fw02", map[string][]byte{store.HADoc: haDoc("passive", "B", "A")})},
+	)
+	ops := &countingOps{tables: map[string]OpTables{}, ha: map[string]resolve.HAState{}}
+	codes := func(now time.Time) []reason.Code {
+		t.Helper()
+		d, err := NewNetwork(st, []string{"fw-a", "fw-b"}, When{Now: now, MaxAge: time.Hour, Ops: ops}).Device("fw-a")
+		if err != nil {
+			t.Fatal(err)
+		}
+		var out []reason.Code
+		for _, n := range d.Notes {
+			out = append(out, n.Code)
+		}
+		return out
+	}
+	fresh, stale := codes(t0), codes(t0.Add(2*time.Hour))
+	if want := []reason.Code{"note.rib-unreadable", "note.ha-peer"}; !slices.Equal(fresh, want) {
+		t.Errorf("fresh notes = %v, want %v", fresh, want)
+	}
+	if want := []reason.Code{"note.rib-unreadable", "note.ha-peer", "note.snapshot-stale"}; !slices.Equal(stale, want) {
+		t.Errorf("stale notes = %v, want %v", stale, want)
+	}
+	if ops.reads != 1 {
+		t.Errorf("tables read %d times, want once", ops.reads)
 	}
 }

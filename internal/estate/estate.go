@@ -85,6 +85,17 @@ type When struct {
 	MaxAge time.Duration // zero: no age note
 	Now    time.Time
 	Log    *runlog.Logger // receives which snapshot each device resolved to
+	// Ops reads the devices' operational data; nil reads it from the store on
+	// every ask. A server fills it with its cache.
+	Ops OpSource
+}
+
+// ops is the source of operational data.
+func (w When) ops() OpSource {
+	if w.Ops == nil {
+		return DiskOps{}
+	}
+	return w.Ops
 }
 
 // Open reads each device's chosen snapshot and returns one target per vsys, in

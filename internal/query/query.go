@@ -49,6 +49,11 @@ type Env struct {
 	Users func() (index.UserDirectory, error)
 	// Log is the run log; nil logs nothing.
 	Log *runlog.Logger
+	// Ops reads the devices' operational data: HA state, interfaces, FIB and
+	// RIB. Nil reads them from the store on every question; a server shares a
+	// cache here. Notes are never cached: each question builds them from the
+	// snapshot meta and Now (spec 2026-10-09 §12 C13).
+	Ops estate.OpSource
 	// Fresh fetches devices before a query reads them and returns the notes
 	// each device's fetch left, by device: TLS verification off, a failed
 	// document, a failed fetch. Nil takes no fresh fetch.
