@@ -54,6 +54,7 @@ Repo map:
   `refs.go`, `profileuse.go`, `snapshot.go`, `intern.go`.
 - `internal/schema`, `internal/digest` — schema parsing and the digest format;
   `internal/tools/schemadigest` — the dev tool that writes a digest. `internal/archtest` — the R12 import check.
+- `internal/reason/` — reason codes: `{code, text}` and the closed registry; stdlib only.
 - `internal/task/` — staged operations: `Run` runs named steps in order, records
   each step's status, detail and time, logs them, and stops at the first error.
   `fetch` uses it per device.

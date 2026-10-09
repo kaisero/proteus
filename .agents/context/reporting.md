@@ -143,6 +143,36 @@ func PrefixesOf(value string) []netip.Prefix
 ```
 <!-- /GENERATED:api -->
 
+## Reason codes (`internal/reason`)
+
+A reason is a code plus a text: `reason.Reason{Code, Text}`, JSON `{code, text}`.
+The code is `<class>.<name>` in lower case and comes from a closed registry
+(`internal/reason/registry.go`). The classes: doubt, gap, path, zone, default,
+dns, input, note, call, verdict. A program acts on the code; a reader reads the
+text. Each not-evaluated dimension has its own code (`doubt.not-evaluated.user`);
+there is no wildcard.
+
+`reason.New` builds a reason. In a test binary (`testing.Testing()`) it panics on
+a code the registry does not hold, so any package's tests fail when a producer
+uses one. A production binary keeps the code. Add a code to the registry, with a
+one-line description, before a producer uses it.
+
+`reason` imports only the standard library, so every package may import it; the
+archtest allows it in every R12 rule.
+
+<!-- GENERATED:api ./internal/reason -->
+```go
+type Class string
+type Code string
+type Entry struct{ ... }
+type Reason struct{ ... }
+
+func Known(c Code) bool
+func New(c Code, text string) Reason
+func Registry() []Entry
+```
+<!-- /GENERATED:api -->
+
 ## Gotchas / invariants
 
 - **A non-empty `Unresolved` means the caller must say so to its own user.**

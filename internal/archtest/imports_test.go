@@ -16,9 +16,13 @@ const module = "github.com/okaiser/proteus"
 // the caller names; it opens no connection and runs no command.
 var ioPackages = []string{"net", "net/http", "net/url", "os/exec"}
 
-// core is the read-only core, plus the schema substrate config decodes. It is the
-// only part of this module the core may import.
-var core = []string{"internal/config", "internal/resolve", "internal/index", "internal/schema", "internal/digest"}
+// reasonPkg names every kind of reason an answer carries. It imports only the
+// standard library, so every rule allows it.
+const reasonPkg = "internal/reason"
+
+// core is the read-only core, plus the schema substrate config decodes and the
+// reason codes. It is the only part of this module the core may import.
+var core = []string{"internal/config", "internal/resolve", "internal/index", "internal/schema", "internal/digest", reasonPkg}
 
 // rule forbids one package from reaching a set of packages, directly or through
 // any package of this module it imports.
@@ -27,6 +31,14 @@ type rule struct {
 	forbid  []string // full import paths it must not reach
 	allowIn []string // when set, the only module-relative packages it may reach
 	direct  []string // when set, the only module-relative packages it may import directly
+	stdlib  bool     // when set, it imports only the standard library
+}
+
+// standard reports whether an import path is in the standard library: its first
+// element has no dot, unlike a module path.
+func standard(path string) bool {
+	first, _, _ := strings.Cut(path, "/")
+	return !strings.Contains(first, ".")
 }
 
 func mod(rel ...string) []string {
@@ -58,9 +70,10 @@ var rules = []rule{
 	{
 		from:   "internal/simulate/pathpolicy",
 		forbid: append(mod("internal/estate", "internal/store", "internal/fetch", "internal/search", "internal/drift", "internal/card"), ioPackages...),
-		direct: []string{"internal/simulate", "internal/simulate/routing", "internal/simulate/securitypolicy", "internal/resolve", "internal/simulate/topology", "internal/config", "internal/index"},
+		direct: []string{"internal/simulate", "internal/simulate/routing", "internal/simulate/securitypolicy", "internal/resolve", "internal/simulate/topology", "internal/config", "internal/index", reasonPkg},
 	},
-	{from: "internal/task", forbid: ioPackages, allowIn: []string{"internal/runlog"}},
+	{from: "internal/task", forbid: ioPackages, allowIn: []string{"internal/runlog", reasonPkg}},
+	{from: reasonPkg, stdlib: true},
 }
 
 // testOnly are helper packages for tests. They import testing, so no package's
@@ -92,6 +105,13 @@ func violations(graph map[string][]string, rules []rule) []string {
 			for _, imp := range graph[from] {
 				if strings.HasPrefix(imp, module+"/") && !direct[imp] {
 					out = append(out, r.from+" imports "+imp+", outside its list")
+				}
+			}
+		}
+		if r.stdlib {
+			for _, imp := range graph[from] {
+				if !standard(imp) {
+					out = append(out, r.from+" imports "+imp+", outside the standard library")
 				}
 			}
 		}
@@ -143,6 +163,8 @@ func TestViolationsCatchesABreach(t *testing.T) {
 		// pathpolicy may import simulate, but not nat directly.
 		module + "/internal/simulate/pathpolicy": {module + "/internal/simulate", module + "/internal/simulate/nat"},
 		module + "/internal/simulate/nat":        {"fmt"},
+		// reason may import neither this module nor another module.
+		module + "/" + reasonPkg: {"fmt", module + "/internal/simulate/nat", "github.com/RoaringBitmap/roaring/v2"},
 	}
 	got := violations(graph, rules)
 	// config reaches helper, which is outside the core, and through it net/http.
@@ -155,11 +177,31 @@ func TestViolationsCatchesABreach(t *testing.T) {
 		"internal/index reaches " + module + "/internal/simulate, outside the read-only core",
 		"internal/index reaches " + module + "/internal/simulate",
 		"internal/simulate/pathpolicy imports " + module + "/internal/simulate/nat, outside its list",
+		reasonPkg + " imports " + module + "/internal/simulate/nat, outside the standard library",
+		reasonPkg + " imports github.com/RoaringBitmap/roaring/v2, outside the standard library",
 	}
 	slices.Sort(got)
 	slices.Sort(want)
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Errorf("violations:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+}
+
+// Every package may import reason: no rule forbids it, and every rule with an
+// allow list names it.
+func TestEveryRuleAllowsReason(t *testing.T) {
+	t.Parallel()
+	for _, r := range rules {
+		if r.from == reasonPkg {
+			continue
+		}
+		graph := map[string][]string{
+			module + "/" + r.from:    {module + "/" + reasonPkg},
+			module + "/" + reasonPkg: {"fmt"},
+		}
+		for _, v := range violations(graph, []rule{r}) {
+			t.Errorf("%s may not import reason: %s", r.from, v)
+		}
 	}
 }
 
