@@ -218,11 +218,7 @@ func answer[In query.Echoer[E], E, R, S any](ctx context.Context, e query.Envelo
 		c.Status = StatusOK
 		c.Answers = v.answers()
 		c.Codes = v.codes()
-		for _, t := range e.Targets {
-			if t.Snapshot != nil {
-				c.Snapshots = append(c.Snapshots, t.Device+"@"+t.Snapshot.ID)
-			}
-		}
+		c.Snapshots = e.Read
 	})
 	return &sdk.CallToolResult{Content: []sdk.Content{&sdk.TextContent{Text: v.text()}}}, output{Envelope: doc}, nil
 }

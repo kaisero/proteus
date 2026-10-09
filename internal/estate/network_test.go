@@ -149,8 +149,13 @@ func TestNetworkCollapsesAnHAPair(t *testing.T) {
 	if active, err := st.Latest("fw-b"); err != nil || d.Member != "fw-b" || d.SnapshotID != active.ID {
 		t.Errorf("member = %s@%s, want fw-b@%s (%v)", d.Member, d.SnapshotID, active.ID, err)
 	}
-	if o, _ := n.Device("other"); o.Member != "other" {
+	o, _ := n.Device("other")
+	if o.Member != "other" {
 		t.Errorf("single device member = %q", o.Member)
+	}
+	// Read names the member that answered, once per node read.
+	if want := []string{"fw-b@" + d.SnapshotID, "other@" + o.SnapshotID}; !slices.Equal(n.Read(), want) {
+		t.Errorf("read = %v, want %v", n.Read(), want)
 	}
 	if len(d.Notes) != 1 || !strings.Contains(d.Notes[0].Text, "[fw-a fw-b] are one HA pair; fw-b answers") || d.Notes[0].Code != "note.ha-peer" {
 		t.Errorf("notes = %v", d.Notes)

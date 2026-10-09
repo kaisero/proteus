@@ -79,6 +79,7 @@ func SnapshotDiff(ctx context.Context, env Env, in DiffInput) (Envelope[DiffInpu
 			e.Holes = append(e.Holes, estate.NewHole(d, "", reason.New(estate.GapOf(err), err.Error())))
 			continue
 		}
+		e.Read = append(e.Read, d+"@"+older.ID, d+"@"+newer.ID)
 		// After an HA failover the entry's snapshots come from the other member,
 		// whose configuration is synced but not identical.
 		if was, now := older.Meta.Serial, newer.Meta.Serial; was != "" && now != "" && was != now {
@@ -100,6 +101,7 @@ func SnapshotDiff(ctx context.Context, env Env, in DiffInput) (Envelope[DiffInpu
 			e.Results = append(e.Results, DiffResult{Answer: DiffAnswer(d, sc.String(), ch), Device: d, From: older.ID, To: newer.ID, Scope: sc.String(), Changes: ch})
 		}
 	}
+	slices.Sort(e.Read)
 	return e, nil
 }
 

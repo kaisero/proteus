@@ -13,6 +13,7 @@ package query
 import (
 	"context"
 	"net/netip"
+	"slices"
 	"time"
 
 	"github.com/okaiser/proteus/internal/estate"
@@ -94,7 +95,9 @@ func (e Env) users() (index.UserDirectory, error) {
 //
 // The fields carry no JSON tags: the command line writes the envelope from
 // them, with its own input block. Targets holds what the renderers need and no
-// envelope prints: every target read, with or without results (C16).
+// envelope prints: every target read, with or without results (C16). Read
+// names every snapshot the answer read, as member@snapshot-id, sorted, for the
+// MCP audit; no envelope prints it either.
 type Envelope[In, Res any] struct {
 	Format     int
 	Command    string
@@ -106,6 +109,7 @@ type Envelope[In, Res any] struct {
 	Unresolved []Unresolved
 	Notes      []Note
 	Targets    []estate.Target
+	Read       []string
 }
 
 // Summary counts a search's or a lookup's results over the targets read.
@@ -122,6 +126,7 @@ func Summarize[In, R, S any](e Envelope[In, R], f func(R) S) Envelope[In, S] {
 	out := Envelope[In, S]{
 		Format: e.Format, Command: e.Command, Detail: DetailSummary, Input: e.Input, Summary: e.Summary,
 		Holes: e.Holes, Unresolved: e.Unresolved, Notes: e.Notes, Targets: e.Targets,
+		Read: e.Read,
 	}
 	if e.Results != nil {
 		out.Results = make([]S, len(e.Results))
@@ -130,6 +135,19 @@ func Summarize[In, R, S any](e Envelope[In, R], f func(R) S) Envelope[In, S] {
 		}
 	}
 	return out
+}
+
+// readOf names the snapshots behind targets as Envelope.Read does: each
+// device@snapshot-id once, sorted. A target read from a file has none.
+func readOf(ts []estate.Target) []string {
+	var out []string
+	for _, t := range ts {
+		if t.Snapshot != nil {
+			out = append(out, t.Device+"@"+t.Snapshot.ID)
+		}
+	}
+	slices.Sort(out)
+	return slices.Compact(out)
 }
 
 // envelope starts a full envelope of a command.

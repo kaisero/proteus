@@ -182,6 +182,17 @@ func (n *Network) Device(name string) (simulate.DeviceData, error) {
 	return d, nil
 }
 
+// Read names each snapshot the run read, as member@snapshot-id, sorted: for an
+// HA pair the member whose snapshot answered, for a single device the device.
+func (n *Network) Read() []string {
+	var out []string
+	for _, d := range n.data {
+		out = append(out, d.Member+"@"+d.SnapshotID)
+	}
+	slices.Sort(out)
+	return out
+}
+
 func (n *Network) read(node string) (simulate.DeviceData, error) {
 	member := n.pick[node]
 	sn, err := pick(n.st, member, n.w.At)

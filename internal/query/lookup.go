@@ -59,7 +59,7 @@ func Lookup(ctx context.Context, env Env, in LookupInput) (Envelope[LookupInput,
 		return none, err
 	}
 	e := envelope[LookupInput, LookupResult]("lookup", in)
-	e.Holes, e.Targets, e.Summary = holes, ts, &Summary{}
+	e.Holes, e.Targets, e.Read, e.Summary = holes, ts, readOf(ts), &Summary{}
 	kinds := map[string][]string{} // kind -> where it was found
 	sets := indexSets{}
 	for i, t := range ts {

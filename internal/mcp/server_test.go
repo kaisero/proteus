@@ -191,12 +191,14 @@ func TestTheSDKAcceptsEveryAnswer(t *testing.T) {
 		name  string
 		env   query.Env
 		tool  string
+		read  []string // the devices whose every snapshot the audit names
 		args  map[string]any
 		want  func(t *testing.T, detail string) any
 		empty bool // no results
 	}{
 		{
 			"policy along the path", path, "simulate_policy",
+			[]string{pathlab.FW01, pathlab.FW02},
 			map[string]any{"source": pathlab.Source, "destination": pathlab.Destination, "protocol": "tcp", "port": 443},
 			func(t *testing.T, d string) any {
 				e, err := query.Policy(ctx, path, query.PolicyInput{Flow: labFlow})
@@ -205,6 +207,7 @@ func TestTheSDKAcceptsEveryAnswer(t *testing.T) {
 		},
 		{
 			"policy with holes only", holes, "simulate_policy",
+			[]string{pathlab.FW01},
 			map[string]any{"source": pathlab.Source, "destination": pathlab.Destination, "protocol": "tcp", "port": 443},
 			func(t *testing.T, d string) any {
 				e, err := query.Policy(ctx, holes, query.PolicyInput{Flow: labFlow})
@@ -213,6 +216,7 @@ func TestTheSDKAcceptsEveryAnswer(t *testing.T) {
 		},
 		{
 			"routing", path, "simulate_routing",
+			[]string{pathlab.FW01, pathlab.FW02},
 			map[string]any{"source": pathlab.Source, "destination": pathlab.Destination, "port": 443},
 			func(t *testing.T, d string) any {
 				e, err := query.Routing(ctx, path, query.RoutingInput{Source: pathlab.Source, Destination: pathlab.Destination, Port: "443"})
@@ -221,6 +225,7 @@ func TestTheSDKAcceptsEveryAnswer(t *testing.T) {
 		},
 		{
 			"nat", natLab, "simulate_nat",
+			[]string{pathlab.FW01},
 			map[string]any{"source": "198.18.1.10", "destination": "198.18.250.10", "port": 8443, "device": "fw01", "router": "default"},
 			func(t *testing.T, d string) any {
 				e, err := query.NAT(ctx, natLab, query.NATInput{
@@ -230,7 +235,7 @@ func TestTheSDKAcceptsEveryAnswer(t *testing.T) {
 			}, false,
 		},
 		{
-			"nat with a hole", natLab, "simulate_nat",
+			"nat with a hole", natLab, "simulate_nat", nil,
 			map[string]any{"destination": "198.18.250.10", "device": "fw02"},
 			func(t *testing.T, d string) any {
 				e, err := query.NAT(ctx, natLab, query.NATInput{Flow: query.FlowInput{Destination: "198.18.250.10", Protocol: "tcp"}, Device: "fw02"})
@@ -239,6 +244,7 @@ func TestTheSDKAcceptsEveryAnswer(t *testing.T) {
 		},
 		{
 			"search", lab, "search",
+			[]string{pathlab.FW01},
 			map[string]any{"value": "198.18.10.100"},
 			func(t *testing.T, d string) any {
 				e, err := query.Search(ctx, lab, query.SearchInput{Term: "198.18.10.100"})
@@ -247,6 +253,7 @@ func TestTheSDKAcceptsEveryAnswer(t *testing.T) {
 		},
 		{
 			"search without a finding", lab, "search",
+			[]string{pathlab.FW01},
 			map[string]any{"value": "no-such-name"},
 			func(t *testing.T, d string) any {
 				e, err := query.Search(ctx, lab, query.SearchInput{Term: "no-such-name"})
@@ -255,6 +262,7 @@ func TestTheSDKAcceptsEveryAnswer(t *testing.T) {
 		},
 		{
 			"lookup", lab, "lookup",
+			[]string{pathlab.FW01},
 			map[string]any{"name": "dc01", "device": []string{"fw01"}},
 			func(t *testing.T, d string) any {
 				e, err := query.Lookup(ctx, lab, query.LookupInput{Name: "dc01", Selection: query.Selection{Device: []string{"fw01"}}})
@@ -263,6 +271,7 @@ func TestTheSDKAcceptsEveryAnswer(t *testing.T) {
 		},
 		{
 			"snapshot diff", diff, "snapshot_diff",
+			[]string{pathlab.FW01},
 			map[string]any{"device": "fw01"},
 			func(t *testing.T, d string) any {
 				e, err := query.SnapshotDiff(ctx, diff, query.DiffInput{Selection: query.Selection{Device: []string{"fw01"}}})
@@ -270,7 +279,7 @@ func TestTheSDKAcceptsEveryAnswer(t *testing.T) {
 			}, false,
 		},
 		{
-			"snapshot diff of one snapshot", diff, "snapshot_diff",
+			"snapshot diff of one snapshot", diff, "snapshot_diff", nil,
 			map[string]any{"device": "fw02"},
 			func(t *testing.T, d string) any {
 				e, err := query.SnapshotDiff(ctx, diff, query.DiffInput{Selection: query.Selection{Device: []string{"fw02"}}})
@@ -311,12 +320,33 @@ func TestTheSDKAcceptsEveryAnswer(t *testing.T) {
 				if as := v.answers(); len(as) > 0 && !strings.HasPrefix(text(res), as[0]+"\n") && text(res) != as[0] {
 					t.Errorf("%s: text %q, answers %q", detail, text(res), as)
 				}
+				if want := snapshotsOf(t, tc.env, tc.read...); !slices.Equal(c.Snapshots, want) {
+					t.Errorf("%s: audit snapshots %q, want %q", detail, c.Snapshots, want)
+				}
 				if c.Tool != tc.tool || c.Status != StatusOK || c.Code != "" || !slices.Equal(c.Answers, v.answers()) || c.Duration < 0 {
 					t.Errorf("%s: audit %+v", detail, c)
 				}
 			}
 		})
 	}
+}
+
+// snapshotsOf names every snapshot of the devices in env's store as the audit
+// does: device@snapshot-id, sorted.
+func snapshotsOf(t *testing.T, env query.Env, devices ...string) []string {
+	t.Helper()
+	var out []string
+	for _, d := range devices {
+		ids, err := env.Store.List(d)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, id := range ids {
+			out = append(out, d+"@"+id)
+		}
+	}
+	slices.Sort(out)
+	return out
 }
 
 // Each tool lists the generated schemas, with the inventory's devices as the

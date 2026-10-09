@@ -97,7 +97,7 @@ func Routing(ctx context.Context, env Env, in RoutingInput) (Envelope[RoutingInp
 	}
 	in.Simulated = flow
 	e := envelope[RoutingInput, RoutingResult]("simulate "+routing.Kind, in)
-	e.Holes = holes
+	e.Holes, e.Read = holes, es.network.Read()
 	if len(holes) > 0 {
 		return e, nil
 	}

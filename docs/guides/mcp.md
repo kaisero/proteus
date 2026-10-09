@@ -263,7 +263,7 @@ devices.
 | `tool`, `input` | the tool and its inputs as the client sent them |
 | `verdict` | the answer lines of the result |
 | `codes` | the reason codes of the holes, unresolved entries and notes |
-| `snapshots` | the snapshots that the answer read, as `<device>@<snapshot id>` |
+| `snapshots` | the snapshots that the answer read, as `<member>@<snapshot id>`: for an HA pair the member whose snapshot answered, for a single device the device |
 | `duration_ms` | the time the call took |
 | `status` | `ok`, `usage`, `choice`, `busy`, `timeout`, `internal` or `unauthorised` |
 | `code` | the `call.*` code of a failed call |

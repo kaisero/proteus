@@ -150,6 +150,7 @@ func Policy(ctx context.Context, env Env, in PolicyInput) (Envelope[PolicyInput,
 	res, stages, err := pathpolicy.Run(ctx, sim, simulate.Input{Flow: flow, Params: map[string]string{"device": in.Device, "router": in.Router}})
 	in.Simulated = flow
 	e := envelope[PolicyInput, PathResult](policyCommand, in)
+	e.Read = es.network.Read()
 	if u, ok := errors.AsType[*simulate.UnavailableError](err); ok {
 		e.Holes = holesOf(u.Missing)
 		return e, nil
@@ -217,7 +218,7 @@ func PolicyFile(ctx context.Context, env Env, in PolicyFileInput) (Envelope[Poli
 	v, _ := run.Output.(securitypolicy.Verdict)
 	e.Results = []SecurityResult{securityResultOf(run, t, v)}
 	e.Results[0].Needs = securityNeeds(flow, e.Results[0].Verdict, &v, run.Fidelity)
-	e.Targets = ts
+	e.Targets, e.Read = ts, readOf(ts)
 	// A version gap is a note, not an unresolved entry: the security check
 	// lowers its fidelity to inferred instead (spec E25).
 	for _, n := range t.Notes {

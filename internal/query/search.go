@@ -142,7 +142,7 @@ func Search(ctx context.Context, env Env, in SearchInput) (Envelope[SearchInput,
 		return none, err
 	}
 	e := envelope[SearchInput, Finding]("search", in)
-	e.Holes, e.Targets, e.Summary = holes, ts, &Summary{}
+	e.Holes, e.Targets, e.Read, e.Summary = holes, ts, readOf(ts), &Summary{}
 	matching := in.Matching()
 	sets := indexSets{}
 	for i, t := range ts {
