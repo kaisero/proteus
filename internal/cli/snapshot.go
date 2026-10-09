@@ -3,7 +3,6 @@ package cli
 import (
 	"context"
 	"fmt"
-	"slices"
 
 	"github.com/spf13/cobra"
 
@@ -241,86 +240,43 @@ func (a *app) snapshotDiffCmd() *cobra.Command {
 	return cmd
 }
 
-// diffResult is what changed in one scope of one device.
-type diffResult struct {
-	Device  string         `json:"device"`
-	From    string         `json:"from"`
-	To      string         `json:"to"`
-	Scope   string         `json:"scope"`
-	Changes []drift.Change `json:"changes"`
-}
-
 // snapshotDiffAnswer is what changed between two snapshots of each selected device.
 type snapshotDiffAnswer struct {
-	o       snapshotDiffOptions
-	results []diffResult
-	holes   []estate.Hole
-	notes   []note
+	enveloped[query.DiffInput, query.DiffResult]
 }
 
 func (a *app) runSnapshotDiff(ctx context.Context, o snapshotDiffOptions) (answer, error) {
+	in := query.DiffInput{Selection: o.sel.input(), From: o.from, To: o.to}
+	if u := in.Validate(); u != nil {
+		return nil, u
+	}
 	s, err := a.settings(true)
 	if err != nil {
 		return nil, err
 	}
-	names, err := s.inv.Select(o.sel.devices, o.sel.labels)
-	if err != nil {
-		return nil, usageErr("%w", err)
-	}
-	st, err := a.openStore(s.storeRoot)
+	env, err := a.storeEnv(s)
 	if err != nil {
 		return nil, err
 	}
-	ans := snapshotDiffAnswer{o: o, results: []diffResult{}}
-	for _, d := range names {
-		if err := ctx.Err(); err != nil {
-			return nil, err
-		}
-		older, newer, err := pair(st, d, o.from, o.to)
-		if err != nil {
-			ans.holes = append(ans.holes, estate.NewHole(d, "", reason.New(estate.GapOf(err), err.Error())))
-			continue
-		}
-		// After an HA failover the entry's snapshots come from the other member,
-		// whose configuration is synced but not identical.
-		if was, now := older.Meta.Serial, newer.Meta.Serial; was != "" && now != "" && was != now {
-			ans.notes = append(ans.notes, noteOf(d, "", reason.New("note.serial-changed", fmt.Sprintf(
-				"the snapshots come from different firewalls (serial %s, then %s), as after an HA failover; settings an HA pair does not sync show as changes", was, now))))
-		}
-		before, _, err1 := config.Load(older.Path(store.ConfigDoc))
-		after, _, err2 := config.Load(newer.Path(store.ConfigDoc))
-		if err1 != nil || err2 != nil {
-			ans.holes = append(ans.holes, estate.NewHole(d, "", reason.New(configGap(older, newer), fmt.Sprintf("unreadable configuration: %v %v", err1, err2))))
-			continue
-		}
-		for _, sc := range diffScopes(before, after, o.sel.vsys) {
-			ch := drift.Compare(before, after, sc)
-			if ch == nil {
-				ch = []drift.Change{}
-			}
-			ans.results = append(ans.results, diffResult{Device: d, From: older.ID, To: newer.ID, Scope: sc.String(), Changes: ch})
-		}
+	e, err := query.SnapshotDiff(ctx, env, in)
+	if err != nil {
+		return nil, err
 	}
-	return ans, nil
+	return snapshotDiffAnswer{enveloped[query.DiffInput, query.DiffResult]{e}}, nil
 }
 
-func (d snapshotDiffAnswer) Command() string { return "snapshot diff" }
 func (d snapshotDiffAnswer) Input() any {
-	return snapshotDiffInput{Selection: d.o.sel.input(), From: d.o.from, To: d.o.to}
-}
-func (d snapshotDiffAnswer) Results() any { return d.results }
-func (d snapshotDiffAnswer) Qualifiers() qualifiers {
-	return qualifiers{Holes: d.holes, Notes: d.notes}
+	return snapshotDiffInput{Selection: d.e.Input.Selection, From: d.e.Input.From, To: d.e.Input.To}
 }
 
 // Text prints one block per device and one section per scope.
 func (d snapshotDiffAnswer) Text(t *textOut) error {
 	last := ""
-	for _, r := range d.results {
+	for _, r := range d.e.Results {
 		if r.Device != last {
 			last = r.Device
 			fmt.Fprintf(t, "%s   %s -> %s\n", t.pal.head(r.Device), r.From, r.To)
-			for _, n := range d.notes {
+			for _, n := range d.e.Notes {
 				if n.Device == r.Device {
 					fmt.Fprintf(t, "  %s\n", t.pal.dim("note: "+n.Note))
 				}
@@ -346,7 +302,7 @@ func (d snapshotDiffAnswer) Text(t *textOut) error {
 		}
 		_ = tb.write(t, "    ", 1)
 	}
-	printQualifiers(t, qualifiers{Holes: d.holes})
+	printQualifiers(t, qualifiers{Holes: d.e.Holes})
 	return t.err
 }
 
@@ -362,79 +318,10 @@ func changeDetail(c drift.Change) string {
 	return c.New
 }
 
-// pair picks the two snapshots of a device to compare.
-func pair(st *store.Store, device, from, to string) (store.Snapshot, store.Snapshot, error) {
-	var newer store.Snapshot
-	var err error
-	if to == "" {
-		newer, err = st.Latest(device)
-	} else {
-		t, perr := estate.ParseAt(to)
-		if perr != nil {
-			return newer, newer, perr
-		}
-		newer, err = st.AtOrBefore(device, t)
-	}
-	if err != nil {
-		return newer, newer, err
-	}
-	if from != "" {
-		t, perr := estate.ParseAt(from)
-		if perr != nil {
-			return newer, newer, perr
-		}
-		older, err := st.AtOrBefore(device, t)
-		return older, newer, err
-	}
-	older, err := st.AtOrBefore(device, newer.Meta.TakenAt.Add(-1))
-	if err != nil {
-		return older, newer, fmt.Errorf("only one snapshot with a configuration at or before %s; nothing to compare", newer.ID)
-	}
-	return older, newer, nil
-}
-
-// diffScopes is shared and every vsys either configuration has, or the asked vsys.
-func diffScopes(before, after *config.Config, want []string) []config.Scope {
-	seen := map[string]bool{}
-	for _, cfg := range []*config.Config{before, after} {
-		vs := resolve.Vsyses(cfg)
-		for _, v := range vs {
-			seen[v] = true
-		}
-	}
-	var names []string
-	for v := range seen {
-		if len(want) == 0 || contains(want, v) {
-			names = append(names, v)
-		}
-	}
-	slices.Sort(names)
-	out := []config.Scope{{Sort: config.ScopeShared}}
-	for _, v := range names {
-		out = append(out, config.Scope{Sort: config.ScopeVsys, Name: v})
-	}
-	return out
-}
-
-func contains(xs []string, x string) bool {
-	return slices.Contains(xs, x)
-}
-
 // firstDevice is the device entry a firewall configuration's vsys sit under.
 func firstDevice(cfg *config.Config) string {
 	if devs := cfg.Root().Find("devices", "entry"); len(devs) > 0 {
 		return devs[0].Attr("name")
 	}
 	return ""
-}
-
-// configGap is the kind of a diff's unreadable configuration: missing when a
-// snapshot has none, as the store reports it, else a failed read.
-func configGap(sns ...store.Snapshot) reason.Code {
-	for _, sn := range sns {
-		if _, err := sn.ConfigPath(); err != nil {
-			return estate.GapOf(err)
-		}
-	}
-	return "gap.load-failed"
 }

@@ -47,7 +47,7 @@ simulate nat <src> <dst> --device <fw>      the NAT rule and the translated pack
 - **`simulate <kind>`** has one subcommand per kind registered in
   `estate.Simulations`, each from its own builder in `kindCommands`
   (`TestEveryKindHasACommand`). See [simulator](simulator.md).
-- **`simulate policy <src> <dst>`** (`policypath.go`) has two modes (spec
+- **`simulate policy <src> <dst>`** (`cli/policypath.go`, `query/policy.go`) has two modes (spec
   2026-10-07 §3). **Path mode**, the default: routing's path from the start
   (`--device` names it, `--router` picks its router), the security check on every
   hop with the hop's flow and zones (`pathpolicy.Run`), one verdict `allowed`,
@@ -139,6 +139,8 @@ with no choice).
 ```go
 type Check struct{ ... }
 type Checks []Check
+type DiffInput struct{ ... }
+type DiffResult struct{ ... }
 type Env struct{ ... }
 type Envelope[In, Res any] struct{ ... }
 type Finding struct{ ... }
@@ -169,6 +171,7 @@ type UsageError struct{ ... }
 func (cs Checks) MarshalJSON() ([]byte, error)
 func (e *UsageError) Error() string
 func (e *UsageError) Unwrap() error
+func (in DiffInput) Validate() *UsageError
 func (in LookupInput) Validate() *UsageError
 func (in NATInput) Validate() *UsageError
 func (in PolicyFileInput) Validate() *UsageError
@@ -186,6 +189,7 @@ func PolicyFile(ctx context.Context, env Env, in PolicyFileInput) (Envelope[Poli
 func Routing(ctx context.Context, env Env, in RoutingInput) (Envelope[RoutingInput, RoutingResult], error)
 func Search(ctx context.Context, env Env, in SearchInput) (Envelope[SearchInput, Finding], error)
 func SimStages(stages []simulate.Stage) []Stage
+func SnapshotDiff(ctx context.Context, env Env, in DiffInput) (Envelope[DiffInput, DiffResult], error)
 func Summarize[In, R, S any](e Envelope[In, R], f func(R) S) Envelope[In, S]
 func TargetOf(t estate.Target) Target
 func TargetQualifiers(ts []estate.Target) ([]Unresolved, []Note)

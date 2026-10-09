@@ -39,12 +39,19 @@ func newLab(t *testing.T) *lab {
 // interfaces and forwarding table.
 func (l *lab) fetch(device, config string) {
 	l.t.Helper()
+	l.write(store.Meta{Device: device, Host: device + ".example.test"}, pathlab.Read(l.t, config))
+}
+
+// write stores a snapshot with meta and a configuration's content.
+func (l *lab) write(meta store.Meta, config []byte) {
+	l.t.Helper()
+	device := meta.Device
 	docs := map[string][]byte{
-		store.ConfigDoc:     pathlab.Read(l.t, config),
+		store.ConfigDoc:     config,
 		store.InterfacesDoc: pathlab.Read(l.t, pathlab.OpdataFile(device+"-interface-all.xml")),
 		store.FIBDoc:        pathlab.Read(l.t, pathlab.OpdataFile(device+"-advanced-routing-fib.xml")),
 	}
-	if _, err := l.st.Write(store.Meta{Device: device, Host: device + ".example.test"}, docs, 20); err != nil {
+	if _, err := l.st.Write(meta, docs, 20); err != nil {
 		l.t.Fatal(err)
 	}
 	l.now = l.now.Add(time.Minute)

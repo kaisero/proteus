@@ -1,9 +1,12 @@
 package query
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -272,5 +275,56 @@ func TestChecksMarshalInOrder(t *testing.T) {
 	}
 	if !slices.Equal(nonNil(nil), []string{}) {
 		t.Error("nonNil")
+	}
+}
+
+// A hop whose default rules differ between the local and the pushed rulebase is
+// undecided: an unresolved entry, and the verdict undecided.
+func TestPolicyUndecidedHopIsUnresolved(t *testing.T) {
+	t.Parallel()
+	differ := pathlab.Defaults{Local: pathlab.Entry(pathlab.Interzone, "allow"), Pushed: pathlab.Entry(pathlab.Interzone, "deny")}
+	l := newLab(t)
+	l.fetch(pathlab.FW01, pathlab.ConfigFile(pathlab.FW01))
+	l.fetch(pathlab.FW02, pathlab.ConfigPath(t, pathlab.FW02, differ))
+	in := PolicyInput{Flow: labFlow()}
+	in.Flow.NoDNS = true
+	e, err := Policy(context.Background(), l.env(), in)
+	if err != nil || len(e.Results) != 1 || e.Results[0].Verdict != "undecided" || len(e.Unresolved) == 0 || e.Unresolved[0].Device != pathlab.FW02 {
+		t.Errorf("%+v %+v %v", e.Results, e.Unresolved, err)
+	}
+}
+
+// A rule that decides on a file names itself and its candidates.
+func TestPolicyFileWithADecidingRule(t *testing.T) {
+	t.Parallel()
+	in := PolicyFileInput{
+		Flow:      FlowInput{Source: "10.1.0.5", Destination: "10.2.0.5", Protocol: "tcp", Port: "tcp/443"},
+		Selection: Selection{File: fixture("firewall-zones.xml"), Vsys: []string{"vsys1"}},
+	}
+	e, err := PolicyFile(context.Background(), Env{}, in)
+	if err != nil || len(e.Results) != 1 {
+		t.Fatalf("%+v %v", e, err)
+	}
+	r := e.Results[0]
+	if r.FirstMatch == nil || r.Rule != r.FirstMatch.Name || len(r.Candidates) == 0 || r.Check.Rule == nil {
+		t.Errorf("%+v", r.Security)
+	}
+}
+
+// A file read with an older schema is a note on its target, and the answer keeps it.
+func TestPolicyFileNotesAVersionGap(t *testing.T) {
+	t.Parallel()
+	b := bytes.Replace(pathlab.Read(t, fixture("firewall-zones.xml")), []byte(`<config version="11.2.0"`), []byte(`<config version="12.2.0"`), 1)
+	file := filepath.Join(t.TempDir(), "newer.xml")
+	if err := os.WriteFile(file, b, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	in := PolicyFileInput{
+		Flow:      FlowInput{Source: "10.1.0.5", Destination: "10.2.0.5", Protocol: "tcp", Port: "443"},
+		Selection: Selection{File: file, Vsys: []string{"vsys1"}},
+	}
+	e, err := PolicyFile(context.Background(), Env{}, in)
+	if err != nil || len(e.Notes) != 1 || e.Notes[0].Code != "gap.version" || len(e.Unresolved) != 0 {
+		t.Errorf("notes %+v, unresolved %+v, %v", e.Notes, e.Unresolved, err)
 	}
 }

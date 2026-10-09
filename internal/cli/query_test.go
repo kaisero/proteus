@@ -20,6 +20,7 @@ var questions = []struct {
 	{[]string{"search", "198.18.10.100"}, true},
 	{[]string{"lookup", "dc01"}, true},
 	{[]string{"snapshot", "show"}, true},
+	{[]string{"snapshot", "diff"}, true},
 }
 
 // A question stops at an inventory it cannot read, and at a store it cannot open,
