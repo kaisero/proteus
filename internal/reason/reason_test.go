@@ -12,7 +12,7 @@ var classes = []Class{Doubt, Gap, Path, Zone, Default, DNS, Input, Note, Call, V
 
 // codeShape is "<class>.<name>": lower case words joined by dashes, with dots
 // between the parts.
-var codeShape = regexp.MustCompile(`^[a-z]+(\.[a-z]+(-[a-z]+)*)+$`)
+var codeShape = regexp.MustCompile(`^[a-z]+(\.[a-z0-9]+(-[a-z0-9]+)*)+$`)
 
 func TestRegistryIsSortedAndUnique(t *testing.T) {
 	t.Parallel()

@@ -14,10 +14,10 @@ import (
 // natZone is what destination NAT makes of the destination zone (spec §18 N10):
 // security policy matches the post-NAT zone (§18 F5, verified on fw01).
 type natZone struct {
-	zones   []string // the post-NAT destination zones; nil when no destination NAT applies
-	rules   []string // the NAT rules that translated
-	doubts  []string
-	skipped string // why NAT was not checked
+	zones   []string         // the post-NAT destination zones; nil when no destination NAT applies
+	rules   []string         // the NAT rules that translated
+	doubts  simulate.Reasons // each NAT doubt, named with its rule
+	skipped string           // why NAT was not checked
 }
 
 // postNATZones runs the NAT engine once per source zone (an unknown one included)
@@ -64,7 +64,7 @@ func (s *state) postNATZones(fromZones []string) natZone {
 		in.Flow.Destination = simulate.Addr(dst)
 		m := nat.Match(in)
 		for _, db := range m.Doubts {
-			out.doubts = append(out.doubts, "nat rule "+db.Rule+": "+db.Reason)
+			out.doubts = append(out.doubts, db.Reasons.Prefixed("nat rule "+db.Rule+": ")...)
 		}
 		zone := pre.Out.Zone
 		if m.Rule != nil && m.Rule.Destination != nil {

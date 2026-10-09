@@ -4,6 +4,7 @@ import (
 	"net/netip"
 	"strings"
 
+	"github.com/okaiser/proteus/internal/reason"
 	"github.com/okaiser/proteus/internal/resolve"
 )
 
@@ -74,7 +75,16 @@ type UnavailableError struct {
 type Missing struct {
 	Device string
 	Reason string
+	Code   reason.Code // the kind of Reason
 }
+
+// NewMissing returns a Missing entry for device with r's code and text.
+func NewMissing(device string, r reason.Reason) Missing {
+	return Missing{Device: device, Reason: r.Text, Code: r.Code}
+}
+
+// Why returns the entry's code and text as one reason.
+func (m Missing) Why() reason.Reason { return reason.Reason{Code: m.Code, Text: m.Reason} }
 
 // Error is the reason alone for one device, so a message that embeds it reads as
 // before; "device: reason; device: reason" for several.

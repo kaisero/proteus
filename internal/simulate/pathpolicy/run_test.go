@@ -14,6 +14,7 @@ import (
 
 	"github.com/okaiser/proteus/internal/config"
 	"github.com/okaiser/proteus/internal/index"
+	"github.com/okaiser/proteus/internal/reason"
 	"github.com/okaiser/proteus/internal/resolve"
 	"github.com/okaiser/proteus/internal/simulate"
 	"github.com/okaiser/proteus/internal/simulate/pathlab"
@@ -147,7 +148,7 @@ func runLab(t *testing.T, l lab, dst string) Result {
 func summary(r Result) string {
 	s := string(r.Verdict)
 	if r.At != nil {
-		s += fmt.Sprintf(" at %d %s %s (%s)", r.At.Hop, r.At.Check, r.At.Rule, r.At.Reason)
+		s += fmt.Sprintf(" at %d %s %s (%s)", r.At.Hop, r.At.Check, r.At.Rule, r.At.Reason.Text)
 	}
 	for _, h := range r.Hops {
 		s += fmt.Sprintf(" | %d %s/%s", h.Index, h.Routing.Device, h.Routing.Vsys)
@@ -158,7 +159,7 @@ func summary(r Result) string {
 			}
 		}
 		if len(h.Doubts) > 0 {
-			s += " doubts=" + strings.Join(h.Doubts, "; ")
+			s += " doubts=" + h.Doubts.Text()
 		}
 		if h.AfterDeny {
 			s += " after-deny"
@@ -268,7 +269,7 @@ func TestAVersionGapIsInferredNotUndecided(t *testing.T) {
 // The ends of a path: no route, a local address, a loop (spec §4.8, §5.1).
 func TestTheEndsOfAPath(t *testing.T) {
 	t.Parallel()
-	dropped := "dropped by routing before security policy"
+	dropped := reason.New("path.no-route", "dropped by routing before security policy")
 	for _, c := range []struct {
 		name, dst string
 		lab       lab
@@ -309,12 +310,12 @@ func TestTheEndsOfAPath(t *testing.T) {
 func TestAnUnreadableConfigurationIsAHole(t *testing.T) {
 	t.Parallel()
 	r := runLab(t, lab{defaults: allowAll, fail: pathlab.FW01}, pathlab.Destination)
-	reason := "the configuration of fw01 vsys1 cannot be read: snapshot unreadable"
-	want := "undecided at 2 routing  (" + reason + ") | 1 fw02/vsys1 security=pass:interzone-default | 2 fw01/vsys1 security=undecided doubts=" + reason
+	why := "the configuration of fw01 vsys1 cannot be read: snapshot unreadable"
+	want := "undecided at 2 routing  (" + why + ") | 1 fw02/vsys1 security=pass:interzone-default | 2 fw01/vsys1 security=undecided doubts=" + why
 	if got := summary(r); got != want {
 		t.Errorf("got  %s\nwant %s", got, want)
 	}
-	if !slices.Equal(r.Holes, []simulate.Missing{{Device: pathlab.FW01, Reason: reason}}) {
+	if !slices.Equal(r.Holes, []simulate.Missing{{Device: pathlab.FW01, Reason: why, Code: "gap.load-failed"}}) {
 		t.Errorf("holes %v", r.Holes)
 	}
 }
@@ -347,7 +348,7 @@ func TestErrors(t *testing.T) {
 		t.Errorf("a check's error: %v", err)
 	}
 	miss := &simulate.UnavailableError{Missing: []simulate.Missing{{Device: "fw02", Reason: "gone"}}}
-	r, _, err := run(ctx, e, input(pathlab.Destination), []Check{fake{r: CheckResult{Name: "fake", Verdict: Undecided, Reason: "gone"}, err: miss}})
+	r, _, err := run(ctx, e, input(pathlab.Destination), []Check{fake{r: CheckResult{Name: "fake", Verdict: Undecided, Reason: reason.New("gap.load-failed", "gone")}, err: miss}})
 	if err != nil || len(r.Holes) != 1 || r.Verdict != VerdictUndecided || r.At.Check != "fake" {
 		t.Errorf("a check's missing data: %v, %v, %+v", err, r.Holes, r.At)
 	}
@@ -378,8 +379,11 @@ func TestTheSecurityCheck(t *testing.T) {
 	h := routing.Hop{Device: pathlab.FW02, Vsys: "vsys1"}
 	f := input(pathlab.Destination).Flow
 	r, err := Security{}.Evaluate(context.Background(), e, h, f)
-	if err != nil || r.Verdict != NotEvaluated || !r.Fidelity.Declared() || r.Name != "security" {
+	if err != nil || r.Verdict != NotEvaluated || !r.Fidelity.Declared() || r.Name != "security" || r.Reason.Code != "zone.missing" {
 		t.Errorf("no zones: %+v, %v", r, err)
+	}
+	if r, _ := (Security{}).Evaluate(context.Background(), e, routing.Hop{Device: pathlab.FW02}, f); r.Reason.Code != "zone.vsys-unknown" {
+		t.Errorf("no vsys: %+v", r)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancelling := *e
@@ -395,7 +399,7 @@ func TestTheSecurityCheck(t *testing.T) {
 	nilCfg.Load = func(string, string) (simulate.Target, error) { return simulate.Target{}, nil }
 	r, err = Security{}.Evaluate(context.Background(), &nilCfg, h, f)
 	if !isType[*simulate.UnavailableError](err) || r.Verdict != Undecided || r.Fidelity.Level() != "undermatch" ||
-		r.Reason != "the configuration of fw02 vsys1 cannot be read: no configuration" {
+		r.Reason != reason.New("gap.config-missing", "the configuration of fw02 vsys1 cannot be read: no configuration") {
 		t.Errorf("no configuration: %+v, %v", r, err)
 	}
 }

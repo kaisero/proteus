@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/okaiser/proteus/internal/index"
+	"github.com/okaiser/proteus/internal/reason"
 	"github.com/okaiser/proteus/internal/resolve"
 	"github.com/okaiser/proteus/internal/simulate"
 	"github.com/okaiser/proteus/internal/simulate/rulebase"
@@ -78,9 +79,9 @@ type translator struct {
 	res *Result
 }
 
-func (t translator) unresolved(value, reason string) {
-	t.res.Unresolved = append(t.res.Unresolved, index.Unresolved{Value: value, Reason: reason})
-	t.res.Fidelity = simulate.Weakest(t.res.Fidelity, simulate.UnderMatch(reason))
+func (t translator) unresolved(value string, why reason.Reason) {
+	t.res.Unresolved = append(t.res.Unresolved, index.NewUnresolved(value, "", why))
+	t.res.Fidelity = simulate.Weakest(t.res.Fidelity, simulate.UnderMatch(why))
 }
 
 // source translates the source (spec §18 F7).
@@ -102,12 +103,13 @@ func (t translator) source(s *resolve.SourceTranslation, r *Rule) *Translation {
 		out.Port = PortUnchanged
 		a, err := t.mapStatic(first(r.Fields["source"]), first(s.Addresses), sourceAddr(t.in.Flow.Source.Addrs))
 		if err != "" {
-			t.unresolved(r.Name, err)
+			t.unresolved(r.Name, reason.New("gap.nat-static", err))
 			return out
 		}
 		out.Address, out.Candidates = a, []string{a.String()}
 	default:
-		t.unresolved(r.Name, fmt.Sprintf("rule %s translates the source as %s, which is not read yet", r.Name, strings.TrimPrefix(s.Kind, resolve.UnknownKind)))
+		t.unresolved(r.Name, reason.New("gap.nat-kind",
+			fmt.Sprintf("rule %s translates the source as %s, which is not read yet", r.Name, strings.TrimPrefix(s.Kind, resolve.UnknownKind))))
 	}
 	return out
 }
@@ -115,7 +117,8 @@ func (t translator) source(s *resolve.SourceTranslation, r *Rule) *Translation {
 // pool is a source pool's candidates: its addresses, or its interface's address.
 func (t translator) pool(s *resolve.SourceTranslation, r *Rule) []string {
 	if s.Interface == "" && s.IPv6Interface != "" {
-		t.unresolved(r.Name, fmt.Sprintf("rule %s translates to the IPv6 address of %s, which is not simulated", r.Name, s.IPv6Interface))
+		t.unresolved(r.Name, reason.New("gap.ipv6",
+			fmt.Sprintf("rule %s translates to the IPv6 address of %s, which is not simulated", r.Name, s.IPv6Interface)))
 		return nil
 	}
 	if s.Interface != "" {
@@ -127,7 +130,8 @@ func (t translator) pool(s *resolve.SourceTranslation, r *Rule) []string {
 				return []string{i.Prefix.Addr().String()}
 			}
 		}
-		t.unresolved(r.Name, fmt.Sprintf("rule %s translates to the address of %s, which the interface state does not hold", r.Name, s.Interface))
+		t.unresolved(r.Name, reason.New("gap.interface-address",
+			fmt.Sprintf("rule %s translates to the address of %s, which the interface state does not hold", r.Name, s.Interface)))
 		return nil
 	}
 	var out []string
@@ -168,7 +172,8 @@ func (t translator) values(name string, r *Rule, hostOnly bool) []string {
 			var out []string
 			for m := range strings.SplitSeq(o.Value, ", ") {
 				if strings.Contains(m, "'") { // a dynamic group's filter
-					t.unresolved(r.Name, fmt.Sprintf("rule %s uses dynamic group %s, whose members are known at runtime", r.Name, name))
+					t.unresolved(r.Name, reason.New("doubt.dynamic-group",
+						fmt.Sprintf("rule %s uses dynamic group %s, whose members are known at runtime", r.Name, name)))
 					return nil
 				}
 				out = append(out, t.values(m, r, hostOnly)...)
@@ -176,7 +181,8 @@ func (t translator) values(name string, r *Rule, hostOnly bool) []string {
 			return out
 		}
 	}
-	t.unresolved(r.Name, fmt.Sprintf("rule %s uses %s, which is runtime content or not in the configuration", r.Name, name))
+	t.unresolved(r.Name, reason.New("gap.object-unresolved",
+		fmt.Sprintf("rule %s uses %s, which is runtime content or not in the configuration", r.Name, name)))
 	return nil
 }
 
@@ -187,7 +193,8 @@ func (t translator) destination(d *resolve.DestinationTranslation, r *Rule) *Tra
 		out.Port = fmt.Sprint(d.Port)
 	}
 	if d.PortText != "" {
-		t.unresolved(r.Name, fmt.Sprintf("rule %s translates to port %q, which is not a port number", r.Name, d.PortText))
+		t.unresolved(r.Name, reason.New("gap.nat-port",
+			fmt.Sprintf("rule %s translates to port %q, which is not a port number", r.Name, d.PortText)))
 	}
 	if d.DNSRewrite != "" {
 		t.res.Notes = append(t.res.Notes, fmt.Sprintf("rule %s also rewrites DNS answers (%s), which is not simulated", r.Name, d.DNSRewrite))
@@ -195,7 +202,7 @@ func (t translator) destination(d *resolve.DestinationTranslation, r *Rule) *Tra
 	if d.Kind == resolve.StaticDestination {
 		a, err := t.mapStatic(first(r.Fields["destination"]), d.Address, t.in.Flow.Destination.Addrs[0])
 		if err != "" {
-			t.unresolved(r.Name, err)
+			t.unresolved(r.Name, reason.New("gap.nat-static", err))
 			return out
 		}
 		out.Address, out.Candidates = a, []string{a.String()}
@@ -214,7 +221,8 @@ func (t translator) destination(d *resolve.DestinationTranslation, r *Rule) *Tra
 		resolvedByDNS = true
 	}
 	if len(addrs) == 0 {
-		t.unresolved(r.Name, fmt.Sprintf("rule %s translates to %s, which resolves to no address; the device then matches no rule for this flow", r.Name, d.Address))
+		t.unresolved(r.Name, reason.New("gap.fqdn-no-address",
+			fmt.Sprintf("rule %s translates to %s, which resolves to no address; the device then matches no rule for this flow", r.Name, d.Address)))
 		return out
 	}
 	slices.SortFunc(addrs, func(a, b netip.Addr) int { return a.Compare(b) })
@@ -229,7 +237,8 @@ func (t translator) destination(d *resolve.DestinationTranslation, r *Rule) *Tra
 		t.res.Notes = append(t.res.Notes, fmt.Sprintf("%s resolved by this machine's DNS, which may answer differently from the firewall's", d.Address))
 	}
 	if len(out.Others) > 0 {
-		t.res.Fidelity = simulate.Weakest(t.res.Fidelity, simulate.UnderMatch(fmt.Sprintf("rule %s distributes sessions (%s); followed %s, not %s", r.Name, d.Distribution, out.Address, strings.Join(out.Others, ", "))))
+		t.res.Fidelity = simulate.Weakest(t.res.Fidelity, simulate.UnderMatch(reason.New("path.nat-distribution",
+			fmt.Sprintf("rule %s distributes sessions (%s); followed %s, not %s", r.Name, d.Distribution, out.Address, strings.Join(out.Others, ", ")))))
 	}
 	return out
 }

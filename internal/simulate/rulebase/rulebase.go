@@ -12,6 +12,7 @@ import (
 
 	"github.com/okaiser/proteus/internal/config"
 	"github.com/okaiser/proteus/internal/index"
+	"github.com/okaiser/proteus/internal/reason"
 	"github.com/okaiser/proteus/internal/resolve"
 	"github.com/okaiser/proteus/internal/simulate"
 )
@@ -56,8 +57,8 @@ func (v Vsys) Sides(rb resolve.Rulebase, src, dst netip.Addr, negated func(int) 
 ) {
 	idx, err := index.ForRulebase(v.Config, v.Scope, rb)
 	if err != nil {
-		reason := fmt.Sprintf("the %s rules of %s were not checked: %v", rb, v.Scope.Name, err)
-		return roaring.New(), roaring.New(), []index.Unresolved{{Value: v.Scope.Name, Reason: reason}}
+		why := reason.New("gap.load-failed", fmt.Sprintf("the %s rules of %s were not checked: %v", rb, v.Scope.Name, err))
+		return roaring.New(), roaring.New(), []index.Unresolved{index.NewUnresolved(v.Scope.Name, "", why)}
 	}
 	n := len(idx.Rules())
 	all := roaring.New()
@@ -67,7 +68,7 @@ func (v Vsys) Sides(rb resolve.Rulebase, src, dst netip.Addr, negated func(int) 
 			return all.Clone()
 		}
 		b, rep := idx.Candidates(f, a.String())
-		unresolved = append(unresolved, withoutGap(rep.Unresolved, v.Config.VersionGap())...)
+		unresolved = append(unresolved, withoutGap(rep.Unresolved)...)
 		out := b.Clone()
 		for i := range n {
 			if neg(i) {
@@ -88,10 +89,10 @@ func (v Vsys) Sides(rb resolve.Rulebase, src, dst netip.Addr, negated func(int) 
 // withoutGap drops the schema version gap from a report's unresolved values. The
 // callers of Sides note a gap themselves, as an inferred answer rather than a
 // missing one.
-func withoutGap(unresolved []index.Unresolved, gap string) []index.Unresolved {
+func withoutGap(unresolved []index.Unresolved) []index.Unresolved {
 	var out []index.Unresolved
 	for _, u := range unresolved {
-		if gap == "" || u.Reason != gap {
+		if u.Code != "gap.version" {
 			out = append(out, u)
 		}
 	}
@@ -123,7 +124,8 @@ func Certainty(rb resolve.Rulebase, unresolved []index.Unresolved) simulate.Fide
 	if len(unresolved) == 0 {
 		return simulate.Exact
 	}
-	return simulate.UnderMatch(fmt.Sprintf("a %s rule reached only through an unresolved value may be missing", rb))
+	return simulate.UnderMatch(reason.New("gap.object-unresolved",
+		fmt.Sprintf("a %s rule reached only through an unresolved value may be missing", rb)))
 }
 
 // PBFMatch is the result of checking a flow against a vsys's PBF rules.

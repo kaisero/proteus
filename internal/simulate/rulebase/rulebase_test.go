@@ -8,6 +8,7 @@ import (
 
 	"github.com/okaiser/proteus/internal/config"
 	"github.com/okaiser/proteus/internal/index"
+	"github.com/okaiser/proteus/internal/reason"
 	"github.com/okaiser/proteus/internal/resolve"
 	"github.com/okaiser/proteus/internal/simulate"
 )
@@ -126,11 +127,16 @@ func TestCertainty(t *testing.T) {
 
 func TestWithoutGap(t *testing.T) {
 	t.Parallel()
-	un := []index.Unresolved{{Value: "a", Reason: "gap"}, {Value: "b", Reason: "other"}}
-	if got := withoutGap(un, "gap"); len(got) != 1 || got[0].Value != "b" {
+	// The gap is known by its code, not by its text: another entry with the same
+	// text stays.
+	un := []index.Unresolved{
+		index.NewUnresolved("a", "", reason.New("gap.version", "gap")),
+		index.NewUnresolved("b", "", reason.New("gap.object-unresolved", "gap")),
+	}
+	if got := withoutGap(un); len(got) != 1 || got[0].Value != "b" {
 		t.Errorf("with a gap: %v", got)
 	}
-	if got := withoutGap(un, ""); len(got) != 2 {
+	if got := withoutGap(un[1:]); len(got) != 1 {
 		t.Errorf("without a gap: %v", got)
 	}
 }

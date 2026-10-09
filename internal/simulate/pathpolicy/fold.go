@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/okaiser/proteus/internal/reason"
 	"github.com/okaiser/proteus/internal/simulate"
 	"github.com/okaiser/proteus/internal/simulate/routing"
 )
@@ -49,7 +50,7 @@ func fold(r *Result, routingFid simulate.Fidelity) {
 				r.Verdict = VerdictDenied
 			}
 		case v == Stop && !stopped:
-			r.Notes = append(r.Notes, fmt.Sprintf("a later hop denies: hop %d (%s), %s", h.Index, describe(h.Routing), pt.Reason))
+			r.Notes = append(r.Notes, fmt.Sprintf("a later hop denies: hop %d (%s), %s", h.Index, describe(h.Routing), pt.Reason.Text))
 		}
 		if v == Stop {
 			stopped = true
@@ -57,8 +58,10 @@ func fold(r *Result, routingFid simulate.Fidelity) {
 	}
 	if r.At == nil {
 		// The end line pads its columns for the text; a reason reads as a
-		// sentence.
-		end := &Point{Hop: len(r.Hops), Check: checkRouting, Reason: strings.Join(strings.Fields(r.Path.End), " ")}
+		// sentence. Its code is routing's.
+		end := &Point{Hop: len(r.Hops), Check: checkRouting, Reason: reason.Reason{
+			Code: r.Path.EndCode, Text: strings.Join(strings.Fields(r.Path.End), " "),
+		}}
 		switch r.Path.Outcome {
 		case routing.Delivered, routing.Local:
 			r.Verdict = VerdictAllowed

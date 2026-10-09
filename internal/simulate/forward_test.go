@@ -28,7 +28,7 @@ func TestUnavailableErrorReadsAsItsReason(t *testing.T) {
 	if one.Error() != "no snapshot" {
 		t.Errorf("one: %q", one.Error())
 	}
-	two := &UnavailableError{Missing: []Missing{{"fw1", "a"}, {"fw2", "b"}}}
+	two := &UnavailableError{Missing: []Missing{{Device: "fw1", Reason: "a"}, {Device: "fw2", Reason: "b"}}}
 	if two.Error() != "fw1: a; fw2: b" {
 		t.Errorf("two: %q", two.Error())
 	}

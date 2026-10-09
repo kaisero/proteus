@@ -65,7 +65,7 @@ func renderNAT(t *textOut, run simulate.Run, r nat.Result, takenAt, now time.Tim
 		rows = append(rows, [2]string{"dest", fmt.Sprintf("%s:%s", f.Destination, portNumber(f.DestPort)) + " -> " + destinationText(d, f.DestPort)})
 	}
 	for _, d := range r.Doubts {
-		rows = append(rows, [2]string{"doubt", d.Rule + ": " + d.Reason})
+		rows = append(rows, [2]string{"doubt", d.Rule + ": " + d.Text()})
 	}
 	for _, n := range r.Notes {
 		rows = append(rows, [2]string{"note", n})

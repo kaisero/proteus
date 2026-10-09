@@ -1,12 +1,14 @@
 package securitypolicy
 
 import (
+	"encoding/json"
 	"fmt"
 	"slices"
 	"strings"
 	"testing"
 
 	"github.com/okaiser/proteus/internal/config"
+	"github.com/okaiser/proteus/internal/reason"
 	"github.com/okaiser/proteus/internal/schema"
 	"github.com/okaiser/proteus/internal/simulate"
 )
@@ -62,9 +64,20 @@ func TestRuleFieldsCoverTheSchema(t *testing.T) {
 func doubtList(v Verdict) string {
 	var out []string
 	for _, d := range v.Doubts {
-		out = append(out, fmt.Sprintf("%d %s: %s", d.Position, d.Rule, d.Reason))
+		out = append(out, fmt.Sprintf("%d %s: %s", d.Position, d.Rule, d.Text()))
 	}
 	return strings.Join(out, "\n")
+}
+
+// doubtCodeList lists each doubt's codes: "3 doubt.application".
+func doubtCodeList(v Verdict) []string {
+	var out []string
+	for _, d := range v.Doubts {
+		for _, r := range d.Reasons {
+			out = append(out, fmt.Sprintf("%d %s", d.Position, r.Code))
+		}
+	}
+	return out
 }
 
 // Each candidate's doubts, in rule order: a field no stage evaluates, set to
@@ -127,6 +140,42 @@ func TestDoubts(t *testing.T) {
 			t.Errorf("%s: doubts\n%s\nwant\n%s\ncandidates %s", c.name, got, want, ruleNames(v))
 		}
 	}
+	// Each doubt has the code of its kind (spec §3.1, §12 C7, C8).
+	codes := map[string][]string{
+		"port, no URL": {
+			"3 doubt.service-application-default", "3 doubt.application",
+			"4 doubt.service-application-default", "4 doubt.application",
+			"7 doubt.not-evaluated.user", "7 doubt.hip", "8 doubt.schedule",
+			"9 doubt.category-no-url", "10 doubt.category-no-url",
+			"11 doubt.service-predefined", "12 doubt.service-absent",
+		},
+		"port and URL": {
+			"3 doubt.service-application-default", "3 doubt.application",
+			"4 doubt.service-application-default", "4 doubt.application",
+			"7 doubt.not-evaluated.user", "7 doubt.hip", "8 doubt.schedule",
+			"9 doubt.category-undefined", "11 doubt.service-predefined", "12 doubt.service-absent",
+		},
+		"no port": {
+			"3 doubt.service-no-port", "3 doubt.application", "4 doubt.service-no-port", "4 doubt.application",
+			"7 doubt.not-evaluated.user", "7 doubt.hip", "8 doubt.schedule",
+			"9 doubt.category-no-url", "10 doubt.category-no-url",
+			"11 doubt.service-no-port", "12 doubt.service-absent",
+		},
+	}
+	for name, want := range codes {
+		var f simulate.Flow
+		switch name {
+		case "port, no URL":
+			f = flow(443, "tcp", "")
+		case "port and URL":
+			f = flow(443, "tcp", "shop.example.com")
+		default:
+			f = flow(0, "icmp", "")
+		}
+		if _, v := run(t, e, f); !slices.Equal(doubtCodeList(v), want) {
+			t.Errorf("%s: codes %v\nwant %v", name, doubtCodeList(v), want)
+		}
+	}
 	// A rule whose fields are all evaluated, or any, has no doubt.
 	_, v := run(t, e, simulate.Flow{Source: ep("198.18.1.10"), Destination: ep("198.18.10.100"), FromZone: "home", ToZone: "labor", DestPort: 443})
 	if first(v) != "to-labor" || len(v.Doubts) != 0 {
@@ -162,6 +211,10 @@ func TestOpaqueAddressesStayInDoubt(t *testing.T) {
 	if got := doubtList(v); got != want {
 		t.Errorf("doubts\n%s\nwant\n%s", got, want)
 	}
+	wantCodes := []string{"1 doubt.edl", "2 doubt.region", "3 doubt.dynamic-group", "5 doubt.edl", "6 doubt.edl", "7 doubt.region"}
+	if got := doubtCodeList(v); !slices.Equal(got, wantCodes) {
+		t.Errorf("codes %v, want %v", got, wantCodes)
+	}
 	if d := stage(r, "resolve-source").Detail; !strings.Contains(d, "5 kept naming addresses the configuration does not hold") {
 		t.Errorf("resolve-source: %s", d)
 	}
@@ -169,5 +222,17 @@ func TestOpaqueAddressesStayInDoubt(t *testing.T) {
 	_, v = run(t, e, flow("10.1.0.20"))
 	if got := doubtList(v); !strings.Contains(got, "4 from-group: source: external list (edl-bad, in group g-mixed)") || strings.Contains(got, "from-dag") {
 		t.Errorf("doubts\n%s", got)
+	}
+}
+
+// A doubt with several reasons reads as one line, in format 1 as before.
+func TestADoubtJoinsItsReasons(t *testing.T) {
+	t.Parallel()
+	d := Doubt{Position: 2, Rule: "r", Reasons: simulate.Reasons{
+		reason.New("doubt.edl", "source: external list (a)"), reason.New("doubt.region", "region (AT)"),
+	}}
+	b, err := json.Marshal(d)
+	if err != nil || string(b) != `{"position":2,"rule":"r","reason":"source: external list (a); region (AT)"}` {
+		t.Errorf("json = %s, %v", b, err)
 	}
 }

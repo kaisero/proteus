@@ -252,7 +252,7 @@ func runUnresolved(run simulate.Run, device, vsys string, withReasons bool) []un
 	}
 	if withReasons && run.Fidelity.Level() == "undermatch" {
 		for _, r := range run.Fidelity.UnderMatchReasons() {
-			un = append(un, unresolved{Device: device, Vsys: vsys, Reason: r})
+			un = append(un, unresolved{Device: device, Vsys: vsys, Reason: r.Text})
 		}
 	}
 	return un

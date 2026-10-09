@@ -125,7 +125,7 @@ func zoneText(z string) string {
 }
 
 func incompleteText(f simulate.Fidelity) string {
-	parts := f.Reasons()
+	parts := f.Reasons().Texts()
 	if s := f.Skipped(); len(s) > 0 {
 		parts = append(parts, "not evaluated: "+strings.Join(s, ", "))
 	}

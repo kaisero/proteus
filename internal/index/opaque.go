@@ -3,10 +3,12 @@ package index
 import (
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/RoaringBitmap/roaring/v2"
 
+	"github.com/okaiser/proteus/internal/reason"
 	"github.com/okaiser/proteus/internal/resolve"
 )
 
@@ -29,7 +31,7 @@ const (
 // configuration tags; without this record such a rule silently vanishes.
 type opaqueIndex struct {
 	rules   map[Field]*roaring.Bitmap
-	reasons map[Field]map[uint32]string
+	reasons map[Field]map[uint32][]reason.Reason
 }
 
 // predefinedRegion matches the name of a predefined region: a country, by its
@@ -65,51 +67,53 @@ func newOpaqueIndex(rules []resolve.Rule, objs opaqueObjects) *opaqueIndex {
 		group[g.Name] = g
 	}
 
-	// reason classifies one value, following static groups; a cycle stops.
-	var reason func(v string, onPath map[string]bool) string
-	reason = func(v string, onPath map[string]bool) string {
+	// classify classifies one value, following static groups; a cycle stops. The
+	// zero reason means the value is not opaque.
+	var classify func(v string, onPath map[string]bool) reason.Reason
+	classify = func(v string, onPath map[string]bool) reason.Reason {
 		if g, ok := group[v]; ok {
 			if strings.HasPrefix(g.Value, "'") {
-				return fmt.Sprintf("%s (%s)", opaqueRuntime, v)
+				return reason.New("doubt.dynamic-group", fmt.Sprintf("%s (%s)", opaqueRuntime, v))
 			}
 			if onPath[v] {
-				return ""
+				return reason.Reason{}
 			}
 			onPath[v] = true
 			defer delete(onPath, v)
 			for m := range strings.SplitSeq(g.Value, ", ") {
-				if r := reason(strings.TrimSpace(m), onPath); r != "" {
-					return strings.TrimSuffix(r, ")") + ", in group " + v + ")"
+				if r := classify(strings.TrimSpace(m), onPath); r.Text != "" {
+					r.Text = strings.TrimSuffix(r.Text, ")") + ", in group " + v + ")"
+					return r
 				}
 			}
-			return ""
+			return reason.Reason{}
 		}
 		switch {
 		case v == "any" || addr[v] || len(prefixesOf(v)) > 0:
-			return ""
+			return reason.Reason{}
 		case list[v] || strings.HasPrefix(v, predefinedListPrefix):
-			return fmt.Sprintf("%s (%s)", opaqueExternalList, v)
+			return reason.New("doubt.edl", fmt.Sprintf("%s (%s)", opaqueExternalList, v))
 		case region[v] || predefinedRegion.MatchString(v):
-			return fmt.Sprintf("%s (%s)", opaqueRegion, v)
+			return reason.New("doubt.region", fmt.Sprintf("%s (%s)", opaqueRegion, v))
 		}
-		return ""
+		return reason.Reason{}
 	}
 
-	o := &opaqueIndex{rules: map[Field]*roaring.Bitmap{}, reasons: map[Field]map[uint32]string{}}
+	o := &opaqueIndex{rules: map[Field]*roaring.Bitmap{}, reasons: map[Field]map[uint32][]reason.Reason{}}
 	for _, f := range []Field{Source, Destination} {
-		b, why := roaring.New(), map[uint32]string{}
+		b, why := roaring.New(), map[uint32][]reason.Reason{}
 		for pos, r := range rules {
-			var rs []string
+			var rs []reason.Reason
 			for _, v := range r.Fields[f.String()] {
-				if s := reason(v, map[string]bool{}); s != "" {
-					rs = append(rs, s)
+				if c := classify(v, map[string]bool{}); c.Text != "" {
+					rs = append(rs, c)
 				}
 			}
 			if len(rs) > 0 {
 				//nolint:gosec // a rule position cannot reach 2^32; a rulebase is capped far below that
 				bit := uint32(pos)
 				b.Add(bit)
-				why[bit] = strings.Join(rs, "; ")
+				why[bit] = rs
 			}
 		}
 		o.rules[f], o.reasons[f] = b, why
@@ -119,17 +123,18 @@ func newOpaqueIndex(rules []resolve.Rule, objs opaqueObjects) *opaqueIndex {
 
 // Opaque returns the rules whose field names an external list, a region or a
 // dynamic address group, directly or through a static group, and why, by rule
-// position. An address lookup cannot say whether such a rule matches: the caller
-// keeps it as a candidate and says so. Only the address fields have any.
-func (v *View) Opaque(f Field) (*roaring.Bitmap, map[uint32]string) {
+// position: one reason per value the rule names, in field order. An address
+// lookup cannot say whether such a rule matches: the caller keeps it as a
+// candidate and says so. Only the address fields have any.
+func (v *View) Opaque(f Field) (*roaring.Bitmap, map[uint32][]reason.Reason) {
 	o := v.idx.opaque
 	b, ok := o.rules[f]
 	if !ok {
 		return roaring.New(), nil
 	}
-	why := make(map[uint32]string, len(o.reasons[f]))
+	why := make(map[uint32][]reason.Reason, len(o.reasons[f]))
 	for k, r := range o.reasons[f] {
-		why[k] = r
+		why[k] = slices.Clone(r)
 	}
 	return b.Clone(), why
 }

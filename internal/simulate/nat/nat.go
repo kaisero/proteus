@@ -12,6 +12,7 @@
 package nat
 
 import (
+	"encoding/json"
 	"net/netip"
 
 	"github.com/okaiser/proteus/internal/index"
@@ -33,10 +34,22 @@ type Rule struct {
 }
 
 // Doubt is a rule above the match that could also have matched, and why the engine
-// cannot tell (spec §18 N11).
+// cannot tell (spec §18 N11). A rule can be in doubt for several reasons.
 type Doubt struct {
-	Rule   string `json:"rule"`
-	Reason string `json:"reason"`
+	Rule    string
+	Reasons simulate.Reasons
+}
+
+// Text is the reasons as one line: "the ingress zone is unknown; the source is
+// unknown".
+func (d Doubt) Text() string { return d.Reasons.Text() }
+
+// MarshalJSON writes {"rule", "reason"}, the reasons joined, as format 1 does.
+func (d Doubt) MarshalJSON() ([]byte, error) {
+	return json.Marshal(struct {
+		Rule   string `json:"rule"`
+		Reason string `json:"reason"`
+	}{d.Rule, d.Text()})
 }
 
 // Excluded is a rule above the match that did not match, and the field that

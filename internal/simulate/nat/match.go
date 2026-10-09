@@ -10,6 +10,7 @@ import (
 	"github.com/RoaringBitmap/roaring/v2"
 
 	"github.com/okaiser/proteus/internal/index"
+	"github.com/okaiser/proteus/internal/reason"
 	"github.com/okaiser/proteus/internal/resolve"
 	"github.com/okaiser/proteus/internal/simulate"
 	"github.com/okaiser/proteus/internal/simulate/rulebase"
@@ -73,9 +74,10 @@ func Match(in Input) MatchResult {
 	}
 	// A virtual-wire ingress has no route lookup (spec §18 D3).
 	if in.In.Interface != "" && in.In.Router == "" {
-		reason := in.In.Interface + " forwards without a router (virtual wire or Layer 2): NAT there is not simulated"
-		out.Unresolved = append(out.Unresolved, index.Unresolved{Value: in.In.Interface, Reason: reason})
-		out.Fidelity = simulate.UnderMatch(reason)
+		why := reason.New("path.virtual-wire",
+			in.In.Interface+" forwards without a router (virtual wire or Layer 2): NAT there is not simulated")
+		out.Unresolved = append(out.Unresolved, index.NewUnresolved(in.In.Interface, "", why))
+		out.Fidelity = simulate.UnderMatch(why)
 		return out
 	}
 	v, ok := rulebase.Load(func(string, string) (simulate.Target, error) { return in.Target, nil }, in.In.Device, in.Vsys)
@@ -97,18 +99,18 @@ func Match(in Input) MatchResult {
 	svc := services(v)
 	for i := range rules {
 		r := &rules[i]
-		why, doubt := r.fits(in, out.PreNAT, src, dst, v, svc)
+		why, doubts := r.fits(in, out.PreNAT, src, dst, v, svc)
 		switch {
 		case why != "":
 			out.Excluded = append(out.Excluded, Excluded{Rule: r.label(), Field: why})
 			continue
 		case r.NATType == "nat64":
-			reason := fmt.Sprintf("NAT64 rule %s may translate this flow to IPv6, which is not simulated", r.Name)
-			out.Unresolved = append(out.Unresolved, index.Unresolved{Value: r.Name, Reason: reason})
-			out.Fidelity = simulate.Weakest(out.Fidelity, simulate.UnderMatch(reason))
+			ipv6 := reason.New("gap.ipv6", fmt.Sprintf("NAT64 rule %s may translate this flow to IPv6, which is not simulated", r.Name))
+			out.Unresolved = append(out.Unresolved, index.NewUnresolved(r.Name, "", ipv6))
+			out.Fidelity = simulate.Weakest(out.Fidelity, simulate.UnderMatch(ipv6))
 			return out
-		case doubt != "":
-			out.Doubts = append(out.Doubts, Doubt{Rule: r.label(), Reason: doubt})
+		case len(doubts) > 0:
+			out.Doubts = append(out.Doubts, Doubt{Rule: r.label(), Reasons: doubts})
 			continue
 		}
 		out.Rule = r
@@ -120,9 +122,11 @@ func Match(in Input) MatchResult {
 	if len(out.Doubts) > 0 {
 		var names []string
 		for _, d := range out.Doubts {
-			names = append(names, d.Rule+" ("+d.Reason+")")
+			names = append(names, d.Rule+" ("+d.Text()+")")
 		}
-		out.Fidelity = simulate.Weakest(out.Fidelity, simulate.OverMatchBecause("may instead hit "+strings.Join(names, ", ")))
+		// The first doubt's first reason names the kind; the text names them all.
+		why := reason.Reason{Code: out.Doubts[0].Reasons[0].Code, Text: "may instead hit " + strings.Join(names, ", ")}
+		out.Fidelity = simulate.Weakest(out.Fidelity, simulate.OverMatchBecause(why))
 	}
 	return out
 }
@@ -145,52 +149,52 @@ func (r *Rule) label() string {
 
 // fits decides one rule: a field that excludes it, or a doubt, or neither (a sure
 // match).
-func (r *Rule) fits(in Input, pre simulate.Forward, src, dst *roaring.Bitmap, v rulebase.Vsys, svc map[string]string) (string, string) {
+func (r *Rule) fits(in Input, pre simulate.Forward, src, dst *roaring.Bitmap, v rulebase.Vsys, svc map[string]string) (string, simulate.Reasons) {
 	if r.Disabled {
-		return "disabled", ""
+		return "disabled", nil
 	}
 	if r.NATType == "nptv6" {
-		return "nat-type nptv6", ""
+		return "nat-type nptv6", nil
 	}
-	var doubts []string
+	var doubts simulate.Reasons
 	from := r.Fields["from"]
 	switch {
 	case len(from) == 0 || slices.Contains(from, "any"):
 	case in.In.Zone == "":
-		doubts = append(doubts, "the ingress zone is unknown")
+		doubts = append(doubts, reason.New("zone.missing", "the ingress zone is unknown"))
 	case !slices.Contains(from, in.In.Zone):
-		return "from zone " + strings.Join(from, ",") + " ≠ " + in.In.Zone, ""
+		return "from zone " + strings.Join(from, ",") + " ≠ " + in.In.Zone, nil
 	}
 	switch to := first(r.Fields["to"]); {
 	case pre.Out.Zone == "":
-		doubts = append(doubts, "the egress zone is unknown")
+		doubts = append(doubts, reason.New("zone.missing", "the egress zone is unknown"))
 	case to != pre.Out.Zone:
-		return "to zone " + to + " ≠ " + pre.Out.Zone, ""
+		return "to zone " + to + " ≠ " + pre.Out.Zone, nil
 	}
 	if r.ToInterface != "any" && r.ToInterface != "" && r.ToInterface != pre.Out.Interface {
-		return "to-interface " + r.ToInterface + " ≠ " + pre.Out.Interface, ""
+		return "to-interface " + r.ToInterface + " ≠ " + pre.Out.Interface, nil
 	}
 	if why, doubt := serviceFits(r.Service, in.Flow, svc); why != "" {
-		return why, ""
-	} else if doubt != "" {
+		return why, nil
+	} else if doubt.Text != "" {
 		doubts = append(doubts, doubt)
 	}
 	// With no source, a rule that names one cannot be decided (spec §18 N11).
 	if src := r.Fields["source"]; len(in.Flow.Source.Addrs) == 0 && len(src) > 0 && !slices.Contains(src, "any") {
-		doubts = append(doubts, "the source is unknown")
+		doubts = append(doubts, reason.New("doubt.source-unknown", "the source is unknown"))
 	}
 	if r.explicit >= 0 {
 		pos := uint32(r.explicit) //nolint:gosec // a rulebase position fits in 32 bits
 		if !src.Contains(pos) {
-			return "source", ""
+			return "source", nil
 		}
 		if !dst.Contains(pos) {
-			return "destination", ""
+			return "destination", nil
 		}
 	} else if !v.Holds(first(r.Fields["destination"]), in.Flow.Destination.Addrs[0]) {
-		return "destination", ""
+		return "destination", nil
 	}
-	return "", strings.Join(doubts, "; ")
+	return "", doubts
 }
 
 // services maps each service and service group name of the vsys to its value:
@@ -210,21 +214,21 @@ func services(v rulebase.Vsys) map[string]string {
 // destination port. A service the configuration does not define, such as the
 // predefined service-http, and a flow without a port are doubts. A service object's
 // source port is not read (spec §18, the probe flows set none).
-func serviceFits(name string, f simulate.Flow, svc map[string]string) (string, string) {
+func serviceFits(name string, f simulate.Flow, svc map[string]string) (string, reason.Reason) {
 	if name == "" || name == "any" {
-		return "", ""
+		return "", reason.Reason{}
 	}
 	if f.DestPort == 0 {
-		return "", "service " + name + " not known without a port: give --port"
+		return "", reason.New("path.nat-no-port", "service "+name+" not known without a port: give --port")
 	}
 	matched, known := serviceHolds(name, strings.ToLower(f.Protocol), int(f.DestPort), svc, 0)
 	switch {
 	case !known:
-		return "", "service " + name + " is not defined in the configuration (a predefined service?)"
+		return "", reason.New("doubt.service-predefined", "service "+name+" is not defined in the configuration (a predefined service?)")
 	case !matched:
-		return "service " + name, ""
+		return "service " + name, reason.Reason{}
 	}
-	return "", ""
+	return "", reason.Reason{}
 }
 
 func serviceHolds(name, proto string, port int, svc map[string]string, depth int) (matched, known bool) {

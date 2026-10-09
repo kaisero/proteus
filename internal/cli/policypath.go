@@ -251,7 +251,7 @@ func pathUnresolved(res pathpolicy.Result, stages []simulate.Stage) []unresolved
 	}
 	if at := res.At; res.Verdict == pathpolicy.VerdictUndecided && at.Check == "routing" {
 		h, _ := pointHop(res)
-		un = append(un, unresolved{Device: h.Device, Vsys: h.Vsys, Reason: at.Reason})
+		un = append(un, unresolved{Device: h.Device, Vsys: h.Vsys, Reason: at.Reason.Text})
 	}
 	var device string
 	if len(res.Hops) > 0 {
@@ -265,11 +265,11 @@ func pathUnresolved(res pathpolicy.Result, stages []simulate.Stage) []unresolved
 // zones' doubts first, then the first undecided check.
 func hopUndecided(h pathpolicy.Hop) (string, bool) {
 	if len(h.Doubts) > 0 {
-		return h.Doubts[0], true
+		return h.Doubts[0].Text, true
 	}
 	for _, c := range h.Checks {
 		if c.Verdict == pathpolicy.Undecided {
-			return c.Reason, true
+			return c.Reason.Text, true
 		}
 	}
 	return "", false
@@ -293,19 +293,19 @@ func (p pathAnswer) Results() any {
 		Stages: simStages(p.stages), Hops: []pathHopJSON{},
 	}
 	if at := r.At; at != nil {
-		out.At = &pointJSON{Hop: at.Hop, Check: at.Check, Rule: at.Rule, Reason: at.Reason}
+		out.At = &pointJSON{Hop: at.Hop, Check: at.Check, Rule: at.Rule, Reason: at.Reason.Text}
 	}
 	for _, h := range r.Hops {
 		hj := pathHopJSON{
 			Index: h.Index, Hop: h.Routing, Notes: nonNil(h.Routing.Notes), PBF: nonNil(h.Routing.PBF),
-			ECMP: h.Routing.ECMP, ZonePlaceholder: h.Routing.ZonePlaceholder, Doubts: nonNil(h.Doubts),
+			ECMP: h.Routing.ECMP, ZonePlaceholder: h.Routing.ZonePlaceholder, Doubts: nonNil(h.Doubts.Texts()),
 			AfterDeny: h.AfterDeny,
 		}
 		if hj.ECMP == nil {
 			hj.ECMP = []routing.NotFollowed{}
 		}
 		for _, c := range h.Checks {
-			hj.Checks = append(hj.Checks, checkJSON{name: c.Name, block: securityOf(c.Security, string(c.Verdict), c.Reason, c.Rule, c.Fidelity, c.Stages)})
+			hj.Checks = append(hj.Checks, checkJSON{name: c.Name, block: securityOf(c.Security, string(c.Verdict), c.Reason.Text, c.Rule, c.Fidelity, c.Stages)})
 		}
 		out.Hops = append(out.Hops, hj)
 	}
@@ -380,8 +380,8 @@ func (p pathAnswer) text(t *textOut) {
 	for _, h := range r.Hops {
 		for _, c := range h.Checks {
 			fmt.Fprintf(t, "\nhop %d: %s / %s, %s %s", h.Index, h.Routing.Device, h.Routing.Vsys, c.Name, c.Verdict)
-			if c.Reason != "" {
-				fmt.Fprintf(t, ": %s", c.Reason)
+			if c.Reason.Text != "" {
+				fmt.Fprintf(t, ": %s", c.Reason.Text)
 			}
 			fmt.Fprintf(t, "\n")
 			if c.Security != nil {
@@ -402,9 +402,9 @@ func policyRows(h pathpolicy.Hop) [][2]string {
 		case pathpolicy.Pass, pathpolicy.Stop:
 			s = fmt.Sprintf("%s (%s)", c.Rule, checkAction(c))
 		case pathpolicy.Undecided:
-			s = "undecided: " + c.Reason
+			s = "undecided: " + c.Reason.Text
 		default:
-			s = "not evaluated: " + c.Reason
+			s = "not evaluated: " + c.Reason.Text
 		}
 		if h.AfterDeny {
 			s += " (after the deny)"
@@ -416,7 +416,7 @@ func policyRows(h pathpolicy.Hop) [][2]string {
 		rows = append(rows, [2]string{label, s})
 	}
 	for _, d := range h.Doubts {
-		rows = append(rows, [2]string{"doubt", d})
+		rows = append(rows, [2]string{"doubt", d.Text})
 	}
 	return rows
 }
@@ -430,9 +430,9 @@ func verdictLine(pal palette, r pathpolicy.Result) string {
 	at := fmt.Sprintf("%s at hop %d: ", r.Verdict, r.At.Hop)
 	switch {
 	case !ok:
-		return pal.warn(at + r.At.Reason)
+		return pal.warn(at + r.At.Reason.Text)
 	case r.Verdict == pathpolicy.VerdictUndecided:
-		return pal.warn(at + fmt.Sprintf("%s / %s, %s", h.Device, h.Vsys, r.At.Reason))
+		return pal.warn(at + fmt.Sprintf("%s / %s, %s", h.Device, h.Vsys, r.At.Reason.Text))
 	case r.At.Check == "routing":
 		// The address the hop looked up: after a destination NAT, the
 		// translated one.

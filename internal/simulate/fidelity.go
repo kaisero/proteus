@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"slices"
 	"strings"
+
+	"github.com/okaiser/proteus/internal/reason"
 )
 
 // level orders how certain an output is, strongest first. The zero value is
@@ -31,10 +33,10 @@ var levelNames = map[level]string{
 // Inferred came from data the device may not be using and can be wrong either way.
 // UnderMatch may be missing matches, the most dangerous for a verdict.
 type Fidelity struct {
-	level  level
-	reason []string // why the output is weaker than exact, at any level
-	under  []string // the reasons given at UnderMatch, a subset of reason
-	skip   []string // NotEvaluated: the dimensions skipped
+	level level
+	why   []reason.Reason // why the output is weaker than exact, at any level
+	under []reason.Reason // the reasons given at UnderMatch, a subset of why
+	skip  []reason.Reason // NotEvaluated: the dimensions skipped, as text with their codes
 }
 
 var (
@@ -48,21 +50,39 @@ var (
 )
 
 // UnderMatch declares that the output may be missing matches, and why.
-func UnderMatch(reason string) Fidelity {
-	return Fidelity{level: underMatch, reason: []string{reason}, under: []string{reason}}
+func UnderMatch(r reason.Reason) Fidelity {
+	return Fidelity{level: underMatch, why: []reason.Reason{r}, under: []reason.Reason{r}}
 }
 
 // NotEvaluated declares that the stage skipped dimensions. Skipping a matching
 // dimension can only leave extra rules in the candidate set, so it is OverMatch,
 // naming what was skipped.
 func NotEvaluated(dimensions ...string) Fidelity {
-	return Fidelity{level: overMatch, skip: dimensions}
+	var skip []reason.Reason
+	for _, d := range dimensions {
+		skip = append(skip, reason.New(dimensionCodes[d], d))
+	}
+	return Fidelity{level: overMatch, skip: skip}
+}
+
+// dimensionCodes gives each dimension a stage can skip its code (spec §12 C7). A
+// dimension missing here fails every test that skips it.
+var dimensionCodes = map[string]reason.Code{
+	"zones":                   "doubt.not-evaluated.zones",
+	"source zone":             "doubt.not-evaluated.source-zone",
+	"destination zone":        "doubt.not-evaluated.destination-zone",
+	"service":                 "doubt.not-evaluated.service",
+	"url category":            "doubt.not-evaluated.url",
+	"application":             "doubt.not-evaluated.application",
+	"user":                    "doubt.not-evaluated.user",
+	"NAT":                     "doubt.not-evaluated.nat",
+	"policy-based forwarding": "doubt.not-evaluated.pbf",
 }
 
 // OverMatchBecause is OverMatch with a reason, such as the rules kept because a
 // configuration cannot say whether they match.
-func OverMatchBecause(reason string) Fidelity {
-	return Fidelity{level: overMatch, reason: []string{reason}}
+func OverMatchBecause(r reason.Reason) Fidelity {
+	return Fidelity{level: overMatch, why: []reason.Reason{r}}
 }
 
 // Declared reports whether the stage said anything at all.
@@ -72,26 +92,32 @@ func (f Fidelity) Declared() bool { return f.level != undeclared }
 func (f Fidelity) Level() string { return levelNames[f.level] }
 
 // Skipped lists the dimensions not evaluated.
-func (f Fidelity) Skipped() []string { return append([]string{}, f.skip...) }
+func (f Fidelity) Skipped() []string { return texts(f.skip) }
+
+// SkippedReasons lists the dimensions not evaluated, each with its code.
+func (f Fidelity) SkippedReasons() Reasons { return slices.Clone(f.skip) }
 
 // Reasons lists why the output is weaker than exact, where a stage said.
-func (f Fidelity) Reasons() []string { return append([]string{}, f.reason...) }
+func (f Fidelity) Reasons() Reasons { return slices.Clone(f.why) }
 
 // UnderMatchReasons lists only the reasons given at UnderMatch: why matches may
 // be missing. Weakest keeps the reasons of every level, so an undermatch can also
 // carry an overmatch reason that says nothing about what is missing.
-func (f Fidelity) UnderMatchReasons() []string { return append([]string{}, f.under...) }
+func (f Fidelity) UnderMatchReasons() Reasons { return slices.Clone(f.under) }
 
 func (f Fidelity) String() string {
 	s := f.Level()
-	if len(f.reason) > 0 {
-		s += ": " + strings.Join(f.reason, "; ")
+	if len(f.why) > 0 {
+		s += ": " + strings.Join(texts(f.why), "; ")
 	}
 	if len(f.skip) > 0 {
-		s += "; not evaluated: " + strings.Join(f.skip, ", ")
+		s += "; not evaluated: " + strings.Join(texts(f.skip), ", ")
 	}
 	return s
 }
+
+// texts lists the texts of rs, nil for none.
+func texts(rs []reason.Reason) []string { return Reasons(rs).Texts() }
 
 // Weakest returns the weakest fidelity: the highest level, with every reason and
 // skipped dimension of the inputs, each once. Nothing in is undeclared out.
@@ -101,9 +127,9 @@ func Weakest(fs ...Fidelity) Fidelity {
 		if f.level > out.level {
 			out.level = f.level
 		}
-		for _, r := range f.reason {
-			if !slices.Contains(out.reason, r) {
-				out.reason = append(out.reason, r)
+		for _, r := range f.why {
+			if !slices.Contains(out.why, r) {
+				out.why = append(out.why, r)
 			}
 		}
 		for _, r := range f.under {
@@ -126,5 +152,5 @@ func (f Fidelity) MarshalJSON() ([]byte, error) {
 		Level        string   `json:"level"`
 		Reasons      []string `json:"reasons,omitempty"`
 		NotEvaluated []string `json:"not_evaluated,omitempty"`
-	}{f.Level(), f.reason, f.skip})
+	}{f.Level(), texts(f.why), texts(f.skip)})
 }

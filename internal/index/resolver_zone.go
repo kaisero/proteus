@@ -10,6 +10,7 @@ import (
 	"github.com/gaissmai/bart"
 
 	"github.com/okaiser/proteus/internal/config"
+	"github.com/okaiser/proteus/internal/reason"
 	"github.com/okaiser/proteus/internal/resolve"
 )
 
@@ -57,11 +58,8 @@ func newZoneResolver(
 			r.zonesOf[key] = append(r.zonesOf[key], zoneRef{name: z.Name, scope: z.Scope})
 		}
 		if len(z.Interfaces) == 0 {
-			r.limits = append(r.limits, Unresolved{
-				Value:  z.Name,
-				Kind:   kindZone,
-				Reason: "this zone has no interface assigned, so no address can be placed in it",
-			})
+			r.limits = append(r.limits, NewUnresolved(z.Name, kindZone, reason.New("zone.no-interface",
+				"this zone has no interface assigned, so no address can be placed in it")))
 		}
 	}
 	if len(zones) == 0 {
@@ -83,13 +81,10 @@ func newZoneResolver(
 	}
 
 	for _, d := range dynamic {
-		r.limits = append(r.limits, Unresolved{
-			Value: d,
-			Kind:  kindZone,
-			Reason: "this virtual router learns routes at runtime, and a route learned that " +
-				"way is not in the configuration, so an address reachable only by it cannot " +
-				"be placed in a zone",
-		})
+		r.limits = append(r.limits, NewUnresolved(d, kindZone, reason.New("zone.dynamic-routing",
+			"this virtual router learns routes at runtime, and a route learned that "+
+				"way is not in the configuration, so an address reachable only by it cannot "+
+				"be placed in a zone")))
 	}
 	return r
 }
@@ -98,12 +93,9 @@ func (r *zoneResolver) insert(p netip.Prefix, iface, via string) {
 	refs, ok := r.zonesOf[strings.ToLower(iface)]
 	if !ok {
 		// An interface in no zone carries traffic nowhere a policy can name.
-		r.limits = append(r.limits, Unresolved{
-			Value: iface,
-			Kind:  kindZone,
-			Reason: "interface " + iface + " is in no zone, so " + p.String() +
-				" cannot be placed in one",
-		})
+		r.limits = append(r.limits, NewUnresolved(iface, kindZone, reason.New("zone.interface-unzoned",
+			"interface "+iface+" is in no zone, so "+p.String()+
+				" cannot be placed in one")))
 		return
 	}
 	hits := make([]Hit, 0, len(refs))
@@ -141,30 +133,21 @@ func (r *zoneResolver) resolve(value string, p Providers) ([]Hit, []Unresolved, 
 		return r.fromSnapshot(value, addr, p.Zones)
 	}
 	if r.empty {
-		return nil, []Unresolved{{
-			Value: value,
-			Kind:  kindZone,
-			Reason: "this scope defines no zones, so an address cannot be placed in a " +
-				"zone from its configuration",
-		}}, true
+		return nil, []Unresolved{NewUnresolved(value, kindZone, reason.New("zone.none-defined",
+			"this scope defines no zones, so an address cannot be placed in a "+
+				"zone from its configuration"))}, true
 	}
 
-	un := append(r.limitsCopy(), Unresolved{
-		Value: value,
-		Kind:  kindZone,
-		Reason: "this zone came from the configuration, not from the device. It is an " +
-			"inference from interface addresses and static routes, and a firewall's " +
-			"forwarding table routinely differs: supply a zone snapshot for what the " +
-			"device is actually doing",
-	})
+	un := append(r.limitsCopy(), NewUnresolved(value, kindZone, reason.New("zone.derived",
+		"this zone came from the configuration, not from the device. It is an "+
+			"inference from interface addresses and static routes, and a firewall's "+
+			"forwarding table routinely differs: supply a zone snapshot for what the "+
+			"device is actually doing")))
 	hits, found := r.table.Lookup(addr)
 	if !found {
-		return nil, append(un, Unresolved{
-			Value: value,
-			Kind:  kindZone,
-			Reason: "no interface address and no static route in this configuration covers " +
-				"this address, so the zone it would arrive on is unknown",
-		}), true
+		return nil, append(un, NewUnresolved(value, kindZone, reason.New("zone.missing",
+			"no interface address and no static route in this configuration covers "+
+				"this address, so the zone it would arrive on is unknown"))), true
 	}
 	return hits, un, true
 }
@@ -173,20 +156,14 @@ func (r *zoneResolver) resolve(value string, p Providers) ([]Hit, []Unresolved, 
 func (r *zoneResolver) fromSnapshot(value string, addr netip.Addr, loc ZoneLocator) ([]Hit, []Unresolved, bool) {
 	placements := loc.ZonesOf(addr)
 	if len(placements) == 0 {
-		un := []Unresolved{{
-			Value: value,
-			Kind:  kindZone,
-			Reason: "no forwarding entry in the snapshot covers this address, so the device " +
-				"would not forward it and no zone applies",
-		}}
+		un := []Unresolved{NewUnresolved(value, kindZone, reason.New("zone.missing",
+			"no forwarding entry in the snapshot covers this address, so the device "+
+				"would not forward it and no zone applies"))}
 		if snap, ok := loc.(*ZoneSnapshot); ok {
 			for _, iface := range snap.UnroutedInterfaces() {
-				un = append(un, Unresolved{
-					Value: iface,
-					Kind:  kindZone,
-					Reason: "a forwarding entry leaves by interface " + iface +
-						", which is in no zone, so nothing it covers can be placed",
-				})
+				un = append(un, NewUnresolved(iface, kindZone, reason.New("zone.interface-unzoned",
+					"a forwarding entry leaves by interface "+iface+
+						", which is in no zone, so nothing it covers can be placed")))
 			}
 		}
 		return nil, un, true
@@ -197,21 +174,15 @@ func (r *zoneResolver) fromSnapshot(value string, addr netip.Addr, loc ZoneLocat
 	// multi-vsys device it carries zones this scope cannot see.
 	placements, dropped := keepVsys(placements, r.scope)
 	if dropped > 0 {
-		un = append(un, Unresolved{
-			Value: value,
-			Kind:  kindZone,
-			Reason: fmt.Sprintf(
+		un = append(un, NewUnresolved(value, kindZone, reason.New("zone.other-vsys",
+			fmt.Sprintf(
 				"%d placement(s) in the snapshot belong to another vsys and were left out, "+
-					"because a zone is visible only inside the vsys that defines it", dropped),
-		})
+					"because a zone is visible only inside the vsys that defines it", dropped))))
 	}
 	if len(placements) == 0 {
-		return nil, append(un, Unresolved{
-			Value: value,
-			Kind:  kindZone,
-			Reason: "the snapshot places this address, but only in a vsys other than " +
-				r.scope.String(),
-		}), true
+		return nil, append(un, NewUnresolved(value, kindZone, reason.New("zone.other-vsys",
+			"the snapshot places this address, but only in a vsys other than "+
+				r.scope.String()))), true
 	}
 
 	hits := make([]Hit, 0, len(placements))
@@ -228,14 +199,11 @@ func (r *zoneResolver) fromSnapshot(value string, addr netip.Addr, loc ZoneLocat
 	// interface the packet arrived on. Reporting one of them as the answer would be
 	// a guess.
 	if routers := distinctRouters(placements); len(routers) > 1 {
-		un = append(un, Unresolved{
-			Value: value,
-			Kind:  kindZone,
-			Reason: "this address is covered by more than one logical router (" +
-				strings.Join(routers, ", ") + "), and which applies depends on the " +
-				"interface the packet arrives on, so every zone is reported and none is " +
-				"chosen",
-		})
+		un = append(un, NewUnresolved(value, kindZone, reason.New("zone.several-routers",
+			"this address is covered by more than one logical router ("+
+				strings.Join(routers, ", ")+"), and which applies depends on the "+
+				"interface the packet arrives on, so every zone is reported and none is "+
+				"chosen")))
 	}
 	return hits, un, true
 }

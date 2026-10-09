@@ -4,6 +4,7 @@ import (
 	"context"
 	"slices"
 
+	"github.com/okaiser/proteus/internal/reason"
 	"github.com/okaiser/proteus/internal/simulate"
 	"github.com/okaiser/proteus/internal/simulate/routing"
 	"github.com/okaiser/proteus/internal/simulate/securitypolicy"
@@ -32,12 +33,16 @@ func (Security) Evaluate(ctx context.Context, env *simulate.Env, h routing.Hop, 
 	if h.Vsys == "" || flow.FromZone == "" || flow.ToZone == "" {
 		// Without both zones securitypolicy would derive them; the path gives the
 		// zones, or the hop has none to check (spec §4.4).
-		out.Verdict, out.Reason, out.Fidelity = NotEvaluated, "the hop's vsys or zones are not known", simulate.Exact
+		code := reason.Code("zone.missing")
+		if h.Vsys == "" {
+			code = "zone.vsys-unknown"
+		}
+		out.Verdict, out.Reason, out.Fidelity = NotEvaluated, reason.New(code, "the hop's vsys or zones are not known"), simulate.Exact
 		return out, nil
 	}
 	t, miss := load(env, h)
 	if miss != nil {
-		out.Verdict, out.Reason, out.Fidelity = Undecided, miss.Reason, simulate.UnderMatch(miss.Reason)
+		out.Verdict, out.Reason, out.Fidelity = Undecided, miss.Why(), simulate.UnderMatch(miss.Why())
 		return out, &simulate.UnavailableError{Missing: []simulate.Missing{*miss}}
 	}
 	run, err := securitypolicy.Simulation{}.Run(ctx, env, simulate.Input{Device: h.Device, Vsys: h.Vsys, Flow: trim(flow)})

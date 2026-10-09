@@ -112,7 +112,7 @@ func TestStagesAreLogged(t *testing.T) {
 	}
 	bad := Step[state]{Slug: "z", Do: func(context.Context, *state) (Outcome, error) { return Outcome{}, errors.New("broke") }}
 	gap := Step[state]{Slug: "u", Do: func(context.Context, *state) (Outcome, error) {
-		return Outcome{Fidelity: UnderMatch("gap"), Unresolved: []index.Unresolved{{Value: "v", Reason: "a gap"}}}, nil
+		return Outcome{Fidelity: under("gap"), Unresolved: []index.Unresolved{{Value: "v", Reason: "a gap"}}}, nil
 	}}
 	_, _ = Execute(context.Background(), "demo", &state{set: roaring.BitmapOf(1, 2)}, []Step[state]{step("a", Exact, 1), gap, bad}, false, l)
 	(&Env{Log: l}).Stepf("hop%d: between stages", 1)

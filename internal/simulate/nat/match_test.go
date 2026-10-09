@@ -2,6 +2,7 @@ package nat
 
 import (
 	"bufio"
+	"encoding/json"
 	"net/netip"
 	"os"
 	"strconv"
@@ -9,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/okaiser/proteus/internal/config"
+	"github.com/okaiser/proteus/internal/reason"
 	"github.com/okaiser/proteus/internal/simulate"
 	"github.com/okaiser/proteus/internal/simulate/rulebase"
 )
@@ -114,7 +116,7 @@ func TestDoubts(t *testing.T) {
 	p := probe{src: "198.18.1.10", dst: "198.18.250.10", from: "transport", to: "transport", iface: "ethernet1/1"}
 	m := Match(input(cfg, p))
 	if m.Rule == nil || m.Rule.Name != "internet-a" || len(m.Doubts) != 1 || m.Doubts[0].Rule != "t-dnat-port" ||
-		!strings.Contains(m.Doubts[0].Reason, "give --port") || m.Fidelity.Level() != "overmatch" {
+		!strings.Contains(m.Doubts[0].Text(), "give --port") || m.Doubts[0].Reasons[0].Code != "path.nat-no-port" || m.Fidelity.Level() != "overmatch" {
 		t.Errorf("no port: %+v", m)
 	}
 	// An unknown ingress zone: every rule naming a source zone is a doubt.
@@ -133,12 +135,12 @@ func TestMatchEnds(t *testing.T) {
 	if m := Match(in); m.Rule != nil || !strings.Contains(m.Dropped, "dropped before NAT") {
 		t.Errorf("no route: %+v", m)
 	}
-	in.PreNAT = &simulate.Forward{End: simulate.EndUnknownType, Fidelity: simulate.UnderMatch("x")}
+	in.PreNAT = &simulate.Forward{End: simulate.EndUnknownType, Fidelity: simulate.UnderMatch(reason.New("path.next-hop-type", "x"))}
 	if m := Match(in); m.Rule != nil || m.Fidelity.Level() != "undermatch" {
 		t.Errorf("unknown route type: %+v", m)
 	}
 	in.PreNAT, in.In = &simulate.Forward{Out: simulate.Port{Zone: "transport"}}, simulate.Port{Interface: "ethernet1/9"}
-	if m := Match(in); len(m.Unresolved) != 1 || !strings.Contains(m.Unresolved[0].Reason, "virtual wire") {
+	if m := Match(in); len(m.Unresolved) != 1 || !strings.Contains(m.Unresolved[0].Reason, "virtual wire") || m.Unresolved[0].Code != "path.virtual-wire" {
 		t.Errorf("virtual wire: %+v", m)
 	}
 	in.In, in.Vsys = simulate.Port{Router: "default", Zone: "transport"}, "vsys9"
@@ -189,7 +191,7 @@ func TestServicesAndTypes(t *testing.T) {
 			}
 			var doubts strings.Builder
 			for _, d := range m.Doubts {
-				doubts.WriteString(d.Reason)
+				doubts.WriteString(d.Text())
 			}
 			if tc.doubt == "" && doubts.String() != "" || tc.doubt != "" && !strings.Contains(doubts.String(), tc.doubt) {
 				t.Errorf("doubts = %q", doubts.String())
@@ -198,7 +200,7 @@ func TestServicesAndTypes(t *testing.T) {
 	}
 	// nptv6 is skipped; a nat64 rule that could match stops the answer (spec §18 N6).
 	m := Match(caseInput(t, "203.0.113.4", "tcp", 443))
-	if m.Rule != nil || len(m.Unresolved) != 1 || !strings.Contains(m.Unresolved[0].Reason, "NAT64 rule six-four") {
+	if m.Rule != nil || len(m.Unresolved) != 1 || !strings.Contains(m.Unresolved[0].Reason, "NAT64 rule six-four") || m.Unresolved[0].Code != "gap.ipv6" {
 		t.Errorf("nat64: %+v", m)
 	}
 	if m.Excluded[0].Field != "nat-type nptv6" {
@@ -220,7 +222,7 @@ func TestAVersionGapIsNoted(t *testing.T) {
 	// A destination-only flow, and an unknown egress zone.
 	in = caseInput(t, "198.51.100.1", "tcp", 443)
 	in.PreNAT = &simulate.Forward{}
-	if m := Match(in); m.Rule != nil || len(m.Doubts) == 0 || !strings.Contains(m.Doubts[0].Reason, "egress zone is unknown") {
+	if m := Match(in); m.Rule != nil || len(m.Doubts) == 0 || !strings.Contains(m.Doubts[0].Text(), "egress zone is unknown") || m.Doubts[0].Reasons[0].Code != "zone.missing" {
 		t.Errorf("unknown egress: %+v", m)
 	}
 	if first(nil) != "" || sourceAddr(nil).IsValid() {
@@ -236,4 +238,16 @@ func policyOf(t *testing.T, file string) rulebase.Vsys {
 		t.Fatal("vsys1")
 	}
 	return v
+}
+
+// A NAT doubt with several reasons reads as one line, in format 1 as before.
+func TestANATDoubtJoinsItsReasons(t *testing.T) {
+	t.Parallel()
+	d := Doubt{Rule: "r", Reasons: simulate.Reasons{
+		reason.New("zone.missing", "the ingress zone is unknown"), reason.New("doubt.source-unknown", "the source is unknown"),
+	}}
+	b, err := json.Marshal(d)
+	if err != nil || string(b) != `{"rule":"r","reason":"the ingress zone is unknown; the source is unknown"}` {
+		t.Errorf("json = %s, %v", b, err)
+	}
 }

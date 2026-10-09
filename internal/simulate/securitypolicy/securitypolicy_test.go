@@ -13,6 +13,7 @@ import (
 
 	"github.com/okaiser/proteus/internal/config"
 	"github.com/okaiser/proteus/internal/index"
+	"github.com/okaiser/proteus/internal/reason"
 	"github.com/okaiser/proteus/internal/simulate"
 )
 
@@ -512,7 +513,7 @@ func TestDefaultRuleWithoutTheVsys(t *testing.T) {
 	}
 	s := &state{known: true, target: simulate.Target{Config: other, Index: idx}}
 	s.in.Flow.FromZone, s.in.Flow.ToZone = "inside", "dmz"
-	if d, why := s.defaultRule(); d.Name != "" || why != "the configuration has no vsys:vsys2, so its default rules are not known" {
+	if d, why := s.defaultRule(); d.Name != "" || why != reason.New("default.vsys-missing", "the configuration has no vsys:vsys2, so its default rules are not known") {
 		t.Errorf("got %+v, %q", d, why)
 	}
 }

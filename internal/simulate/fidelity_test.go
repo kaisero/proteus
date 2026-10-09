@@ -2,9 +2,16 @@ package simulate
 
 import (
 	"encoding/json"
+	"slices"
 	"strings"
 	"testing"
+
+	"github.com/okaiser/proteus/internal/reason"
 )
+
+// under and over are reasons for tests; their code is a valid one.
+func under(text string) Fidelity { return UnderMatch(reason.New("gap.object-unresolved", text)) }
+func over(text string) Fidelity  { return OverMatchBecause(reason.New("doubt.service-kept", text)) }
 
 func TestWeakestFollowsTheOrder(t *testing.T) {
 	t.Parallel()
@@ -15,7 +22,7 @@ func TestWeakestFollowsTheOrder(t *testing.T) {
 		{[]Fidelity{Exact, Exact}, "exact"},
 		{[]Fidelity{Exact, OverMatch}, "overmatch"},
 		{[]Fidelity{OverMatch, Inferred}, "inferred"},
-		{[]Fidelity{Inferred, UnderMatch("x"), Exact}, "undermatch"},
+		{[]Fidelity{Inferred, under("x"), Exact}, "undermatch"},
 		{nil, "undeclared"},
 	} {
 		if got := Weakest(tc.in...).Level(); got != tc.want {
@@ -43,15 +50,15 @@ func TestNotEvaluatedIsOverMatchWithDimensions(t *testing.T) {
 
 func TestReasonsMerge(t *testing.T) {
 	t.Parallel()
-	w := Weakest(UnderMatch("a"), UnderMatch("b"), UnderMatch("a"), OverMatchBecause("c"))
-	if strings.Join(w.Reasons(), ";") != "a;b;c" {
+	w := Weakest(under("a"), under("b"), under("a"), over("c"))
+	if strings.Join(w.Reasons().Texts(), ";") != "a;b;c" {
 		t.Errorf("reasons = %v", w.Reasons())
 	}
 	if !strings.HasPrefix(w.String(), "undermatch: a; b; c") {
 		t.Errorf("String = %s", w)
 	}
 	// Only the undermatch reasons say what may be missing; c is an overmatch's.
-	if strings.Join(w.UnderMatchReasons(), ";") != "a;b" {
+	if strings.Join(w.UnderMatchReasons().Texts(), ";") != "a;b" {
 		t.Errorf("undermatch reasons = %v", w.UnderMatchReasons())
 	}
 }
@@ -62,11 +69,11 @@ func TestDeclaredAndString(t *testing.T) {
 		t.Error("the zero value is undeclared")
 	}
 	for f, want := range map[string]string{
-		Exact.String():                          "exact",
-		Inferred.String():                       "inferred",
-		NotEvaluated("application").String():    "overmatch; not evaluated: application",
-		UnderMatch("a version gap").String():    "undermatch: a version gap",
-		OverMatchBecause("predefined").String(): "overmatch: predefined",
+		Exact.String():                       "exact",
+		Inferred.String():                    "inferred",
+		NotEvaluated("application").String(): "overmatch; not evaluated: application",
+		under("a version gap").String():      "undermatch: a version gap",
+		over("predefined").String():          "overmatch: predefined",
 	} {
 		if f != want {
 			t.Errorf("got %q, want %q", f, want)
@@ -76,7 +83,7 @@ func TestDeclaredAndString(t *testing.T) {
 
 func TestFidelityJSON(t *testing.T) {
 	t.Parallel()
-	b, err := json.Marshal(Weakest(UnderMatch("x"), NotEvaluated("application")))
+	b, err := json.Marshal(Weakest(under("x"), NotEvaluated("application")))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,5 +93,80 @@ func TestFidelityJSON(t *testing.T) {
 	b, _ = json.Marshal(Exact)
 	if string(b) != `{"level":"exact"}` {
 		t.Errorf("json = %s", b)
+	}
+}
+
+// Every reason keeps its code through Weakest; the codes stay out of the JSON
+// until format 2.
+func TestReasonsKeepTheirCodes(t *testing.T) {
+	t.Parallel()
+	w := Weakest(under("a"), over("c"), NotEvaluated("application", "url category"))
+	var codes []reason.Code
+	for _, r := range w.Reasons() {
+		codes = append(codes, r.Code)
+	}
+	if !slices.Equal(codes, []reason.Code{"gap.object-unresolved", "doubt.service-kept"}) {
+		t.Errorf("codes = %v", codes)
+	}
+	want := []reason.Reason{
+		{Code: "doubt.not-evaluated.application", Text: "application"},
+		{Code: "doubt.not-evaluated.url", Text: "url category"},
+	}
+	if got := w.SkippedReasons(); !slices.Equal(got, want) {
+		t.Errorf("skipped = %v", got)
+	}
+}
+
+// Every dimension a stage skips has its own registered code (spec §12 C7).
+func TestEveryDimensionHasACode(t *testing.T) {
+	t.Parallel()
+	dims := []string{
+		"zones", "source zone", "destination zone", "service", "url category",
+		"application", "user", "NAT", "policy-based forwarding",
+	}
+	if len(dimensionCodes) != len(dims) {
+		t.Errorf("%d codes for %d dimensions", len(dimensionCodes), len(dims))
+	}
+	for _, d := range dims {
+		if c := dimensionCodes[d]; !reason.Known(c) {
+			t.Errorf("%s: code %q is not registered", d, c)
+		}
+	}
+}
+
+func TestReasonsList(t *testing.T) {
+	t.Parallel()
+	rs := Reasons{reason.New("doubt.edl", "a"), reason.New("doubt.region", "b")}
+	if got := rs.Prefixed("source: "); got.Text() != "source: a; b" || got[1].Code != "doubt.region" {
+		t.Errorf("prefixed = %v", got)
+	}
+	if rs[0].Text != "a" {
+		t.Error("Prefixed changed its receiver")
+	}
+	if j := rs.Joined(); j != (reason.Reason{Code: "doubt.edl", Text: "a; b"}) {
+		t.Errorf("joined = %v", j)
+	}
+	if j := (Reasons{}).Joined(); j != (reason.Reason{}) {
+		t.Errorf("joined of none = %v", j)
+	}
+	if got := (Reasons{}).Prefixed("x"); len(got) != 0 {
+		t.Errorf("prefixed of none = %v", got)
+	}
+	for _, tc := range []struct {
+		in   Reasons
+		want string
+	}{{nil, "null"}, {Reasons{}, "[]"}, {rs, `["a","b"]`}} {
+		if b, err := json.Marshal(tc.in); err != nil || string(b) != tc.want {
+			t.Errorf("json of %v = %s, %v", tc.in, b, err)
+		}
+	}
+}
+
+func TestMissingKeepsItsCode(t *testing.T) {
+	t.Parallel()
+	r := reason.New("gap.config-missing", "no configuration")
+	m := NewMissing("fw01", r)
+	if m.Device != "fw01" || m.Reason != r.Text || m.Why() != r {
+		t.Errorf("missing = %+v", m)
 	}
 }

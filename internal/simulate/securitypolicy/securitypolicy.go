@@ -12,12 +12,12 @@ import (
 	"fmt"
 	"net/netip"
 	"slices"
-	"strings"
 
 	"github.com/RoaringBitmap/roaring/v2"
 
 	"github.com/okaiser/proteus/internal/config"
 	"github.com/okaiser/proteus/internal/index"
+	"github.com/okaiser/proteus/internal/reason"
 	"github.com/okaiser/proteus/internal/resolve"
 	"github.com/okaiser/proteus/internal/simulate"
 )
@@ -53,7 +53,7 @@ type Verdict struct {
 	// Undecided says why no rule or default rule decides the flow, empty when one
 	// does (spec §4.7): a stage that may miss matches, or candidates in doubt. Rule
 	// or Default may still be set: the first certain match.
-	Undecided string `json:"undecided,omitempty"`
+	Undecided reason.Reason `json:"undecided,omitzero"`
 	// Default is the default rule that decides when no rule matches, empty when
 	// none decides; DefaultAction is its action, and DefaultSource where the action
 	// came from: built-in, local or pushed.
@@ -81,24 +81,29 @@ const (
 // Decision is the verdict's outcome and why. allow passes; deny, drop and the
 // reset actions stop (spec §4.6, PAN-OS admin guide, "Security Policy Actions").
 // Any other action, or no deciding rule, is undecided.
-func (v Verdict) Decision() (Outcome, string) {
-	if v.Undecided != "" {
+//
+// The reason of a decided flow is a verdict: the rule or default rule that
+// decides (spec §12 C9).
+func (v Verdict) Decision() (Outcome, reason.Reason) {
+	if v.Undecided.Text != "" {
 		return Undecided, v.Undecided
 	}
 	what, action := fmt.Sprintf("default rule %s (%s), %s", v.Default, v.DefaultAction, v.DefaultSource), v.DefaultAction
+	code, invalid := reason.Code("verdict.default"), reason.Code("default.invalid-action")
 	switch {
 	case v.Rule != nil:
 		what, action = fmt.Sprintf("rule %s (%s)", v.Rule.Name, v.Rule.Action), v.Rule.Action
+		code, invalid = "verdict.rule", "verdict.invalid-action"
 	case v.Default == "":
-		return Undecided, "no rule decides"
+		return Undecided, reason.New("default.none", "no rule decides")
 	}
 	switch {
 	case action == "allow":
-		return Pass, what
+		return Pass, reason.New(code, what)
 	case slices.Contains(validActions, action):
-		return Stop, what
+		return Stop, reason.New(code, what)
 	}
-	return Undecided, what + " is not a security rule action"
+	return Undecided, reason.New(invalid, what+" is not a security rule action")
 }
 
 // ZoneDerivation says which zones were used and where they came from.
@@ -131,7 +136,7 @@ type state struct {
 	known bool
 	// opaque holds, per address field, the candidates kept because they name
 	// addresses the configuration does not hold, and why, by rule position.
-	opaque  map[string]map[uint32]string
+	opaque  map[string]map[uint32][]reason.Reason
 	verdict Verdict
 }
 
@@ -148,7 +153,7 @@ func (Simulation) Run(ctx context.Context, env *simulate.Env, in simulate.Input)
 	stages, err := simulate.Execute(ctx, Kind, s, steps, false, env.Log)
 	run.Stages = stages
 	run.Fidelity = simulate.Overall(stages)
-	if u := undermatched(stages); err == nil && u != "" {
+	if u := undermatched(stages); err == nil && u.Text != "" {
 		s.verdict.Undecided = u
 	}
 	run.Output = s.verdict
@@ -161,14 +166,14 @@ func (Simulation) Run(ctx context.Context, env *simulate.Env, in simulate.Input)
 // its reason wins over a doubt first-match found. Only the undermatch reasons
 // count: an overmatch reason of the same stage says nothing about what is
 // missing. A version gap does not count: withoutGap has already made it inferred
-// (E25).
-func undermatched(stages []simulate.Stage) string {
+// (E25). Several reasons read as one, with the first one's code.
+func undermatched(stages []simulate.Stage) reason.Reason {
 	for _, st := range stages {
 		if f := st.Fidelity; f.Level() == "undermatch" {
-			return strings.Join(f.UnderMatchReasons(), "; ")
+			return f.UnderMatchReasons().Joined()
 		}
 	}
-	return ""
+	return reason.Reason{}
 }
 
 // relevance reads the forwarding table's placements of both endpoints.

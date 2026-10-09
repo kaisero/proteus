@@ -2,6 +2,7 @@ package index
 
 import (
 	"maps"
+	"strings"
 	"testing"
 )
 
@@ -13,27 +14,32 @@ func TestOpaque(t *testing.T) {
 	idx := indexOf(t, "../../testdata/config/firewall-opaque.xml", "vsys1")
 	rules := idx.Rules()
 	v := idx.With(Providers{})
+	// Each rule's reasons as "code: text", joined.
 	named := func(f Field) map[string]string {
 		b, why := v.Opaque(f)
 		out := map[string]string{}
 		for it := b.Iterator(); it.HasNext(); {
 			bit := it.Next()
-			out[rules[bit].Name] = why[bit]
+			var parts []string
+			for _, r := range why[bit] {
+				parts = append(parts, string(r.Code)+": "+r.Text)
+			}
+			out[rules[bit].Name] = strings.Join(parts, "; ")
 		}
 		return out
 	}
 	want := map[string]string{
-		"from-edl":     "external list (edl-bad)",
-		"from-country": "region (AT)",
-		"from-dag":     "members registered at runtime are not known (dag-web)",
-		"from-group":   "external list (edl-bad, in group g-mixed)",
-		"not-from-edl": "external list (edl-bad)",
-		"from-region":  "region (my-region)",
+		"from-edl":     "doubt.edl: external list (edl-bad)",
+		"from-country": "doubt.region: region (AT)",
+		"from-dag":     "doubt.dynamic-group: members registered at runtime are not known (dag-web)",
+		"from-group":   "doubt.edl: external list (edl-bad, in group g-mixed)",
+		"not-from-edl": "doubt.edl: external list (edl-bad)",
+		"from-region":  "doubt.region: region (my-region)",
 	}
 	if got := named(Source); !maps.Equal(got, want) {
 		t.Errorf("source: got %v, want %v", got, want)
 	}
-	if got := named(Destination); !maps.Equal(got, map[string]string{"to-builtin": "external list (panw-highrisk-ip-list)"}) {
+	if got := named(Destination); !maps.Equal(got, map[string]string{"to-builtin": "doubt.edl: external list (panw-highrisk-ip-list)"}) {
 		t.Errorf("destination: got %v", got)
 	}
 	if b, why := v.Opaque(Service); !b.IsEmpty() || why != nil {

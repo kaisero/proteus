@@ -14,6 +14,7 @@ import (
 
 	"github.com/okaiser/proteus/internal/estate"
 	"github.com/okaiser/proteus/internal/fakepanos"
+	"github.com/okaiser/proteus/internal/reason"
 	"github.com/okaiser/proteus/internal/simulate"
 	"github.com/okaiser/proteus/internal/simulate/pathlab"
 	"github.com/okaiser/proteus/internal/simulate/pathpolicy"
@@ -491,7 +492,7 @@ func TestVerdictLineEdges(t *testing.T) {
 	if got := verdictLine(palette{}, r); got != "denied at hop 1: no route to 198.18.10.100 on fw01" {
 		t.Errorf("after NAT: %s", got)
 	}
-	r = pathpolicy.Result{Verdict: pathpolicy.VerdictUndecided, At: &pathpolicy.Point{Hop: 0, Check: "routing", Reason: "no hop"}}
+	r = pathpolicy.Result{Verdict: pathpolicy.VerdictUndecided, At: &pathpolicy.Point{Hop: 0, Check: "routing", Reason: reason.New("path.unresolved", "no hop")}}
 	if got := verdictLine(palette{}, r); got != "undecided at hop 0: no hop" {
 		t.Errorf("no hop: %s", got)
 	}

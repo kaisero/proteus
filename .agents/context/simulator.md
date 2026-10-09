@@ -144,6 +144,7 @@ type Missing struct{ ... }
 type Network interface{ ... }
 type Outcome struct{ ... }
 type Port struct{ ... }
+type Reasons []reason.Reason
 type Run struct{ ... }
 type Simulation interface{ ... }
 type Stage struct{ ... }
@@ -159,18 +160,26 @@ func (e Endpoint) String() string
 func (f Fidelity) Declared() bool
 func (f Fidelity) Level() string
 func (f Fidelity) MarshalJSON() ([]byte, error)
-func (f Fidelity) Reasons() []string
+func (f Fidelity) Reasons() Reasons
 func (f Fidelity) Skipped() []string
+func (f Fidelity) SkippedReasons() Reasons
 func (f Fidelity) String() string
-func (f Fidelity) UnderMatchReasons() []string
+func (f Fidelity) UnderMatchReasons() Reasons
 func (m Match) First() resolve.FIBRoute
+func (m Missing) Why() reason.Reason
 func (p Port) Link() netip.Prefix
+func (rs Reasons) Joined() reason.Reason
+func (rs Reasons) MarshalJSON() ([]byte, error)
+func (rs Reasons) Prefixed(p string) Reasons
+func (rs Reasons) Text() string
+func (rs Reasons) Texts() []string
 func Addr(a netip.Addr) Endpoint
 func Execute[S any](ctx context.Context, kind string, state *S, steps []Step[S], keepBitmaps bool, log *runlog.Logger) ([]Stage, error)
+func NewMissing(device string, r reason.Reason) Missing
 func NotEvaluated(dimensions ...string) Fidelity
-func OverMatchBecause(reason string) Fidelity
+func OverMatchBecause(r reason.Reason) Fidelity
 func Overall(stages []Stage) Fidelity
-func UnderMatch(reason string) Fidelity
+func UnderMatch(r reason.Reason) Fidelity
 func Weakest(fs ...Fidelity) Fidelity
 ```
 <!-- /GENERATED:api -->
@@ -188,7 +197,9 @@ func (Simulation) Describe() string
 func (Simulation) Kind() string
 func (Simulation) Run(ctx context.Context, env *simulate.Env, in simulate.Input) (simulate.Run, error)
 func (Simulation) Stages() []string
-func (v Verdict) Decision() (Outcome, string)
+func (d Doubt) MarshalJSON() ([]byte, error)
+func (d Doubt) Text() string
+func (v Verdict) Decision() (Outcome, reason.Reason)
 ```
 <!-- /GENERATED:api -->
 
@@ -241,6 +252,8 @@ func (Simulation) Describe() string
 func (Simulation) Kind() string
 func (Simulation) Run(ctx context.Context, env *simulate.Env, in simulate.Input) (simulate.Run, error)
 func (Simulation) Stages() []string
+func (d Doubt) MarshalJSON() ([]byte, error)
+func (d Doubt) Text() string
 func FQDNs(in Input, m MatchResult) []string
 func Match(in Input) MatchResult
 func Rules(t *resolve.Target) []Rule

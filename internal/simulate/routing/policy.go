@@ -96,7 +96,7 @@ func nat(ctx context.Context, s *state) (simulate.Outcome, error) {
 	r := natsim.Translate(in, m)
 	h.Notes = append(h.Notes, r.Notes...)
 	for _, d := range r.Doubts {
-		h.Notes = append(h.Notes, "nat rule "+d.Rule+" may match instead: "+d.Reason)
+		h.Notes = append(h.Notes, "nat rule "+d.Rule+" may match instead: "+d.Text())
 	}
 	out.Unresolved = r.Unresolved
 	out.Fidelity = simulate.Weakest(out.Fidelity, r.Fidelity)
@@ -129,7 +129,7 @@ func nat(ctx context.Context, s *state) (simulate.Outcome, error) {
 		h.Out = r.PostNAT.Out
 		h.Flow.ToZone = h.Out.Zone
 		if r.PostNAT.End == simulate.EndNoRoute {
-			s.end(Dropped, fmt.Sprintf("dropped on %s: no route to the translated %s", h.Device, r.Flow.Destination))
+			s.end(Dropped, "path.no-route", fmt.Sprintf("dropped on %s: no route to the translated %s", h.Device, r.Flow.Destination))
 		}
 	}
 	post := r.Flow

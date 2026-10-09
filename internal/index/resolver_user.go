@@ -6,6 +6,7 @@ import (
 	"github.com/RoaringBitmap/roaring/v2"
 
 	"github.com/okaiser/proteus/internal/config"
+	"github.com/okaiser/proteus/internal/reason"
 	"github.com/okaiser/proteus/internal/resolve"
 )
 
@@ -45,12 +46,9 @@ func newUserResolver(users, groups, dynamic []resolve.Object) *userResolver {
 		}
 	}
 	for _, d := range dynamic {
-		r.dynamic = append(r.dynamic, Unresolved{
-			Value: d.Name,
-			Kind:  "dynamic-user-group",
-			Reason: "a dynamic user group is filled in at runtime by User-ID, so who is in it " +
-				"is not in the configuration and a user cannot be matched against it",
-		})
+		r.dynamic = append(r.dynamic, NewUnresolved(d.Name, "dynamic-user-group", reason.New("gap.dynamic-user-group",
+			"a dynamic user group is filled in at runtime by User-ID, so who is in it "+
+				"is not in the configuration and a user cannot be matched against it")))
 	}
 	return r
 }
@@ -80,18 +78,15 @@ func (r *userResolver) resolve(value string, p Providers) ([]Hit, []Unresolved, 
 
 	unresolved := append([]Unresolved{}, r.dynamic...)
 	if p.Users == nil {
-		unresolved = append(unresolved, Unresolved{
-			Value: name,
-			Kind:  "user-group",
-			Reason: "no user directory was supplied, so only the local user database was " +
-				"searched. A rule naming a directory group this user belongs to is missing " +
-				"from the result",
-		})
+		unresolved = append(unresolved, NewUnresolved(name, "user-group", reason.New("gap.no-user-directory",
+			"no user directory was supplied, so only the local user database was "+
+				"searched. A rule naming a directory group this user belongs to is missing "+
+				"from the result")))
 		return hits, unresolved, true
 	}
 	if sr, ok := p.Users.(StaleReporter); ok {
-		if reason, stale := sr.Stale(); stale {
-			unresolved = append(unresolved, Unresolved{Value: name, Kind: "user-group", Reason: reason})
+		if why, stale := sr.Stale(); stale {
+			unresolved = append(unresolved, NewUnresolved(name, "user-group", reason.New("gap.user-directory-stale", why)))
 		}
 	}
 	for _, g := range p.Users.GroupsOf(name) {

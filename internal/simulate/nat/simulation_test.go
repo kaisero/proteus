@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/okaiser/proteus/internal/config"
+	"github.com/okaiser/proteus/internal/reason"
 	"github.com/okaiser/proteus/internal/resolve"
 	"github.com/okaiser/proteus/internal/simulate"
 )
@@ -109,7 +110,7 @@ func TestSimulateIngress(t *testing.T) {
 	// Given by interface.
 	// No source: the dmz rules that name one are doubts, internet-a is sure.
 	if _, res, _ := run(t, env, "", "198.18.250.200", 443, map[string]string{"from-interface": "ethernet1/4"}); res.Rule == nil || res.Rule.Name != "internet-a" ||
-		len(res.Doubts) != 2 || res.Doubts[0].Rule != "t-bidir" || res.Doubts[0].Reason != "the source is unknown" {
+		len(res.Doubts) != 2 || res.Doubts[0].Rule != "t-bidir" || res.Doubts[0].Reasons.Joined() != reason.New("doubt.source-unknown", "the source is unknown") {
 		t.Errorf("from-interface: %v, doubts %v", res.Rule, res.Doubts)
 	}
 	if _, _, err := run(t, env, "", "198.18.250.200", 443, map[string]string{"from-interface": "nope", "router": "default"}); err == nil {

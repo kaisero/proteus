@@ -136,7 +136,7 @@ func (p policyAnswer) Text(t *textOut) error {
 	printQualifiers(t, p.Qualifiers())
 	// Behind candidates in doubt, the first match is only the first certain one.
 	lead := "first match:"
-	if p.verdict.Undecided != "" {
+	if p.verdict.Undecided.Text != "" {
 		lead = "first certain match:"
 	}
 	switch v := p.verdict; {
@@ -147,8 +147,8 @@ func (p policyAnswer) Text(t *textOut) error {
 	case len(v.Candidates) == 0:
 		fmt.Fprintln(t, "no enabled rule matches")
 	}
-	if v := p.verdict; v.Undecided != "" {
-		fmt.Fprintf(t, "%s %s\n", t.pal.warn("undecided:"), v.Undecided)
+	if v := p.verdict; v.Undecided.Text != "" {
+		fmt.Fprintf(t, "%s %s\n", t.pal.warn("undecided:"), v.Undecided.Text)
 	}
 	return t.err
 }
@@ -311,7 +311,7 @@ func printCandidates(w *textOut, v securitypolicy.Verdict, why bool) {
 		}
 		for _, d := range v.Doubts {
 			if d.Position == r.Position {
-				tb.row(plain(""), cell{text: "doubt: " + d.Reason, style: w.pal.warn})
+				tb.row(plain(""), cell{text: "doubt: " + d.Text(), style: w.pal.warn})
 			}
 		}
 	}
@@ -428,7 +428,7 @@ type policyResult struct {
 }
 
 func runJSON(run simulate.Run, t estate.Target, v securitypolicy.Verdict) policyResult {
-	outcome, reason := v.Decision()
+	outcome, why := v.Decision()
 	var rule string
 	if outcome != securitypolicy.Undecided {
 		rule = v.Default
@@ -437,7 +437,7 @@ func runJSON(run simulate.Run, t estate.Target, v securitypolicy.Verdict) policy
 		}
 	}
 	return policyResult{
-		securityJSON: securityOf(&v, string(outcome), reason, rule, run.Fidelity, run.Stages),
+		securityJSON: securityOf(&v, string(outcome), why.Text, rule, run.Fidelity, run.Stages),
 		Kind:         run.Kind, Target: targetOf(t), Relevance: v.Relevance,
 	}
 }

@@ -5,6 +5,7 @@ import (
 
 	"github.com/RoaringBitmap/roaring/v2"
 
+	"github.com/okaiser/proteus/internal/reason"
 	"github.com/okaiser/proteus/internal/resolve"
 )
 
@@ -39,13 +40,10 @@ func newURLResolver(cats []resolve.Object) *urlResolver {
 		// configuration. Its membership is unknowable here, so it is reported rather
 		// than guessed at.
 		if strings.EqualFold(c.Subtype, typeCategoryMatch) {
-			r.unresolved = append(r.unresolved, Unresolved{
-				Value: c.Name,
-				Kind:  kindCustomURLCategory,
-				Reason: "a Category Match category lists predefined URL categories, whose " +
-					"contents are in the PAN-DB cloud and not in the configuration, so a URL " +
-					"cannot be matched against it",
-			})
+			r.unresolved = append(r.unresolved, NewUnresolved(c.Name, kindCustomURLCategory, reason.New("gap.category-match",
+				"a Category Match category lists predefined URL categories, whose "+
+					"contents are in the PAN-DB cloud and not in the configuration, so a URL "+
+					"cannot be matched against it")))
 			continue
 		}
 		for _, m := range splitMembers(c.Value) {
@@ -54,11 +52,7 @@ func newURLResolver(cats []resolve.Object) *urlResolver {
 			if err != nil {
 				// A member this build cannot read contributes no match and is
 				// reported, the same way an unreadable tag filter is.
-				r.unresolved = append(r.unresolved, Unresolved{
-					Value:  m,
-					Kind:   kindCustomURLCategory,
-					Reason: "in category " + c.Name + ": " + err.Error(),
-				})
+				r.unresolved = append(r.unresolved, NewUnresolved(m, kindCustomURLCategory, reason.New("gap.url-pattern", "in category "+c.Name+": "+err.Error())))
 				continue
 			}
 			// A plain member still matches as a pattern: its path matches as a prefix,
