@@ -1,0 +1,43 @@
+{
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "the rule or object name"
+    },
+    "kind": {
+      "type": "string",
+      "description": "pick one kind when several share the name: security-rule or an object kind"
+    },
+    "device": {
+      "type": [
+        "null",
+        "array"
+      ],
+      "items": {
+        "type": "string"
+      },
+      "description": "the devices to read; left out, every device"
+    },
+    "vsys": {
+      "type": "string",
+      "description": "the vsys to read; left out, every vsys"
+    },
+    "at": {
+      "type": "string",
+      "description": "read each device's newest snapshot at or before this time; left out, the latest"
+    },
+    "detail": {
+      "type": "string",
+      "description": "summary or full: how much of each result to return",
+      "enum": [
+        "summary",
+        "full"
+      ]
+    }
+  },
+  "required": [
+    "name"
+  ],
+  "additionalProperties": false
+}

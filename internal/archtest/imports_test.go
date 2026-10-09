@@ -300,3 +300,97 @@ func TestTestHelpersStayInTests(t *testing.T) {
 		}
 	}
 }
+
+// sdkModules are the MCP Go SDK and the schema module it brings. Only the MCP
+// server imports them, in its code and in its tests (spec 2026-10-09 §12 S9).
+var sdkModules = []string{"github.com/modelcontextprotocol/go-sdk", "github.com/google/jsonschema-go"}
+
+// mcpPkg is the one package that may import them.
+const mcpPkg = module + "/internal/mcp"
+
+// sdkImporters lists every package other than the MCP server that imports an
+// SDK module. imports maps a package to its imports, tests' included.
+func sdkImporters(imports map[string][]string) []string {
+	var out []string
+	for p, imps := range imports {
+		if p == mcpPkg {
+			continue
+		}
+		for _, imp := range imps {
+			for _, m := range sdkModules {
+				if imp == m || strings.HasPrefix(imp, m+"/") {
+					out = append(out, p+" imports "+imp)
+				}
+			}
+		}
+	}
+	slices.Sort(out)
+	return out
+}
+
+// loadAllImports reads every package's imports, its tests' included.
+func loadAllImports(t *testing.T, root string) map[string][]string {
+	t.Helper()
+	out := map[string][]string{}
+	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil || !d.IsDir() {
+			return err
+		}
+		name := d.Name()
+		if path != root && (strings.HasPrefix(name, ".") || name == "testdata" || name == "docs" || name == "bin" || name == "schemas") {
+			return filepath.SkipDir
+		}
+		pkg, err := build.ImportDir(path, 0)
+		if _, ok := errors.AsType[*build.NoGoError](err); ok {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		ip := module
+		if rel != "." {
+			ip += "/" + filepath.ToSlash(rel)
+		}
+		out[ip] = slices.Concat(pkg.Imports, pkg.TestImports, pkg.XTestImports)
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return out
+}
+
+// R12: only internal/mcp imports the MCP SDK or jsonschema-go, tests included.
+func TestOnlyMCPImportsTheSDK(t *testing.T) {
+	t.Parallel()
+	imports := loadAllImports(t, "../..")
+	if !slices.ContainsFunc(imports[mcpPkg], func(imp string) bool { return strings.HasPrefix(imp, sdkModules[0]) }) {
+		t.Fatalf("%s does not import the SDK, so the check would pass vacuously", mcpPkg)
+	}
+	for _, v := range sdkImporters(imports) {
+		t.Error(v)
+	}
+}
+
+// The SDK check must be able to fail.
+func TestSDKImportersCatchesABreach(t *testing.T) {
+	t.Parallel()
+	got := sdkImporters(map[string][]string{
+		mcpPkg:                   {"github.com/modelcontextprotocol/go-sdk/mcp", "github.com/google/jsonschema-go/jsonschema"},
+		module + "/internal/cli": {"github.com/modelcontextprotocol/go-sdk/mcp"},
+		module + "/internal/query": {
+			"github.com/google/jsonschema-go/jsonschema", "github.com/google/jsonschema-go-other",
+		},
+	})
+	want := []string{
+		module + "/internal/cli imports github.com/modelcontextprotocol/go-sdk/mcp",
+		module + "/internal/query imports github.com/google/jsonschema-go/jsonschema",
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("got %v\nwant %v", got, want)
+	}
+}

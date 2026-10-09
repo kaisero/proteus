@@ -65,6 +65,7 @@ Repo map:
   each step's status, detail and time, logs them, and stops at the first error.
   `fetch` uses it per device.
 - `internal/query/` — the questions as typed inputs and envelopes, for the command line and the MCP server; no flags, no rendering.
+- `internal/mcp/` — the MCP server; tests only so far: they generate the JSON schemas in `schemas/out/` (`go test ./internal/mcp -update`), validate every CLI JSON golden against them, and prove the MCP Go SDK accepts each answer. The only importer of the SDK and jsonschema-go.
 - `internal/estate/` — selectors and a time to targets and holes; `internal/search/` — five-stage findings for one term; `internal/card/` — the whole element behind one name, for `lookup`; `internal/drift/` — changes between two configurations.
 - `internal/inventory/` — the YAML device list and credentials; `internal/fetch/` — the read-only XML
   API client and the `Document` list; `internal/store/` — timestamped snapshots, `latest`.

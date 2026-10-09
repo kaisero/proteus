@@ -1,0 +1,29 @@
+{
+  "type": "object",
+  "properties": {
+    "device": {
+      "type": "string",
+      "description": "the device to compare"
+    },
+    "from": {
+      "type": "string",
+      "description": "the older point in time; left out, the snapshot before the newer one"
+    },
+    "to": {
+      "type": "string",
+      "description": "the newer point in time; left out, the latest"
+    },
+    "detail": {
+      "type": "string",
+      "description": "summary or full: how much of each result to return",
+      "enum": [
+        "summary",
+        "full"
+      ]
+    }
+  },
+  "required": [
+    "device"
+  ],
+  "additionalProperties": false
+}

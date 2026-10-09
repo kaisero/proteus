@@ -159,11 +159,16 @@ rule above allows it. The test helpers `internal/fakepanos` and
 `internal/simulate/pathlab` import `testing`; only tests import them.
 `internal/reason` also imports `testing`, for `testing.Testing()` alone: its strict
 hook, which makes `reason.New` panic on an unregistered code in a test binary. It is
-not a test helper, and production code imports it.
+not a test helper, and production code imports it. `internal/mcp` is the only
+package that imports the MCP Go SDK (`github.com/modelcontextprotocol/go-sdk`) or
+`github.com/google/jsonschema-go`, in its code and in its tests. They and the
+modules they bring (`segmentio/asm`, `segmentio/encoding`, `uritemplate`,
+`x/oauth2`, `x/sync`, `x/time`) are the one dependency added for the MCP server;
+any other new dependency needs its own decision.
 
 The core's freedom from I/O is an absolute property today. A fetcher in the same
 module makes it a conditional one, and conditional invariants decay unless a test
 holds them. A rule for a package that does not exist yet passes; it binds when
 the package lands.
 
-Check: `go test ./internal/archtest -run 'TestImportDirection|TestTestHelpersStayInTests'`
+Check: `go test ./internal/archtest -run 'TestImportDirection|TestTestHelpersStayInTests|TestOnlyMCPImportsTheSDK'`

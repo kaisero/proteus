@@ -1,0 +1,54 @@
+{
+  "type": "object",
+  "properties": {
+    "source": {
+      "type": "string",
+      "description": "an address or a host name; left out, any source"
+    },
+    "destination": {
+      "type": "string",
+      "description": "an address or a host name; a host name is resolved with DNS and its first IPv4 address is checked"
+    },
+    "protocol": {
+      "type": "string",
+      "description": "tcp, udp, icmp or sctp; tcp when left out",
+      "enum": [
+        "tcp",
+        "udp",
+        "icmp",
+        "sctp"
+      ]
+    },
+    "port": {
+      "type": "integer",
+      "description": "the destination port",
+      "minimum": 1,
+      "maximum": 65535
+    },
+    "device": {
+      "type": "string",
+      "description": "the firewall"
+    },
+    "router": {
+      "type": "string",
+      "description": "its logical router when it has several"
+    },
+    "at": {
+      "type": "string",
+      "description": "read the newest snapshot at or before this time; left out, the latest"
+    },
+    "detail": {
+      "type": "string",
+      "description": "summary or full: how much of each result to return",
+      "enum": [
+        "summary",
+        "full"
+      ]
+    }
+  },
+  "required": [
+    "destination",
+    "device"
+  ],
+  "additionalProperties": false
+}

@@ -1,0 +1,600 @@
+{
+  "type": "object",
+  "properties": {
+    "format": {
+      "type": "integer",
+      "description": "the envelope format; a change that breaks a consumer increments it",
+      "const": 2
+    },
+    "command": {
+      "type": "string",
+      "description": "the command that answered",
+      "const": "simulate policy"
+    },
+    "detail": {
+      "type": "string",
+      "description": "summary or full: how much of each result the envelope holds",
+      "const": "summary"
+    },
+    "input": {
+      "type": "object",
+      "properties": {
+        "flow": {
+          "type": "object",
+          "properties": {
+            "source": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "addrs": {
+                  "type": [
+                    "null",
+                    "array"
+                  ],
+                  "items": {
+                    "type": "string",
+                    "description": "an IP address"
+                  }
+                },
+                "resolved": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "addrs",
+                "resolved"
+              ],
+              "additionalProperties": false
+            },
+            "destination": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "addrs": {
+                  "type": [
+                    "null",
+                    "array"
+                  ],
+                  "items": {
+                    "type": "string",
+                    "description": "an IP address"
+                  }
+                },
+                "resolved": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "addrs",
+                "resolved"
+              ],
+              "additionalProperties": false
+            },
+            "protocol": {
+              "type": "string"
+            },
+            "source_port": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 65535
+            },
+            "port": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 65535
+            },
+            "application": {
+              "type": "string"
+            },
+            "user": {
+              "type": "string"
+            },
+            "url": {
+              "type": "string"
+            },
+            "from_zone": {
+              "type": "string"
+            },
+            "to_zone": {
+              "type": "string"
+            }
+          },
+          "description": "the flow as simulated: endpoints resolved, ports as numbers",
+          "required": [
+            "source",
+            "destination",
+            "protocol"
+          ],
+          "additionalProperties": false
+        },
+        "selection": {
+          "type": "object",
+          "properties": {
+            "at": {
+              "type": "string",
+              "description": "read each device's newest snapshot at or before this time; empty for the latest"
+            },
+            "device": {
+              "type": [
+                "null",
+                "array"
+              ],
+              "items": {
+                "type": "string"
+              },
+              "description": "the devices to read; empty for every device"
+            },
+            "file": {
+              "type": "string",
+              "description": "one configuration file to read in place of the store"
+            },
+            "fresh": {
+              "type": "boolean",
+              "description": "fetch the devices before reading them"
+            },
+            "label": {
+              "type": [
+                "null",
+                "array"
+              ],
+              "items": {
+                "type": "string"
+              },
+              "description": "select devices by label, key=value"
+            },
+            "vsys": {
+              "type": [
+                "null",
+                "array"
+              ],
+              "items": {
+                "type": "string"
+              },
+              "description": "the vsys to read; empty for every vsys"
+            }
+          },
+          "description": "the configuration file and vsys asked",
+          "additionalProperties": false
+        }
+      },
+      "description": "the question as answered, with the flow as simulated",
+      "required": [
+        "flow",
+        "selection"
+      ],
+      "additionalProperties": false
+    },
+    "results": {
+      "type": [
+        "null",
+        "array"
+      ],
+      "items": {
+        "type": "object",
+        "properties": {
+          "answer": {
+            "type": "string",
+            "description": "one line that says what the result found, as the text output prints it"
+          },
+          "needs": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "type": "string",
+                  "description": "the input's code: input.port, input.protocol or input.url"
+                },
+                "input": {
+                  "type": "string",
+                  "description": "the input to give in a second call"
+                },
+                "text": {
+                  "type": "string",
+                  "description": "what to give and which rules it decides"
+                }
+              },
+              "required": [
+                "code",
+                "input",
+                "text"
+              ],
+              "additionalProperties": false
+            },
+            "description": "present when the result is held back: the inputs a second call can give to change it; empty when none helps"
+          },
+          "verdict": {
+            "type": "string",
+            "description": "pass, stop or undecided; undecided means the answer cannot say"
+          },
+          "reasons": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "type": "string"
+                },
+                "text": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "code",
+                "text"
+              ],
+              "additionalProperties": false
+            },
+            "description": "why, each reason with its code"
+          },
+          "rule": {
+            "type": "string",
+            "description": "the rule that decides; empty when none does"
+          },
+          "default_action": {
+            "type": "string",
+            "description": "the default rule's action"
+          },
+          "fidelity": {
+            "type": "object",
+            "properties": {
+              "level": {
+                "type": "string",
+                "description": "exact, overmatch (may hold more than the device matches), inferred (from data the device may not use) or undermatch (may miss matches)",
+                "enum": [
+                  "exact",
+                  "overmatch",
+                  "inferred",
+                  "undermatch",
+                  "undeclared"
+                ]
+              },
+              "not_evaluated": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "the dimensions not evaluated"
+              },
+              "reasons": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "description": "the reason code"
+                    },
+                    "text": {
+                      "type": "string",
+                      "description": "the reason in words"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "text"
+                  ],
+                  "additionalProperties": false
+                },
+                "description": "why the result is weaker than exact"
+              }
+            },
+            "description": "how certain the result is: exact, overmatch, inferred or undermatch, with the reasons; never report undermatch or inferred as a firm answer",
+            "required": [
+              "level"
+            ],
+            "additionalProperties": false
+          },
+          "doubts": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "object",
+              "properties": {
+                "position": {
+                  "type": "integer"
+                },
+                "rule": {
+                  "type": "string"
+                },
+                "reasons": {
+                  "type": [
+                    "null",
+                    "array"
+                  ],
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "code": {
+                        "type": "string"
+                      },
+                      "text": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "code",
+                      "text"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "required": [
+                "position",
+                "rule",
+                "reasons"
+              ],
+              "additionalProperties": false
+            },
+            "description": "rules that may match first, with the reasons the answer cannot rule them out"
+          },
+          "zones": {
+            "type": "object",
+            "properties": {
+              "from": {
+                "type": [
+                  "null",
+                  "array"
+                ],
+                "items": {
+                  "type": "string"
+                }
+              },
+              "to": {
+                "type": [
+                  "null",
+                  "array"
+                ],
+                "items": {
+                  "type": "string"
+                }
+              },
+              "source": {
+                "type": "string"
+              },
+              "detail": {
+                "type": "string"
+              }
+            },
+            "description": "the zones used and where they came from",
+            "required": [
+              "from",
+              "to",
+              "source"
+            ],
+            "additionalProperties": false
+          },
+          "relevance": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "description": "the reason code"
+              },
+              "known": {
+                "type": "boolean",
+                "description": "whether relevance could be read: the snapshot has a forwarding table"
+              },
+              "relevant": {
+                "type": "boolean",
+                "description": "whether the device routes either endpoint by more than a default route"
+              },
+              "text": {
+                "type": "string",
+                "description": "the reason in words"
+              }
+            },
+            "description": "whether the device routes either endpoint by more than a default route",
+            "required": [
+              "code",
+              "known",
+              "relevant",
+              "text"
+            ],
+            "additionalProperties": false
+          },
+          "target": {
+            "type": "object",
+            "properties": {
+              "device": {
+                "type": "string",
+                "description": "the device name"
+              },
+              "vsys": {
+                "type": "string",
+                "description": "the vsys name"
+              },
+              "snapshot": {
+                "type": "string",
+                "description": "the snapshot ID"
+              },
+              "taken_at": {
+                "type": "string",
+                "description": "when the snapshot was taken (RFC 3339)"
+              }
+            },
+            "description": "the device, vsys and snapshot the result came from",
+            "required": [
+              "device",
+              "vsys"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "answer",
+          "verdict",
+          "reasons",
+          "rule",
+          "default_action",
+          "fidelity",
+          "doubts",
+          "zones",
+          "relevance",
+          "target"
+        ],
+        "additionalProperties": false
+      },
+      "description": "the answers; empty when no target could be read"
+    },
+    "summary": {
+      "type": [
+        "null",
+        "object"
+      ],
+      "properties": {
+        "answer": {
+          "type": "string",
+          "description": "the count line of the text output"
+        },
+        "found": {
+          "type": "integer",
+          "description": "results over every target"
+        },
+        "with": {
+          "type": "integer",
+          "description": "targets with a result"
+        },
+        "without": {
+          "type": "integer",
+          "description": "targets read without a result"
+        }
+      },
+      "description": "search and lookup only: the count of results over the targets read",
+      "required": [
+        "answer",
+        "found",
+        "with",
+        "without"
+      ],
+      "additionalProperties": false
+    },
+    "holes": {
+      "type": [
+        "null",
+        "array"
+      ],
+      "items": {
+        "type": "object",
+        "properties": {
+          "device": {
+            "type": "string"
+          },
+          "vsys": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "device",
+          "code",
+          "text"
+        ],
+        "additionalProperties": false
+      },
+      "description": "devices or snapshots the answer could not read; each one makes the answer incomplete"
+    },
+    "unresolved": {
+      "type": [
+        "null",
+        "array"
+      ],
+      "items": {
+        "type": "object",
+        "properties": {
+          "device": {
+            "type": "string",
+            "description": "the device"
+          },
+          "vsys": {
+            "type": "string",
+            "description": "the vsys; empty for the device as a whole"
+          },
+          "value": {
+            "type": "string",
+            "description": "the value that was not resolved"
+          },
+          "code": {
+            "type": "string",
+            "description": "the reason code"
+          },
+          "text": {
+            "type": "string",
+            "description": "the reason in words"
+          }
+        },
+        "required": [
+          "device",
+          "code",
+          "text"
+        ],
+        "additionalProperties": false
+      },
+      "description": "values the answer could not resolve; each one can hide matches"
+    },
+    "notes": {
+      "type": [
+        "null",
+        "array"
+      ],
+      "items": {
+        "type": "object",
+        "properties": {
+          "device": {
+            "type": "string",
+            "description": "the device"
+          },
+          "vsys": {
+            "type": "string",
+            "description": "the vsys; empty for the device as a whole"
+          },
+          "code": {
+            "type": "string",
+            "description": "the reason code"
+          },
+          "text": {
+            "type": "string",
+            "description": "the note in words"
+          }
+        },
+        "required": [
+          "device",
+          "code",
+          "text"
+        ],
+        "additionalProperties": false
+      },
+      "description": "facts that qualify the answer without making it incomplete, such as a stale snapshot"
+    }
+  },
+  "description": "the simulate policy answer, detail summary",
+  "required": [
+    "format",
+    "command",
+    "detail",
+    "input",
+    "results",
+    "holes",
+    "unresolved",
+    "notes"
+  ],
+  "additionalProperties": false
+}

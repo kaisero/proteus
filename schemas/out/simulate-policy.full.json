@@ -1,0 +1,1716 @@
+{
+  "type": "object",
+  "properties": {
+    "format": {
+      "type": "integer",
+      "description": "the envelope format; a change that breaks a consumer increments it",
+      "const": 2
+    },
+    "command": {
+      "type": "string",
+      "description": "the command that answered",
+      "const": "simulate policy"
+    },
+    "detail": {
+      "type": "string",
+      "description": "summary or full: how much of each result the envelope holds",
+      "const": "full"
+    },
+    "input": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "type": "string",
+          "description": "path: the flow is checked on every firewall it crosses"
+        },
+        "flow": {
+          "type": "object",
+          "properties": {
+            "source": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "addrs": {
+                  "type": [
+                    "null",
+                    "array"
+                  ],
+                  "items": {
+                    "type": "string",
+                    "description": "an IP address"
+                  }
+                },
+                "resolved": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "addrs",
+                "resolved"
+              ],
+              "additionalProperties": false
+            },
+            "destination": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "addrs": {
+                  "type": [
+                    "null",
+                    "array"
+                  ],
+                  "items": {
+                    "type": "string",
+                    "description": "an IP address"
+                  }
+                },
+                "resolved": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "addrs",
+                "resolved"
+              ],
+              "additionalProperties": false
+            },
+            "protocol": {
+              "type": "string"
+            },
+            "source_port": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 65535
+            },
+            "port": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 65535
+            },
+            "application": {
+              "type": "string"
+            },
+            "user": {
+              "type": "string"
+            },
+            "url": {
+              "type": "string"
+            },
+            "from_zone": {
+              "type": "string"
+            },
+            "to_zone": {
+              "type": "string"
+            }
+          },
+          "description": "the flow as simulated: endpoints resolved, ports as numbers",
+          "required": [
+            "source",
+            "destination",
+            "protocol"
+          ],
+          "additionalProperties": false
+        },
+        "device": {
+          "type": "string",
+          "description": "the firewall the path starts on; empty when the source places the start"
+        },
+        "router": {
+          "type": "string",
+          "description": "the start's logical router; empty when it has one"
+        },
+        "at": {
+          "type": "string",
+          "description": "the time each device's snapshot is read at or before; empty for the latest"
+        }
+      },
+      "description": "the question as answered, with the flow as simulated",
+      "required": [
+        "mode",
+        "flow",
+        "device",
+        "router",
+        "at"
+      ],
+      "additionalProperties": false
+    },
+    "results": {
+      "type": [
+        "null",
+        "array"
+      ],
+      "items": {
+        "type": "object",
+        "properties": {
+          "answer": {
+            "type": "string",
+            "description": "one line that says what the result found, as the text output prints it"
+          },
+          "needs": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "type": "string",
+                  "description": "the input's code: input.port, input.protocol or input.url"
+                },
+                "input": {
+                  "type": "string",
+                  "description": "the input to give in a second call"
+                },
+                "text": {
+                  "type": "string",
+                  "description": "what to give and which rules it decides"
+                }
+              },
+              "required": [
+                "code",
+                "input",
+                "text"
+              ],
+              "additionalProperties": false
+            },
+            "description": "present when the result is held back: the inputs a second call can give to change it; empty when none helps"
+          },
+          "mode": {
+            "type": "string",
+            "description": "path: the flow is checked on every firewall it crosses"
+          },
+          "verdict": {
+            "type": "string",
+            "description": "allowed, denied, undecided or another path verdict; undecided means the answer cannot say"
+          },
+          "at": {
+            "type": [
+              "null",
+              "object"
+            ],
+            "properties": {
+              "hop": {
+                "type": "integer",
+                "description": "the hop index"
+              },
+              "check": {
+                "type": "string",
+                "description": "the check that decided"
+              },
+              "rule": {
+                "type": "string",
+                "description": "the deciding rule"
+              },
+              "reasons": {
+                "type": [
+                  "null",
+                  "array"
+                ],
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "text": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "text"
+                  ],
+                  "additionalProperties": false
+                },
+                "description": "why, each reason with its code"
+              }
+            },
+            "description": "where the verdict was decided or became undecided; null when no check decided",
+            "required": [
+              "hop",
+              "check",
+              "rule",
+              "reasons"
+            ],
+            "additionalProperties": false
+          },
+          "fidelity": {
+            "type": "object",
+            "properties": {
+              "level": {
+                "type": "string",
+                "description": "exact, overmatch (may hold more than the device matches), inferred (from data the device may not use) or undermatch (may miss matches)",
+                "enum": [
+                  "exact",
+                  "overmatch",
+                  "inferred",
+                  "undermatch",
+                  "undeclared"
+                ]
+              },
+              "not_evaluated": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "the dimensions not evaluated"
+              },
+              "reasons": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "description": "the reason code"
+                    },
+                    "text": {
+                      "type": "string",
+                      "description": "the reason in words"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "text"
+                  ],
+                  "additionalProperties": false
+                },
+                "description": "why the result is weaker than exact"
+              }
+            },
+            "description": "how certain the result is: exact, overmatch, inferred or undermatch, with the reasons; never report undermatch or inferred as a firm answer",
+            "required": [
+              "level"
+            ],
+            "additionalProperties": false
+          },
+          "source": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "addrs": {
+                "type": [
+                  "null",
+                  "array"
+                ],
+                "items": {
+                  "type": "string",
+                  "description": "an IP address"
+                }
+              },
+              "resolved": {
+                "type": "boolean"
+              }
+            },
+            "description": "the source endpoint as simulated",
+            "required": [
+              "addrs",
+              "resolved"
+            ],
+            "additionalProperties": false
+          },
+          "destination": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "addrs": {
+                "type": [
+                  "null",
+                  "array"
+                ],
+                "items": {
+                  "type": "string",
+                  "description": "an IP address"
+                }
+              },
+              "resolved": {
+                "type": "boolean"
+              }
+            },
+            "description": "the destination endpoint as simulated",
+            "required": [
+              "addrs",
+              "resolved"
+            ],
+            "additionalProperties": false
+          },
+          "placed": {
+            "type": "string",
+            "description": "how the path's start was placed"
+          },
+          "placed_via": {
+            "type": "string",
+            "description": "the route or interface that placed the start"
+          },
+          "start_via": {
+            "type": "string",
+            "description": "the prefix that placed the start"
+          },
+          "outcome": {
+            "type": "string",
+            "description": "how the path ended"
+          },
+          "end": {
+            "type": "string",
+            "description": "where and why the path ended, in words"
+          },
+          "end_code": {
+            "type": "string",
+            "description": "the reason code of the path end"
+          },
+          "hidden": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "firewalls the path crossed that the inventory does not hold"
+          },
+          "stages": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "object",
+              "properties": {
+                "slug": {
+                  "type": "string",
+                  "description": "the stage's ID"
+                },
+                "name": {
+                  "type": "string",
+                  "description": "the stage's name"
+                },
+                "status": {
+                  "type": "string",
+                  "description": "a fetch stage's status"
+                },
+                "fidelity": {
+                  "type": [
+                    "null",
+                    "object"
+                  ],
+                  "properties": {
+                    "level": {
+                      "type": "string",
+                      "description": "exact, overmatch (may hold more than the device matches), inferred (from data the device may not use) or undermatch (may miss matches)",
+                      "enum": [
+                        "exact",
+                        "overmatch",
+                        "inferred",
+                        "undermatch",
+                        "undeclared"
+                      ]
+                    },
+                    "not_evaluated": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "description": "the dimensions not evaluated"
+                    },
+                    "reasons": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "code": {
+                            "type": "string",
+                            "description": "the reason code"
+                          },
+                          "text": {
+                            "type": "string",
+                            "description": "the reason in words"
+                          }
+                        },
+                        "required": [
+                          "code",
+                          "text"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "description": "why the result is weaker than exact"
+                    }
+                  },
+                  "description": "how certain the stage's output is",
+                  "required": [
+                    "level"
+                  ],
+                  "additionalProperties": false
+                },
+                "candidates": {
+                  "type": [
+                    "null",
+                    "integer"
+                  ],
+                  "description": "the candidate count after the stage",
+                  "minimum": 0
+                },
+                "detail": {
+                  "type": "string",
+                  "description": "what the stage did, in words"
+                },
+                "notes": {
+                  "type": [
+                    "null",
+                    "array"
+                  ],
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "code": {
+                        "type": "string"
+                      },
+                      "text": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "code",
+                      "text"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "description": "notes the stage left, each with its code"
+                },
+                "unresolved": {
+                  "type": [
+                    "null",
+                    "array"
+                  ],
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "value": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "type": "string"
+                      },
+                      "code": {
+                        "type": "string"
+                      },
+                      "text": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "value",
+                      "kind",
+                      "code",
+                      "text"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "description": "values the stage could not resolve"
+                },
+                "elapsed_ms": {
+                  "type": "number",
+                  "description": "the stage's time in milliseconds"
+                }
+              },
+              "required": [
+                "slug",
+                "name",
+                "elapsed_ms"
+              ],
+              "additionalProperties": false
+            },
+            "description": "the run's stages: what each one did, its fidelity and its candidate count"
+          },
+          "hops": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "object",
+              "properties": {
+                "index": {
+                  "type": "integer",
+                  "description": "the hop's place on the path"
+                },
+                "device": {
+                  "type": "string"
+                },
+                "vsys": {
+                  "type": "string"
+                },
+                "snapshot": {
+                  "type": "string"
+                },
+                "taken_at": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "in": {
+                  "type": "object",
+                  "properties": {
+                    "device": {
+                      "type": "string"
+                    },
+                    "vsys": {
+                      "type": "string"
+                    },
+                    "router": {
+                      "type": "string"
+                    },
+                    "interface": {
+                      "type": "string"
+                    },
+                    "zone": {
+                      "type": "string"
+                    },
+                    "address": {
+                      "type": "string",
+                      "description": "an IP prefix, address/length"
+                    }
+                  },
+                  "required": [
+                    "device",
+                    "vsys",
+                    "router",
+                    "interface"
+                  ],
+                  "additionalProperties": false
+                },
+                "out": {
+                  "type": "object",
+                  "properties": {
+                    "device": {
+                      "type": "string"
+                    },
+                    "vsys": {
+                      "type": "string"
+                    },
+                    "router": {
+                      "type": "string"
+                    },
+                    "interface": {
+                      "type": "string"
+                    },
+                    "zone": {
+                      "type": "string"
+                    },
+                    "address": {
+                      "type": "string",
+                      "description": "an IP prefix, address/length"
+                    }
+                  },
+                  "required": [
+                    "device",
+                    "vsys",
+                    "router",
+                    "interface"
+                  ],
+                  "additionalProperties": false
+                },
+                "lookups": {
+                  "type": [
+                    "null",
+                    "array"
+                  ],
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "router": {
+                        "type": "string"
+                      },
+                      "route": {
+                        "type": "object",
+                        "properties": {
+                          "destination": {
+                            "type": "string",
+                            "description": "an IP prefix, address/length"
+                          },
+                          "next_hops": {
+                            "type": [
+                              "null",
+                              "array"
+                            ],
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "Router": {
+                                  "type": "string"
+                                },
+                                "IPv6": {
+                                  "type": "boolean"
+                                },
+                                "Destination": {
+                                  "type": "string",
+                                  "description": "an IP prefix, address/length"
+                                },
+                                "Interface": {
+                                  "type": "string"
+                                },
+                                "NextHop": {
+                                  "type": "string"
+                                },
+                                "Flags": {
+                                  "type": "string"
+                                },
+                                "NextHopType": {
+                                  "type": "string"
+                                },
+                                "ECMP": {
+                                  "type": "boolean"
+                                }
+                              },
+                              "required": [
+                                "Router",
+                                "IPv6",
+                                "Destination",
+                                "Interface",
+                                "NextHop",
+                                "Flags",
+                                "NextHopType",
+                                "ECMP"
+                              ],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "required": [
+                          "destination",
+                          "next_hops"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "protocol": {
+                        "type": "string"
+                      },
+                      "stage": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "router",
+                      "route"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "flow": {
+                  "type": "object",
+                  "properties": {
+                    "source": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string"
+                        },
+                        "addrs": {
+                          "type": [
+                            "null",
+                            "array"
+                          ],
+                          "items": {
+                            "type": "string",
+                            "description": "an IP address"
+                          }
+                        },
+                        "resolved": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "addrs",
+                        "resolved"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "destination": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string"
+                        },
+                        "addrs": {
+                          "type": [
+                            "null",
+                            "array"
+                          ],
+                          "items": {
+                            "type": "string",
+                            "description": "an IP address"
+                          }
+                        },
+                        "resolved": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "addrs",
+                        "resolved"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "protocol": {
+                      "type": "string"
+                    },
+                    "source_port": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 65535
+                    },
+                    "port": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 65535
+                    },
+                    "application": {
+                      "type": "string"
+                    },
+                    "user": {
+                      "type": "string"
+                    },
+                    "url": {
+                      "type": "string"
+                    },
+                    "from_zone": {
+                      "type": "string"
+                    },
+                    "to_zone": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "source",
+                    "destination",
+                    "protocol"
+                  ],
+                  "additionalProperties": false
+                },
+                "post_nat": {
+                  "type": [
+                    "null",
+                    "object"
+                  ],
+                  "properties": {
+                    "source": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string"
+                        },
+                        "addrs": {
+                          "type": [
+                            "null",
+                            "array"
+                          ],
+                          "items": {
+                            "type": "string",
+                            "description": "an IP address"
+                          }
+                        },
+                        "resolved": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "addrs",
+                        "resolved"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "destination": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string"
+                        },
+                        "addrs": {
+                          "type": [
+                            "null",
+                            "array"
+                          ],
+                          "items": {
+                            "type": "string",
+                            "description": "an IP address"
+                          }
+                        },
+                        "resolved": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "addrs",
+                        "resolved"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "protocol": {
+                      "type": "string"
+                    },
+                    "source_port": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 65535
+                    },
+                    "port": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 65535
+                    },
+                    "application": {
+                      "type": "string"
+                    },
+                    "user": {
+                      "type": "string"
+                    },
+                    "url": {
+                      "type": "string"
+                    },
+                    "from_zone": {
+                      "type": "string"
+                    },
+                    "to_zone": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "source",
+                    "destination",
+                    "protocol"
+                  ],
+                  "additionalProperties": false
+                },
+                "alternates": {
+                  "type": [
+                    "null",
+                    "array"
+                  ],
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "Router": {
+                        "type": "string"
+                      },
+                      "Destination": {
+                        "type": "string",
+                        "description": "an IP prefix, address/length"
+                      },
+                      "Protocol": {
+                        "type": "string"
+                      },
+                      "Distance": {
+                        "type": "integer"
+                      },
+                      "Metric": {
+                        "type": "integer"
+                      },
+                      "Selected": {
+                        "type": "boolean"
+                      },
+                      "Installed": {
+                        "type": "boolean"
+                      },
+                      "NextHops": {
+                        "type": [
+                          "null",
+                          "array"
+                        ],
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "IP": {
+                              "type": "string",
+                              "description": "an IP address"
+                            },
+                            "Interface": {
+                              "type": "string"
+                            },
+                            "Active": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "IP",
+                            "Interface",
+                            "Active"
+                          ],
+                          "additionalProperties": false
+                        }
+                      }
+                    },
+                    "required": [
+                      "Router",
+                      "Destination",
+                      "Protocol",
+                      "Distance",
+                      "Metric",
+                      "Selected",
+                      "Installed",
+                      "NextHops"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "fidelity": {
+                  "type": "object",
+                  "properties": {
+                    "level": {
+                      "type": "string",
+                      "description": "exact, overmatch (may hold more than the device matches), inferred (from data the device may not use) or undermatch (may miss matches)",
+                      "enum": [
+                        "exact",
+                        "overmatch",
+                        "inferred",
+                        "undermatch",
+                        "undeclared"
+                      ]
+                    },
+                    "not_evaluated": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "description": "the dimensions not evaluated"
+                    },
+                    "reasons": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "code": {
+                            "type": "string",
+                            "description": "the reason code"
+                          },
+                          "text": {
+                            "type": "string",
+                            "description": "the reason in words"
+                          }
+                        },
+                        "required": [
+                          "code",
+                          "text"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "description": "why the result is weaker than exact"
+                    }
+                  },
+                  "required": [
+                    "level"
+                  ],
+                  "additionalProperties": false
+                },
+                "notes": {
+                  "type": [
+                    "null",
+                    "array"
+                  ],
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "code": {
+                        "type": "string"
+                      },
+                      "text": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "code",
+                      "text"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "description": "notes on the hop, each with its code"
+                },
+                "pbf": {
+                  "type": [
+                    "null",
+                    "array"
+                  ],
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "policy-based forwarding rules that applied"
+                },
+                "ecmp_not_followed": {
+                  "type": [
+                    "null",
+                    "array"
+                  ],
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "next_hop": {
+                        "type": "string"
+                      },
+                      "reaches": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "next_hop"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "description": "equal-cost next hops the path did not follow"
+                },
+                "zone_placeholder": {
+                  "type": "boolean",
+                  "description": "whether the zones are placeholders"
+                },
+                "doubts": {
+                  "type": [
+                    "null",
+                    "array"
+                  ],
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "code": {
+                        "type": "string"
+                      },
+                      "text": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "code",
+                      "text"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "description": "doubts on the hop, each with its code"
+                },
+                "after_deny": {
+                  "type": "boolean",
+                  "description": "whether the hop comes after a deny, checked only to show the rest of the path"
+                },
+                "checks": {
+                  "type": "object",
+                  "description": "each check's answer under its name, such as security",
+                  "additionalProperties": {
+                    "type": "object",
+                    "properties": {
+                      "verdict": {
+                        "type": "string",
+                        "description": "pass, stop, undecided or, on a hop, not-evaluated"
+                      },
+                      "reasons": {
+                        "type": [
+                          "null",
+                          "array"
+                        ],
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "code": {
+                              "type": "string"
+                            },
+                            "text": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "text"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "description": "why, each reason with its code"
+                      },
+                      "rule": {
+                        "type": "string",
+                        "description": "the rule or default rule that decides; empty when undecided"
+                      },
+                      "default": {
+                        "type": "string",
+                        "description": "the default rule that decides when no rule matches; empty when none does"
+                      },
+                      "default_action": {
+                        "type": "string",
+                        "description": "the default rule's action"
+                      },
+                      "default_source": {
+                        "type": "string",
+                        "description": "where the default action came from: built-in, local or pushed"
+                      },
+                      "fidelity": {
+                        "type": "object",
+                        "properties": {
+                          "level": {
+                            "type": "string",
+                            "description": "exact, overmatch (may hold more than the device matches), inferred (from data the device may not use) or undermatch (may miss matches)",
+                            "enum": [
+                              "exact",
+                              "overmatch",
+                              "inferred",
+                              "undermatch",
+                              "undeclared"
+                            ]
+                          },
+                          "not_evaluated": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            },
+                            "description": "the dimensions not evaluated"
+                          },
+                          "reasons": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "code": {
+                                  "type": "string",
+                                  "description": "the reason code"
+                                },
+                                "text": {
+                                  "type": "string",
+                                  "description": "the reason in words"
+                                }
+                              },
+                              "required": [
+                                "code",
+                                "text"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "description": "why the result is weaker than exact"
+                          }
+                        },
+                        "description": "how certain the result is: exact, overmatch, inferred or undermatch, with the reasons; never report undermatch or inferred as a firm answer",
+                        "required": [
+                          "level"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "first_match": {
+                        "type": [
+                          "null",
+                          "object"
+                        ],
+                        "properties": {
+                          "position": {
+                            "type": "integer",
+                            "description": "the rule's position in the effective order"
+                          },
+                          "name": {
+                            "type": "string",
+                            "description": "the rule name"
+                          },
+                          "action": {
+                            "type": "string",
+                            "description": "the rule's action"
+                          },
+                          "layer": {
+                            "type": "string",
+                            "description": "the rulebase layer: pre, local or post"
+                          },
+                          "scope": {
+                            "type": "string",
+                            "description": "the scope the rule comes from"
+                          }
+                        },
+                        "description": "the first certain match; null when none",
+                        "required": [
+                          "position",
+                          "name",
+                          "action",
+                          "layer",
+                          "scope"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "candidates": {
+                        "type": [
+                          "null",
+                          "array"
+                        ],
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "position": {
+                              "type": "integer",
+                              "description": "the rule's position in the effective order"
+                            },
+                            "name": {
+                              "type": "string",
+                              "description": "the rule name"
+                            },
+                            "action": {
+                              "type": "string",
+                              "description": "the rule's action"
+                            },
+                            "layer": {
+                              "type": "string",
+                              "description": "the rulebase layer: pre, local or post"
+                            },
+                            "scope": {
+                              "type": "string",
+                              "description": "the scope the rule comes from"
+                            }
+                          },
+                          "required": [
+                            "position",
+                            "name",
+                            "action",
+                            "layer",
+                            "scope"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "description": "the rules that may match the flow, in order"
+                      },
+                      "doubts": {
+                        "type": [
+                          "null",
+                          "array"
+                        ],
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "position": {
+                              "type": "integer"
+                            },
+                            "rule": {
+                              "type": "string"
+                            },
+                            "reasons": {
+                              "type": [
+                                "null",
+                                "array"
+                              ],
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "code": {
+                                    "type": "string"
+                                  },
+                                  "text": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "code",
+                                  "text"
+                                ],
+                                "additionalProperties": false
+                              }
+                            }
+                          },
+                          "required": [
+                            "position",
+                            "rule",
+                            "reasons"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "description": "rules that may match first, with the reasons the answer cannot rule them out"
+                      },
+                      "zones": {
+                        "type": "object",
+                        "properties": {
+                          "from": {
+                            "type": [
+                              "null",
+                              "array"
+                            ],
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "to": {
+                            "type": [
+                              "null",
+                              "array"
+                            ],
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "source": {
+                            "type": "string"
+                          },
+                          "detail": {
+                            "type": "string"
+                          }
+                        },
+                        "description": "the zones used and where they came from",
+                        "required": [
+                          "from",
+                          "to",
+                          "source"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "stages": {
+                        "type": [
+                          "null",
+                          "array"
+                        ],
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "slug": {
+                              "type": "string",
+                              "description": "the stage's ID"
+                            },
+                            "name": {
+                              "type": "string",
+                              "description": "the stage's name"
+                            },
+                            "status": {
+                              "type": "string",
+                              "description": "a fetch stage's status"
+                            },
+                            "fidelity": {
+                              "type": [
+                                "null",
+                                "object"
+                              ],
+                              "properties": {
+                                "level": {
+                                  "type": "string",
+                                  "description": "exact, overmatch (may hold more than the device matches), inferred (from data the device may not use) or undermatch (may miss matches)",
+                                  "enum": [
+                                    "exact",
+                                    "overmatch",
+                                    "inferred",
+                                    "undermatch",
+                                    "undeclared"
+                                  ]
+                                },
+                                "not_evaluated": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  },
+                                  "description": "the dimensions not evaluated"
+                                },
+                                "reasons": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "code": {
+                                        "type": "string",
+                                        "description": "the reason code"
+                                      },
+                                      "text": {
+                                        "type": "string",
+                                        "description": "the reason in words"
+                                      }
+                                    },
+                                    "required": [
+                                      "code",
+                                      "text"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  "description": "why the result is weaker than exact"
+                                }
+                              },
+                              "description": "how certain the stage's output is",
+                              "required": [
+                                "level"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "candidates": {
+                              "type": [
+                                "null",
+                                "integer"
+                              ],
+                              "description": "the candidate count after the stage",
+                              "minimum": 0
+                            },
+                            "detail": {
+                              "type": "string",
+                              "description": "what the stage did, in words"
+                            },
+                            "notes": {
+                              "type": [
+                                "null",
+                                "array"
+                              ],
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "code": {
+                                    "type": "string"
+                                  },
+                                  "text": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "code",
+                                  "text"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "description": "notes the stage left, each with its code"
+                            },
+                            "unresolved": {
+                              "type": [
+                                "null",
+                                "array"
+                              ],
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "value": {
+                                    "type": "string"
+                                  },
+                                  "kind": {
+                                    "type": "string"
+                                  },
+                                  "code": {
+                                    "type": "string"
+                                  },
+                                  "text": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "value",
+                                  "kind",
+                                  "code",
+                                  "text"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "description": "values the stage could not resolve"
+                            },
+                            "elapsed_ms": {
+                              "type": "number",
+                              "description": "the stage's time in milliseconds"
+                            }
+                          },
+                          "required": [
+                            "slug",
+                            "name",
+                            "elapsed_ms"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "description": "the run's stages: what each one did, its fidelity and its candidate count"
+                      }
+                    },
+                    "required": [
+                      "verdict",
+                      "reasons",
+                      "rule",
+                      "default",
+                      "default_action",
+                      "default_source",
+                      "fidelity",
+                      "first_match",
+                      "candidates",
+                      "doubts",
+                      "zones",
+                      "stages"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "required": [
+                "index",
+                "device",
+                "vsys",
+                "in",
+                "out",
+                "lookups",
+                "flow",
+                "post_nat",
+                "fidelity",
+                "notes",
+                "pbf",
+                "ecmp_not_followed",
+                "zone_placeholder",
+                "doubts",
+                "after_deny",
+                "checks"
+              ],
+              "additionalProperties": false
+            },
+            "description": "the firewalls the path crossed, in order"
+          }
+        },
+        "required": [
+          "answer",
+          "mode",
+          "verdict",
+          "at",
+          "fidelity",
+          "source",
+          "destination",
+          "placed",
+          "outcome",
+          "end",
+          "end_code",
+          "stages",
+          "hops"
+        ],
+        "additionalProperties": false
+      },
+      "description": "the answers; empty when no target could be read"
+    },
+    "summary": {
+      "type": [
+        "null",
+        "object"
+      ],
+      "properties": {
+        "answer": {
+          "type": "string",
+          "description": "the count line of the text output"
+        },
+        "found": {
+          "type": "integer",
+          "description": "results over every target"
+        },
+        "with": {
+          "type": "integer",
+          "description": "targets with a result"
+        },
+        "without": {
+          "type": "integer",
+          "description": "targets read without a result"
+        }
+      },
+      "description": "search and lookup only: the count of results over the targets read",
+      "required": [
+        "answer",
+        "found",
+        "with",
+        "without"
+      ],
+      "additionalProperties": false
+    },
+    "holes": {
+      "type": [
+        "null",
+        "array"
+      ],
+      "items": {
+        "type": "object",
+        "properties": {
+          "device": {
+            "type": "string"
+          },
+          "vsys": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "device",
+          "code",
+          "text"
+        ],
+        "additionalProperties": false
+      },
+      "description": "devices or snapshots the answer could not read; each one makes the answer incomplete"
+    },
+    "unresolved": {
+      "type": [
+        "null",
+        "array"
+      ],
+      "items": {
+        "type": "object",
+        "properties": {
+          "device": {
+            "type": "string",
+            "description": "the device"
+          },
+          "vsys": {
+            "type": "string",
+            "description": "the vsys; empty for the device as a whole"
+          },
+          "value": {
+            "type": "string",
+            "description": "the value that was not resolved"
+          },
+          "code": {
+            "type": "string",
+            "description": "the reason code"
+          },
+          "text": {
+            "type": "string",
+            "description": "the reason in words"
+          }
+        },
+        "required": [
+          "device",
+          "code",
+          "text"
+        ],
+        "additionalProperties": false
+      },
+      "description": "values the answer could not resolve; each one can hide matches"
+    },
+    "notes": {
+      "type": [
+        "null",
+        "array"
+      ],
+      "items": {
+        "type": "object",
+        "properties": {
+          "device": {
+            "type": "string",
+            "description": "the device"
+          },
+          "vsys": {
+            "type": "string",
+            "description": "the vsys; empty for the device as a whole"
+          },
+          "code": {
+            "type": "string",
+            "description": "the reason code"
+          },
+          "text": {
+            "type": "string",
+            "description": "the note in words"
+          }
+        },
+        "required": [
+          "device",
+          "code",
+          "text"
+        ],
+        "additionalProperties": false
+      },
+      "description": "facts that qualify the answer without making it incomplete, such as a stale snapshot"
+    }
+  },
+  "description": "the simulate policy answer, detail full",
+  "required": [
+    "format",
+    "command",
+    "detail",
+    "input",
+    "results",
+    "holes",
+    "unresolved",
+    "notes"
+  ],
+  "additionalProperties": false
+}

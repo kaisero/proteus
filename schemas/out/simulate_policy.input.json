@@ -1,0 +1,72 @@
+{
+  "type": "object",
+  "properties": {
+    "source": {
+      "type": "string",
+      "description": "an address or a host name; a host name is resolved with DNS and its first IPv4 address is checked"
+    },
+    "destination": {
+      "type": "string",
+      "description": "an address or a host name; a host name is resolved with DNS and its first IPv4 address is checked"
+    },
+    "protocol": {
+      "type": "string",
+      "description": "tcp, udp, icmp or sctp; no default: a rule that needs it is held back and needs names it",
+      "enum": [
+        "tcp",
+        "udp",
+        "icmp",
+        "sctp"
+      ]
+    },
+    "port": {
+      "type": "integer",
+      "description": "the destination port",
+      "minimum": 1,
+      "maximum": 65535
+    },
+    "source_port": {
+      "type": "integer",
+      "description": "the source port",
+      "minimum": 1,
+      "maximum": 65535
+    },
+    "url": {
+      "type": "string",
+      "description": "the URL; it decides URL categories"
+    },
+    "application": {
+      "type": "string",
+      "description": "recorded, not evaluated; it does not change the answer"
+    },
+    "user": {
+      "type": "string",
+      "description": "the source user, such as corp\\alice"
+    },
+    "device": {
+      "type": "string",
+      "description": "the firewall the path starts on; left out, the source places the start"
+    },
+    "router": {
+      "type": "string",
+      "description": "the start's logical router; needs device"
+    },
+    "at": {
+      "type": "string",
+      "description": "read each device's newest snapshot at or before this time; left out, the latest"
+    },
+    "detail": {
+      "type": "string",
+      "description": "summary or full: how much of each result to return",
+      "enum": [
+        "summary",
+        "full"
+      ]
+    }
+  },
+  "required": [
+    "source",
+    "destination"
+  ],
+  "additionalProperties": false
+}
