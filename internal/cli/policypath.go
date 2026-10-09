@@ -336,10 +336,14 @@ func pathNotes(res pathpolicy.Result) []note {
 		}
 	}
 	out = append(out, runNotes(device, res.Notes)...)
+	// A note is the same when its printed fields are: the code is not printed
+	// in format 1, so the first code stays.
 	seen := map[note]bool{}
 	return slices.DeleteFunc(out, func(n note) bool {
-		dup := seen[n]
-		seen[n] = true
+		k := n
+		k.Code = ""
+		dup := seen[k]
+		seen[k] = true
 		return dup
 	})
 }

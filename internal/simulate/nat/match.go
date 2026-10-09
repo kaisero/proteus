@@ -124,8 +124,8 @@ func Match(in Input) MatchResult {
 		for _, d := range out.Doubts {
 			names = append(names, d.Rule+" ("+d.Text()+")")
 		}
-		// The first doubt's first reason names the kind; the text names them all.
-		why := reason.Reason{Code: out.Doubts[0].Reasons[0].Code, Text: "may instead hit " + strings.Join(names, ", ")}
+		// One code for the summary; each doubt keeps its own reasons and codes.
+		why := reason.New("doubt.nat-rule", "may instead hit "+strings.Join(names, ", "))
 		out.Fidelity = simulate.Weakest(out.Fidelity, simulate.OverMatchBecause(why))
 	}
 	return out

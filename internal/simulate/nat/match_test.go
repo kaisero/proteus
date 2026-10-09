@@ -120,6 +120,10 @@ func TestDoubts(t *testing.T) {
 		!strings.Contains(m.Doubts[0].Text(), "give --port") || m.Doubts[0].Reasons[0].Code != "path.nat-no-port" || m.Fidelity.Level() != "overmatch" {
 		t.Errorf("no port: %+v", m)
 	}
+	// The summary has its own code; the doubt keeps its reasons' codes.
+	if rs := m.Fidelity.Reasons(); len(rs) != 1 || rs[0].Code != "doubt.nat-rule" || !strings.HasPrefix(rs[0].Text, "may instead hit t-dnat-port") {
+		t.Errorf("summary: %v", rs)
+	}
 	// An unknown ingress zone: every rule naming a source zone is a doubt.
 	p = probe{src: "198.18.11.77", dst: "198.18.250.200", port: 443, to: "transport", iface: "ethernet1/1"}
 	m = Match(input(cfg, p))

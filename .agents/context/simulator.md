@@ -132,6 +132,7 @@ its tests share with the CLI's.
 <!-- GENERATED:api ./internal/simulate -->
 ```go
 type ChoiceError struct{ ... }
+type CodedError struct{ ... }
 type DeviceData struct{ ... }
 type Endpoint struct{ ... }
 type Env struct{ ... }
@@ -154,6 +155,8 @@ type Target struct{ ... }
 type UnavailableError struct{ ... }
 
 func (e *ChoiceError) Error() string
+func (e *CodedError) Code() reason.Code
+func (e *CodedError) Error() string
 func (e *Env) Stepf(format string, args ...any)
 func (e *UnavailableError) Error() string
 func (e Endpoint) String() string
@@ -201,6 +204,7 @@ func (d Doubt) MarshalJSON() ([]byte, error)
 func (d Doubt) Text() string
 func (r Relevance) MarshalJSON() ([]byte, error)
 func (v Verdict) Decision() (Outcome, reason.Reason)
+func (v Verdict) MarshalJSON() ([]byte, error)
 ```
 <!-- /GENERATED:api -->
 

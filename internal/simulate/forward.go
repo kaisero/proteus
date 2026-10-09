@@ -75,8 +75,21 @@ type UnavailableError struct {
 type Missing struct {
 	Device string
 	Reason string
-	Code   reason.Code // the kind of Reason
+	Code   reason.Code `json:"-"` // the kind of Reason; out of the JSON until format 2
 }
+
+// CodedError is an error that keeps the kind of a failure as a reason code. A
+// loader returns one so a simulation that reports the failure keeps its kind, as
+// gap.config-missing for a snapshot without a configuration.
+type CodedError struct {
+	Reason reason.Reason
+}
+
+// Error is the reason's text.
+func (e *CodedError) Error() string { return e.Reason.Text }
+
+// Code is the kind of the failure.
+func (e *CodedError) Code() reason.Code { return e.Reason.Code }
 
 // NewMissing returns a Missing entry for device with r's code and text.
 func NewMissing(device string, r reason.Reason) Missing {

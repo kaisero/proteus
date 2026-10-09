@@ -94,7 +94,7 @@ func (v Verdict) Decision() (Outcome, reason.Reason) {
 	switch {
 	case v.Rule != nil:
 		what, action = fmt.Sprintf("rule %s (%s)", v.Rule.Name, v.Rule.Action), v.Rule.Action
-		code, invalid = "verdict.rule", "verdict.invalid-action"
+		code, invalid = "verdict.rule", "doubt.invalid-action"
 	case v.Default == "":
 		return Undecided, reason.New("default.none", "no rule decides")
 	}
@@ -105,6 +105,16 @@ func (v Verdict) Decision() (Outcome, reason.Reason) {
 		return Stop, reason.New(code, what)
 	}
 	return Undecided, reason.New(invalid, what+" is not a security rule action")
+}
+
+// MarshalJSON writes the verdict with undecided as its text, omitted when empty,
+// as format 1 has it.
+func (v Verdict) MarshalJSON() ([]byte, error) {
+	type plain Verdict
+	return json.Marshal(struct {
+		plain
+		Undecided string `json:"undecided,omitempty"`
+	}{plain(v), v.Undecided.Text})
 }
 
 // ZoneDerivation says which zones were used and where they came from.

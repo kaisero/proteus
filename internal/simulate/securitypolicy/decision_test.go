@@ -1,6 +1,7 @@
 package securitypolicy
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -118,7 +119,7 @@ func TestDecisionOfAVerdict(t *testing.T) {
 		{Verdict{}, Undecided, "default.none", "no rule decides"},
 		{Verdict{Rule: &resolve.Rule{Name: "r", Action: "reset-both"}}, Stop, "verdict.rule", "rule r (reset-both)"},
 		{Verdict{Rule: &resolve.Rule{Name: "r", Action: "allow"}}, Pass, "verdict.rule", "rule r (allow)"},
-		{Verdict{Rule: &resolve.Rule{Name: "r", Action: "maybe"}}, Undecided, "verdict.invalid-action", "rule r (maybe) is not a security rule action"},
+		{Verdict{Rule: &resolve.Rule{Name: "r", Action: "maybe"}}, Undecided, "doubt.invalid-action", "rule r (maybe) is not a security rule action"},
 		{
 			Verdict{Rule: &resolve.Rule{Name: "r", Action: "allow"}, Undecided: reason.New("doubt.application", "doubt")},
 			Undecided, "doubt.application", "doubt",
@@ -189,5 +190,19 @@ func TestUndermatchedKeepsOnlyUndermatchReasons(t *testing.T) {
 	// Several undermatch reasons read as one, with the first one's code.
 	if got := undermatched(stages); got != reason.New("gap.category-match", "cat-x cannot be matched; y is unknown") {
 		t.Errorf("undermatched = %q", got)
+	}
+}
+
+// Format 1 writes undecided as its text, and leaves it out when the flow is
+// decided.
+func TestVerdictJSONWritesUndecidedAsText(t *testing.T) {
+	t.Parallel()
+	b, err := json.Marshal(Verdict{Undecided: reason.New("default.none", "no rule decides")})
+	if err != nil || !strings.Contains(string(b), `"undecided":"no rule decides"`) || strings.Contains(string(b), `"code"`) {
+		t.Errorf("%s %v", b, err)
+	}
+	b, err = json.Marshal(Verdict{Default: "intrazone-default"})
+	if err != nil || strings.Contains(string(b), "undecided") || !strings.Contains(string(b), `"default":"intrazone-default"`) {
+		t.Errorf("%s %v", b, err)
 	}
 }

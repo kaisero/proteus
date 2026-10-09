@@ -12,6 +12,7 @@ import (
 	"github.com/okaiser/proteus/internal/config"
 	"github.com/okaiser/proteus/internal/estate"
 	"github.com/okaiser/proteus/internal/index"
+	"github.com/okaiser/proteus/internal/reason"
 	"github.com/okaiser/proteus/internal/resolve"
 	"github.com/okaiser/proteus/internal/runlog"
 	"github.com/okaiser/proteus/internal/simulate"
@@ -301,11 +302,18 @@ func storeLoader(st *store.Store, when estate.When, net *estate.Network, users i
 			ts, holes = estate.Open(st, []string{k.member}, []string{vsys}, when)
 		}
 		if len(ts) == 0 {
+			// The first hole's code names the kind, as a missing configuration.
+			code := reason.Code("gap.load-failed")
 			var why []string
 			for _, h := range holes {
 				why = append(why, h.Reason)
+				if code == "gap.load-failed" && h.Code != "" {
+					code = h.Code
+				}
 			}
-			return simulate.Target{}, fmt.Errorf("%s/%s: %s", dev, vsys, strings.Join(why, "; "))
+			return simulate.Target{}, &simulate.CodedError{Reason: reason.Reason{
+				Code: code, Text: fmt.Sprintf("%s/%s: %s", dev, vsys, strings.Join(why, "; ")),
+			}}
 		}
 		set := sets.of(ts[0].Config)
 		idx, err := set.Index(ts[0].Scope, resolve.Security)

@@ -2,6 +2,7 @@ package simulate
 
 import (
 	"encoding/json"
+	"errors"
 	"slices"
 	"strings"
 	"testing"
@@ -168,5 +169,30 @@ func TestMissingKeepsItsCode(t *testing.T) {
 	m := NewMissing("fw01", r)
 	if m.Device != "fw01" || m.Reason != r.Text || m.Why() != r {
 		t.Errorf("missing = %+v", m)
+	}
+}
+
+// Format 1 prints a reason's text, not its code: two reasons with one text are
+// one, and the first code stays.
+func TestWeakestKeepsATextOnce(t *testing.T) {
+	t.Parallel()
+	a := UnderMatch(reason.New("gap.object-unresolved", "same"))
+	b := UnderMatch(reason.New("gap.version", "same"))
+	got := Weakest(a, b)
+	if rs := got.Reasons(); len(rs) != 1 || rs[0].Code != "gap.object-unresolved" {
+		t.Errorf("reasons %v", rs)
+	}
+	if rs := got.UnderMatchReasons(); len(rs) != 1 {
+		t.Errorf("under %v", rs)
+	}
+}
+
+// A loader's coded error keeps the failure's kind.
+func TestCodedError(t *testing.T) {
+	t.Parallel()
+	var err error = &CodedError{Reason: reason.New("gap.config-missing", "fw01/vsys1: no configuration")}
+	var coded interface{ Code() reason.Code }
+	if !errors.As(err, &coded) || coded.Code() != "gap.config-missing" || err.Error() != "fw01/vsys1: no configuration" {
+		t.Errorf("%v", err)
 	}
 }

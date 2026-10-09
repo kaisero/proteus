@@ -266,3 +266,16 @@ func codeTexts(rs simulate.Reasons) []string {
 	}
 	return out
 }
+
+// A loader's coded error keeps its kind on the hop, as a snapshot without a
+// configuration.
+func TestLoadKeepsTheLoadersCode(t *testing.T) {
+	t.Parallel()
+	e := &simulate.Env{Load: func(string, string) (simulate.Target, error) {
+		return simulate.Target{}, &simulate.CodedError{Reason: reason.New("gap.config-missing", "fw02/vsys1: no configuration")}
+	}}
+	_, m := load(e, routing.Hop{Device: pathlab.FW02, Vsys: "vsys1"})
+	if m == nil || m.Code != "gap.config-missing" || !strings.HasSuffix(m.Reason, "cannot be read: fw02/vsys1: no configuration") {
+		t.Errorf("%+v", m)
+	}
+}

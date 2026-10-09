@@ -119,6 +119,11 @@ func (f Fidelity) String() string {
 // texts lists the texts of rs, nil for none.
 func texts(rs []reason.Reason) []string { return Reasons(rs).Texts() }
 
+// sameText matches a reason with r's text.
+func sameText(r reason.Reason) func(reason.Reason) bool {
+	return func(o reason.Reason) bool { return o.Text == r.Text }
+}
+
 // Weakest returns the weakest fidelity: the highest level, with every reason and
 // skipped dimension of the inputs, each once. Nothing in is undeclared out.
 func Weakest(fs ...Fidelity) Fidelity {
@@ -127,13 +132,15 @@ func Weakest(fs ...Fidelity) Fidelity {
 		if f.level > out.level {
 			out.level = f.level
 		}
+		// Reasons are the same when their texts are, as in format 1, which
+		// prints only the text: the first code stays.
 		for _, r := range f.why {
-			if !slices.Contains(out.why, r) {
+			if !slices.ContainsFunc(out.why, sameText(r)) {
 				out.why = append(out.why, r)
 			}
 		}
 		for _, r := range f.under {
-			if !slices.Contains(out.under, r) {
+			if !slices.ContainsFunc(out.under, sameText(r)) {
 				out.under = append(out.under, r)
 			}
 		}

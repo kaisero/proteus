@@ -181,8 +181,9 @@ func deriveZones(_ context.Context, s *state) (simulate.Outcome, error) {
 		z.Source += ", after NAT rule " + strings.Join(nz.rules, ", ")
 	}
 	if len(nz.doubts) > 0 {
-		// The NAT doubts keep their codes; the first names the kind.
-		out.Fidelity = simulate.Weakest(out.Fidelity, simulate.OverMatchBecause(nz.doubts.Prefixed("the NAT rule is not certain: ").Joined()))
+		// One code for the summary; the NAT doubts keep their own codes.
+		why := nz.doubts.Prefixed("the NAT rule is not certain: ").Joined()
+		out.Fidelity = simulate.Weakest(out.Fidelity, simulate.OverMatchBecause(reason.New("doubt.nat-rule", why.Text)))
 	}
 	z.From, z.To = from, to
 	// Derived zones are never single and known, so whether from equals to is open:

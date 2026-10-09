@@ -289,7 +289,7 @@ func (a *app) runSnapshotDiff(ctx context.Context, o snapshotDiffOptions) (answe
 		before, _, err1 := config.Load(older.Path(store.ConfigDoc))
 		after, _, err2 := config.Load(newer.Path(store.ConfigDoc))
 		if err1 != nil || err2 != nil {
-			ans.holes = append(ans.holes, estate.NewHole(d, "", reason.New("gap.load-failed", fmt.Sprintf("unreadable configuration: %v %v", err1, err2))))
+			ans.holes = append(ans.holes, estate.NewHole(d, "", reason.New(configGap(older, newer), fmt.Sprintf("unreadable configuration: %v %v", err1, err2))))
 			continue
 		}
 		for _, sc := range diffScopes(before, after, o.sel.vsys) {
@@ -425,4 +425,15 @@ func firstDevice(cfg *config.Config) string {
 		return devs[0].Attr("name")
 	}
 	return ""
+}
+
+// configGap is the kind of a diff's unreadable configuration: missing when a
+// snapshot has none, as the store reports it, else a failed read.
+func configGap(sns ...store.Snapshot) reason.Code {
+	for _, sn := range sns {
+		if _, err := sn.ConfigPath(); err != nil {
+			return estate.GapOf(err)
+		}
+	}
+	return "gap.load-failed"
 }

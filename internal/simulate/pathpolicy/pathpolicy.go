@@ -133,7 +133,7 @@ func run(ctx context.Context, env *simulate.Env, in simulate.Input, checks []Che
 			for _, c := range checks {
 				h.Checks = append(h.Checks, CheckResult{
 					Name: c.Name(), Verdict: NotEvaluated, Fidelity: simulate.Exact,
-					Reason: reason.New("path.no-route", "dropped by routing before security policy"),
+					Reason: reason.Reason{Code: p.EndCode, Text: "dropped by routing before security policy"},
 				})
 			}
 			res.Hops = append(res.Hops, h)
@@ -280,6 +280,10 @@ func zoneDoubts(env *simulate.Env, h routing.Hop) (simulate.Reasons, []simulate.
 func load(env *simulate.Env, h routing.Hop) (simulate.Target, *simulate.Missing) {
 	t, err := env.Load(h.Device, h.Vsys)
 	code := reason.Code("gap.load-failed")
+	var coded interface{ Code() reason.Code }
+	if errors.As(err, &coded) {
+		code = coded.Code()
+	}
 	if err == nil && (t.Config == nil || t.Index == nil) {
 		err, code = errors.New("no configuration"), "gap.config-missing"
 	}
