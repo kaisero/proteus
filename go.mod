@@ -1,6 +1,6 @@
 module github.com/okaiser/proteus
 
-go 1.26.6
+go 1.26.9
 
 require (
 	github.com/RoaringBitmap/roaring/v2 v2.29.0
