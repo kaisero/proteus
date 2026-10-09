@@ -134,7 +134,7 @@ func (a *app) resolveSettings() error {
 			return usageErr("%s %q (from %s): %w", s.name, v, src, err)
 		}
 		a.settingLines = append(a.settingLines, fmt.Sprintf("setting %s=%s from %s", s.name, v, src))
-		if i == 0 { // the inventory path is known: load it once
+		if i == 0 && !a.noInventory { // the inventory path is known: load it once
 			a.inv, a.invErr = inventory.Load(a.invPath)
 			if a.inv != nil {
 				file = a.inv.Defaults

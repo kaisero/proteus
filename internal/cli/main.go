@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"net/netip"
+	"os"
 	"strings"
 	"time"
 
@@ -94,6 +95,8 @@ func (a *app) execute(ctx context.Context, argv []string) int {
 // app holds what every command shares: where it writes, how it reads the
 // environment and the clock, and the persistent flags.
 type app struct {
+	// stdin is what proteus mcp reads its client from without --http.
+	stdin          io.Reader
 	stdout, stderr io.Writer
 	// stdoutTTY and stderrTTY say whether each is a terminal; Run sets them.
 	stdoutTTY, stderrTTY bool
@@ -132,10 +135,12 @@ type app struct {
 	invPath string
 	inv     *inventory.Inventory
 	invErr  error
+	// noInventory skips the inventory: proteus mcp reads none.
+	noInventory bool
 }
 
 func newApp(stdout, stderr io.Writer, getenv func(string) string, now func() time.Time) *app {
-	return &app{stdout: stdout, stderr: stderr, getenv: getenv, now: now, version: "dev", lookup: query.SystemResolve, canonical: query.SystemCanonicalName}
+	return &app{stdin: os.Stdin, stdout: stdout, stderr: stderr, getenv: getenv, now: now, version: "dev", lookup: query.SystemResolve, canonical: query.SystemCanonicalName}
 }
 
 func (a *app) root() *cobra.Command {
@@ -160,6 +165,9 @@ func (a *app) root() *cobra.Command {
 		if skipsHook(c) {
 			return nil
 		}
+		// The server never reads the inventory with credentials: it reads
+		// the store's export (spec 2026-10-09 §4.2).
+		a.noInventory = c.CommandPath() == c.Root().Name()+" mcp"
 		if err := a.resolveSettings(); err != nil {
 			return err
 		}
@@ -182,7 +190,7 @@ func (a *app) root() *cobra.Command {
 		a.snapshotListCmd(), a.snapshotShowCmd(), a.snapshotDiffCmd())
 	sim := group("simulate", "Simulate what a device would do", a.simulateCmds()...)
 
-	cmd.AddCommand(a.fetchCmd(), inv, snap, a.searchCmd(), a.lookupCmd(), sim)
+	cmd.AddCommand(a.fetchCmd(), inv, snap, a.searchCmd(), a.lookupCmd(), sim, a.mcpCmd())
 	cmd.SetHelpCommand(helpCmd(cmd))
 	a.registerCompletions(cmd)
 	return cmd

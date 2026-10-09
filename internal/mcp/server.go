@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"runtime/debug"
 	"testing"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/okaiser/proteus/internal/query"
 	"github.com/okaiser/proteus/internal/reason"
+	"github.com/okaiser/proteus/internal/runlog"
 )
 
 // Options configure the server.
@@ -33,6 +35,10 @@ type Options struct {
 	// Identify gives a call's identity from its HTTP header (nil over
 	// stdio): HeaderIdentity or StdioIdentity. Nil records none.
 	Identify func(http.Header) Identity
+	// Logs opens a run log per tool call, named mcp-<tool>-<time>-<seq>.log
+	// in Logs.Dir, Logs.Keep kept (spec §4.9). Command is set per call. Nil
+	// writes no run log.
+	Logs *runlog.Options
 }
 
 // Limits bound what the server does at once and keeps (spec §4.2, §4.7).
@@ -169,7 +175,7 @@ func build(o Options, strict bool) (*sdk.Server, *limiter, error) {
 	if err := addResources(s); err != nil {
 		return nil, nil, err
 	}
-	m := middleware{audit: o.Audit, now: o.Now, identify: o.Identify, strict: strict, lim: newLimiter(lim.MaxConcurrent, lim.MaxQueue, lim.MaxWait, lim.CallTimeout)}
+	m := middleware{audit: o.Audit, now: o.Now, identify: o.Identify, logs: o.Logs, strict: strict, lim: newLimiter(lim.MaxConcurrent, lim.MaxQueue, lim.MaxWait, lim.CallTimeout)}
 	if m.now == nil {
 		m.now = time.Now
 	}
@@ -220,12 +226,24 @@ const answerGrace = 100 * time.Millisecond
 // Stdio is the transport over standard input and output.
 func Stdio() sdk.Transport { return &sdk.StdioTransport{} }
 
+// Streams is the stdio transport over r and w, one JSON-RPC message per
+// line. Serve does not close them.
+func Streams(r io.Reader, w io.Writer) sdk.Transport {
+	return &sdk.IOTransport{Reader: io.NopCloser(r), Writer: nopCloser{w}}
+}
+
+// nopCloser is a writer whose Close does nothing.
+type nopCloser struct{ io.Writer }
+
+func (nopCloser) Close() error { return nil }
+
 // middleware audits each tool call, bounds the calls and recovers a panic
 // (S3, S7, S8, spec §4.7).
 type middleware struct {
 	audit    Auditor
 	now      func() time.Time
 	identify func(http.Header) Identity
+	logs     *runlog.Options
 	strict   bool
 	// lim bounds the calls; nil runs each at once with no time limit.
 	lim *limiter
@@ -265,11 +283,14 @@ func (m middleware) receive(next sdk.MethodHandler) sdk.MethodHandler {
 			m.lim.begin()
 			defer m.lim.end()
 		}
+		log := m.openLog(c)
+		ctx = context.WithValue(ctx, logKey{}, log)
 		defer func() {
 			c.Duration = m.now().Sub(c.Time)
 			if m.audit != nil {
 				m.audit.Audit(*c)
 			}
+			closeLog(log, c)
 		}()
 		if m.lim == nil {
 			return m.handle(ctx, next, method, req, c)
@@ -279,6 +300,51 @@ func (m middleware) receive(next sdk.MethodHandler) sdk.MethodHandler {
 		}
 		return m.bounded(ctx, next, method, req, c)
 	}
+}
+
+// logKey keys a call's run log in its context.
+type logKey struct{}
+
+// logOf is the run log of the call ctx carries, or nil.
+func logOf(ctx context.Context) *runlog.Logger {
+	l, _ := ctx.Value(logKey{}).(*runlog.Logger)
+	return l
+}
+
+// maxLogTool bounds the tool name in a run log's file name: the client
+// names the tool, also one that does not exist.
+const maxLogTool = 64
+
+// openLog opens the run log of call c and records its input; nil when the
+// server writes none or the log does not open.
+func (m middleware) openLog(c *Call) *runlog.Logger {
+	if m.logs == nil {
+		return nil
+	}
+	o := *m.logs
+	o.Command = "mcp-" + cut(c.Tool, maxLogTool)
+	l, err := runlog.Open(o)
+	if err != nil {
+		return nil
+	}
+	l.Infof(runlog.TagRun, "call %s: %s", c.Tool, c.Input)
+	return l
+}
+
+// closeLog records how call c ended in its run log, a panic's stack
+// included, and closes the log.
+func closeLog(l *runlog.Logger, c *Call) {
+	if l == nil {
+		return
+	}
+	if c.Err != "" {
+		l.Warnf(runlog.TagRun, "%s", c.Err)
+	}
+	if len(c.Stack) > 0 {
+		l.Errorf(runlog.TagRun, "%s", c.Stack)
+	}
+	l.Infof(runlog.TagRun, "status %s %s after %s", c.Status, c.Code, c.Duration.Round(time.Millisecond))
+	_ = l.Close()
 }
 
 // refused is a call that did not run, as its result; c gets its status.

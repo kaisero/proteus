@@ -91,6 +91,9 @@ func TestFileIsPrivate(t *testing.T) {
 	if !strings.HasPrefix(filepath.Base(l.Path()), "simulate_policy-") {
 		t.Errorf("name = %s", l.Path())
 	}
+	if l := open(t, Options{Command: "mcp-simulate_policy/x"}); !strings.HasPrefix(filepath.Base(l.Path()), "mcp-simulate_policy_x-") {
+		t.Errorf("name = %s", l.Path())
+	}
 }
 
 func TestRotationKeepsTheNewest(t *testing.T) {

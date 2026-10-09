@@ -233,11 +233,13 @@ type calls struct {
 	cache *Cache
 }
 
-// on is the env of one call: its configurations and operational data come
-// through the cache, and its loads wait no longer than ctx. The returned
+// on is the env of one call: it logs to the call's run log, its
+// configurations and operational data come through the cache, and its loads
+// wait no longer than ctx. The returned
 // view keeps the call's first server failure.
 func (c calls) on(ctx context.Context) (query.Env, *callCache) {
 	env := c.env
+	env.Log = logOf(ctx)
 	if c.cache == nil {
 		return env, nil
 	}

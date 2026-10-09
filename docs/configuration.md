@@ -79,7 +79,9 @@ because a device name starts with a letter or a digit.
 ## The mcp section
 
 The `mcp:` section configures `proteus mcp`. Write it in this inventory; the export
-carries it to the server. Each key is optional.
+carries it to the server. Each key is optional. The values below are the defaults,
+except `token_file`, `allowed_hosts`, `identity_header` and `audit_log`, which have
+none.
 
 ```yaml
 mcp:
@@ -89,7 +91,7 @@ mcp:
   identity_header: X-User-Claims         # the header with the caller's claims
   audit_claims: [sub]                    # the claims each audit line records
   audit_log: /var/log/proteus/mcp-audit.jsonl
-  log_dir: /var/log/proteus/mcp          # run logs of the calls, apart from the CLI's
+  log_dir: ~/.local/state/proteus/mcp    # run logs of the calls, apart from the CLI's
   log_keep: 200
   max_concurrent: 4                      # calls answered at once
   max_queue: 16                          # calls waiting for a slot
@@ -100,9 +102,45 @@ mcp:
 ```
 
 The token is never in the inventory: `token_file` names the file that holds it.
-proteus refuses an unknown key, a negative number, a duration it cannot read and a
-`listen` without a port. A number left out or set to `0` takes its default: `max_queue: 0`
-does not turn the queue off.
+proteus refuses an unknown key, a negative number, a duration it cannot read, a
+`listen` without a port, an `identity_header` that is not an HTTP header name and an
+empty `audit_claims` entry. A number left out or set to `0` takes its default:
+`max_queue: 0` does not turn the queue off.
+
+Each mcp setting comes from, in rising precedence: its default, the export's `mcp:`
+section, a variable, and a flag. The server reads no other file: not the inventory
+with credentials, and not the export's `store` or `log_dir`.
+
+| Key | Variable | Flag |
+| --- | --- | --- |
+| `listen` | `PROTEUS_MCP_LISTEN` | `--listen` |
+| `token_file` | `PROTEUS_MCP_TOKEN_FILE` | `--token-file` |
+| `allowed_hosts` | `PROTEUS_MCP_ALLOWED_HOSTS` (comma-separated) | `--allowed-host` (repeatable) |
+| `identity_header` | `PROTEUS_MCP_IDENTITY_HEADER` | |
+| `audit_claims` | `PROTEUS_MCP_AUDIT_CLAIMS` (comma-separated) | |
+| `audit_log` | `PROTEUS_MCP_AUDIT_LOG` | `--audit-log` |
+| `log_dir` | `PROTEUS_MCP_LOG_DIR` | |
+| `log_keep` | `PROTEUS_MCP_LOG_KEEP` | |
+| `max_concurrent` | `PROTEUS_MCP_MAX_CONCURRENT` | `--max-concurrent` |
+| `max_queue` | `PROTEUS_MCP_MAX_QUEUE` | `--max-queue` |
+| `max_wait` | `PROTEUS_MCP_MAX_WAIT` | `--max-wait` |
+| `call_timeout` | `PROTEUS_MCP_CALL_TIMEOUT` | `--call-timeout` |
+| `max_loads` | `PROTEUS_MCP_MAX_LOADS` | `--max-loads` |
+| `max_cache` | `PROTEUS_MCP_MAX_CACHE` | `--max-cache` |
+
+`PROTEUS_MCP_TOKEN` holds the token itself. It wins over `token_file` from the export
+or `PROTEUS_MCP_TOKEN_FILE`; `--token-file` wins over it. There is no `--token`
+flag: a flag shows in the process list. proteus trims trailing whitespace from the
+token and refuses a token file that others can write. A read-only secret mount
+(mode 0444, owned by root) is fine.
+
+`--http` needs a token of at least 32 bytes, `allowed_hosts` and `audit_log`. Over
+stdio no audit file is written unless `audit_log` is set; its lines record the
+operating system user (`auth: stdio`, `identity_source: os`). Over HTTP they record
+the claims of `identity_header` (`auth: token`, `identity_source: header`), or the
+identity `unknown` when the header is missing or is not a JSON object. The `--max-age`,
+`--log-level` and `--store` settings apply to the server too; `max_snapshot_age` comes
+from the export's `defaults:`.
 
 ## Settings
 
@@ -149,3 +187,5 @@ A configuration does not say which directory groups a user belongs to.
 | `~/.local/share/proteus/<device>/<time>/` | 0700 / 0600 | one snapshot |
 | `~/.local/state/proteus/log/` | 0700 / 0600 | one log file per run, `<command>-<time>-<seq>.log` |
 | `<store>/.proteus/inventory.yaml` | 0700 / 0600 | the inventory export, with `export_inventory: true` |
+| `~/.local/state/proteus/mcp/` | 0700 / 0600 | one log file per MCP call, `mcp-<tool>-<time>-<seq>.log` |
+| `audit_log` | 0600 | the MCP audit, one JSON line per call, appended |

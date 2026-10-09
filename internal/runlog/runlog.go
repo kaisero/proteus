@@ -274,10 +274,11 @@ func removeGone(path string) error {
 }
 
 // fileSafe turns a command such as "simulate policy" into "simulate_policy".
+// A hyphen stays: the server names its logs "mcp-<tool>".
 func fileSafe(s string) string {
 	return strings.Map(func(r rune) rune {
 		switch {
-		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '.':
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '.', r == '-':
 			return r
 		}
 		return '_'

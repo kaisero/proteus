@@ -84,14 +84,20 @@ func TestParseRejectsABadMCPSection(t *testing.T) {
 		{"bare ipv6", "listen: ::1:8765"},
 		{"empty host", "allowed_hosts: ['']"},
 		{"host with path", "allowed_hosts: [a.example/x]"},
+		{"header with a space", "identity_header: 'X User'"},
+		{"header with a colon", "identity_header: 'X-User:'"},
+		{"empty claim", "audit_claims: [sub, '']"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			doc := "version: 1\ndevices: []\nmcp:\n  " + tc.mcp + "\n"
-			if _, err := Parse(strings.NewReader(doc)); err == nil {
-				t.Errorf("want an error for %q", tc.mcp)
+			if _, err := Parse(strings.NewReader(doc)); err == nil || !strings.HasPrefix(err.Error(), "inventory: ") {
+				t.Errorf("%q: %v", tc.mcp, err)
 			}
 		})
+	}
+	if _, err := Parse(strings.NewReader("version: 1\ndevices: []\nmcp: {identity_header: X-User-Claims, audit_claims: [sub, email]}\n")); err != nil {
+		t.Errorf("a valid header and claims: %v", err)
 	}
 	for _, listen := range []string{":8765", "0.0.0.0:8765", "[::1]:8765", "proteus.example.org:443"} {
 		if _, err := Parse(strings.NewReader("version: 1\ndevices: []\nmcp: {listen: '" + listen + "'}\n")); err != nil {

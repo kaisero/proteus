@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -168,8 +169,8 @@ func (inv *Inventory) validate() error {
 	if inv.Defaults.LogKeep < 0 {
 		return errors.New("inventory: defaults: log_keep must not be negative")
 	}
-	if err := inv.MCP.validate(); err != nil {
-		return err
+	if err := inv.MCP.Validate(); err != nil {
+		return fmt.Errorf("inventory: %w", err)
 	}
 	seen := map[string]bool{}
 	for i, d := range inv.Devices {
@@ -188,9 +189,10 @@ func (inv *Inventory) validate() error {
 	return nil
 }
 
-// validate checks the mcp: values that a typo could turn into a default. A nil
-// section is valid.
-func (m *MCP) validate() error {
+// Validate checks the mcp: values that a typo could turn into a default, or
+// that the server could not use. A nil section is valid. proteus mcp checks
+// the values from every source with it, not only the file's.
+func (m *MCP) Validate() error {
 	if m == nil {
 		return nil
 	}
@@ -205,7 +207,7 @@ func (m *MCP) validate() error {
 		{"max_cache", m.MaxCache},
 	} {
 		if n.v < 0 {
-			return fmt.Errorf("inventory: mcp: %s must not be negative", n.key)
+			return fmt.Errorf("mcp: %s must not be negative", n.key)
 		}
 	}
 	for _, d := range []struct{ key, v string }{{"max_wait", m.MaxWait}, {"call_timeout", m.CallTimeout}} {
@@ -213,22 +215,32 @@ func (m *MCP) validate() error {
 			continue
 		}
 		if v, err := time.ParseDuration(d.v); err != nil || v <= 0 {
-			return fmt.Errorf("inventory: mcp: %s %q: want a duration like 10s", d.key, d.v)
+			return fmt.Errorf("mcp: %s %q: want a duration like 10s", d.key, d.v)
 		}
 	}
 	if m.Listen != "" {
 		host, port, err := net.SplitHostPort(m.Listen)
 		if n, perr := strconv.Atoi(port); err != nil || perr != nil || n < 1 || n > 65535 || strings.ContainsAny(host, " /") {
-			return fmt.Errorf("inventory: mcp: listen %q: want host:port, such as 127.0.0.1:8765", m.Listen)
+			return fmt.Errorf("mcp: listen %q: want host:port, such as 127.0.0.1:8765", m.Listen)
 		}
 	}
 	for _, h := range m.AllowedHosts {
 		if h == "" || strings.ContainsAny(h, " /") {
-			return fmt.Errorf("inventory: mcp: allowed_hosts: %q is not a host name", h)
+			return fmt.Errorf("mcp: allowed_hosts: %q is not a host name", h)
 		}
+	}
+	if m.IdentityHeader != "" && !headerName.MatchString(m.IdentityHeader) {
+		return fmt.Errorf("mcp: identity_header %q is not an HTTP header name", m.IdentityHeader)
+	}
+	if slices.Contains(m.AuditClaims, "") {
+		return errors.New("mcp: audit_claims: an entry is empty")
 	}
 	return nil
 }
+
+// headerName is an HTTP field name: one or more token characters (RFC 9110
+// §5.1, §5.6.2).
+var headerName = regexp.MustCompile("^[!#$%&'*+.^_`|~0-9A-Za-z-]+$")
 
 // Names returns the device names in file order.
 func (inv *Inventory) Names() []string {
