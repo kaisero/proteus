@@ -5,16 +5,12 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
-	"strconv"
 	"strings"
-	"time"
 
 	"github.com/spf13/cobra"
 
 	"github.com/okaiser/proteus/internal/estate"
-	"github.com/okaiser/proteus/internal/index"
 	"github.com/okaiser/proteus/internal/query"
-	"github.com/okaiser/proteus/internal/runlog"
 	"github.com/okaiser/proteus/internal/simulate"
 	"github.com/okaiser/proteus/internal/simulate/nat"
 	"github.com/okaiser/proteus/internal/simulate/routing"
@@ -110,63 +106,6 @@ func (fl flowFlags) input(src, dst string) query.FlowInput {
 		Application: fl.application, User: fl.user, URL: fl.url, FromZone: fl.fromZone, ToZone: fl.toZone,
 		NoDNS: fl.noDNS,
 	}
-}
-
-// parseFlow reads the flow flags. --port takes 443 or tcp/443.
-func parseFlow(fl flowFlags) (simulate.Flow, error) {
-	f := simulate.Flow{
-		Protocol: strings.ToLower(fl.protocol), Application: fl.application, User: fl.user,
-		URL: fl.url, FromZone: fl.fromZone, ToZone: fl.toZone,
-	}
-	if fl.sourcePort < 0 || fl.sourcePort > 65535 {
-		return f, usageErr("--source-port %d is not a port", fl.sourcePort)
-	}
-	f.SourcePort = uint16(fl.sourcePort) //nolint:gosec // G115: range checked above
-	if fl.port == "" {
-		return f, nil
-	}
-	port := fl.port
-	if proto, p, ok := strings.Cut(fl.port, "/"); ok {
-		f.Protocol, port = strings.ToLower(proto), p
-	}
-	n, err := strconv.ParseUint(port, 10, 16)
-	if err != nil {
-		return f, usageErr("--port %q: want 443 or tcp/443", fl.port)
-	}
-	f.DestPort = uint16(n)
-	return f, nil
-}
-
-// endpoint reads a source or destination: an address, or an FQDN resolved with
-// this machine's DNS. A network is not an endpoint.
-func (a *app) endpoint(ctx context.Context, s string, noDNS bool) (simulate.Endpoint, error) {
-	if addr, err := netip.ParseAddr(s); err == nil {
-		return simulate.Addr(addr), nil
-	}
-	if len(index.PrefixesOf(s)) > 0 {
-		return simulate.Endpoint{}, usageErr("%q is a network, not an endpoint; simulate one address", s)
-	}
-	if !strings.Contains(s, ".") {
-		return simulate.Endpoint{}, usageErr("%q is neither an address nor an FQDN", s)
-	}
-	ep := simulate.Endpoint{Name: strings.ToLower(s)}
-	if noDNS {
-		a.log.Infof(runlog.TagRun, "dns: %s not resolved (--no-dns)", ep.Name)
-		return ep, nil
-	}
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-	addrs, err := a.lookup(ctx, ep.Name)
-	if err != nil {
-		a.log.Warnf(runlog.TagRun, "dns: %s: %v", ep.Name, err)
-		return ep, nil
-	}
-	for _, ad := range addrs {
-		ep.Addrs = append(ep.Addrs, ad.Unmap())
-	}
-	ep.Resolved = len(ep.Addrs) > 0
-	a.log.Infof(runlog.TagRun, "dns: %s -> %v", ep.Name, ep.Addrs)
-	return ep, nil
 }
 
 // lookupDNS resolves a name with this machine's resolver.
@@ -283,21 +222,6 @@ func orAny(zs []string) string {
 		return "any"
 	}
 	return strings.Join(zs, "/")
-}
-
-// dedupeUnresolved keeps one entry per device, vsys and reason. A stage's
-// unresolved entry and the run's fidelity can carry the same reason.
-func dedupeUnresolved(in []unresolved) []unresolved {
-	seen := map[string]bool{}
-	var out []unresolved
-	for _, u := range in {
-		k := u.Device + "|" + u.Vsys + "|" + u.Reason
-		if !seen[k] {
-			seen[k] = true
-			out = append(out, u)
-		}
-	}
-	return out
 }
 
 func (fl *flowFlags) bindProtocol(cmd *cobra.Command) {

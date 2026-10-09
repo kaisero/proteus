@@ -142,6 +142,8 @@ type Checks []Check
 type Env struct{ ... }
 type Envelope[In, Res any] struct{ ... }
 type FlowInput struct{ ... }
+type NATInput struct{ ... }
+type NATResult struct{ ... }
 type Note struct{ ... }
 type PathHop struct{ ... }
 type PathResult struct{ ... }
@@ -163,9 +165,11 @@ type UsageError struct{ ... }
 func (cs Checks) MarshalJSON() ([]byte, error)
 func (e *UsageError) Error() string
 func (e *UsageError) Unwrap() error
+func (in NATInput) Validate() *UsageError
 func (in PolicyFileInput) Validate() *UsageError
 func (in PolicyInput) Validate() *UsageError
 func (in RoutingInput) Validate() *UsageError
+func NAT(ctx context.Context, env Env, in NATInput) (Envelope[NATInput, NATResult], error)
 func NoteOf(device, vsys string, r reason.Reason) Note
 func PointHop(r pathpolicy.Result) (routing.Hop, bool)
 func Policy(ctx context.Context, env Env, in PolicyInput) (Envelope[PolicyInput, PathResult], error)

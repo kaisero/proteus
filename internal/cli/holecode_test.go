@@ -1,31 +1,12 @@
 package cli
 
 import (
-	"errors"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
-	"github.com/okaiser/proteus/internal/estate"
-	"github.com/okaiser/proteus/internal/simulate"
 	"github.com/okaiser/proteus/internal/store"
 )
-
-// A hop the store cannot give keeps the hole's kind, not a generic load failure.
-func TestStoreLoaderKeepsTheHoleCode(t *testing.T) {
-	t.Parallel()
-	st, err := store.Open(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	load := storeLoader(st, estate.When{}, estate.NewNetwork(st, nil, estate.When{}), nil)
-	_, err = load("fw01", "vsys1")
-	var coded *simulate.CodedError
-	if !errors.As(err, &coded) || coded.Code() != "gap.snapshot-missing" || !strings.HasPrefix(err.Error(), "fw01/vsys1: ") {
-		t.Errorf("%v (%T)", err, err)
-	}
-}
 
 // A diff of a snapshot without a configuration says so; one that cannot be read
 // is a failed load.

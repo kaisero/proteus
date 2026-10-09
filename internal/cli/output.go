@@ -7,7 +7,6 @@ import (
 	"github.com/okaiser/proteus/internal/estate"
 	"github.com/okaiser/proteus/internal/query"
 	"github.com/okaiser/proteus/internal/reason"
-	"github.com/okaiser/proteus/internal/simulate"
 )
 
 // formatVersion is the JSON envelope's format. A change that breaks a consumer
@@ -58,8 +57,6 @@ func targetQualifiers(ts []estate.Target) ([]unresolved, []note) {
 	}
 	return un, notes
 }
-
-func simStages(stages []simulate.Stage) []stageJSON { return query.SimStages(stages) }
 
 // normalize turns nil slices into empty ones, so every key prints [] rather than
 // null (spec U5). writeJSON and writeYAML both call it.

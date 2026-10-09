@@ -10,6 +10,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/okaiser/proteus/internal/config"
 	"github.com/okaiser/proteus/internal/estate"
 	"github.com/okaiser/proteus/internal/index"
 	"github.com/okaiser/proteus/internal/reason"
@@ -281,4 +282,18 @@ func where(device, vsys string) string {
 		return device
 	}
 	return device + "/" + vsys
+}
+
+// indexSets keeps one index set per configuration a run reads, so the run builds
+// each (configuration, scope, rulebase) index at most once. The run owns it: one
+// process answers one command, so it lives as long as the command.
+type indexSets map[*config.Config]*index.Set
+
+func (m indexSets) of(cfg *config.Config) *index.Set {
+	s, ok := m[cfg]
+	if !ok {
+		s = index.NewSet(cfg)
+		m[cfg] = s
+	}
+	return s
 }

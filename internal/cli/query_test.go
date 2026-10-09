@@ -16,6 +16,7 @@ var questions = []struct {
 	{[]string{"simulate", "policy", "198.18.1.10", "198.18.10.100"}, true},
 	{[]string{"simulate", "policy", "10.1.0.5", "10.2.0.5", "--file", fixture("firewall-zones.xml"), "--vsys", "vsys1"}, false},
 	{[]string{"simulate", "routing", "198.18.10.5", "8.8.8.8"}, true},
+	{[]string{"simulate", "nat", "198.18.1.10", "198.18.250.10", "--device", "fw01"}, true},
 }
 
 // A question stops at an inventory it cannot read, and at a store it cannot open,
