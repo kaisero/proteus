@@ -114,8 +114,8 @@ var doubtCodes = map[string]reason.Code{
 // candidate, the fields it sets that no stage evaluates (spec §4.7).
 func (s *state) doubts() []Doubt {
 	var out []Doubt
-	services := definedIn(s.target.Config, s.target.Index.Scope(), "service")
-	categories := definedIn(s.target.Config, s.target.Index.Scope(), "category")
+	services := definedIn(s.target.Config, s.idx.Scope(), "service")
+	categories := definedIn(s.target.Config, s.idx.Scope(), "category")
 	for _, r := range s.verdict.Candidates {
 		add := func(why ...reason.Reason) {
 			out = append(out, Doubt{Position: r.Position, Rule: r.Name, Reasons: why})

@@ -34,8 +34,7 @@ func envPath(t *testing.T, path string, zones bool) *simulate.Env {
 		}
 		set := index.NewSet(cfg)
 		sc := config.Scope{Sort: config.ScopeVsys, Name: vsys}
-		idx, err := set.Index(sc, resolve.Security)
-		if err != nil {
+		if _, err := set.Index(sc, resolve.Security); err != nil {
 			return simulate.Target{}, err
 		}
 		var p index.Providers
@@ -54,7 +53,7 @@ func envPath(t *testing.T, path string, zones bool) *simulate.Env {
 		if rep.VersionGap != "" {
 			notes = append(notes, reason.New("gap.version", rep.VersionGap))
 		}
-		return simulate.Target{Config: cfg, Index: idx, Indexes: set.Provider(sc), Providers: p, Notes: notes}, nil
+		return simulate.Target{Config: cfg, Indexes: set.Provider(sc), Providers: p, Notes: notes}, nil
 	}}
 }
 
@@ -288,6 +287,21 @@ func TestALoadFailureNamesTheDevice(t *testing.T) {
 	}
 }
 
+// The security index comes from the target's provider. A target without one fails
+// the run like a failed load: the check never builds an index itself.
+func TestATargetWithoutAnIndexProviderFailsLikeALoad(t *testing.T) {
+	t.Parallel()
+	cfg, _, err := config.Load("../../../testdata/config/firewall-zones.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := &simulate.Env{Load: func(string, string) (simulate.Target, error) { return simulate.Target{Config: cfg}, nil }}
+	_, err = Simulation{}.Run(context.Background(), e, simulate.Input{Device: "fw09", Vsys: "vsys1"})
+	if err == nil || err.Error() != "policy: fw09/vsys1: no index provider" {
+		t.Errorf("err = %v", err)
+	}
+}
+
 // head is the first candidate, whether or not it decides.
 func head(v Verdict) string {
 	if len(v.Candidates) == 0 {
@@ -514,7 +528,7 @@ func TestDefaultRuleWithoutTheVsys(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := &state{known: true, target: simulate.Target{Config: other, Index: idx}}
+	s := &state{known: true, target: simulate.Target{Config: other}, idx: idx}
 	s.in.Flow.FromZone, s.in.Flow.ToZone = "inside", "dmz"
 	if d, why := s.defaultRule(); d.Name != "" || why != reason.New("default.vsys-missing", "the configuration has no vsys:vsys2, so its default rules are not known") {
 		t.Errorf("got %+v, %q", d, why)

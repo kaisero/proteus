@@ -283,7 +283,7 @@ func (s *state) narrowZones(from, to *roaring.Bitmap) *roaring.Bitmap {
 
 // defined reports whether the vsys defines a zone of this name.
 func (s *state) defined(zone string) bool {
-	for _, z := range resolve.ZonesInScope(s.target.Config, s.target.Index.Scope()) {
+	for _, z := range resolve.ZonesInScope(s.target.Config, s.idx.Scope()) {
 		if z.Name == zone {
 			return true
 		}
@@ -417,7 +417,7 @@ func (s *state) withoutField(field string) *roaring.Bitmap {
 // not define, one of the given keywords, or nothing at all: a rule a configuration
 // exports without the field cannot be judged on it, so it is kept, not dropped.
 func (s *state) unevaluable(field string, keywords ...string) *roaring.Bitmap {
-	defined := definedIn(s.target.Config, s.target.Index.Scope(), field)
+	defined := definedIn(s.target.Config, s.idx.Scope(), field)
 	out := roaring.New()
 	for i, r := range s.rules {
 		if len(r.Fields[field]) == 0 && field != "category" {
@@ -451,7 +451,7 @@ func (s *state) anyNames(field string) bool {
 }
 
 func dropDisabled(_ context.Context, s *state) (simulate.Outcome, error) {
-	disabled := roaring.And(s.cand, s.target.Index.Disabled())
+	disabled := roaring.And(s.cand, s.idx.Disabled())
 	s.cand.AndNot(disabled)
 	return simulate.Outcome{
 		Fidelity: simulate.Exact, Detail: fmt.Sprintf("%d disabled", disabled.GetCardinality()),
@@ -588,7 +588,7 @@ func (s *state) defaultRule() (resolve.DefaultRule, reason.Reason) {
 	var stored []resolve.DefaultRule
 	found := false
 	for _, tg := range resolve.Targets(s.target.Config) {
-		if tg.Scope() != s.target.Index.Scope() {
+		if tg.Scope() != s.idx.Scope() {
 			continue
 		}
 		found = true
@@ -606,7 +606,7 @@ func (s *state) defaultRule() (resolve.DefaultRule, reason.Reason) {
 		// Without the vsys its overrides are unknown; the built-in action would be
 		// a guess.
 		return resolve.DefaultRule{}, reason.New("default.vsys-missing",
-			fmt.Sprintf("the configuration has no %s, so its default rules are not known", s.target.Index.Scope()))
+			fmt.Sprintf("the configuration has no %s, so its default rules are not known", s.idx.Scope()))
 	}
 	// Precedence between a local and a pushed override is not verified on a
 	// device (spec E24): one source decides alone; two must agree, and then the

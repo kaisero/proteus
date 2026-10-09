@@ -93,15 +93,14 @@ func (l lab) env(t *testing.T) *simulate.Env {
 		}
 		set := index.NewSet(cfg)
 		sc := config.Scope{Sort: config.ScopeVsys, Name: vsys}
-		idx, err := set.Index(sc, resolve.Security)
-		if err != nil {
+		if _, err := set.Index(sc, resolve.Security); err != nil {
 			return simulate.Target{}, err
 		}
 		var notes simulate.Reasons
 		if rep.VersionGap != "" && !l.quiet {
 			notes = append(notes, reason.New("gap.version", rep.VersionGap))
 		}
-		return simulate.Target{Config: cfg, Index: idx, Indexes: set.Provider(sc), Notes: notes}, nil
+		return simulate.Target{Config: cfg, Indexes: set.Provider(sc), Notes: notes}, nil
 	}
 	return &simulate.Env{Network: l.net, Load: load}
 }
@@ -303,6 +302,22 @@ func TestTheEndsOfAPath(t *testing.T) {
 		}
 		if last := r.Hops[len(r.Hops)-1]; last.Checks[0].Verdict == NotEvaluated && last.Checks[0].Reason != dropped {
 			t.Errorf("%s: reason %q", c.name, last.Checks[0].Reason)
+		}
+	}
+}
+
+// A hop routing dropped carries the path's end code on each check it did not
+// evaluate, not a code of its own.
+func TestADroppedHopCarriesTheEndCode(t *testing.T) {
+	t.Parallel()
+	r := runLab(t, lab{defaults: allowAll, net: labNet(t, true)}, "198.18.30.5")
+	last := r.Hops[len(r.Hops)-1]
+	if r.Path.Outcome != routing.Dropped || r.Path.EndCode != "path.no-route" {
+		t.Fatalf("path %s %s", r.Path.Outcome, r.Path.EndCode)
+	}
+	for _, c := range last.Checks {
+		if c.Verdict != NotEvaluated || c.Reason.Code != r.Path.EndCode {
+			t.Errorf("%s: %s %+v", c.Name, c.Verdict, c.Reason)
 		}
 	}
 }

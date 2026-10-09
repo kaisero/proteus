@@ -106,6 +106,18 @@ func TestNoIndexProviderIsUnresolved(t *testing.T) {
 	}
 }
 
+// A provider of another vsys's indexes is a loader's mistake too: its rules are
+// not this vsys's.
+func TestAProviderOfAnotherVsysIsUnresolved(t *testing.T) {
+	t.Parallel()
+	v := routingVsys(t)
+	v.Indexes = index.NewSet(v.Config).Provider(config.Scope{Sort: config.ScopeShared})
+	_, _, un := v.Sides(resolve.Security, ip("1.1.1.1"), ip("1.1.1.1"), func(int) (bool, bool) { return false, false })
+	if len(un) != 1 || !strings.Contains(un[0].Reason, "the index provider gives shared, not vsys:vsys1") {
+		t.Errorf("Sides: %v", un)
+	}
+}
+
 func TestSidesAndHolds(t *testing.T) {
 	t.Parallel()
 	v := routingVsys(t)

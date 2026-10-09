@@ -176,6 +176,7 @@ func (rs Reasons) MarshalJSON() ([]byte, error)
 func (rs Reasons) Prefixed(p string) Reasons
 func (rs Reasons) Text() string
 func (rs Reasons) Texts() []string
+func (t Target) Index(rb resolve.Rulebase) (*index.Index, error)
 func Addr(a netip.Addr) Endpoint
 func Execute[S any](ctx context.Context, kind string, state *S, steps []Step[S], keepBitmaps bool, log *runlog.Logger) ([]Stage, error)
 func NewMissing(device string, r reason.Reason) Missing

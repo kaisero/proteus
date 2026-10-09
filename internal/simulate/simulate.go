@@ -2,6 +2,7 @@ package simulate
 
 import (
 	"context"
+	"errors"
 	"net/netip"
 	"time"
 
@@ -60,14 +61,21 @@ type Input struct {
 // Target is what a simulation reads for one device and vsys.
 type Target struct {
 	Config *config.Config
-	// Index is the vsys's security index, the one Indexes gives for
-	// resolve.Security; the loader fills both.
-	Index *index.Index
 	// Indexes gives the vsys's index of a rulebase. The loader's owner builds and
-	// keeps the indexes (spec §4.8); a simulation never builds its own.
+	// keeps the indexes (spec §4.8); a simulation never builds its own. It is the
+	// one source of a target's indexes: the security check takes its index here too.
 	Indexes   func(resolve.Rulebase) (*index.Index, error)
 	Providers index.Providers
 	Notes     Reasons
+}
+
+// Index is the target's index of a rulebase from its provider. A target without
+// a provider is a loader's mistake, reported as an error rather than built here.
+func (t Target) Index(rb resolve.Rulebase) (*index.Index, error) {
+	if t.Indexes == nil {
+		return nil, errors.New("no index provider")
+	}
+	return t.Indexes(rb)
 }
 
 // Env bundles one run's dependencies. It is single-use and not safe for

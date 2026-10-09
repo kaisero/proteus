@@ -100,3 +100,30 @@ func TestAnUnknownDeviceIsAnError(t *testing.T) {
 		t.Error("fw01 has vsys9")
 	}
 }
+
+// fatalTB records a fatal failure instead of ending the test, so a helper's
+// failure path can be checked.
+type fatalTB struct {
+	testing.TB
+	failed bool
+}
+
+func (f *fatalTB) Helper()      {}
+func (f *fatalTB) Fatal(...any) { f.failed = true; panic(f) }
+
+// A file the lab cannot read fails the test that asked for it.
+func TestAnUnreadableFileFailsTheTest(t *testing.T) {
+	t.Parallel()
+	tb := &fatalTB{TB: t}
+	func() {
+		defer func() {
+			if r := recover(); r != nil && r != any(tb) {
+				panic(r)
+			}
+		}()
+		pathlab.Read(tb, pathlab.OpdataFile("absent.xml"))
+	}()
+	if !tb.failed {
+		t.Error("an absent file was read")
+	}
+}

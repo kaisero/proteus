@@ -10,7 +10,6 @@ import (
 	"github.com/okaiser/proteus/internal/config"
 	"github.com/okaiser/proteus/internal/index"
 	"github.com/okaiser/proteus/internal/reason"
-	"github.com/okaiser/proteus/internal/resolve"
 	"github.com/okaiser/proteus/internal/simulate"
 	"github.com/okaiser/proteus/internal/simulate/pathlab"
 	"github.com/okaiser/proteus/internal/simulate/routing"
@@ -236,11 +235,10 @@ func TestLoadNeedsAnIndex(t *testing.T) {
 	if _, m := load(e, routing.Hop{Device: pathlab.FW02, Vsys: "vsys1"}); m == nil || !strings.HasSuffix(m.Reason, "no configuration") || m.Code != "gap.config-missing" {
 		t.Errorf("%v", m)
 	}
-	idx, err := index.New(cfg, config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}, resolve.Security)
-	if err != nil {
-		t.Fatal(err)
+	set := index.NewSet(cfg)
+	e.Load = func(string, string) (simulate.Target, error) {
+		return simulate.Target{Config: cfg, Indexes: set.Provider(config.Scope{Sort: config.ScopeVsys, Name: "vsys1"})}, nil
 	}
-	e.Load = func(string, string) (simulate.Target, error) { return simulate.Target{Config: cfg, Index: idx}, nil }
 	if _, m := load(e, routing.Hop{Device: pathlab.FW02, Vsys: "vsys1"}); m != nil {
 		t.Errorf("%v", m)
 	}

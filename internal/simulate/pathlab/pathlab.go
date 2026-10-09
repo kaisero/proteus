@@ -212,8 +212,7 @@ func Env(tb testing.TB, d Defaults) *simulate.Env {
 			return simulate.Target{}, err
 		}
 		sc := config.Scope{Sort: config.ScopeVsys, Name: vsys}
-		idx, err := s.Index(sc, resolve.Security)
-		if err != nil {
+		if _, err := s.Index(sc, resolve.Security); err != nil {
 			return simulate.Target{}, err
 		}
 		z, err := index.NewZoneSnapshot(time.Time{}, device,
@@ -222,7 +221,7 @@ func Env(tb testing.TB, d Defaults) *simulate.Env {
 		if err != nil {
 			return simulate.Target{}, err
 		}
-		return simulate.Target{Config: s.Config(), Index: idx, Indexes: s.Provider(sc), Providers: index.Providers{Zones: z}}, nil
+		return simulate.Target{Config: s.Config(), Indexes: s.Provider(sc), Providers: index.Providers{Zones: z}}, nil
 	}
 	return &simulate.Env{Network: Network(tb), Load: load}
 }

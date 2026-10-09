@@ -96,7 +96,15 @@ func (v Vsys) index(rb resolve.Rulebase) (*index.Index, error) {
 	if v.Indexes == nil {
 		return nil, errors.New("no index provider")
 	}
-	return v.Indexes(rb)
+	idx, err := v.Indexes(rb)
+	if err != nil {
+		return nil, err
+	}
+	// A provider of another vsys would answer with that vsys's rules.
+	if idx.Scope() != v.Scope {
+		return nil, fmt.Errorf("the index provider gives %s, not %s", idx.Scope(), v.Scope)
+	}
+	return idx, nil
 }
 
 // withoutGap drops the schema version gap from a report's unresolved values. The

@@ -4,6 +4,7 @@ import (
 	"net/netip"
 	"testing"
 
+	"github.com/okaiser/proteus/internal/index"
 	"github.com/okaiser/proteus/internal/resolve"
 )
 
@@ -31,5 +32,19 @@ func TestUnavailableErrorReadsAsItsReason(t *testing.T) {
 	two := &UnavailableError{Missing: []Missing{{Device: "fw1", Reason: "a"}, {Device: "fw2", Reason: "b"}}}
 	if two.Error() != "fw1: a; fw2: b" {
 		t.Errorf("two: %q", two.Error())
+	}
+}
+
+// A target's index comes from its provider; without one it is an error, never
+// an index built here.
+func TestTargetIndexComesFromItsProvider(t *testing.T) {
+	t.Parallel()
+	if _, err := (Target{}).Index(resolve.Security); err == nil || err.Error() != "no index provider" {
+		t.Errorf("no provider: %v", err)
+	}
+	var asked resolve.Rulebase
+	tg := Target{Indexes: func(rb resolve.Rulebase) (*index.Index, error) { asked = rb; return nil, nil }}
+	if _, err := tg.Index(resolve.NAT); err != nil || asked != resolve.NAT {
+		t.Errorf("provider asked for %v: %v", asked, err)
 	}
 }

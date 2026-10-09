@@ -148,6 +148,7 @@ type state struct {
 	env    *simulate.Env
 	in     simulate.Input
 	target simulate.Target
+	idx    *index.Index // the target's security index, from its provider
 	view   *index.View
 	rules  []resolve.Rule
 	cand   *roaring.Bitmap
@@ -169,7 +170,11 @@ func (Simulation) Run(ctx context.Context, env *simulate.Env, in simulate.Input)
 		return run, fmt.Errorf("%s: %s/%s: %w", Kind, in.Device, in.Vsys, err)
 	}
 	run.Notes = t.Notes
-	s := &state{env: env, in: in, target: t, view: t.Index.With(t.Providers), rules: t.Index.Rules()}
+	idx, err := t.Index(resolve.Security)
+	if err != nil {
+		return run, fmt.Errorf("%s: %s/%s: %w", Kind, in.Device, in.Vsys, err)
+	}
+	s := &state{env: env, in: in, target: t, idx: idx, view: idx.With(t.Providers), rules: idx.Rules()}
 	s.verdict.Relevance = relevance(t.Providers.Zones, in.Flow)
 	stages, err := simulate.Execute(ctx, Kind, s, steps, false, env.Log)
 	run.Stages = stages

@@ -279,11 +279,13 @@ func (m indexSets) of(cfg *config.Config) *index.Set {
 // every multi-device simulation needs. A device the network knows reads the
 // snapshot its routing data came from: for an HA pair, the active member's, not
 // the first member's (spec 2026-10-07 §3.4). Each member, snapshot and vsys
-// loads once.
+// loads once, and the vsys of one snapshot share its configuration and index set,
+// so the edge list of a snapshot is read once however many vsys a run visits.
 func storeLoader(st *store.Store, when estate.When, net *estate.Network, users index.UserDirectory) func(dev, vsys string) (simulate.Target, error) {
 	type key struct{ member, snapshot, vsys string }
+	type snap struct{ member, id string }
 	cache := map[key]simulate.Target{}
-	sets := indexSets{}
+	sets := map[snap]*index.Set{}
 	return func(dev, vsys string) (simulate.Target, error) {
 		k := key{member: dev, vsys: vsys}
 		if d, err := net.Device(dev); err == nil {
@@ -302,7 +304,8 @@ func storeLoader(st *store.Store, when estate.When, net *estate.Network, users i
 			ts, holes = estate.Open(st, []string{k.member}, []string{vsys}, when)
 		}
 		if len(ts) == 0 {
-			// The first hole's code names the kind, as a missing configuration.
+			// The code is the first hole's whose code is more specific than
+			// gap.load-failed, such as a missing configuration.
 			code := reason.Code("gap.load-failed")
 			var why []string
 			for _, h := range holes {
@@ -315,13 +318,21 @@ func storeLoader(st *store.Store, when estate.When, net *estate.Network, users i
 				Code: code, Text: fmt.Sprintf("%s/%s: %s", dev, vsys, strings.Join(why, "; ")),
 			}}
 		}
-		set := sets.of(ts[0].Config)
-		idx, err := set.Index(ts[0].Scope, resolve.Security)
-		if err != nil {
+		sk := snap{member: k.member, id: k.snapshot}
+		if ts[0].Snapshot != nil {
+			sk.id = ts[0].Snapshot.ID
+		}
+		set, ok := sets[sk]
+		if !ok {
+			set = index.NewSet(ts[0].Config)
+			sets[sk] = set
+		}
+		// Built here, so a failed build is the load's error.
+		if _, err := set.Index(ts[0].Scope, resolve.Security); err != nil {
 			return simulate.Target{}, err
 		}
 		t := simulate.Target{
-			Config: ts[0].Config, Index: idx, Indexes: set.Provider(ts[0].Scope),
+			Config: set.Config(), Indexes: set.Provider(ts[0].Scope),
 			Providers: index.Providers{Users: users}, Notes: ts[0].Notes,
 		}
 		cache[k] = t

@@ -284,7 +284,7 @@ func load(env *simulate.Env, h routing.Hop) (simulate.Target, *simulate.Missing)
 	if errors.As(err, &coded) {
 		code = coded.Code()
 	}
-	if err == nil && (t.Config == nil || t.Index == nil) {
+	if err == nil && (t.Config == nil || t.Indexes == nil) {
 		err, code = errors.New("no configuration"), "gap.config-missing"
 	}
 	if err != nil {

@@ -37,7 +37,9 @@ The package keeps no state (spec 2026-10-09 §4.8; `TestNoPackageLevelCache`).
 The caller builds and owns every index: `index.Build(cfg, edges, scope, rb)`, the
 one-shot `index.New(cfg, scope, rb)`, or an `index.Set` per configuration, which
 builds each `(scope, rulebase)` index once and gives simulations their
-`Target.Indexes` provider. A CLI run keeps one set per configuration it reads. A query goes
+`Target.Indexes` provider, the one source of a target's indexes (the security
+check takes its index there too, through `Target.Index`). A CLI run keeps one set
+per configuration, or per snapshot for the store loader. A query goes
 to `View.Candidates(field, value)`, which asks each **resolver** wired to that
 field to turn the value into object names. The schema decides that wiring:
 `config.FieldKinds("rulebase/security/rules")` says which object kinds a field

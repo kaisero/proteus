@@ -62,7 +62,8 @@ func TestNoPackageLevelCache(t *testing.T) {
 }
 
 // stateful says why a package-level var could hold state between calls: a map,
-// or a sync value guarding one. Empty when it is neither.
+// a sync or sync/atomic value guarding one, or an index or index set kept for
+// later calls. Empty when it is none of these.
 func stateful(vs *ast.ValueSpec) string {
 	exprs := append([]ast.Expr{vs.Type}, vs.Values...)
 	why := ""
@@ -71,16 +72,31 @@ func stateful(vs *ast.ValueSpec) string {
 			continue
 		}
 		ast.Inspect(x, func(n ast.Node) bool {
+			if why != "" {
+				return false
+			}
 			switch n := n.(type) {
 			case *ast.MapType:
 				why = "a map"
 			case *ast.SelectorExpr:
-				if id, ok := n.X.(*ast.Ident); ok && id.Name == "sync" {
+				if id, ok := n.X.(*ast.Ident); ok && (id.Name == "sync" || id.Name == "atomic") {
 					why = "a sync." + n.Sel.Name
+					if id.Name == "atomic" {
+						why = "an atomic." + n.Sel.Name
+					}
+				}
+			case *ast.Ident:
+				if n.Name == "Set" || n.Name == "Index" {
+					why = "an index value (" + n.Name + ")"
 				}
 			case *ast.CallExpr:
-				if id, ok := n.Fun.(*ast.Ident); ok && id.Name == "make" {
-					why = "made by make"
+				if id, ok := n.Fun.(*ast.Ident); ok {
+					switch id.Name {
+					case "make":
+						why = "made by make"
+					case "New", "NewSet", "Build":
+						why = "an index built by " + id.Name
+					}
 				}
 			}
 			return why == ""
@@ -96,6 +112,12 @@ func TestStatefulCatchesACache(t *testing.T) {
 		"var c = map[string]int{}":          "a map",
 		"var c map[string]*Index":           "a map",
 		"var mu sync.Mutex":                 "a sync.Mutex",
+		"var n atomic.Int64":                "an atomic.Int64",
+		"var p atomic.Pointer[Set]":         "an atomic.Pointer",
+		"var s *Set":                        "an index value (Set)",
+		"var i Index":                       "an index value (Index)",
+		"var s = NewSet(nil)":               "an index built by NewSet",
+		"var i, _ = New(nil, Scope{}, 0)":   "an index built by New",
 		"var c = make(chan int)":            "made by make",
 		"var c = [...]string{\"a\"}":        "",
 		"var c = regexp.MustCompile(`^a$`)": "",
