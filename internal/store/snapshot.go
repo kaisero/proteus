@@ -1,9 +1,7 @@
 package store
 
 import (
-	"errors"
 	"fmt"
-	"io/fs"
 	"os"
 	"path/filepath"
 
@@ -29,11 +27,14 @@ func (sn Snapshot) Has(doc string) bool {
 
 // ConfigPath returns where this snapshot's configuration is stored, or an error
 // that matches ErrNoConfig when the configuration did not arrive.
+// A configuration that is there but cannot be read gives one that matches
+// ErrUnreadable.
 func (sn Snapshot) ConfigPath() (string, error) {
-	if !sn.Has(ConfigDoc) {
-		return "", mark(ErrNoConfig, fmt.Errorf("store: %s@%s has no configuration", sn.Device, sn.ID))
+	p := sn.Path(ConfigDoc)
+	if _, err := os.Stat(p); err != nil {
+		return "", missingOr(ErrNoConfig, fmt.Errorf("store: %s@%s has no configuration", sn.Device, sn.ID), err)
 	}
-	return sn.Path(ConfigDoc), nil
+	return p, nil
 }
 
 // Zones builds the zone snapshot the index reads, from this snapshot's interface
@@ -57,12 +58,4 @@ func (sn Snapshot) Zones() (*index.ZoneSnapshot, error) {
 		return nil, mark(ErrUnreadable, err)
 	}
 	return zs, nil
-}
-
-// unreadable marks err as ErrUnreadable unless the file is absent.
-func unreadable(err, read error) error {
-	if errors.Is(read, fs.ErrNotExist) {
-		return err
-	}
-	return mark(ErrUnreadable, err)
 }

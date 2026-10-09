@@ -43,6 +43,19 @@ func TestErrorsMatchTheirKind(t *testing.T) {
 		t.Fatal(err)
 	}
 	early := time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
+	// A device with snapshots, none of them with a configuration.
+	if _, err := s.Write(Meta{Device: "fw05"}, map[string][]byte{RIBDoc: []byte("<rib/>")}, 20); err != nil {
+		t.Fatal(err)
+	}
+	// A configuration that is there but cannot be read: a link to itself.
+	looped, err := s.Write(Meta{Device: "fw06"}, map[string][]byte{RIBDoc: []byte("<rib/>")}, 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(looped.Path(ConfigDoc), looped.Path(ConfigDoc)); err != nil {
+		t.Fatal(err)
+	}
+	both := errors.Join(ErrNoSnapshot, ErrNoConfig)
 
 	cases := []struct {
 		name string
@@ -74,6 +87,15 @@ func TestErrorsMatchTheirKind(t *testing.T) {
 			"store: fw01 has no snapshot with a configuration at or before 2026-09-01T00:00:00Z",
 		},
 		{"AtOrBefore of an unknown device", func() error { _, err := s.AtOrBefore("fw09", early); return err }, ErrNoSnapshot, ""},
+		{
+			"Latest of snapshots without a configuration", func() error { _, err := s.Latest("fw05"); return err }, both,
+			"store: fw05 has no snapshot with a configuration; run proteus fetch fw05",
+		},
+		{
+			"AtOrBefore of snapshots without a configuration", func() error { _, err := s.AtOrBefore("fw05", time.Now()); return err }, both, "",
+		},
+		{"AtOrBefore of an unreadable configuration", func() error { _, err := s.AtOrBefore("fw06", time.Now()); return err }, ErrUnreadable, ""},
+		{"ConfigPath of an unreadable configuration", func() error { _, err := looped.ConfigPath(); return err }, ErrUnreadable, ""},
 		{
 			"ConfigPath without a configuration", func() error { _, err := noConfig.ConfigPath(); return err }, ErrNoConfig,
 			"store: fw01@" + noConfig.ID + " has no configuration",

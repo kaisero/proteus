@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -224,8 +225,13 @@ func (s *Store) Latest(device string) (Snapshot, error) {
 	}
 	id, err := os.Readlink(filepath.Join(s.root, device, "latest"))
 	if err != nil {
-		return Snapshot{}, missingOr(ErrNoSnapshot,
-			fmt.Errorf("store: %s has no snapshot with a configuration; run proteus fetch %s", device, device), err)
+		msg := fmt.Errorf("store: %s has no snapshot with a configuration; run proteus fetch %s", device, device)
+		// latest moves only when a configuration arrived: snapshots without one
+		// leave it absent, and that is a missing configuration.
+		if ids, lerr := s.List(device); errors.Is(err, fs.ErrNotExist) && lerr == nil && len(ids) > 0 {
+			return Snapshot{}, mark(ErrNoConfig, mark(ErrNoSnapshot, msg))
+		}
+		return Snapshot{}, missingOr(ErrNoSnapshot, msg, err)
 	}
 	return s.Get(device, id)
 }
@@ -258,6 +264,7 @@ func (s *Store) AtOrBefore(device string, t time.Time) (Snapshot, error) {
 	if err != nil {
 		return Snapshot{}, err
 	}
+	early := false           // a snapshot at or before t exists, without a configuration
 	for _, id := range ids { // newest first
 		taken, _ := time.Parse(idLayout, id)
 		if taken.After(t) {
@@ -267,12 +274,21 @@ func (s *Store) AtOrBefore(device string, t time.Time) (Snapshot, error) {
 		if err != nil {
 			return Snapshot{}, err
 		}
-		if sn.Has(ConfigDoc) {
+		_, err = sn.ConfigPath()
+		if err == nil {
 			return sn, nil
 		}
+		if errors.Is(err, ErrUnreadable) {
+			return Snapshot{}, err
+		}
+		early = true
 	}
-	return Snapshot{}, mark(ErrNoSnapshot, fmt.Errorf("store: %s has no snapshot with a configuration at or before %s",
+	err = mark(ErrNoSnapshot, fmt.Errorf("store: %s has no snapshot with a configuration at or before %s",
 		device, t.UTC().Format(time.RFC3339)))
+	if early {
+		err = mark(ErrNoConfig, err)
+	}
+	return Snapshot{}, err
 }
 
 // Resolve reads a snapshot reference: a device name for its latest snapshot, or

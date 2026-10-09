@@ -157,7 +157,20 @@ there is no wildcard.
 `reason.New` builds a reason. In a test binary (`testing.Testing()`) it panics on
 a code the registry does not hold, so any package's tests fail when a producer
 uses one. A production binary keeps the code. Add a code to the registry, with a
-one-line description, before a producer uses it.
+one-line description, before a producer uses it. A test in `internal/reason` also
+reads every source file and fails on a string that reads as a code and is not
+registered, so a code on a path no test takes is caught too.
+
+Code that only passes a code through, and does not choose it, must not call
+`reason.New` on a value it did not check: a fuzz input or a built code such as
+`"doubt.not-evaluated." + dim` panics in a test binary. Check `reason.Known`
+first, or build `reason.Reason{Code: c, Text: t}` directly. Producers keep a
+fixed table instead (`simulate`'s dimension codes, `securitypolicy`'s doubt
+codes), so each code is a literal the source test sees.
+
+Until JSON format 2 the codes stay out of the output. `simulate.Reasons` writes
+its reasons as texts, `index.Unresolved.Code` and `simulate.Missing.Code` are not
+in the JSON, and a doubt with several reasons writes them joined by "; ".
 
 `reason` imports only the standard library, so every package may import it; the
 archtest allows it in every R12 rule.

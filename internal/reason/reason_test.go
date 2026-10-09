@@ -83,6 +83,48 @@ func TestRegistryHoldsTheCorrections(t *testing.T) {
 	}
 }
 
+// specCodes are the codes spec §3.1 and its corrections in §12 name, by class.
+// Each must stay registered: removing one fails here, not only at a producer.
+var specCodes = map[Class][]string{
+	Doubt: {
+		"application", "service-application-default", "service-predefined", "service-absent",
+		"service-no-port", "category-no-url", "category-undefined", "hip", "schedule", "edl",
+		"region", "dynamic-group", "fqdn-resolution",
+		"not-evaluated.zones", "not-evaluated.source-zone", "not-evaluated.destination-zone",
+		"not-evaluated.service", "not-evaluated.url", "not-evaluated.application",
+		"not-evaluated.user", "not-evaluated.nat", "not-evaluated.pbf",
+		"imsi", "imei", "nw-slice", "saas-user-list", "saas-tenant-list",
+	},
+	Gap: {"version", "fqdn-no-address", "object-unresolved", "load-failed", "snapshot-missing", "config-missing"},
+	Path: {
+		"left-estate", "left-by-interface", "loop", "too-long", "unresolved", "no-route", "ecmp",
+		"pbf", "nat-undermatch", "nat-no-port", "start-default-route", "hidden-firewall",
+	},
+	Zone:    {"missing", "undefined", "placeholder", "vsys-unknown", "derived"},
+	Default: {"precedence-unverified", "zones-unknown", "invalid-action", "vsys-missing"},
+	DNS:     {"other-addresses", "canonical-name"},
+	Input:   {"port", "protocol", "url", "device", "router"},
+	Note:    {"snapshot-stale", "ha-peer", "local-services", "later-deny"},
+	Call:    {"timeout", "busy", "usage", "choice", "internal"},
+	Verdict: {"rule", "default", "relevant-route", "not-relevant"},
+}
+
+func TestEverySpecCodeIsRegistered(t *testing.T) {
+	t.Parallel()
+	class := map[Code]Class{}
+	for _, e := range Registry() {
+		class[e.Code] = e.Class
+	}
+	for c, names := range specCodes {
+		for _, n := range names {
+			code := Code(string(c) + "." + n)
+			if got, ok := class[code]; !ok || got != c {
+				t.Errorf("%s: registered %v, class %q; want class %q", code, ok, got, c)
+			}
+		}
+	}
+}
+
 func TestRegistryReturnsACopy(t *testing.T) {
 	t.Parallel()
 	reg := Registry()

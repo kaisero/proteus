@@ -80,8 +80,10 @@ device for `simulate routing`, pairing HA members by serial into one node.
 A lookup failure matches one kind with `errors.Is`: `ErrNoSnapshot` (nothing to
 pick for the device, id or time), `ErrNoConfig` (the picked snapshot has no
 configuration; `Snapshot.ConfigPath`), `ErrUnreadable` (a stored file is there but
-cannot be read or parsed). The message text stays as it was. An absent zone
-document matches `fs.ErrNotExist`, not `ErrUnreadable`.
+cannot be read or parsed). `Latest` and `AtOrBefore` on a device whose snapshots
+all lack a configuration match both `ErrNoSnapshot` and `ErrNoConfig`; test
+`ErrNoConfig` first. The message text stays as it was. An absent zone document
+matches `fs.ErrNotExist`, not `ErrUnreadable`.
 
 ## Build / run pointers
 

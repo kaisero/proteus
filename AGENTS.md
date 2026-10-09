@@ -152,7 +152,10 @@ and imports none of `estate`, `store`, `fetch`, `search`, `drift`, `card`, and n
 I/O package. `internal/reason` names the reason codes answers carry. It imports only the
 standard library, and every package may import it: each rule above allows it.
 The test helpers `internal/fakepanos` and `internal/simulate/pathlab`
-import `testing`; only tests import them.
+import `testing`; only tests import them. `internal/reason` also imports
+`testing`, for `testing.Testing()` alone: its strict hook, which makes
+`reason.New` panic on an unregistered code in a test binary. It is not a test
+helper, and production code imports it.
 
 The core's freedom from I/O is an absolute property today. A fetcher in the same
 module makes it a conditional one, and conditional invariants decay unless a test
