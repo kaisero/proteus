@@ -471,8 +471,8 @@ func TestPrintRunRelevanceAndDefault(t *testing.T) {
 // A check without a security verdict names no action.
 func TestCheckActionWithoutAVerdict(t *testing.T) {
 	t.Parallel()
-	if got := checkAction(pathpolicy.CheckResult{}); got != "" {
-		t.Errorf("checkAction = %q", got)
+	if got := query.CheckAction(pathpolicy.CheckResult{}); got != "" {
+		t.Errorf("CheckAction = %q", got)
 	}
 }
 

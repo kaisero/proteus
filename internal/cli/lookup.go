@@ -73,6 +73,8 @@ func (a *app) runLookup(ctx context.Context, o lookupOptions) (answer, error) {
 	return lookupAnswer{enveloped[query.LookupInput, query.LookupResult]{e}}, nil
 }
 
+func (l lookupAnswer) Summary() *query.Summary { return l.e.Summary }
+
 func (l lookupAnswer) Input() any {
 	in := l.e.Input
 	return lookupInput{Name: in.Name, Kind: in.Kind, Expand: in.Expand, Full: in.Full, Selection: in.Selection}
@@ -81,9 +83,9 @@ func (l lookupAnswer) Input() any {
 func (l lookupAnswer) Text(t *textOut) error {
 	in := l.e.Input
 	r := renderer{w: t, expand: in.Expand, full: in.Full}
-	byTarget := make([][]card.Card, len(l.e.Targets))
+	byTarget := make([][]query.LookupResult, len(l.e.Targets))
 	for _, res := range l.e.Results {
-		byTarget[res.TargetIndex] = append(byTarget[res.TargetIndex], res.Card)
+		byTarget[res.TargetIndex] = append(byTarget[res.TargetIndex], res)
 	}
 	for i, tg := range l.e.Targets {
 		if len(byTarget[i]) == 0 {
@@ -91,8 +93,9 @@ func (l lookupAnswer) Text(t *textOut) error {
 		}
 		fmt.Fprintln(t, t.pal.head(header(tg, t.now)))
 		printNotes(t, tg)
-		for _, cd := range byTarget[i] {
-			r.card(cd)
+		for _, res := range byTarget[i] {
+			fmt.Fprintf(t, "  %s\n", res.Answer)
+			r.card(res.Card)
 			fmt.Fprintln(t)
 		}
 	}
@@ -100,7 +103,7 @@ func (l lookupAnswer) Text(t *textOut) error {
 		fmt.Fprintf(t, "no element named %q in the selection\n\n", in.Name)
 	}
 	printQualifiers(t, l.Qualifiers())
-	fmt.Fprintf(t, "%d with it, %d without, %d holes\n", l.e.Summary.With, l.e.Summary.Without, len(l.e.Holes))
+	fmt.Fprintln(t, l.e.Summary.Answer)
 	return t.err
 }
 

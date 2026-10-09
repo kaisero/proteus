@@ -78,18 +78,10 @@ func (p policyAnswer) Text(t *textOut) error {
 	r := p.e.Results[0]
 	printRun(t, r.Run, r.From, r.Check, p.e.Input.Simulated, p.why)
 	printQualifiers(t, p.Qualifiers())
-	// Behind candidates in doubt, the first match is only the first certain one.
-	lead := "first match:"
-	if len(r.Check.Undecided) > 0 {
-		lead = "first certain match:"
-	}
-	switch v := r.Check; {
-	case v.Rule != nil:
-		fmt.Fprintf(t, "%s %s (%s)\n", lead, t.pal.accent(v.Rule.Name), v.Rule.Action)
-	case v.Default != "":
-		fmt.Fprintf(t, "%s %s (%s), default rule (%s)\n", lead, t.pal.accent(v.Default), v.DefaultAction, v.DefaultSource)
-	case len(v.Candidates) == 0:
-		fmt.Fprintln(t, "no enabled rule matches")
+	// The decision line, then, behind candidates in doubt, the undecided line
+	// that is the answer (query.FileAnswer).
+	if line := query.DecisionLine(r.Check, t.pal.accent); line != "" {
+		fmt.Fprintln(t, line)
 	}
 	if v := r.Check; len(v.Undecided) > 0 {
 		fmt.Fprintf(t, "%s %s\n", t.pal.warn("undecided:"), v.Undecided.Text())

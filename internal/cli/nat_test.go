@@ -28,6 +28,8 @@ func TestSimulateNATPortForward(t *testing.T) {
 	out := c.want(0, "simulate", "nat", "198.18.1.10", "198.18.250.10", "--device", "fw01", "--router", "default", "--from-zone", "transport", "--port", "8443")
 	want := `simulate nat 198.18.1.10 -> 198.18.250.10 tcp/8443 on fw01            fidelity: exact
 
+t-dnat-port: destination 198.18.250.10:8443 -> 198.18.10.100:443
+
   ┌─ fw01 ─ vsys1 ─ router default ─ snapshot 1m ────────┐
   │  zones   transport -> server                         │
   │  out     ethernet1/2   198.18.10.1/24                │

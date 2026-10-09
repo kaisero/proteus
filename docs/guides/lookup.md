@@ -11,6 +11,7 @@ name's value in parentheses and opens groups as a tree, three levels deep.
 ```
 $ proteus lookup branch-to-dc --expand --file testdata/config/firewall-lookup.xml
 file / vsys1   testdata/config/firewall-lookup.xml
+  file/vsys1: security-rule branch-to-dc
 security rule  branch-to-dc                 position 2 of 2, local, enabled
   uuid         0b3f5e2a-9d41-4c1e-8f7a-2b6c9d1ec21e
   tags         branch
@@ -62,6 +63,7 @@ the object is used, run `proteus search <name>`:
 ```
 $ proteus lookup net-vienna --file testdata/config/firewall-lookup.xml
 file / vsys1   testdata/config/firewall-lookup.xml
+  file/vsys1: address net-vienna
 address        net-vienna                   vsys:vsys1
   tags         branch
   description  Vienna office

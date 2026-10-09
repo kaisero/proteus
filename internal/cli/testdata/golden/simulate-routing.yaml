@@ -16,7 +16,8 @@ input:
   rib: false
   router: ""
 results:
-  - source:
+  - answer: 192.168.0.1 leaves the estate (not in the inventory)
+    source:
       addrs:
         - 198.18.10.5
       resolved: false

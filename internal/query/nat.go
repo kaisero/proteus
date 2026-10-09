@@ -43,6 +43,7 @@ func (in NATInput) Validate() *UsageError {
 // packet, and the run's fidelity and stages. Run and TakenAt are the native run
 // and the snapshot's time, for a renderer.
 type NATResult struct {
+	Answer string `json:"answer"`
 	nat.Result
 	Fidelity simulate.Fidelity `json:"fidelity"`
 	Stages   []Stage           `json:"stages"`
@@ -99,6 +100,6 @@ func NAT(ctx context.Context, env Env, in NATInput) (Envelope[NATInput, NATResul
 	e.Unresolved = dedupeUnresolved(runUnresolved(run, run.Device, run.Vsys, true))
 	d, _ := es.network.Device(run.Device)
 	e.Notes = runNotes(run.Device, append(append(append(simulate.Reasons{}, run.Notes...), d.Notes...), res.Notes...))
-	e.Results = []NATResult{{Result: res, Fidelity: run.Fidelity, Stages: SimStages(run.Stages), Run: run, TakenAt: d.TakenAt}}
+	e.Results = []NATResult{{Answer: NATAnswer(res, run.Input.Flow), Result: res, Fidelity: run.Fidelity, Stages: SimStages(run.Stages), Run: run, TakenAt: d.TakenAt}}
 	return e, nil
 }

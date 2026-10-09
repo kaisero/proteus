@@ -41,6 +41,7 @@ $ proteus search 10.124.0.1 --vsys vsys1 --show objects --output json \
   },
   "results": [
     {
+      "answer": "file/vsys1: address corp-dc-vienna",
       "device": "file",
       "vsys": "vsys1",
       "stage": "object",
@@ -50,6 +51,7 @@ $ proteus search 10.124.0.1 --vsys vsys1 --show objects --output json \
       "scope": "vsys:vsys1"
     },
     {
+      "answer": "file/vsys1: address corp-location-vienna",
       "device": "file",
       "vsys": "vsys1",
       "stage": "object",
@@ -59,6 +61,12 @@ $ proteus search 10.124.0.1 --vsys vsys1 --show objects --output json \
       "scope": "vsys:vsys1"
     }
   ],
+  "summary": {
+    "answer": "1 with results, 0 without, 0 holes",
+    "found": 2,
+    "with": 1,
+    "without": 0
+  },
   "holes": [],
   "unresolved": [],
   "notes": []
@@ -67,6 +75,12 @@ $ proteus search 10.124.0.1 --vsys vsys1 --show objects --output json \
 
 `format` is the version of the envelope. It changes only when a field changes its
 meaning or is removed.
+
+Each result of `simulate`, `search`, `lookup` and `snapshot diff` has an
+`answer`: one line of the text output that says what the result found, such as
+`denied at hop 2: fw01 / vsys1, rule block-servers (deny)`. `search` and
+`lookup` also print a `summary` with the counts and the count line as its
+`answer`.
 
 Format 2 gives every reason a stable code. A hole, an unresolved entry and a
 note are objects with `code` and `text` beside `device` and `vsys`. A list of

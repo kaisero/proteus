@@ -25,6 +25,7 @@
   },
   "results": [
     {
+      "answer": "allowed",
       "mode": "path",
       "verdict": "allowed",
       "at": null,

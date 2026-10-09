@@ -38,6 +38,7 @@ func (in LookupInput) Validate() *UsageError {
 // LookupResult is one card with the target it came from. TargetIndex is the
 // target's place in the envelope's Targets, for a renderer.
 type LookupResult struct {
+	Answer string `json:"answer"`
 	Target
 	Scope string    `json:"scope"`
 	Card  card.Card `json:"card"`
@@ -78,7 +79,10 @@ func Lookup(ctx context.Context, env Env, in LookupInput) (Envelope[LookupInput,
 		for _, cd := range cs {
 			here = append(here, cd.Kind)
 			kinds[cd.Kind] = append(kinds[cd.Kind], where(t.Device, t.Vsys))
-			e.Results = append(e.Results, LookupResult{Target: TargetOf(t), Scope: cd.Scope.String(), Card: cd, TargetIndex: i})
+			tg := TargetOf(t)
+			e.Results = append(e.Results, LookupResult{
+				Answer: LookupAnswer(tg, cd.Kind, cd.Name), Target: tg, Scope: cd.Scope.String(), Card: cd, TargetIndex: i,
+			})
 		}
 		e.Summary.count(len(cs))
 		env.Log.Infof(runlog.TagFind, "%s/%s: lookup %q found %v", t.Device, t.Vsys, in.Name, here)
@@ -93,6 +97,7 @@ func Lookup(ctx context.Context, env Env, in LookupInput) (Envelope[LookupInput,
 			fmt.Sprintf("%q names more than one kind; pick one with kind:\n%s", in.Name, list))
 	}
 	e.Summary.Without = len(ts) - e.Summary.With
+	e.Summary.Answer = lookupCount(e.Summary, len(e.Holes))
 	e.Unresolved, e.Notes = TargetQualifiers(ts)
 	return e, nil
 }

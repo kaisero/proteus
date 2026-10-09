@@ -1,6 +1,8 @@
 fw01   2026-09-28T10-00-00Z -> 2026-09-28T10-01-00Z
   shared     no changes
+    fw01/shared: 0 added, 0 removed, 0 changed
   vsys:vsys1
+    fw01/vsys:vsys1: 1 added, 1 removed, 2 changed
     changed address       net-home   198.18.1.0/24 -> 198.18.2.0/24
     removed address       net-labor  198.18.0.0/15
     changed security rule dc-to-home allow application=ssl destination=net-home source=g-servers -> allow disabled application=ssl destination=net-home source=g-servers

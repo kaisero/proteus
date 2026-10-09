@@ -17,7 +17,8 @@ input:
   selection:
     file: ../../testdata/config/firewall-doubt.xml
 results:
-  - verdict: undecided
+  - answer: 'undecided: dmz-user (deny) at position 7 may match first: user not evaluated (corp\alice)'
+    verdict: undecided
     reasons:
       - code: doubt.not-evaluated.user
         text: 'dmz-user (deny) at position 7 may match first: user not evaluated (corp\alice)'

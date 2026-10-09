@@ -10,35 +10,40 @@ input:
   show: null
   term: 10.124.0.1
 results:
-  - device: file
+  - answer: 'file/vsys1: address corp-dc-vienna'
+    device: file
     vsys: vsys1
     stage: object
     kind: address
     name: corp-dc-vienna
     via: 10.124.0.1/32
     scope: vsys:vsys1
-  - device: file
+  - answer: 'file/vsys1: address corp-location-vienna'
+    device: file
     vsys: vsys1
     stage: object
     kind: address
     name: corp-location-vienna
     via: 10.124.0.0/16
     scope: vsys:vsys1
-  - device: file
+  - answer: 'file/vsys1: address-group corp-dc'
+    device: file
     vsys: vsys1
     stage: group
     kind: address-group
     name: corp-dc
     via: holds corp-dc-vienna
     scope: vsys:vsys1
-  - device: file
+  - answer: 'file/vsys1: address-group corp-location'
+    device: file
     vsys: vsys1
     stage: group
     kind: address-group
     name: corp-location
     via: holds corp-location-vienna
     scope: vsys:vsys1
-  - device: file
+  - answer: 'file/vsys1: security rule Corp DC Access (destination)'
+    device: file
     vsys: vsys1
     stage: reference
     kind: security rule
@@ -47,7 +52,8 @@ results:
     via: corp-dc
     path: /config/devices/localhost.localdomain/vsys/vsys1/rulebase/security/rules/Corp DC Access
     scope: vsys:vsys1
-  - device: file
+  - answer: 'file/vsys1: security rule Corp DC Access (source)'
+    device: file
     vsys: vsys1
     stage: reference
     kind: security rule
@@ -56,6 +62,11 @@ results:
     via: corp-location
     path: /config/devices/localhost.localdomain/vsys/vsys1/rulebase/security/rules/Corp DC Access
     scope: vsys:vsys1
+summary:
+  answer: 1 with results, 2 without, 0 holes
+  found: 6
+  with: 1
+  without: 2
 holes: []
 unresolved: []
 notes: []

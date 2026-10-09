@@ -17,7 +17,8 @@ input:
   selection:
     file: ../../testdata/config/firewall-doubt.xml
 results:
-  - verdict: stop
+  - answer: 'first match: interzone-default (deny), default rule (built-in)'
+    verdict: stop
     reasons:
       - code: verdict.default
         text: default rule interzone-default (deny), built-in

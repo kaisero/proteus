@@ -42,6 +42,7 @@ func (in DiffInput) Validate() *UsageError {
 
 // DiffResult is what changed in one scope of one device.
 type DiffResult struct {
+	Answer  string         `json:"answer"`
 	Device  string         `json:"device"`
 	From    string         `json:"from"`
 	To      string         `json:"to"`
@@ -95,7 +96,7 @@ func SnapshotDiff(ctx context.Context, env Env, in DiffInput) (Envelope[DiffInpu
 			if ch == nil {
 				ch = []drift.Change{}
 			}
-			e.Results = append(e.Results, DiffResult{Device: d, From: older.ID, To: newer.ID, Scope: sc.String(), Changes: ch})
+			e.Results = append(e.Results, DiffResult{Answer: DiffAnswer(d, sc.String(), ch), Device: d, From: older.ID, To: newer.ID, Scope: sc.String(), Changes: ch})
 		}
 	}
 	return e, nil

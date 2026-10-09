@@ -186,7 +186,7 @@ func policyRows(h pathpolicy.Hop) [][2]string {
 		var s string
 		switch c.Verdict {
 		case pathpolicy.Pass, pathpolicy.Stop:
-			s = fmt.Sprintf("%s (%s)", c.Rule, checkAction(c))
+			s = fmt.Sprintf("%s (%s)", c.Rule, query.CheckAction(c))
 		case pathpolicy.Undecided:
 			s = "undecided: " + c.Reason.Text()
 		default:
@@ -207,46 +207,17 @@ func policyRows(h pathpolicy.Hop) [][2]string {
 	return rows
 }
 
-// verdictLine is the answer's first line, coloured by the verdict (spec §8.1).
+// verdictLine is the answer's first line, coloured by the verdict (spec §8.1):
+// ok when allowed, warn when undecided, bad when denied.
 func verdictLine(pal palette, r pathpolicy.Result) string {
+	line := query.PathAnswer(r)
 	if r.At == nil {
-		return pal.ok(string(r.Verdict))
+		return pal.ok(line)
 	}
-	h, ok := query.PointHop(r)
-	at := fmt.Sprintf("%s at hop %d: ", r.Verdict, r.At.Hop)
-	switch {
-	case !ok:
-		return pal.warn(at + r.At.Reason.Text())
-	case r.Verdict == pathpolicy.VerdictUndecided:
-		return pal.warn(at + fmt.Sprintf("%s / %s, %s", h.Device, h.Vsys, r.At.Reason.Text()))
-	case r.At.Check == "routing":
-		// The address the hop looked up: after a destination NAT, the
-		// translated one.
-		dst := h.Flow.Destination
-		if h.PostNAT != nil {
-			dst = h.PostNAT.Destination
-		}
-		return pal.bad(at + fmt.Sprintf("no route to %s on %s", dst, h.Device))
+	if _, ok := query.PointHop(r); !ok || r.Verdict == pathpolicy.VerdictUndecided {
+		return pal.warn(line)
 	}
-	var action string
-	for _, c := range r.Hops[r.At.Hop-1].Checks {
-		if c.Name == r.At.Check {
-			action = checkAction(c)
-		}
-	}
-	return pal.bad(at + fmt.Sprintf("%s / %s, rule %s (%s)", h.Device, h.Vsys, r.At.Rule, action))
-}
-
-// checkAction is the action of the rule, or default rule, that decided a
-// check.
-func checkAction(c pathpolicy.CheckResult) string {
-	switch v := c.Security; {
-	case v == nil:
-		return ""
-	case v.Rule != nil:
-		return v.Rule.Action
-	}
-	return c.Security.DefaultAction
+	return pal.bad(line)
 }
 
 // pathInput is the input block in path mode (spec §8.2).

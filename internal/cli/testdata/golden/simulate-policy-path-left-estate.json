@@ -25,6 +25,7 @@
   },
   "results": [
     {
+      "answer": "undecided at hop 1: fw02 / vsys1, 198.19.0.77 leaves the estate (not in the inventory)",
       "mode": "path",
       "verdict": "undecided",
       "at": {

@@ -24,6 +24,7 @@
   },
   "results": [
     {
+      "answer": "first match: from-inside (allow)",
       "verdict": "pass",
       "reasons": [
         {

@@ -16,7 +16,8 @@ input:
   selection:
     file: ../../testdata/config/firewall-simulate.xml
 results:
-  - verdict: pass
+  - answer: 'first match: to-web-by-address (allow)'
+    verdict: pass
     reasons:
       - code: verdict.rule
         text: rule to-web-by-address (allow)

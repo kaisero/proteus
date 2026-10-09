@@ -26,6 +26,7 @@
   },
   "results": [
     {
+      "answer": "t-dnat-port: destination 198.18.250.10:8443 -\u003e 198.18.10.100:443",
       "rule": {
         "Name": "t-dnat-port",
         "Action": "",

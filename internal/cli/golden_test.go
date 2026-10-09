@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"net/netip"
 	"os"
@@ -194,6 +195,7 @@ func TestGoldenText(t *testing.T) {
 		args []string
 	}{
 		{"search", 0, []string{"search", "10.124.0.1", "--file", fixture("firewall-multivsys.xml")}},
+		{"search-why", 0, []string{"search", "10.124.0.1", "--why", "--file", fixture("firewall-multivsys.xml")}},
 		{"lookup", 0, []string{"lookup", "branch-to-dc", "--file", fixture("firewall-lookup.xml")}},
 		{"snapshot-show-file", 0, []string{"snapshot", "show", "--file", fixture("firewall-multivsys.xml")}},
 		{"simulate-policy", 0, []string{"simulate", "policy", "10.1.0.5", "10.2.0.5", "--port", "443", "--file", fixture("firewall-zones.xml")}},
@@ -292,5 +294,85 @@ func TestGoldenFQDN(t *testing.T) {
 			golden(t, g.name, fqdnCLI(t, g.addr).want(0, append(args, "--output", "json")...))
 			goldenFile(t, g.name+".yaml", fqdnCLI(t, g.addr).want(0, append(args, "--output", "yaml")...))
 		})
+	}
+}
+
+// answerText is the text golden that shows a JSON golden's answers: search
+// adds its findings' answers only with --why (spec 2026-10-09 §3.3).
+var answerText = map[string]string{"search": "search-why"}
+
+// answering are the commands whose results carry an answer: the questions of
+// the query layer.
+var answering = map[string]bool{
+	"simulate policy": true, "simulate routing": true, "simulate nat": true,
+	"search": true, "lookup": true, "snapshot diff": true,
+}
+
+// Every result's answer, and a summary's, is a line of the text output of the
+// same question (spec 2026-10-09 §3.3, §7). Indentation is not part of it; a
+// routing end line is compared with its runs of spaces collapsed.
+func TestGoldenAnswersAreTextLines(t *testing.T) {
+	t.Parallel()
+	files, err := filepath.Glob(filepath.Join("testdata", "golden", "*.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	checked := 0
+	for _, file := range files {
+		name := strings.TrimSuffix(filepath.Base(file), ".json")
+		textName := name
+		if n, ok := answerText[name]; ok {
+			textName = n
+		}
+		text, err := os.ReadFile(filepath.Join("testdata", "golden", textName+".txt"))
+		if err != nil {
+			continue // no text twin, such as inventory init
+		}
+		raw, err := os.ReadFile(file)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var env struct {
+			Command string `json:"command"`
+			Results []struct {
+				Answer *string `json:"answer"`
+			} `json:"results"`
+			Summary *struct {
+				Answer string `json:"answer"`
+			} `json:"summary"`
+		}
+		if err := json.Unmarshal(raw, &env); err != nil {
+			t.Fatalf("%s: %v", file, err)
+		}
+		if !answering[env.Command] {
+			continue
+		}
+		lines := map[string]bool{}
+		for _, l := range strings.Split(string(text), "\n") {
+			lines[strings.TrimSpace(l)] = true
+			if env.Command == "simulate routing" {
+				lines[strings.Join(strings.Fields(l), " ")] = true
+			}
+		}
+		var answers []string
+		for _, r := range env.Results {
+			if r.Answer == nil {
+				t.Errorf("%s: a result has no answer", file)
+				continue
+			}
+			answers = append(answers, *r.Answer)
+		}
+		if env.Summary != nil {
+			answers = append(answers, env.Summary.Answer)
+		}
+		for _, a := range answers {
+			checked++
+			if a == "" || !lines[a] {
+				t.Errorf("%s: answer %q is not a line of %s.txt", file, a, textName)
+			}
+		}
+	}
+	if checked < 20 {
+		t.Errorf("only %d answers checked", checked)
 	}
 }

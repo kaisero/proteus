@@ -11,7 +11,6 @@ import (
 	"github.com/okaiser/proteus/internal/estate"
 	"github.com/okaiser/proteus/internal/index"
 	"github.com/okaiser/proteus/internal/query"
-	"github.com/okaiser/proteus/internal/search"
 )
 
 // searchOptions are search's flags.
@@ -19,7 +18,7 @@ type searchOptions struct {
 	sel                     selection
 	term                    string
 	exact, within, contains bool
-	direct                  bool
+	direct, why             bool
 	kinds, fields, show     []string
 }
 
@@ -49,6 +48,7 @@ func (a *app) searchCmd() *cobra.Command {
 	f.StringSliceVar(&o.fields, "field", nil, "only references and literals from these fields")
 	f.StringSliceVar(&o.show, "show", nil, "only these stages: objects, groups, refs, literals")
 	f.BoolVar(&o.direct, "direct", false, "groups one level up only")
+	bindWhy(cmd, &o.why)
 	return cmd
 }
 
@@ -73,6 +73,7 @@ func (o searchOptions) input() query.SearchInput {
 // target order.
 type searchAnswer struct {
 	enveloped[query.SearchInput, query.Finding]
+	why bool
 }
 
 func (a *app) runSearch(ctx context.Context, o searchOptions) (answer, error) {
@@ -88,8 +89,10 @@ func (a *app) runSearch(ctx context.Context, o searchOptions) (answer, error) {
 	if err != nil {
 		return nil, err
 	}
-	return searchAnswer{enveloped[query.SearchInput, query.Finding]{e}}, nil
+	return searchAnswer{enveloped: enveloped[query.SearchInput, query.Finding]{e}, why: o.why}, nil
 }
+
+func (s searchAnswer) Summary() *query.Summary { return s.e.Summary }
 
 func (s searchAnswer) Input() any {
 	in := s.e.Input
@@ -101,9 +104,9 @@ func (s searchAnswer) Input() any {
 
 func (s searchAnswer) Text(t *textOut) error {
 	fmt.Fprintf(t, "search %s (%s)\n\n", s.e.Input.Term, s.e.Input.Matching())
-	byTarget := make([][]search.Finding, len(s.e.Targets))
+	byTarget := make([][]query.Finding, len(s.e.Targets))
 	for _, r := range s.e.Results {
-		byTarget[r.TargetIndex] = append(byTarget[r.TargetIndex], r.Finding)
+		byTarget[r.TargetIndex] = append(byTarget[r.TargetIndex], r)
 	}
 	for i, tg := range s.e.Targets {
 		if len(byTarget[i]) == 0 {
@@ -113,12 +116,16 @@ func (s searchAnswer) Text(t *textOut) error {
 		printNotes(t, tg)
 		var tb table
 		for _, f := range byTarget[i] {
-			tb.row(plain(string(f.Stage)), plain(f.Kind), plain(f.Name), plain(query.Detail(f)))
+			tb.row(plain(string(f.Stage)), plain(f.Kind), plain(f.Name), plain(query.Detail(f.Finding)))
+			// The finding's answer duplicates its row, so only --why adds it.
+			if s.why {
+				tb.row(plain(""), plain(f.Answer))
+			}
 		}
 		_ = tb.write(t, "  ", 1)
 	}
 	printQualifiers(t, s.Qualifiers())
-	fmt.Fprintf(t, "%d with results, %d without, %d holes\n", s.e.Summary.With, s.e.Summary.Without, len(s.e.Holes))
+	fmt.Fprintln(t, s.e.Summary.Answer)
 	return t.err
 }
 

@@ -15,7 +15,8 @@ input:
   selection:
     file: ../../testdata/config/firewall-zones.xml
 results:
-  - verdict: pass
+  - answer: 'first match: from-inside (allow)'
+    verdict: pass
     reasons:
       - code: verdict.rule
         text: rule from-inside (allow)

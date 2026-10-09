@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/okaiser/proteus/internal/estate"
+	"github.com/okaiser/proteus/internal/query"
 	"github.com/okaiser/proteus/internal/reason"
 	"github.com/okaiser/proteus/internal/runlog"
 )
@@ -39,6 +40,12 @@ func (q qualifiers) status() error {
 	return nil
 }
 
+// summarizer is an answer whose envelope counts its results: search and
+// lookup.
+type summarizer interface {
+	Summary() *query.Summary
+}
+
 // statuser is an answer that sets its own exit status. Only fetch needs it.
 type statuser interface {
 	Status() error
@@ -69,15 +76,9 @@ func (a *app) emit(ans answer) error {
 	var err error
 	switch a.format {
 	case formatJSON:
-		err = writeJSON(a.stdout, envelope{
-			Command: ans.Command(), Input: ans.Input(), Results: ans.Results(),
-			Holes: q.Holes, Unresolved: q.Unresolved, Notes: q.Notes,
-		})
+		err = writeJSON(a.stdout, envelopeOf(ans))
 	case formatYAML:
-		err = writeYAML(a.stdout, envelope{
-			Command: ans.Command(), Input: ans.Input(), Results: ans.Results(),
-			Holes: q.Holes, Unresolved: q.Unresolved, Notes: q.Notes,
-		})
+		err = writeYAML(a.stdout, envelopeOf(ans))
 	default:
 		err = ans.Text(&textOut{w: a.stdout, now: a.now(), pal: palette{on: useColor(a.color, a.format, a.getenv, a.stdoutTTY)}})
 	}
@@ -90,6 +91,19 @@ func (a *app) emit(ans answer) error {
 		return s.Status()
 	}
 	return q.status()
+}
+
+// envelopeOf is an answer's JSON envelope.
+func envelopeOf(ans answer) envelope {
+	q := ans.Qualifiers()
+	e := envelope{
+		Command: ans.Command(), Input: ans.Input(), Results: ans.Results(),
+		Holes: q.Holes, Unresolved: q.Unresolved, Notes: q.Notes,
+	}
+	if s, ok := ans.(summarizer); ok {
+		e.Summary = s.Summary()
+	}
+	return e
 }
 
 // emitRun is how every RunE ends: an error when there is no answer, else the

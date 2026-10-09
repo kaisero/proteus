@@ -192,4 +192,5 @@ The snapshot format is:
 | `--field source,destination` | keeps references and literals from these fields |
 | `--show objects,groups,refs,literals` | keeps these stages |
 | `--direct` | keeps groups one level up |
+| `--why` | adds each finding's answer line under its row |
 | `--device`, `--label k=v`, `--vsys` | narrow the devices and vsys |

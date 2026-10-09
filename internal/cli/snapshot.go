@@ -284,9 +284,11 @@ func (d snapshotDiffAnswer) Text(t *textOut) error {
 		}
 		if len(r.Changes) == 0 {
 			fmt.Fprintf(t, "  %-10s no changes\n", r.Scope)
+			fmt.Fprintf(t, "    %s\n", r.Answer)
 			continue
 		}
 		fmt.Fprintf(t, "  %s\n", r.Scope)
+		fmt.Fprintf(t, "    %s\n", r.Answer)
 		var tb table
 		for _, c := range r.Changes {
 			op := cell{text: string(c.Op)}

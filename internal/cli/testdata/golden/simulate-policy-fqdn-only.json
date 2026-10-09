@@ -25,6 +25,7 @@
   },
   "results": [
     {
+      "answer": "first match: anything (allow)",
       "verdict": "pass",
       "reasons": [
         {

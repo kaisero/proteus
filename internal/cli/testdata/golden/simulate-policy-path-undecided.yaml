@@ -17,7 +17,8 @@ input:
   router: ""
   at: ""
 results:
-  - mode: path
+  - answer: 'undecided at hop 1: fw02 / vsys1, local and pushed default rules disagree; precedence not verified'
+    mode: path
     verdict: undecided
     at:
       hop: 1

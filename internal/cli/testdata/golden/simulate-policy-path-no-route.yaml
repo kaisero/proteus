@@ -17,7 +17,8 @@ input:
   router: ""
   at: ""
 results:
-  - mode: path
+  - answer: 'denied at hop 2: no route to 198.18.30.5 on fw01'
+    mode: path
     verdict: denied
     at:
       hop: 2

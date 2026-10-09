@@ -46,6 +46,7 @@ func (in RoutingInput) flow() FlowInput {
 // RoutingResult is simulate routing's result: the path, and the run's fidelity
 // and stages. Run is the native run, for a renderer.
 type RoutingResult struct {
+	Answer string `json:"answer"`
 	routing.Path
 	Fidelity simulate.Fidelity `json:"fidelity"`
 	Stages   []Stage           `json:"stages"`
@@ -96,7 +97,7 @@ func Routing(ctx context.Context, env Env, in RoutingInput) (Envelope[RoutingInp
 	}
 	path, _ := run.Output.(routing.Path)
 	env.Log.Infof(runlog.TagStep, "routing: %s, fidelity %s", path.Outcome, run.Fidelity)
-	e.Results = []RoutingResult{{Path: path, Fidelity: run.Fidelity, Stages: SimStages(run.Stages), Run: run}}
+	e.Results = []RoutingResult{{Answer: RoutingAnswer(path), Path: path, Fidelity: run.Fidelity, Stages: SimStages(run.Stages), Run: run}}
 	e.Unresolved = dedupeUnresolved(runUnresolved(run, run.Device, "", false))
 	for _, h := range path.Hops {
 		e.Notes = append(e.Notes, runNotes(h.Device, h.Notes)...)

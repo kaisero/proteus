@@ -353,6 +353,7 @@ func nonNil(s []string) []string {
 // was decided, routing's path fields, and the hops with their checks. Result
 // and RunStages are the native answer, for a renderer.
 type PathResult struct {
+	Answer      string            `json:"answer"`
 	Mode        string            `json:"mode"`
 	Verdict     string            `json:"verdict"`
 	At          *Point            `json:"at"`
@@ -435,7 +436,7 @@ func (cs Checks) MarshalJSON() ([]byte, error) {
 func pathResultOf(r pathpolicy.Result, stages []simulate.Stage) PathResult {
 	path := r.Path
 	out := PathResult{
-		Mode: "path", Verdict: string(r.Verdict), Fidelity: r.Fidelity,
+		Answer: PathAnswer(r), Mode: "path", Verdict: string(r.Verdict), Fidelity: r.Fidelity,
 		Source: path.Source, Destination: path.Destination, Placed: path.Placed, PlacedVia: path.PlacedVia,
 		StartVia: path.StartVia, Outcome: path.Outcome, End: path.End, EndCode: path.EndCode, Hidden: path.Hidden,
 		Stages: SimStages(stages), Hops: []PathHop{}, Result: r, RunStages: stages,
@@ -526,6 +527,7 @@ func securityOf(v *securitypolicy.Verdict, verdict string, why simulate.Reasons,
 // SecurityResult is one device and vsys's simulate policy answer on a file. Run,
 // Check and From are the native answer, for a renderer.
 type SecurityResult struct {
+	Answer string `json:"answer"`
 	Security
 	Kind      string                   `json:"kind"`
 	Relevance securitypolicy.Relevance `json:"relevance"`
@@ -546,6 +548,7 @@ func securityResultOf(run simulate.Run, t estate.Target, v securitypolicy.Verdic
 		}
 	}
 	return SecurityResult{
+		Answer:   FileAnswer(v),
 		Security: securityOf(&v, string(outcome), why, rule, run.Fidelity, run.Stages),
 		Kind:     run.Kind, Target: TargetOf(t), Relevance: v.Relevance,
 		Run: run, Check: v, From: t,

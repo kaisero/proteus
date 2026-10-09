@@ -14,6 +14,7 @@
   },
   "results": [
     {
+      "answer": "file/vsys1: address corp-dc-vienna",
       "device": "file",
       "vsys": "vsys1",
       "stage": "object",
@@ -23,6 +24,7 @@
       "scope": "vsys:vsys1"
     },
     {
+      "answer": "file/vsys1: address corp-location-vienna",
       "device": "file",
       "vsys": "vsys1",
       "stage": "object",
@@ -32,6 +34,7 @@
       "scope": "vsys:vsys1"
     },
     {
+      "answer": "file/vsys1: address-group corp-dc",
       "device": "file",
       "vsys": "vsys1",
       "stage": "group",
@@ -41,6 +44,7 @@
       "scope": "vsys:vsys1"
     },
     {
+      "answer": "file/vsys1: address-group corp-location",
       "device": "file",
       "vsys": "vsys1",
       "stage": "group",
@@ -50,6 +54,7 @@
       "scope": "vsys:vsys1"
     },
     {
+      "answer": "file/vsys1: security rule Corp DC Access (destination)",
       "device": "file",
       "vsys": "vsys1",
       "stage": "reference",
@@ -61,6 +66,7 @@
       "scope": "vsys:vsys1"
     },
     {
+      "answer": "file/vsys1: security rule Corp DC Access (source)",
       "device": "file",
       "vsys": "vsys1",
       "stage": "reference",
@@ -72,6 +78,12 @@
       "scope": "vsys:vsys1"
     }
   ],
+  "summary": {
+    "answer": "1 with results, 2 without, 0 holes",
+    "found": 6,
+    "with": 1,
+    "without": 2
+  },
   "holes": [],
   "unresolved": [],
   "notes": []

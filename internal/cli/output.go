@@ -16,13 +16,14 @@ const formatVersion = query.FormatVersion
 
 // envelope is the one JSON object every command prints with --output json.
 type envelope struct {
-	Format     int           `json:"format"`
-	Command    string        `json:"command"`
-	Input      any           `json:"input"`
-	Results    any           `json:"results"`
-	Holes      []estate.Hole `json:"holes"`
-	Unresolved []unresolved  `json:"unresolved"`
-	Notes      []note        `json:"notes"`
+	Format     int            `json:"format"`
+	Command    string         `json:"command"`
+	Input      any            `json:"input"`
+	Results    any            `json:"results"`
+	Summary    *query.Summary `json:"summary,omitempty"` // search and lookup
+	Holes      []estate.Hole  `json:"holes"`
+	Unresolved []unresolved   `json:"unresolved"`
+	Notes      []note         `json:"notes"`
 }
 
 // The qualifiers, the target and the stage of a result are the query layer's.

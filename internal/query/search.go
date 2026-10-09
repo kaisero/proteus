@@ -105,6 +105,7 @@ func (in SearchInput) Matching() string {
 // Finding is one finding with the target it came from. TargetIndex is the
 // target's place in the envelope's Targets, for a renderer.
 type Finding struct {
+	Answer string `json:"answer"`
 	Target
 	search.Finding
 	Scope string `json:"scope"`
@@ -170,11 +171,15 @@ func Search(ctx context.Context, env Env, in SearchInput) (Envelope[SearchInput,
 		env.Log.Infof(runlog.TagFind, "%s/%s: %d findings for %q (%s)", t.Device, t.Vsys, len(fs), q.Term, matching)
 		for _, f := range fs {
 			env.Log.Debugf(runlog.TagFind, "%s/%s: %s %s %s %s", t.Device, t.Vsys, f.Stage, f.Kind, f.Name, Detail(f))
-			e.Results = append(e.Results, Finding{Target: TargetOf(t), Finding: f, Scope: f.Scope.String(), TargetIndex: i})
+			tg := TargetOf(t)
+			e.Results = append(e.Results, Finding{
+				Answer: FindingAnswer(tg, f.Kind, f.Name, f.Field), Target: tg, Finding: f, Scope: f.Scope.String(), TargetIndex: i,
+			})
 		}
 		e.Summary.count(len(fs))
 	}
 	e.Summary.Without = len(ts) - e.Summary.With
+	e.Summary.Answer = searchCount(e.Summary, len(e.Holes))
 	e.Unresolved, e.Notes = TargetQualifiers(ts)
 	return e, nil
 }

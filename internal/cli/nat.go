@@ -100,7 +100,7 @@ func (n natAnswer) Input() any {
 func (n natAnswer) Text(t *textOut) error {
 	if len(n.e.Results) > 0 {
 		r := n.e.Results[0]
-		renderNAT(t, r.Run, r.Result, r.TakenAt, t.now, n.why)
+		renderNAT(t, r.Run, r.Result, r.Answer, r.TakenAt, t.now, n.why)
 	}
 	printQualifiers(t, n.Qualifiers())
 	return t.err

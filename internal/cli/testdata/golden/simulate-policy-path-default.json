@@ -25,6 +25,7 @@
   },
   "results": [
     {
+      "answer": "denied at hop 1: fw02 / vsys1, rule interzone-default (deny)",
       "mode": "path",
       "verdict": "denied",
       "at": {

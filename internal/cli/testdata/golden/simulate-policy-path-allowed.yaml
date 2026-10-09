@@ -17,7 +17,8 @@ input:
   router: ""
   at: ""
 results:
-  - mode: path
+  - answer: allowed
+    mode: path
     verdict: allowed
     at: null
     fidelity:

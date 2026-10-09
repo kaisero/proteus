@@ -93,9 +93,11 @@ type Envelope[In, Res any] struct {
 
 // Summary counts a search's or a lookup's results over the targets read.
 type Summary struct {
-	Found   int `json:"found"`   // results over every target
-	With    int `json:"with"`    // targets with a result
-	Without int `json:"without"` // targets read without one
+	// Answer is the count line of the text output.
+	Answer  string `json:"answer"`
+	Found   int    `json:"found"`   // results over every target
+	With    int    `json:"with"`    // targets with a result
+	Without int    `json:"without"` // targets read without one
 }
 
 // Summarize converts a full envelope into its summary form: each result through

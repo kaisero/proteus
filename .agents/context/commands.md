@@ -81,7 +81,12 @@ simulate nat <src> <dst> --device <fw>      the NAT rule and the translated pack
   `format` (2), `command`, `input`, `results` (always an array), `holes`,
   `unresolved`, `notes`. Every note the text shows is in `notes` too. Format 2
   writes every reason as `{code, text}` with its context fields (see
-  reporting.md); the text output does not change with it.
+  reporting.md); the text output does not change with it. Each result of a
+  question (simulate, search, lookup, snapshot diff) carries `answer`, one line
+  of its text output that a `query` builder makes and the renderer prints
+  (`TestGoldenAnswersAreTextLines`); search and lookup add `summary` with the
+  count line as its `answer`. Search prints its findings' answers only with
+  `--why`.
 - **Colour:** `--color auto|always|never` (also `PROTEUS_COLOR`, inventory `color:`),
   default `auto`. JSON and YAML are never coloured. `NO_COLOR`, `CLICOLOR_FORCE` and
   `TERM=dumb` act on `auto` only; `auto` colours a terminal and nothing else.
@@ -181,17 +186,30 @@ func (in PolicyInput) Validate() *UsageError
 func (in RoutingInput) Validate() *UsageError
 func (in SearchInput) Matching() string
 func (in SearchInput) Validate() *UsageError
+func CheckAction(c pathpolicy.CheckResult) string
+func DecisionLine(v securitypolicy.Verdict, name func(string) string) string
+func DestinationTranslation(d *nat.Translation, port uint16) string
 func Detail(f search.Finding) string
+func DiffAnswer(device, scope string, changes []drift.Change) string
+func EndpointText(e simulate.Endpoint) string
+func FileAnswer(v securitypolicy.Verdict) string
+func FindingAnswer(t Target, kind, name, field string) string
 func Lookup(ctx context.Context, env Env, in LookupInput) (Envelope[LookupInput, LookupResult], error)
+func LookupAnswer(t Target, kind, name string) string
 func NAT(ctx context.Context, env Env, in NATInput) (Envelope[NATInput, NATResult], error)
+func NATAnswer(r nat.Result, f simulate.Flow) string
 func NoteOf(device, vsys string, r reason.Reason) Note
+func PathAnswer(r pathpolicy.Result) string
 func PointHop(r pathpolicy.Result) (routing.Hop, bool)
 func Policy(ctx context.Context, env Env, in PolicyInput) (Envelope[PolicyInput, PathResult], error)
 func PolicyFile(ctx context.Context, env Env, in PolicyFileInput) (Envelope[PolicyFileInput, SecurityResult], error)
+func PortNumber(p uint16) string
 func Routing(ctx context.Context, env Env, in RoutingInput) (Envelope[RoutingInput, RoutingResult], error)
+func RoutingAnswer(p routing.Path) string
 func Search(ctx context.Context, env Env, in SearchInput) (Envelope[SearchInput, Finding], error)
 func SimStages(stages []simulate.Stage) []Stage
 func SnapshotDiff(ctx context.Context, env Env, in DiffInput) (Envelope[DiffInput, DiffResult], error)
+func SourceTranslation(from string, t *nat.Translation) string
 func Summarize[In, R, S any](e Envelope[In, R], f func(R) S) Envelope[In, S]
 func SystemCanonicalName(ctx context.Context, name string) (string, error)
 func SystemResolve(ctx context.Context, name string) ([]netip.Addr, error)

@@ -26,6 +26,7 @@
   },
   "results": [
     {
+      "answer": "first match: interzone-default (deny), default rule (built-in)",
       "verdict": "stop",
       "reasons": [
         {

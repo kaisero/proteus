@@ -17,7 +17,8 @@ input:
   router: ""
   at: ""
 results:
-  - mode: path
+  - answer: 'denied at hop 2: fw01 / vsys1, rule block-servers (deny)'
+    mode: path
     verdict: denied
     at:
       hop: 2
