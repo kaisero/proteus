@@ -78,6 +78,21 @@ hop's firewall the same question with `test security-policy-match`. On fw02,
 - A path ends where it leaves the inventory, also into a tunnel.
 - Firewalls in virtual wire or Layer 2 mode are not seen on a path.
 
+## Host names
+
+- **Only the first IPv4 address is checked.** A source or destination given as a
+  host name is resolved with this machine's DNS. proteus checks the first IPv4
+  address in the answer; IPv6 is not simulated. `simulate routing` and
+  `simulate nat` name the other addresses in a note.
+- **The canonical name is this machine's view.** A note gives the name's
+  canonical name as this machine's resolver reports it. Resolvers differ: one
+  reports the first name of a CNAME chain, another the last.
+- **A rule matched only through an FQDN object is in doubt.** The firewall
+  resolves an FQDN address object itself, and its addresses can differ from the
+  ones this machine gets. Such a rule stays a candidate with the doubt
+  `doubt.fqdn-resolution`, also when the name resolves to nothing. A rule that
+  also matches the address by an address object or `any` is not in doubt.
+
 ## URL matching
 
 The URL matching rules come from PAN-OS documentation. A firewall's validator

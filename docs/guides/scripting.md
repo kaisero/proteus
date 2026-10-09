@@ -120,6 +120,19 @@ one line; JSON lists them separately.
 ]
 ```
 
+### Reason codes and schemas
+
+Every code comes from one closed registry, `internal/reason/registry.go`. A code
+reads `<class>.<name>`; the class says what kind of reason it is: `doubt`, `gap`,
+`path`, `zone`, `default`, `dns`, `input`, `note`, `call` or `verdict`. Each
+entry has a one-line description. A code that is not in the registry never
+appears in an answer.
+
+The JSON schema of each question's envelope is in `schemas/out/`, one file per
+command and detail: `simulate-policy.full.json`, `search.summary.json`, and so
+on. `simulate-policy-file.*` is `simulate policy --file`. Every JSON example the
+tests hold validates against them.
+
 ## A version without a digest
 
 A configuration from a PAN-OS version without a schema digest is read with the
