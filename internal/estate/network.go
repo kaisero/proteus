@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/okaiser/proteus/internal/reason"
 	"github.com/okaiser/proteus/internal/resolve"
 	"github.com/okaiser/proteus/internal/runlog"
 	"github.com/okaiser/proteus/internal/simulate"
@@ -31,7 +32,7 @@ type Network struct {
 	errs  map[string]error
 	// haNotes holds, per device, why its HA state could not be read. Such a device
 	// is not paired, so the note travels with its answers.
-	haNotes map[string]string
+	haNotes map[string]reason.Reason
 }
 
 // NewNetwork groups the devices into nodes. It reads each device's snapshot
@@ -39,7 +40,7 @@ type Network struct {
 func NewNetwork(st *store.Store, devices []string, w When) *Network {
 	n := &Network{
 		st: st, w: w, node: map[string]string{}, pair: map[string][]string{}, pick: map[string]string{},
-		data: map[string]simulate.DeviceData{}, errs: map[string]error{}, haNotes: map[string]string{},
+		data: map[string]simulate.DeviceData{}, errs: map[string]error{}, haNotes: map[string]reason.Reason{},
 	}
 	groups := map[string][]string{}
 	var order []string
@@ -49,8 +50,8 @@ func NewNetwork(st *store.Store, devices []string, w When) *Network {
 		if sn, err := pick(st, d, w.At); err == nil {
 			ha, err := readHA(sn)
 			if err != nil {
-				n.haNotes[d] = fmt.Sprintf("%s: HA state unreadable, so it is not paired with its peer: %v", d, err)
-				w.Log.Warnf(runlog.TagSnap, "%s", n.haNotes[d])
+				n.haNotes[d] = reason.New("note.ha-unreadable", fmt.Sprintf("%s: HA state unreadable, so it is not paired with its peer: %v", d, err))
+				w.Log.Warnf(runlog.TagSnap, "%s", n.haNotes[d].Text)
 			}
 			switch {
 			case ha.Enabled && ha.LocalSerial != "" && ha.PeerSerial != "":
@@ -148,7 +149,8 @@ func (n *Network) read(node string) (simulate.DeviceData, error) {
 	}
 	if b, err := os.ReadFile(sn.Path(store.RIBDoc)); err == nil {
 		if d.RIB, err = resolve.ReadRIBRoutes(b); err != nil {
-			d.Notes = append(d.Notes, fmt.Sprintf("%s@%s: routing table unreadable, so route protocols and alternates are missing: %v", member, sn.ID, err))
+			d.Notes = append(d.Notes, reason.New("note.rib-unreadable",
+				fmt.Sprintf("%s@%s: routing table unreadable, so route protocols and alternates are missing: %v", member, sn.ID, err)))
 		}
 	}
 	for _, m := range n.pairOrSelf(node) {
@@ -157,13 +159,14 @@ func (n *Network) read(node string) (simulate.DeviceData, error) {
 		}
 	}
 	if members := n.pair[node]; len(members) > 1 {
-		d.Notes = append(d.Notes, fmt.Sprintf("%v are one HA pair; %s answers for it", sorted(members), member))
+		d.Notes = append(d.Notes, reason.New("note.ha-peer", fmt.Sprintf("%v are one HA pair; %s answers for it", sorted(members), member)))
 	}
 	if sn.Meta.FetchedFrom != "" {
-		d.Notes = append(d.Notes, fmt.Sprintf("%s was passive; its snapshot comes from the active peer %s", member, sn.Meta.FetchedFrom))
+		d.Notes = append(d.Notes, reason.New("note.ha-from-peer",
+			fmt.Sprintf("%s was passive; its snapshot comes from the active peer %s", member, sn.Meta.FetchedFrom)))
 	}
 	if age := n.w.Now.Sub(sn.Meta.TakenAt); n.w.MaxAge > 0 && age > n.w.MaxAge {
-		d.Notes = append(d.Notes, StaleNote(sn.ID, age, n.w.MaxAge))
+		d.Notes = append(d.Notes, reason.New("note.snapshot-stale", StaleNote(sn.ID, age, n.w.MaxAge)))
 	}
 	n.w.Log.Infof(runlog.TagSnap, "%s: routing data from %s@%s", node, member, sn.ID)
 	return d, nil

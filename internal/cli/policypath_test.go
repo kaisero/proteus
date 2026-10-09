@@ -451,8 +451,8 @@ func TestPrintRunRelevanceAndDefault(t *testing.T) {
 		rel  securitypolicy.Relevance
 		want string
 	}{
-		{securitypolicy.Relevance{Known: true, Relevant: true, Reason: "10.0.0.0/8 via default covers 10.0.0.1"}, "  relevant   10.0.0.0/8 via default covers 10.0.0.1\n"},
-		{securitypolicy.Relevance{Known: true, Reason: "only a default route"}, "  relevance  not relevant: only a default route\n"},
+		{securitypolicy.Relevance{Known: true, Relevant: true, Reason: reason.New("verdict.relevant-route", "10.0.0.0/8 via default covers 10.0.0.1")}, "  relevant   10.0.0.0/8 via default covers 10.0.0.1\n"},
+		{securitypolicy.Relevance{Known: true, Reason: reason.New("verdict.not-relevant", "only a default route")}, "  relevance  not relevant: only a default route\n"},
 	} {
 		var b bytes.Buffer
 		v := securitypolicy.Verdict{

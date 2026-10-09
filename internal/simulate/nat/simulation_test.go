@@ -147,7 +147,7 @@ func TestSimulatePBFAndChoices(t *testing.T) {
 	// firewall-routing.xml's PBF rule for branch-vpn, on fw01's tables.
 	env := fw01Env(t, "firewall-routing.xml")
 	r, res, _ := run(t, env, "10.20.5.5", "8.8.8.8", 443, map[string]string{"from-zone": "branch-vpn", "router": "default"})
-	if r.Stages[1].Fidelity.Level() != "inferred" || len(res.Notes) == 0 || !strings.Contains(res.Notes[0], "pbf rule branch-to-zscaler") {
+	if r.Stages[1].Fidelity.Level() != "inferred" || len(res.Notes) == 0 || !strings.Contains(res.Notes[0].Text, "pbf rule branch-to-zscaler") || res.Notes[0].Code != "path.pbf" {
 		t.Errorf("pbf: %s, notes %v", slugs(r), res.Notes)
 	}
 	env.Load = nil

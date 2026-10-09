@@ -199,6 +199,7 @@ func (Simulation) Run(ctx context.Context, env *simulate.Env, in simulate.Input)
 func (Simulation) Stages() []string
 func (d Doubt) MarshalJSON() ([]byte, error)
 func (d Doubt) Text() string
+func (r Relevance) MarshalJSON() ([]byte, error)
 func (v Verdict) Decision() (Outcome, reason.Reason)
 ```
 <!-- /GENERATED:api -->

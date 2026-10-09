@@ -236,3 +236,13 @@ func TestADoubtJoinsItsReasons(t *testing.T) {
 		t.Errorf("json = %s, %v", b, err)
 	}
 }
+
+// Relevance writes its reason as text, as format 1 does.
+func TestRelevanceJSON(t *testing.T) {
+	t.Parallel()
+	r := Relevance{Known: true, Relevant: true, Reason: reason.New("verdict.relevant-route", "10.0.0.0/8 via default covers 10.0.0.1")}
+	b, err := json.Marshal(r)
+	if err != nil || string(b) != `{"known":true,"relevant":true,"reason":"10.0.0.0/8 via default covers 10.0.0.1"}` {
+		t.Errorf("json = %s, %v", b, err)
+	}
+}

@@ -9,6 +9,7 @@ package securitypolicy
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/netip"
 	"slices"
@@ -117,9 +118,19 @@ type ZoneDerivation struct {
 // Relevance is whether the device routes either endpoint by something more
 // specific than a default route (spec S14). It orders an estate's answers in M5.
 type Relevance struct {
-	Known    bool   `json:"known"`
-	Relevant bool   `json:"relevant"`
-	Reason   string `json:"reason"`
+	Known    bool
+	Relevant bool
+	Reason   reason.Reason // a verdict when known (spec §12 C9)
+}
+
+// MarshalJSON writes {"known", "relevant", "reason"}, the reason as its text, as
+// format 1 does.
+func (r Relevance) MarshalJSON() ([]byte, error) {
+	return json.Marshal(struct {
+		Known    bool   `json:"known"`
+		Relevant bool   `json:"relevant"`
+		Reason   string `json:"reason"`
+	}{r.Known, r.Relevant, r.Reason.Text})
 }
 
 // state is what the stages share.
@@ -179,7 +190,7 @@ func undermatched(stages []simulate.Stage) reason.Reason {
 // relevance reads the forwarding table's placements of both endpoints.
 func relevance(zl index.ZoneLocator, f simulate.Flow) Relevance {
 	if zl == nil {
-		return Relevance{Reason: "no stored forwarding table"}
+		return Relevance{Reason: reason.New("gap.fib-missing", "no stored forwarding table")}
 	}
 	for _, ep := range []simulate.Endpoint{f.Source, f.Destination} {
 		for _, a := range ep.Addrs {
@@ -187,13 +198,13 @@ func relevance(zl index.ZoneLocator, f simulate.Flow) Relevance {
 				if !isDefault(p.Route) {
 					return Relevance{
 						Known: true, Relevant: true,
-						Reason: fmt.Sprintf("%s via %s covers %s", p.Route, p.Router, a),
+						Reason: reason.New("verdict.relevant-route", fmt.Sprintf("%s via %s covers %s", p.Route, p.Router, a)),
 					}
 				}
 			}
 		}
 	}
-	return Relevance{Known: true, Reason: "only a default route covers either endpoint"}
+	return Relevance{Known: true, Reason: reason.New("verdict.not-relevant", "only a default route covers either endpoint")}
 }
 
 func isDefault(route string) bool {

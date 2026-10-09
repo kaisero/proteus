@@ -87,7 +87,7 @@ func Match(in Input) MatchResult {
 		return out
 	}
 	if v.Config.VersionGap() != "" {
-		out.Notes = append(out.Notes, fmt.Sprintf("schema: NAT checked with the %s digest", v.Config.DigestVersion()))
+		out.Notes = append(out.Notes, reason.New("gap.version", fmt.Sprintf("schema: NAT checked with the %s digest", v.Config.DigestVersion())))
 		out.Fidelity = simulate.Inferred
 	}
 	out.vsys = v
@@ -115,7 +115,7 @@ func Match(in Input) MatchResult {
 		}
 		out.Rule = r
 		if r.HABinding != "" {
-			out.Notes = append(out.Notes, fmt.Sprintf("rule %s is bound to HA device %s, which is ignored", r.Name, r.HABinding))
+			out.Notes = append(out.Notes, reason.New("note.ha-binding", fmt.Sprintf("rule %s is bound to HA device %s, which is ignored", r.Name, r.HABinding)))
 		}
 		break
 	}

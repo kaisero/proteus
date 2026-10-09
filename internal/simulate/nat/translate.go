@@ -95,7 +95,8 @@ func (t translator) source(s *resolve.SourceTranslation, r *Rule) *Translation {
 			if s.Fallback != nil {
 				out.Fallback = t.pool(s.Fallback, r)
 			} else {
-				t.res.Notes = append(t.res.Notes, fmt.Sprintf("rule %s has no fallback: new sessions are dropped when its pool is exhausted", r.Name))
+				t.res.Notes = append(t.res.Notes, reason.New("note.nat-no-fallback",
+					fmt.Sprintf("rule %s has no fallback: new sessions are dropped when its pool is exhausted", r.Name)))
 			}
 		}
 		out.Address = firstAddr(out.Candidates)
@@ -197,7 +198,8 @@ func (t translator) destination(d *resolve.DestinationTranslation, r *Rule) *Tra
 			fmt.Sprintf("rule %s translates to port %q, which is not a port number", r.Name, d.PortText)))
 	}
 	if d.DNSRewrite != "" {
-		t.res.Notes = append(t.res.Notes, fmt.Sprintf("rule %s also rewrites DNS answers (%s), which is not simulated", r.Name, d.DNSRewrite))
+		t.res.Notes = append(t.res.Notes, reason.New("note.dns-rewrite",
+			fmt.Sprintf("rule %s also rewrites DNS answers (%s), which is not simulated", r.Name, d.DNSRewrite)))
 	}
 	if d.Kind == resolve.StaticDestination {
 		a, err := t.mapStatic(first(r.Fields["destination"]), d.Address, t.in.Flow.Destination.Addrs[0])
@@ -234,7 +236,8 @@ func (t translator) destination(d *resolve.DestinationTranslation, r *Rule) *Tra
 	out.Others = out.Candidates[1:]
 	if resolvedByDNS {
 		t.res.Fidelity = simulate.Weakest(t.res.Fidelity, simulate.Inferred)
-		t.res.Notes = append(t.res.Notes, fmt.Sprintf("%s resolved by this machine's DNS, which may answer differently from the firewall's", d.Address))
+		t.res.Notes = append(t.res.Notes, reason.New("doubt.fqdn-resolution",
+			fmt.Sprintf("%s resolved by this machine's DNS, which may answer differently from the firewall's", d.Address)))
 	}
 	if len(out.Others) > 0 {
 		t.res.Fidelity = simulate.Weakest(t.res.Fidelity, simulate.UnderMatch(reason.New("path.nat-distribution",

@@ -38,6 +38,9 @@ type Reason struct {
 	Text string `json:"text"`
 }
 
+// String returns the text, so a reason prints as its text where a string did.
+func (r Reason) String() string { return r.Text }
+
 // Entry describes a code.
 type Entry struct {
 	Code        Code

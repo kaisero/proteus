@@ -68,7 +68,7 @@ func renderNAT(t *textOut, run simulate.Run, r nat.Result, takenAt, now time.Tim
 		rows = append(rows, [2]string{"doubt", d.Rule + ": " + d.Text()})
 	}
 	for _, n := range r.Notes {
-		rows = append(rows, [2]string{"note", n})
+		rows = append(rows, [2]string{"note", n.Text})
 	}
 	b := newBox(title, rows)
 	b.draw(t, max(minBox, b.width), false)

@@ -50,7 +50,8 @@ func fold(r *Result, routingFid simulate.Fidelity) {
 				r.Verdict = VerdictDenied
 			}
 		case v == Stop && !stopped:
-			r.Notes = append(r.Notes, fmt.Sprintf("a later hop denies: hop %d (%s), %s", h.Index, describe(h.Routing), pt.Reason.Text))
+			r.Notes = append(r.Notes, reason.New("note.later-deny",
+				fmt.Sprintf("a later hop denies: hop %d (%s), %s", h.Index, describe(h.Routing), pt.Reason.Text)))
 		}
 		if v == Stop {
 			stopped = true
@@ -91,12 +92,13 @@ func fold(r *Result, routingFid simulate.Fidelity) {
 	}
 	r.Fidelity = simulate.Weakest(fs...)
 	if r.Path.Outcome == routing.Local {
-		r.Notes = append(r.Notes, noteLocal)
+		r.Notes = append(r.Notes, reason.New("note.local-services", noteLocal))
 	}
 	if len(r.Path.Hidden) > 0 {
 		// Spec E17: a firewall that forwards without a router may sit on the path
 		// unseen; the verdict does not include it.
-		r.Notes = append(r.Notes, "firewalls that may sit on the path unseen are not checked: "+strings.Join(r.Path.Hidden, ", "))
+		r.Notes = append(r.Notes, reason.New("path.hidden-firewall",
+			"firewalls that may sit on the path unseen are not checked: "+strings.Join(r.Path.Hidden, ", ")))
 	}
 }
 

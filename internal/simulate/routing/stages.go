@@ -35,7 +35,7 @@ type state struct {
 	cur simulate.Flow
 	// pool names a source translation to one of several addresses; later hops
 	// match their rules against its first address and say so.
-	pool string
+	pool reason.Reason
 	// placeholder is an ingress zone that is a placeholder: the next hop's.
 	placeholder bool
 }
@@ -291,7 +291,7 @@ func zones(_ context.Context, s *state) (simulate.Outcome, error) {
 	h.Flow.ToZone = h.Out.Zone
 	detail := fmt.Sprintf("%s -> %s", orUnknown(h.Flow.FromZone), orUnknown(h.Flow.ToZone))
 	if h.In.Interface == "" {
-		h.Notes = append(h.Notes, "the ingress is unknown: no source was given")
+		h.Notes = append(h.Notes, reason.New("path.ingress-unknown", "the ingress is unknown: no source was given"))
 	}
 	return simulate.Outcome{Fidelity: simulate.Exact, Detail: detail}, nil
 }
@@ -360,7 +360,8 @@ func (s *state) chain(p simulate.Port, out simulate.Outcome) (simulate.Outcome, 
 	if s.seen[s.key(p)] {
 		s.end(Loop, "path.loop", "loop: "+s.trail(p.Device))
 		if s.agesDiffer() {
-			s.hop().Notes = append(s.hop().Notes, "the loop crosses snapshots taken at different times; it may come from their ages")
+			s.hop().Notes = append(s.hop().Notes, reason.New("note.loop-snapshot-ages",
+				"the loop crosses snapshots taken at different times; it may come from their ages"))
 		}
 		out.Detail = "loop"
 		return out, nil
@@ -388,7 +389,8 @@ func (s *state) crossVsys(h *Hop, out simulate.Outcome) (simulate.Outcome, error
 	h.Flow.ToZone = fromExt
 	if !ok1 || !ok2 {
 		out.Fidelity, h.ZonePlaceholder, s.placeholder = simulate.Inferred, true, true
-		h.Notes = append(h.Notes, "no external zone joins these vsys in the configuration; the zone names are placeholders")
+		h.Notes = append(h.Notes, reason.New("zone.placeholder",
+			"no external zone joins these vsys in the configuration; the zone names are placeholders"))
 	}
 	out.Detail = fmt.Sprintf("into %s by the external zones", vsysName(egress.Vsys))
 	return s.chain(simulate.Port{Device: h.Device, Vsys: egress.Vsys, Router: s.router, Zone: toExt}, out)

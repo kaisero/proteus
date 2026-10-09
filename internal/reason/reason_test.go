@@ -138,7 +138,7 @@ func TestRegistryReturnsACopy(t *testing.T) {
 func TestNewKeepsCodeAndText(t *testing.T) {
 	t.Parallel()
 	r := New("doubt.service-no-port", "rule web matches service web-ports")
-	if r.Code != "doubt.service-no-port" || r.Text != "rule web matches service web-ports" {
+	if r.Code != "doubt.service-no-port" || r.Text != "rule web matches service web-ports" || r.String() != r.Text {
 		t.Errorf("New = %+v", r)
 	}
 	b, err := json.Marshal(r)

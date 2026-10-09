@@ -6,6 +6,7 @@ import (
 	"net/netip"
 	"strings"
 
+	"github.com/okaiser/proteus/internal/reason"
 	"github.com/okaiser/proteus/internal/resolve"
 	"github.com/okaiser/proteus/internal/simulate"
 	natsim "github.com/okaiser/proteus/internal/simulate/nat"
@@ -35,17 +36,17 @@ func pbf(_ context.Context, s *state) (simulate.Outcome, error) {
 	}
 	out := simulate.Outcome{Fidelity: simulate.Exact, Detail: "no PBF rule could match"}
 	if gap := v.Config.VersionGap(); gap != "" {
-		h.Notes = append(h.Notes, fmt.Sprintf("schema: PBF checked with the %s digest", v.Config.DigestVersion()))
+		h.Notes = append(h.Notes, reason.New("gap.version", fmt.Sprintf("schema: PBF checked with the %s digest", v.Config.DigestVersion())))
 		out.Fidelity = simulate.Inferred
 	}
 	m := v.PBF(s.src, s.dst, h.In)
 	out.Unresolved = m.Unresolved
 	out.Fidelity = simulate.Weakest(out.Fidelity, rulebase.Certainty(resolve.PBF, m.Unresolved))
 	if m.Found {
-		if m.Note != "" {
+		if m.Note.Text != "" {
 			h.Notes = append(h.Notes, m.Note)
 			h.PBF = append(h.PBF, m.Rule.Name)
-			out.Fidelity, out.Detail = simulate.Weakest(out.Fidelity, simulate.Inferred), m.Note
+			out.Fidelity, out.Detail = simulate.Weakest(out.Fidelity, simulate.Inferred), m.Note.Text
 		} else {
 			out.Detail = "pbf rule " + m.Rule.Name + " leaves the packet to routing"
 		}
@@ -63,7 +64,7 @@ func nat(ctx context.Context, s *state) (simulate.Outcome, error) {
 	}
 	h := s.hop()
 	out := simulate.Outcome{Fidelity: simulate.Exact, Detail: "no NAT rule matches"}
-	if s.pool != "" {
+	if s.pool.Text != "" {
 		h.Notes = append(h.Notes, s.pool)
 		out.Fidelity = simulate.Inferred
 	}
@@ -96,7 +97,7 @@ func nat(ctx context.Context, s *state) (simulate.Outcome, error) {
 	r := natsim.Translate(in, m)
 	h.Notes = append(h.Notes, r.Notes...)
 	for _, d := range r.Doubts {
-		h.Notes = append(h.Notes, "nat rule "+d.Rule+" may match instead: "+d.Text())
+		h.Notes = append(h.Notes, reason.New("path.nat-undermatch", "nat rule "+d.Rule+" may match instead: "+d.Text()))
 	}
 	out.Unresolved = r.Unresolved
 	out.Fidelity = simulate.Weakest(out.Fidelity, r.Fidelity)
@@ -110,7 +111,7 @@ func nat(ctx context.Context, s *state) (simulate.Outcome, error) {
 	if tr := r.Source; tr != nil {
 		note += fmt.Sprintf(" source %s -> %s", s.cur.Source, strings.Join(tr.Candidates, ", "))
 		if len(tr.Candidates) > 1 || strings.Contains(strings.Join(tr.Candidates, ""), "/") || strings.Contains(strings.Join(tr.Candidates, ""), "-") {
-			s.pool = fmt.Sprintf("nat on %s translates the source to one of %s", h.Device, strings.Join(tr.Candidates, ", "))
+			s.pool = reason.New("note.nat-pool", fmt.Sprintf("nat on %s translates the source to one of %s", h.Device, strings.Join(tr.Candidates, ", ")))
 		}
 	}
 	if tr := r.Destination; tr != nil && tr.Address.IsValid() {
@@ -119,7 +120,7 @@ func nat(ctx context.Context, s *state) (simulate.Outcome, error) {
 			note += ":" + tr.Port
 		}
 	}
-	h.Notes = append(h.Notes, note)
+	h.Notes = append(h.Notes, reason.New("note.nat-applied", note))
 	out.Detail = note
 	if r.PostNAT != nil {
 		last.Stage = "pre-NAT"

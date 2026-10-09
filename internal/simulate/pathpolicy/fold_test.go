@@ -102,7 +102,7 @@ func TestFold(t *testing.T) {
 				after = append(after, h.Index)
 			}
 		}
-		if got != c.want || !slices.Equal(after, c.after) || !slices.Equal(r.Notes, c.notes) {
+		if got != c.want || !slices.Equal(after, c.after) || !slices.Equal(r.Notes.Texts(), c.notes) {
 			t.Errorf("%s:\ngot  %s, after %v, notes %v\nwant %s, after %v, notes %v", c.name, got, after, r.Notes, c.want, c.after, c.notes)
 		}
 	}
@@ -138,7 +138,7 @@ func TestHiddenFirewallsAreANote(t *testing.T) {
 	t.Parallel()
 	r := Result{Path: routing.Path{Outcome: routing.Delivered, Hidden: []string{"fw9 (Layer 2 or virtual wire)"}}, Hops: hops("pass")}
 	fold(&r, simulate.Exact)
-	if r.Verdict != VerdictAllowed || !slices.Equal(r.Notes, []string{"firewalls that may sit on the path unseen are not checked: fw9 (Layer 2 or virtual wire)"}) {
+	if r.Verdict != VerdictAllowed || !slices.Equal(codeTexts(r.Notes), []string{"path.hidden-firewall: firewalls that may sit on the path unseen are not checked: fw9 (Layer 2 or virtual wire)"}) {
 		t.Errorf("%s %v", r.Verdict, r.Notes)
 	}
 }

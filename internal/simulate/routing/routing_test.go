@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/okaiser/proteus/internal/config"
+	"github.com/okaiser/proteus/internal/reason"
 	"github.com/okaiser/proteus/internal/resolve"
 	"github.com/okaiser/proteus/internal/simulate"
 	"github.com/okaiser/proteus/internal/simulate/topology"
@@ -195,7 +196,7 @@ func TestAGivenStart(t *testing.T) {
 	t.Parallel()
 	// No source: the ingress is unknown.
 	_, p, err := simulateOn(t, labNet(), flow("", "8.8.8.8"), map[string]string{"device": "fw01", "router": "default"})
-	if err != nil || p.Placed != topology.PlacedGiven || p.Hops[0].Flow.FromZone != "" || !strings.Contains(strings.Join(p.Hops[0].Notes, ";"), "ingress is unknown") {
+	if err != nil || p.Placed != topology.PlacedGiven || p.Hops[0].Flow.FromZone != "" || !strings.Contains(p.Hops[0].Notes.Text(), "ingress is unknown") {
 		t.Errorf("path = %+v, %v", p, err)
 	}
 	// A source connected on the device gives the ingress.
@@ -291,7 +292,7 @@ func TestALoop(t *testing.T) {
 	b := dev("b", []resolve.InterfaceState{iface("e1", "z", "r", "10.0.0.2/30")}, route("r", "0.0.0.0/0", "e1", "10.0.0.1"))
 	b.TakenAt = time.Unix(100, 0)
 	_, p, _ := simulateOn(t, netOf(a, b), flow("10.9.0.5", "8.8.8.8"), nil)
-	if p.Outcome != Loop || p.End != "loop: a -> b -> a" || !strings.Contains(strings.Join(p.Hops[1].Notes, ";"), "different times") {
+	if p.Outcome != Loop || p.End != "loop: a -> b -> a" || !strings.Contains(p.Hops[1].Notes.Text(), "different times") {
 		t.Errorf("loop = %+v", p)
 	}
 }
@@ -410,7 +411,7 @@ func TestAnFQDNNamesTheAddressesNotTraced(t *testing.T) {
 	f := flow("198.18.10.5", "8.8.8.8")
 	f.Destination = simulate.Endpoint{Name: "dns.example", Addrs: []netip.Addr{netip.MustParseAddr("8.8.8.8"), netip.MustParseAddr("8.8.4.4")}, Resolved: true}
 	_, p, _ := simulateOn(t, labNet(), f, nil)
-	if len(p.Notes) != 1 || p.Notes[0] != "dns.example resolved to 2 addresses; traced 8.8.8.8, not 8.8.4.4" {
+	if len(p.Notes) != 1 || p.Notes[0] != reason.New("dns.other-addresses", "dns.example resolved to 2 addresses; traced 8.8.8.8, not 8.8.4.4") {
 		t.Errorf("notes = %v", p.Notes)
 	}
 }

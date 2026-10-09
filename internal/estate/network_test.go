@@ -79,7 +79,7 @@ func TestNetworkReadsEachDeviceOnce(t *testing.T) {
 	if again, _ := n.Device("fw02"); again.SnapshotID != d.SnapshotID {
 		t.Error("a second ask returns the same data")
 	}
-	if len(d.Notes) != 1 || !strings.Contains(d.Notes[0], "past the 2h0m0s limit") {
+	if len(d.Notes) != 1 || !strings.Contains(d.Notes[0].Text, "past the 2h0m0s limit") || d.Notes[0].Code != "note.snapshot-stale" {
 		t.Errorf("fw02 notes = %v", d.Notes)
 	}
 	// Latest by default; --at picks the older fw01 snapshot.
@@ -140,7 +140,7 @@ func TestNetworkCollapsesAnHAPair(t *testing.T) {
 	if o, _ := n.Device("other"); o.Member != "other" {
 		t.Errorf("single device member = %q", o.Member)
 	}
-	if len(d.Notes) != 1 || !strings.Contains(d.Notes[0], "[fw-a fw-b] are one HA pair; fw-b answers") {
+	if len(d.Notes) != 1 || !strings.Contains(d.Notes[0].Text, "[fw-a fw-b] are one HA pair; fw-b answers") || d.Notes[0].Code != "note.ha-peer" {
 		t.Errorf("notes = %v", d.Notes)
 	}
 }
@@ -158,7 +158,7 @@ func TestNetworkJoinsAMemberWithoutHAState(t *testing.T) {
 		t.Fatalf("nodes = %v", n.Devices())
 	}
 	d, _ := n.Device("fw-a")
-	if len(d.Notes) != 2 || !strings.Contains(d.Notes[1], "from the active peer 192.0.2.2") {
+	if len(d.Notes) != 2 || !strings.Contains(d.Notes[1].Text, "from the active peer 192.0.2.2") || d.Notes[1].Code != "note.ha-from-peer" {
 		t.Errorf("notes = %v", d.Notes)
 	}
 }
@@ -178,7 +178,7 @@ func TestNetworkNotesUnreadableOptionalDocuments(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	notes := strings.Join(d.Notes, "\n")
+	notes := strings.Join(d.Notes.Texts(), "\n")
 	if !strings.Contains(notes, "routing table unreadable") || !strings.Contains(notes, "HA state unreadable") {
 		t.Errorf("notes = %v", d.Notes)
 	}

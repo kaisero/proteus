@@ -84,7 +84,7 @@ type MatchResult struct {
 	In         simulate.Port      `json:"in"` // the ingress the answer assumed
 	PreNAT     simulate.Forward   `json:"pre_nat"`
 	Dropped    string             `json:"dropped,omitempty"` // why no NAT applies at all
-	Notes      []string           `json:"notes,omitempty"`
+	Notes      simulate.Reasons   `json:"notes,omitempty"`
 	Unresolved []index.Unresolved `json:"unresolved,omitempty"`
 	Fidelity   simulate.Fidelity  `json:"fidelity"`
 

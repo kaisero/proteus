@@ -297,7 +297,7 @@ func (p pathAnswer) Results() any {
 	}
 	for _, h := range r.Hops {
 		hj := pathHopJSON{
-			Index: h.Index, Hop: h.Routing, Notes: nonNil(h.Routing.Notes), PBF: nonNil(h.Routing.PBF),
+			Index: h.Index, Hop: h.Routing, Notes: nonNil(h.Routing.Notes.Texts()), PBF: nonNil(h.Routing.PBF),
 			ECMP: h.Routing.ECMP, ZonePlaceholder: h.Routing.ZonePlaceholder, Doubts: nonNil(h.Doubts.Texts()),
 			AfterDeny: h.AfterDeny,
 		}
@@ -325,16 +325,16 @@ func pathNotes(res pathpolicy.Result) []note {
 		device = res.Hops[0].Routing.Device
 	}
 	var out []note
-	out = append(out, runNotes(device, res.Path.Notes)...)
+	out = append(out, runNotes(device, res.Path.Notes.Texts())...)
 	for _, h := range res.Hops {
-		out = append(out, runNotes(h.Routing.Device, h.Routing.Notes)...)
+		out = append(out, runNotes(h.Routing.Device, h.Routing.Notes.Texts())...)
 		for _, c := range h.Checks {
 			for _, n := range c.Notes {
 				out = append(out, note{Device: h.Routing.Device, Vsys: h.Routing.Vsys, Note: n})
 			}
 		}
 	}
-	out = append(out, runNotes(device, res.Notes)...)
+	out = append(out, runNotes(device, res.Notes.Texts())...)
 	seen := map[note]bool{}
 	return slices.DeleteFunc(out, func(n note) bool {
 		dup := seen[n]
@@ -365,7 +365,7 @@ func (p pathAnswer) text(t *textOut) {
 		}
 	}
 	for _, n := range r.Notes {
-		fmt.Fprintf(t, "  %s\n", noteStyle(t.pal, n)("note: "+n))
+		fmt.Fprintf(t, "  %s\n", noteStyle(t.pal, n.Text)("note: "+n.Text))
 	}
 	fmt.Fprintln(t)
 	title := fmt.Sprintf("simulate policy %s -> %s %s", sourceText(r.Path), r.Path.Destination, p.flow.Protocol)

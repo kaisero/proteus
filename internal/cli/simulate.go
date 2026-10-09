@@ -272,11 +272,11 @@ func printRun(w *textOut, run simulate.Run, t estate.Target, v securitypolicy.Ve
 	fmt.Fprintf(w, "  zones      %s\n", zones)
 	switch {
 	case !v.Relevance.Known:
-		fmt.Fprintf(w, "  relevance  unknown: %s\n", v.Relevance.Reason)
+		fmt.Fprintf(w, "  relevance  unknown: %s\n", v.Relevance.Reason.Text)
 	case v.Relevance.Relevant:
-		fmt.Fprintf(w, "  relevant   %s\n", v.Relevance.Reason)
+		fmt.Fprintf(w, "  relevant   %s\n", v.Relevance.Reason.Text)
 	default:
-		fmt.Fprintf(w, "  relevance  not relevant: %s\n", v.Relevance.Reason)
+		fmt.Fprintf(w, "  relevance  not relevant: %s\n", v.Relevance.Reason.Text)
 	}
 	fmt.Fprintf(w, "  fidelity   %s\n", run.Fidelity)
 	if why {

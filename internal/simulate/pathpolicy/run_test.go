@@ -236,7 +236,7 @@ func TestThePathFixtureVariants(t *testing.T) {
 		}
 	}
 	r := runLab(t, lab{defaults: map[string]pathlab.Defaults{pathlab.FW02: differ}}, pathlab.Destination)
-	if want := "a later hop denies: hop 2 (fw01 vsys1), default rule interzone-default (deny), built-in"; !slices.Equal(r.Notes, []string{want}) {
+	if want := "a later hop denies: hop 2 (fw01 vsys1), default rule interzone-default (deny), built-in"; !slices.Equal(r.Notes, simulate.Reasons{reason.New("note.later-deny", want)}) {
 		t.Errorf("E7 note: %v", r.Notes)
 	}
 	// Undecided at 1 bounds the fidelity: hop 2's exact check does not raise it.
@@ -296,7 +296,7 @@ func TestTheEndsOfAPath(t *testing.T) {
 		},
 	} {
 		r := runLab(t, c.lab, c.dst)
-		if got := summary(r); got != c.want || !slices.Equal(r.Notes, c.notes) {
+		if got := summary(r); got != c.want || !slices.Equal(r.Notes.Texts(), c.notes) {
 			t.Errorf("%s:\ngot  %s %v\nwant %s %v", c.name, got, r.Notes, c.want, c.notes)
 		}
 		if last := r.Hops[len(r.Hops)-1]; last.Checks[0].Verdict == NotEvaluated && last.Checks[0].Reason != dropped {

@@ -57,7 +57,7 @@ func policyRun(t *testing.T, file, src, dst string) Path {
 	return run.Output.(Path)
 }
 
-func notes(h Hop) string { return strings.Join(h.Notes, "; ") }
+func notes(h Hop) string { return h.Notes.Text() }
 
 func TestPBFForwardAndSourceNAT(t *testing.T) {
 	t.Parallel()

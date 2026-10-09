@@ -103,7 +103,7 @@ type DeviceData struct {
 	Interfaces []resolve.InterfaceState
 	FIB        []resolve.FIBRoute
 	RIB        []resolve.RIBRoute // nil when the snapshot has none
-	Notes      []string           // an HA pair, a fetch from the peer, an old snapshot
+	Notes      Reasons            // an HA pair, a fetch from the peer, an old snapshot
 }
 
 // StageState is the candidate set as a stage left it. Its count answers "why did

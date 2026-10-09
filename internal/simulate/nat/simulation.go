@@ -7,6 +7,7 @@ import (
 	"net/netip"
 	"strings"
 
+	"github.com/okaiser/proteus/internal/reason"
 	"github.com/okaiser/proteus/internal/resolve"
 	"github.com/okaiser/proteus/internal/simulate"
 	"github.com/okaiser/proteus/internal/simulate/rulebase"
@@ -45,7 +46,7 @@ type state struct {
 	nat    Input
 	pre    simulate.Forward
 	result Result
-	notes  []string // from stages before the match, such as PBF
+	notes  simulate.Reasons // from stages before the match, such as PBF
 }
 
 // Run implements simulate.Simulation.
@@ -86,7 +87,7 @@ func (Simulation) Run(ctx context.Context, env *simulate.Env, in simulate.Input)
 	run.Fidelity = simulate.Overall(stages)
 	s.result.Notes = append(s.notes, s.result.Notes...)
 	run.Output = s.result
-	run.Notes = d.Notes
+	run.Notes = d.Notes.Texts()
 	return run, err
 }
 
@@ -157,11 +158,11 @@ func pbfStage(_ context.Context, s *state) (simulate.Outcome, error) {
 		Detail:     "no PBF rule could take the packet",
 		Unresolved: m.Unresolved,
 	}
-	if !m.Found || m.Note == "" {
+	if !m.Found || m.Note.Text == "" {
 		return out, nil
 	}
-	s.notes = append(s.notes, m.Note+"; the NAT zones below assume it does not")
-	out.Fidelity, out.Detail = simulate.Weakest(out.Fidelity, simulate.Inferred), m.Note
+	s.notes = append(s.notes, reason.Reason{Code: m.Note.Code, Text: m.Note.Text + "; the NAT zones below assume it does not"})
+	out.Fidelity, out.Detail = simulate.Weakest(out.Fidelity, simulate.Inferred), m.Note.Text
 	return out, nil
 }
 

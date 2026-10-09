@@ -57,22 +57,22 @@ func TestPBF(t *testing.T) {
 	v := routingVsys(t)
 	branch := simulate.Port{Zone: "branch-vpn", Interface: "ethernet1/3"}
 	if m := pbf(t, v, "10.20.5.5", "10.1.10.100", branch); !m.Found || m.Rule.Name != "branch-to-zscaler" ||
-		m.Note != "pbf rule branch-to-zscaler may forward this packet to tunnel.1 via 198.19.255.254" {
+		m.Note != reason.New("path.pbf", "pbf rule branch-to-zscaler may forward this packet to tunnel.1 via 198.19.255.254") {
 		t.Errorf("forward: %+v", m)
 	}
 	// By interface, destination negated: dc01 is excluded.
-	if m := pbf(t, v, "10.99.0.5", "10.1.10.50", branch); m.Note != "pbf rule lab-by-interface may drop this packet" {
+	if m := pbf(t, v, "10.99.0.5", "10.1.10.50", branch); m.Note != reason.New("path.pbf", "pbf rule lab-by-interface may drop this packet") {
 		t.Errorf("discard: %q", m.Note)
 	}
 	if m := pbf(t, v, "10.99.0.5", "10.1.10.100", branch); m.Found {
 		t.Error("the negated destination")
 	}
 	dc := simulate.Port{Zone: "datacenter", Interface: "ethernet1/2"}
-	if m := pbf(t, v, "10.1.1.1", "10.30.0.9", dc); !m.Found || m.Note != "" || m.Rule.Name != "keep-routing" {
+	if m := pbf(t, v, "10.1.1.1", "10.30.0.9", dc); !m.Found || m.Note != (reason.Reason{}) || m.Rule.Name != "keep-routing" {
 		t.Errorf("no-pbf: %+v", m)
 	}
 	sdwan := simulate.Port{Zone: "sdwan", Interface: "ethernet1/4"}
-	if m := pbf(t, v, "10.30.0.7", "10.1.1.1", sdwan); m.Note != "pbf rule sdwan-to-vsys2 may forward this packet to vsys2" {
+	if m := pbf(t, v, "10.30.0.7", "10.1.1.1", sdwan); m.Note != reason.New("path.pbf", "pbf rule sdwan-to-vsys2 may forward this packet to vsys2") {
 		t.Errorf("to vsys: %q", m.Note)
 	}
 }

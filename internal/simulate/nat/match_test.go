@@ -207,7 +207,7 @@ func TestServicesAndTypes(t *testing.T) {
 		t.Errorf("nptv6: %+v", m.Excluded)
 	}
 	// An HA binding is ignored with a note (D2).
-	if m := Match(caseInput(t, "198.51.100.1", "tcp", 443)); len(m.Notes) != 1 || !strings.Contains(m.Notes[0], "bound to HA device 0") {
+	if m := Match(caseInput(t, "198.51.100.1", "tcp", 443)); len(m.Notes) != 1 || !strings.Contains(m.Notes[0].Text, "bound to HA device 0") || m.Notes[0].Code != "note.ha-binding" {
 		t.Errorf("binding: %+v", m.Notes)
 	}
 }
@@ -216,7 +216,7 @@ func TestAVersionGapIsNoted(t *testing.T) {
 	t.Parallel()
 	in := input(natConfig(t, "firewall-version-12.2.xml"), probe{src: "10.0.0.1", dst: "10.0.0.2", port: 443, from: "trust", to: "untrust"})
 	m := Match(in)
-	if m.Rule != nil || len(m.Notes) != 1 || !strings.Contains(m.Notes[0], "NAT checked with the") || m.Fidelity.Level() != "inferred" {
+	if m.Rule != nil || len(m.Notes) != 1 || !strings.Contains(m.Notes[0].Text, "NAT checked with the") || m.Notes[0].Code != "gap.version" || m.Fidelity.Level() != "inferred" {
 		t.Errorf("gap: %+v", m)
 	}
 	// A destination-only flow, and an unknown egress zone.

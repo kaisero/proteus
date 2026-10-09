@@ -81,7 +81,7 @@ type Hop struct {
 	PostNAT         *simulate.Flow     `json:"post_nat"` // nil until NAT is simulated
 	ECMP            []NotFollowed      `json:"ecmp_not_followed,omitempty"`
 	Alternates      []resolve.RIBRoute `json:"alternates,omitempty"`
-	Notes           []string           `json:"notes,omitempty"`
+	Notes           simulate.Reasons   `json:"notes,omitempty"`
 	PBF             []string           `json:"pbf,omitempty"`              // PBF rules that can redirect the flow here
 	ZonePlaceholder bool               `json:"zone_placeholder,omitempty"` // a zone name is a placeholder
 	Fidelity        simulate.Fidelity  `json:"fidelity"`
@@ -99,7 +99,7 @@ type Path struct {
 	EndCode     reason.Code       `json:"-"`   // the kind of end, for a reason that names it
 	Hops        []Hop             `json:"hops"`
 	Hidden      []string          `json:"hidden,omitempty"` // spec §17 R19
-	Notes       []string          `json:"notes,omitempty"`
+	Notes       simulate.Reasons  `json:"notes,omitempty"`
 }
 
 // Run implements simulate.Simulation.
@@ -137,15 +137,16 @@ func (Simulation) Run(ctx context.Context, env *simulate.Env, in simulate.Input)
 }
 
 // endpointNotes names what an FQDN resolved to beyond the address traced.
-func endpointNotes(f simulate.Flow) []string {
-	var out []string
+func endpointNotes(f simulate.Flow) simulate.Reasons {
+	var out simulate.Reasons
 	for _, ep := range []simulate.Endpoint{f.Source, f.Destination} {
 		if ep.Name != "" && len(ep.Addrs) > 1 {
 			var rest []string
 			for _, a := range ep.Addrs[1:] {
 				rest = append(rest, a.String())
 			}
-			out = append(out, fmt.Sprintf("%s resolved to %d addresses; traced %s, not %s", ep.Name, len(ep.Addrs), ep.Addrs[0], strings.Join(rest, ", ")))
+			out = append(out, reason.New("dns.other-addresses",
+				fmt.Sprintf("%s resolved to %d addresses; traced %s, not %s", ep.Name, len(ep.Addrs), ep.Addrs[0], strings.Join(rest, ", "))))
 		}
 	}
 	return out

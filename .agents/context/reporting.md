@@ -182,6 +182,7 @@ type Code string
 type Entry struct{ ... }
 type Reason struct{ ... }
 
+func (r Reason) String() string
 func Known(c Code) bool
 func New(c Code, text string) Reason
 func Registry() []Entry

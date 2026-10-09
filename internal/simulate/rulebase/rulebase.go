@@ -133,9 +133,9 @@ type PBFMatch struct {
 	// Rule is the first rule that could take the flow; Found says whether there is one.
 	Rule  resolve.PBFRule
 	Found bool
-	// Note says what the rule would do; "" for no-pbf, which leaves the packet to
-	// routing.
-	Note string
+	// Note says what the rule would do; the zero reason for no-pbf, which leaves
+	// the packet to routing.
+	Note reason.Reason
 	// Unresolved lists values the rules name that could not be evaluated. A rule
 	// reached only through one of them may be missing.
 	Unresolved []index.Unresolved
@@ -155,14 +155,15 @@ func (v Vsys) PBF(src, dst netip.Addr, in simulate.Port) PBFMatch {
 		}
 		switch r.ActionKind {
 		case resolve.PBFForward:
-			m.Note = fmt.Sprintf("pbf rule %s may forward this packet to %s", r.Name, r.EgressInterface)
+			note := fmt.Sprintf("pbf rule %s may forward this packet to %s", r.Name, r.EgressInterface)
 			if r.NextHop != "" {
-				m.Note += " via " + r.NextHop
+				note += " via " + r.NextHop
 			}
+			m.Note = reason.New("path.pbf", note)
 		case resolve.PBFForwardToVsys:
-			m.Note = fmt.Sprintf("pbf rule %s may forward this packet to %s", r.Name, r.ForwardVsys)
+			m.Note = reason.New("path.pbf", fmt.Sprintf("pbf rule %s may forward this packet to %s", r.Name, r.ForwardVsys))
 		case resolve.PBFDiscard:
-			m.Note = fmt.Sprintf("pbf rule %s may drop this packet", r.Name)
+			m.Note = reason.New("path.pbf", fmt.Sprintf("pbf rule %s may drop this packet", r.Name))
 		}
 		m.Rule, m.Found = r, true
 		return m

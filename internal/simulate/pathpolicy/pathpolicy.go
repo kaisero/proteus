@@ -92,7 +92,7 @@ type Result struct {
 	Hops     []Hop
 	Fidelity simulate.Fidelity // weakest of routing stages and checks up to At
 	Holes    []simulate.Missing
-	Notes    []string
+	Notes    simulate.Reasons
 }
 
 // The checks' names, and the routing pseudo-check a Point names.
