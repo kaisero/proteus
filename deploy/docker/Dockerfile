@@ -45,7 +45,9 @@ ENV HOME=/var/lib/proteus \
 USER 10001:10001
 ENTRYPOINT ["/usr/local/bin/fetch-loop"]
 
-FROM gcr.io/distroless/static-debian12 AS mcp
+# distroless publishes no version tags: the digest pins the image (the index of
+# :latest on 2026-10-10). Update it on purpose, as with a version bump.
+FROM gcr.io/distroless/static-debian12:latest@sha256:d75cdd72874d4790092fcb1b058493ecf6bb5bf2b2b897045b00ff01d91843f2 AS mcp
 COPY --from=build /out/proteus /usr/local/bin/proteus
 COPY --from=build /out/root/ /
 ENV HOME=/var/lib/proteus \

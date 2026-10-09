@@ -67,6 +67,9 @@ or the audit is not reliable.
 - proteus does no authorisation. Portkey decides which users and workspaces can
   use the server.
 - The audit file holds addresses and identities. Treat it as sensitive.
+- Behind the proxy, the audit `remote` of a refused request is the proxy's
+  address, so the limit of 10 refusal lines per address counts every client as
+  one. proteus does not read `X-Forwarded-For`, and it must not trust it.
 - Rotate the token in the secret file and in Portkey together, then restart
   `proteus-mcp`.
 

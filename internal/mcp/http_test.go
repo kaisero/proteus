@@ -17,6 +17,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -34,6 +35,12 @@ const testToken = "0123456789abcdef0123456789abcdef"
 // server and returns ServeHTTP's error.
 func httpLab(t *testing.T, o Options) (string, *recorder, func() error) {
 	t.Helper()
+	return httpLabOn(t, o, nil)
+}
+
+// httpLabOn is httpLab with the listener passed through wrap first, when set.
+func httpLabOn(t *testing.T, o Options, wrap func(net.Listener) net.Listener) (string, *recorder, func() error) {
+	t.Helper()
 	rec := &recorder{}
 	if o.Env.Inventory == nil {
 		o.Env = labEnv(t, snap{pathlab.FW01, pathlab.ConfigFile(pathlab.FW01)}, snap{pathlab.FW02, pathlab.ConfigFile(pathlab.FW02)})
@@ -44,6 +51,9 @@ func httpLab(t *testing.T, o Options) (string, *recorder, func() error) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
+	}
+	if wrap != nil {
+		ln = wrap(ln)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
@@ -362,7 +372,10 @@ func TestServeHTTPDrainsOnShutdown(t *testing.T) {
 // is cut: the server closes its connection and ServeHTTP returns.
 func TestServeHTTPClosesWhatOutlivesTheShutdown(t *testing.T) {
 	t.Parallel()
-	url, _, stop := httpLab(t, Options{Limits: Limits{CallTimeout: 100 * time.Millisecond}})
+	waiting := make(chan struct{})
+	url, _, stop := httpLabOn(t, Options{Limits: Limits{CallTimeout: 100 * time.Millisecond}}, func(ln net.Listener) net.Listener {
+		return &secondRead{Listener: ln, waiting: waiting}
+	})
 	conn, err := net.Dial("tcp", strings.TrimSuffix(strings.TrimPrefix(url, "http://"), "/"))
 	if err != nil {
 		t.Fatal(err)
@@ -373,7 +386,12 @@ func TestServeHTTPClosesWhatOutlivesTheShutdown(t *testing.T) {
 		"Content-Type: application/json\r\nAccept: application/json, text/event-stream\r\nContent-Length: 1000\r\n\r\n{", testToken); err != nil {
 		t.Fatal(err)
 	}
-	time.Sleep(50 * time.Millisecond)
+	// The handler reads the body: the request is active, not new.
+	select {
+	case <-waiting:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the server never read the body")
+	}
 	stopped := make(chan error, 1)
 	go func() { stopped <- stop() }()
 	select {
@@ -389,6 +407,36 @@ func TestServeHTTPClosesWhatOutlivesTheShutdown(t *testing.T) {
 	if _, err := io.ReadAll(conn); errors.Is(err, os.ErrDeadlineExceeded) {
 		t.Errorf("the connection was not closed: %v", err)
 	}
+}
+
+// secondRead closes waiting when the first connection it accepts is read a
+// second time: the first read takes the headers and the body's first byte,
+// the second waits for the rest of the body.
+type secondRead struct {
+	net.Listener
+	waiting chan struct{}
+	once    sync.Once
+}
+
+func (l *secondRead) Accept() (net.Conn, error) {
+	c, err := l.Listener.Accept()
+	if err != nil {
+		return nil, err
+	}
+	return &readCount{Conn: c, l: l}, nil
+}
+
+type readCount struct {
+	net.Conn
+	l     *secondRead
+	reads atomic.Int32
+}
+
+func (c *readCount) Read(b []byte) (int, error) {
+	if c.reads.Add(1) == 2 {
+		c.l.once.Do(func() { close(c.l.waiting) })
+	}
+	return c.Conn.Read(b)
 }
 
 // Refusals are audited at most 10 per minute per address; a summary line
