@@ -136,7 +136,7 @@ func TestTranslationEdges(t *testing.T) {
 func caseTranslate(t *testing.T, src, dst string) Result {
 	t.Helper()
 	in := Input{
-		Target: simulate.Target{Config: natConfig(t, "firewall-nat-translations.xml")}, Vsys: "vsys1",
+		Target: withIndexes(natConfig(t, "firewall-nat-translations.xml"), "vsys1"), Vsys: "vsys1",
 		Flow:   simulate.Flow{Destination: simulate.Addr(netip.MustParseAddr(dst)), Protocol: "tcp", DestPort: 443},
 		In:     simulate.Port{Device: "fw", Router: "r", Zone: "trust"},
 		PreNAT: &simulate.Forward{Out: simulate.Port{Zone: "untrust", Interface: "ethernet1/1"}},

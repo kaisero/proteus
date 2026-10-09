@@ -114,6 +114,7 @@ already answers it.
 
 <!-- GENERATED:api ./internal/index -->
 ```go
+type Edges struct{ ... }
 type Field int
 type Hit struct{ ... }
 type Index struct{ ... }
@@ -123,6 +124,7 @@ type ProfileUse struct{ ... }
 type Providers struct{ ... }
 type Ref struct{ ... }
 type Report struct{ ... }
+type Set struct{ ... }
 type StaleReporter interface{ ... }
 type UnparsedFilter struct{ ... }
 type Unresolved struct{ ... }
@@ -161,6 +163,9 @@ func (in *Interner) ID(name string) uint32
 func (in *Interner) Len() int
 func (in *Interner) Lookup(name string) (uint32, bool)
 func (in *Interner) Name(id uint32) string
+func (s *Set) Config() *config.Config
+func (s *Set) Index(sc config.Scope, rb resolve.Rulebase) (*Index, error)
+func (s *Set) Provider(sc config.Scope) func(resolve.Rulebase) (*Index, error)
 func (s *UserSnapshot) GroupsOf(user string) []string
 func (s *UserSnapshot) Stale() (string, bool)
 func (s *ZoneSnapshot) Describe() string
@@ -171,14 +176,16 @@ func (u Unresolved) String() string
 func (u Unresolved) Why() reason.Reason
 func (v *View) Candidates(f Field, value string) (*roaring.Bitmap, Report)
 func (v *View) Opaque(f Field) (*roaring.Bitmap, map[uint32][]reason.Reason)
-func For(cfg *config.Config, sc config.Scope) (*Index, error)
-func ForRulebase(cfg *config.Config, sc config.Scope, rb resolve.Rulebase) (*Index, error)
+func Build(cfg *config.Config, edges *Edges, sc config.Scope, rb resolve.Rulebase) (*Index, error)
 func LoadUserSnapshot(r io.Reader) (*UserSnapshot, error)
 func LoadZoneSnapshot(r io.Reader) (*ZoneSnapshot, error)
+func New(cfg *config.Config, sc config.Scope, rb resolve.Rulebase) (*Index, error)
 func NewInterner() *Interner
+func NewSet(cfg *config.Config) *Set
 func NewUnresolved(value, kind string, r reason.Reason) Unresolved
 func NewZoneSnapshot(takenAt time.Time, source string, interfaces, fib io.Reader) (*ZoneSnapshot, error)
 func PrefixesOf(value string) []netip.Prefix
+func ReadEdges(cfg *config.Config) (*Edges, error)
 ```
 <!-- /GENERATED:api -->
 

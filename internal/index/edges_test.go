@@ -52,25 +52,26 @@ func TestAnIndexSeesSharedEdges(t *testing.T) {
 	}
 }
 
-// The file is read once however many scopes ask for it.
+// The file is read once however many indexes of a set ask for it.
 func TestTheEdgeListIsReadOnce(t *testing.T) {
 	t.Parallel()
 	cfg, _, err := config.Load("../../testdata/config/firewall-siblings.xml")
 	if err != nil {
 		t.Fatal(err)
 	}
-	first, err := edgesOf(cfg)
+	s := NewSet(cfg)
+	first, err := s.readEdges()
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := edgesOf(cfg)
+	second, err := s.readEdges()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(first) == 0 {
+	if len(first.list) == 0 {
 		t.Fatal("the fixture must yield edges for this to mean anything")
 	}
-	if &first[0] != &second[0] {
-		t.Error("edgesOf read the configuration twice; it must return the cached list")
+	if first != second {
+		t.Error("the set read the configuration twice; it must keep the list it read")
 	}
 }

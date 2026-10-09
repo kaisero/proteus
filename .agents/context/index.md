@@ -25,15 +25,19 @@ Three packages, dependency order strictly one-way — `config` <- `resolve` <- `
 - **`index`** — speed and answers. `For(cfg, scope)` builds an immutable, cached
   index: a prefix trie, group-closure bitmaps, rule-field bitmaps and a reference
   table. It exposes the lookups and the report that comes with them.
-  The reference edges are read once per configuration and cached as an edge list
-  (`edgesOf`); a scope's index holds positions into it, never its own copies, and
+  The reference edges are read once per configuration into an edge list
+  (`index.ReadEdges`, kept by an `index.Set`); a scope's index holds positions into it, never its own copies, and
   still sees only its own scope and shared. The list is a materialisation of the
   file, not an index — it answers no question and is keyed by nothing — so R10
   still holds, and `TestNoGlobalIndex` is what proves it.
 
 Control flow for the main question, "which rules can this value reach":
 
-`index.For(cfg, scope)` builds once per `(file, scope)` and caches. A query goes
+The package keeps no state (spec 2026-10-09 §4.8; `TestNoPackageLevelCache`).
+The caller builds and owns every index: `index.Build(cfg, edges, scope, rb)`, the
+one-shot `index.New(cfg, scope, rb)`, or an `index.Set` per configuration, which
+builds each `(scope, rulebase)` index once and gives simulations their
+`Target.Indexes` provider. A CLI run keeps one set per configuration it reads. A query goes
 to `View.Candidates(field, value)`, which asks each **resolver** wired to that
 field to turn the value into object names. The schema decides that wiring:
 `config.FieldKinds("rulebase/security/rules")` says which object kinds a field

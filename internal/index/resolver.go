@@ -66,8 +66,8 @@ type Hit struct {
 //
 // A User-ID mapping and a routing table are not in a configuration file, and they
 // change far faster than one. They attach to a View rather than to an Index for
-// that reason: an Index is cached per file and scope, and is immutable so that
-// concurrent readers need no lock.
+// that reason: an Index is built once per scope and kept by its caller, and is
+// immutable so that concurrent readers need no lock.
 //
 // The library performs no network access. These are interfaces, and fetching the
 // data behind them belongs to the caller.
@@ -198,7 +198,8 @@ func (i *Index) distinctResolvers() []resolver {
 // allows there.
 func wireResolvers(kinds map[string][]string, byKind map[string]resolver) map[Field][]resolver {
 	out := map[Field][]resolver{}
-	for f, name := range fieldNames {
+	for i, name := range fieldNames {
+		f := Field(i)
 		seen := map[resolver]bool{}
 		for _, k := range kinds[name] {
 			r, ok := byKind[k]

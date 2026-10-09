@@ -7,6 +7,7 @@ import (
 	"github.com/RoaringBitmap/roaring/v2"
 
 	"github.com/okaiser/proteus/internal/config"
+	"github.com/okaiser/proteus/internal/resolve"
 )
 
 func benchIndex(b *testing.B) *Index {
@@ -15,7 +16,7 @@ func benchIndex(b *testing.B) *Index {
 	if err != nil {
 		b.Fatal(err)
 	}
-	idx, err := For(cfg, config.Scope{Sort: config.ScopeVsys, Name: "vsys1"})
+	idx, err := New(cfg, config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}, resolve.Security)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -63,8 +64,7 @@ func BenchmarkIndexBuild(b *testing.B) {
 	}
 	sc := config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}
 	for b.Loop() {
-		clearCache()
-		if _, err := For(cfg, sc); err != nil {
+		if _, err := New(cfg, sc, resolve.Security); err != nil {
 			b.Fatal(err)
 		}
 	}
@@ -82,7 +82,7 @@ func indexOfB(b *testing.B, path, vsys string) *Index {
 	if err != nil {
 		b.Fatal(err)
 	}
-	idx, err := For(cfg, config.Scope{Sort: config.ScopeVsys, Name: vsys})
+	idx, err := New(cfg, config.Scope{Sort: config.ScopeVsys, Name: vsys}, resolve.Security)
 	if err != nil {
 		b.Fatal(err)
 	}

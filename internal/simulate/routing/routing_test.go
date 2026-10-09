@@ -378,7 +378,7 @@ func TestAVsysCrossing(t *testing.T) {
 	out.Vsys = "2"
 	n := netOf(dev("fw", []resolve.InterfaceState{in, out},
 		route("default", "10.1.0.0/24", "ethernet1/1", "0.0.0.0"), route("default", "10.2.0.0/24", "ethernet1/2", "0.0.0.0")))
-	load := func(string, string) (simulate.Target, error) { return simulate.Target{Config: cfg}, nil }
+	load := func(_, vsys string) (simulate.Target, error) { return withIndexes(cfg, vsys), nil }
 	run, err := Simulation{}.Run(context.Background(), &simulate.Env{Network: n, Load: load}, simulate.Input{Flow: flow("10.1.0.5", "10.2.0.9")})
 	p := run.Output.(Path)
 	if err != nil || trail(p) != "fw(trust->to-vsys2) fw(from-vsys1->dmz)" || p.Hops[1].Vsys != "vsys2" || p.Outcome != Delivered ||

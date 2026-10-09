@@ -5,6 +5,7 @@ import (
 
 	"github.com/okaiser/proteus/internal/config"
 	"github.com/okaiser/proteus/internal/index"
+	"github.com/okaiser/proteus/internal/resolve"
 )
 
 // BenchmarkRun is one search on a loaded, indexed configuration: what every vsys
@@ -14,7 +15,7 @@ func BenchmarkRun(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	idx, err := index.For(cfg, config.Scope{Sort: config.ScopeVsys, Name: "vsys1"})
+	idx, err := index.New(cfg, config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}, resolve.Security)
 	if err != nil {
 		b.Fatal(err)
 	}

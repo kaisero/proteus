@@ -14,6 +14,7 @@ import (
 	"github.com/okaiser/proteus/internal/config"
 	"github.com/okaiser/proteus/internal/index"
 	"github.com/okaiser/proteus/internal/reason"
+	"github.com/okaiser/proteus/internal/resolve"
 	"github.com/okaiser/proteus/internal/simulate"
 )
 
@@ -31,7 +32,9 @@ func envPath(t *testing.T, path string, zones bool) *simulate.Env {
 		if err != nil {
 			return simulate.Target{}, err
 		}
-		idx, err := index.For(cfg, config.Scope{Sort: config.ScopeVsys, Name: vsys})
+		set := index.NewSet(cfg)
+		sc := config.Scope{Sort: config.ScopeVsys, Name: vsys}
+		idx, err := set.Index(sc, resolve.Security)
 		if err != nil {
 			return simulate.Target{}, err
 		}
@@ -51,7 +54,7 @@ func envPath(t *testing.T, path string, zones bool) *simulate.Env {
 		if rep.VersionGap != "" {
 			notes = append(notes, reason.New("gap.version", rep.VersionGap))
 		}
-		return simulate.Target{Config: cfg, Index: idx, Providers: p, Notes: notes}, nil
+		return simulate.Target{Config: cfg, Index: idx, Indexes: set.Provider(sc), Providers: p, Notes: notes}, nil
 	}}
 }
 
@@ -507,7 +510,7 @@ func TestDefaultRuleWithoutTheVsys(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	idx, err := index.For(cfg, config.Scope{Sort: config.ScopeVsys, Name: "vsys2"})
+	idx, err := index.New(cfg, config.Scope{Sort: config.ScopeVsys, Name: "vsys2"}, resolve.Security)
 	if err != nil {
 		t.Fatal(err)
 	}

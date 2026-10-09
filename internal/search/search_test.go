@@ -9,6 +9,7 @@ import (
 
 	"github.com/okaiser/proteus/internal/config"
 	"github.com/okaiser/proteus/internal/index"
+	"github.com/okaiser/proteus/internal/resolve"
 )
 
 func run(t *testing.T, fixture, vsys string, q Query) []Finding {
@@ -17,7 +18,7 @@ func run(t *testing.T, fixture, vsys string, q Query) []Finding {
 	if err != nil {
 		t.Fatal(err)
 	}
-	idx, err := index.For(cfg, config.Scope{Sort: config.ScopeVsys, Name: vsys})
+	idx, err := index.New(cfg, config.Scope{Sort: config.ScopeVsys, Name: vsys}, resolve.Security)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -132,7 +133,7 @@ func TestAddressModes(t *testing.T) {
 func TestWithinNeedsAnAddress(t *testing.T) {
 	t.Parallel()
 	cfg, _, _ := config.Load("../../testdata/config/firewall-multivsys.xml")
-	idx, _ := index.For(cfg, config.Scope{Sort: config.ScopeVsys, Name: "vsys1"})
+	idx, _ := index.New(cfg, config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}, resolve.Security)
 	if _, err := Run(cfg, idx, Query{Term: "web", Mode: Within}); !errors.Is(err, ErrWithinNeedsAddress) {
 		t.Errorf("got %v", err)
 	}

@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/okaiser/proteus/internal/config"
+	"github.com/okaiser/proteus/internal/index"
 	"github.com/okaiser/proteus/internal/resolve"
 	"github.com/okaiser/proteus/internal/simulate"
 )
@@ -38,11 +39,11 @@ func policyNet(t *testing.T, file string) (*network, func(string, string) (simul
 		dev("up", []resolve.InterfaceState{iface("e1", "outside", "r", "10.30.0.254/24"), iface("e2", "wan", "r", "203.0.113.2/30")},
 			route("r", "0.0.0.0/0", "e2", "203.0.113.1")),
 	)
-	load := func(device, _ string) (simulate.Target, error) {
+	load := func(device, vsys string) (simulate.Target, error) {
 		if device != "fw" {
 			return simulate.Target{}, errors.New("no configuration")
 		}
-		return simulate.Target{Config: cfg}, nil
+		return withIndexes(cfg, vsys), nil
 	}
 	return n, load
 }
@@ -139,7 +140,7 @@ func TestAVersionGapIsInferredNotUnresolved(t *testing.T) {
 		t.Fatalf("fixture: %v", err)
 	}
 	n, _ := policyNet(t, "firewall-routing.xml")
-	load := func(string, string) (simulate.Target, error) { return simulate.Target{Config: cfg}, nil }
+	load := func(_, vsys string) (simulate.Target, error) { return withIndexes(cfg, vsys), nil }
 	run, err := Simulation{}.Run(context.Background(), &simulate.Env{Network: n, Load: load}, simulate.Input{Flow: flow("10.1.5.5", "10.30.0.9")})
 	h := run.Output.(Path).Hops[0]
 	if err != nil || !strings.HasPrefix(notes(h), "schema: PBF checked with the 11.2") || h.Fidelity.Level() != "inferred" {
@@ -218,7 +219,7 @@ func TestTheTranslatedDestinationHasNoRoute(t *testing.T) {
 		route("default", "10.30.0.0/24", "ethernet1/4", "0.0.0.0"),
 		route("default", "198.51.100.40/32", "ethernet1/4", "10.30.0.254"),
 	))
-	load := func(string, string) (simulate.Target, error) { return simulate.Target{Config: cfg}, nil }
+	load := func(_, vsys string) (simulate.Target, error) { return withIndexes(cfg, vsys), nil }
 	f := flow("10.1.5.5", "198.51.100.40")
 	f.DestPort = 3389
 	run, _ := Simulation{}.Run(context.Background(), &simulate.Env{Network: n, Load: load},
@@ -227,4 +228,11 @@ func TestTheTranslatedDestinationHasNoRoute(t *testing.T) {
 	if p.Outcome != Dropped || !strings.Contains(p.End, "no route to the translated 10.1.10.100") {
 		t.Errorf("path = %+v", p)
 	}
+}
+
+// withIndexes is a target over a vsys of cfg with its index provider, as a
+// loader gives it.
+func withIndexes(cfg *config.Config, vsys string) simulate.Target {
+	sc := config.Scope{Sort: config.ScopeVsys, Name: vsys}
+	return simulate.Target{Config: cfg, Indexes: index.NewSet(cfg).Provider(sc)}
 }

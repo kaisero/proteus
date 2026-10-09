@@ -11,8 +11,8 @@ import (
 
 	"github.com/okaiser/proteus/internal/card"
 	"github.com/okaiser/proteus/internal/estate"
-	"github.com/okaiser/proteus/internal/index"
 	"github.com/okaiser/proteus/internal/reason"
+	"github.com/okaiser/proteus/internal/resolve"
 	"github.com/okaiser/proteus/internal/runlog"
 )
 
@@ -134,11 +134,12 @@ func (a *app) lookupTargets(ctx context.Context, name, kind string, ts []estate.
 	ans := lookupAnswer{name: name, ts: ts, byTarget: make([][]card.Card, len(ts)), holes: holes}
 	kinds := map[string][]string{} // kind -> where it was found
 	found := 0
+	sets := indexSets{}
 	for i, t := range ts {
 		if err := ctx.Err(); err != nil {
 			return lookupAnswer{}, err
 		}
-		idx, err := index.For(t.Config, t.Scope)
+		idx, err := sets.of(t.Config).Index(t.Scope, resolve.Security)
 		if err != nil {
 			ans.holes = append(ans.holes, estate.NewHole(t.Device, t.Vsys, reason.New("gap.load-failed", err.Error())))
 			continue

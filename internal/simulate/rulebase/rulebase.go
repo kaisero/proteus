@@ -4,6 +4,7 @@
 package rulebase
 
 import (
+	"errors"
 	"fmt"
 	"net/netip"
 	"slices"
@@ -22,6 +23,8 @@ type Vsys struct {
 	Config *config.Config
 	Target *resolve.Target
 	Scope  config.Scope
+	// Indexes is the loaded target's index provider.
+	Indexes func(resolve.Rulebase) (*index.Index, error)
 }
 
 // Load reads a device's vsys through a simulation's loader; false when there is
@@ -37,7 +40,7 @@ func Load(load func(device, vsys string) (simulate.Target, error), device, vsys 
 	tgs := resolve.Targets(t.Config)
 	for _, tg := range tgs {
 		if tg.Scope().Name == vsys {
-			return Vsys{Config: t.Config, Target: tg, Scope: tg.Scope()}, true
+			return Vsys{Config: t.Config, Target: tg, Scope: tg.Scope(), Indexes: t.Indexes}, true
 		}
 	}
 	return Vsys{}, false
@@ -55,7 +58,7 @@ func Load(load func(device, vsys string) (simulate.Target, error), device, vsys 
 func (v Vsys) Sides(rb resolve.Rulebase, src, dst netip.Addr, negated func(int) (bool, bool)) (
 	s, d *roaring.Bitmap, unresolved []index.Unresolved,
 ) {
-	idx, err := index.ForRulebase(v.Config, v.Scope, rb)
+	idx, err := v.index(rb)
 	if err != nil {
 		why := reason.New("gap.load-failed", fmt.Sprintf("the %s rules of %s were not checked: %v", rb, v.Scope.Name, err))
 		return roaring.New(), roaring.New(), []index.Unresolved{index.NewUnresolved(v.Scope.Name, "", why)}
@@ -84,6 +87,16 @@ func (v Vsys) Sides(rb resolve.Rulebase, src, dst netip.Addr, negated func(int) 
 	s = side(index.Source, src, func(i int) bool { ns, _ := negated(i); return ns })
 	d = side(index.Destination, dst, func(i int) bool { _, nd := negated(i); return nd })
 	return s, d, unresolved
+}
+
+// index returns the vsys's index of a rulebase from the loader's provider. A target
+// without one is a loader's mistake, reported like a failed build rather than
+// built here: the loader's owner keeps the indexes.
+func (v Vsys) index(rb resolve.Rulebase) (*index.Index, error) {
+	if v.Indexes == nil {
+		return nil, errors.New("no index provider")
+	}
+	return v.Indexes(rb)
 }
 
 // withoutGap drops the schema version gap from a report's unresolved values. The

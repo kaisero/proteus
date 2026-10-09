@@ -18,6 +18,7 @@ import (
 	"github.com/okaiser/proteus/internal/fetch"
 	"github.com/okaiser/proteus/internal/index"
 	"github.com/okaiser/proteus/internal/inventory"
+	"github.com/okaiser/proteus/internal/resolve"
 	"github.com/okaiser/proteus/internal/search"
 	"github.com/okaiser/proteus/internal/store"
 )
@@ -105,7 +106,7 @@ func TestFetchThenAnswerFromLatest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	idx, err := index.For(cfg, config.Scope{Sort: config.ScopeVsys, Name: "vsys1"})
+	idx, err := index.New(cfg, config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}, resolve.Security)
 	if err != nil {
 		t.Fatal(err)
 	}

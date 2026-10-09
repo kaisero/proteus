@@ -52,7 +52,7 @@ func fw01Env(t *testing.T, file string) *simulate.Env {
 	}
 	return &simulate.Env{
 		Network: fw01{simulate.DeviceData{Name: "fw01", Interfaces: fw01Interfaces(t), FIB: routes}},
-		Load:    func(string, string) (simulate.Target, error) { return simulate.Target{Config: cfg}, nil },
+		Load:    func(_, vsys string) (simulate.Target, error) { return withIndexes(cfg, vsys), nil },
 	}
 }
 

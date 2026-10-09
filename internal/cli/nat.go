@@ -9,8 +9,10 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/okaiser/proteus/internal/config"
 	"github.com/okaiser/proteus/internal/estate"
 	"github.com/okaiser/proteus/internal/index"
+	"github.com/okaiser/proteus/internal/resolve"
 	"github.com/okaiser/proteus/internal/runlog"
 	"github.com/okaiser/proteus/internal/simulate"
 	"github.com/okaiser/proteus/internal/simulate/nat"
@@ -258,6 +260,20 @@ func runUnresolved(run simulate.Run, device, vsys string, withReasons bool) []un
 	return un
 }
 
+// indexSets keeps one index set per configuration a run reads, so the run builds
+// each (configuration, scope, rulebase) index at most once. The run owns it: one
+// process answers one command, so it lives as long as the command.
+type indexSets map[*config.Config]*index.Set
+
+func (m indexSets) of(cfg *config.Config) *index.Set {
+	s, ok := m[cfg]
+	if !ok {
+		s = index.NewSet(cfg)
+		m[cfg] = s
+	}
+	return s
+}
+
 // storeLoader loads a device's vsys configuration and index from the store, as
 // every multi-device simulation needs. A device the network knows reads the
 // snapshot its routing data came from: for an HA pair, the active member's, not
@@ -266,6 +282,7 @@ func runUnresolved(run simulate.Run, device, vsys string, withReasons bool) []un
 func storeLoader(st *store.Store, when estate.When, net *estate.Network, users index.UserDirectory) func(dev, vsys string) (simulate.Target, error) {
 	type key struct{ member, snapshot, vsys string }
 	cache := map[key]simulate.Target{}
+	sets := indexSets{}
 	return func(dev, vsys string) (simulate.Target, error) {
 		k := key{member: dev, vsys: vsys}
 		if d, err := net.Device(dev); err == nil {
@@ -290,11 +307,15 @@ func storeLoader(st *store.Store, when estate.When, net *estate.Network, users i
 			}
 			return simulate.Target{}, fmt.Errorf("%s/%s: %s", dev, vsys, strings.Join(why, "; "))
 		}
-		idx, err := index.For(ts[0].Config, ts[0].Scope)
+		set := sets.of(ts[0].Config)
+		idx, err := set.Index(ts[0].Scope, resolve.Security)
 		if err != nil {
 			return simulate.Target{}, err
 		}
-		t := simulate.Target{Config: ts[0].Config, Index: idx, Providers: index.Providers{Users: users}, Notes: ts[0].Notes}
+		t := simulate.Target{
+			Config: ts[0].Config, Index: idx, Indexes: set.Provider(ts[0].Scope),
+			Providers: index.Providers{Users: users}, Notes: ts[0].Notes,
+		}
 		cache[k] = t
 		return t, nil
 	}

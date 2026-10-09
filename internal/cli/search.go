@@ -13,6 +13,7 @@ import (
 	"github.com/okaiser/proteus/internal/estate"
 	"github.com/okaiser/proteus/internal/index"
 	"github.com/okaiser/proteus/internal/reason"
+	"github.com/okaiser/proteus/internal/resolve"
 	"github.com/okaiser/proteus/internal/runlog"
 	"github.com/okaiser/proteus/internal/search"
 )
@@ -162,6 +163,7 @@ func (a *app) searchTargets(ctx context.Context, q search.Query, ts []estate.Tar
 		return searchAnswer{}, err
 	}
 	ans := searchAnswer{q: q, ts: ts, byTarget: make([][]search.Finding, len(ts)), holes: holes}
+	sets := indexSets{}
 	for i, t := range ts {
 		if err := ctx.Err(); err != nil {
 			return searchAnswer{}, err
@@ -172,7 +174,7 @@ func (a *app) searchTargets(ctx context.Context, q search.Query, ts []estate.Tar
 				q.Providers.Zones = z
 			}
 		}
-		idx, err := index.For(t.Config, t.Scope)
+		idx, err := sets.of(t.Config).Index(t.Scope, resolve.Security)
 		if err != nil {
 			ans.holes = append(ans.holes, estate.NewHole(t.Device, t.Vsys, reason.New("gap.load-failed", err.Error())))
 			continue

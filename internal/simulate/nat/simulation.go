@@ -151,7 +151,7 @@ func pbfStage(_ context.Context, s *state) (simulate.Outcome, error) {
 			Detail:   "no configuration for " + s.data.Name + " " + s.nat.Vsys,
 		}, nil
 	}
-	s.nat.Target = simulate.Target{Config: v.Config}
+	s.nat.Target = simulate.Target{Config: v.Config, Indexes: v.Indexes}
 	m := v.PBF(sourceAddr(s.in.Flow.Source.Addrs), s.in.Flow.Destination.Addrs[0], s.nat.In)
 	out := simulate.Outcome{
 		Fidelity:   rulebase.Certainty(resolve.PBF, m.Unresolved),

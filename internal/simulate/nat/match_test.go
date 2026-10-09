@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/okaiser/proteus/internal/config"
+	"github.com/okaiser/proteus/internal/index"
 	"github.com/okaiser/proteus/internal/reason"
 	"github.com/okaiser/proteus/internal/simulate"
 	"github.com/okaiser/proteus/internal/simulate/rulebase"
@@ -54,7 +55,7 @@ func probes(t *testing.T, file string) []probe {
 
 func input(cfg *config.Config, p probe) Input {
 	return Input{
-		Target: simulate.Target{Config: cfg}, Vsys: "vsys1",
+		Target: withIndexes(cfg, "vsys1"), Vsys: "vsys1",
 		Flow: simulate.Flow{
 			Source:      simulate.Addr(netip.MustParseAddr(p.src)),
 			Destination: simulate.Addr(netip.MustParseAddr(p.dst)),
@@ -161,7 +162,7 @@ func caseInput(t *testing.T, dst string, proto string, port uint16) Input {
 	t.Helper()
 	cfg := natConfig(t, "firewall-nat-cases.xml")
 	return Input{
-		Target: simulate.Target{Config: cfg}, Vsys: "vsys1",
+		Target: withIndexes(cfg, "vsys1"), Vsys: "vsys1",
 		Flow:   simulate.Flow{Destination: simulate.Addr(netip.MustParseAddr(dst)), Protocol: proto, DestPort: port},
 		In:     simulate.Port{Device: "fw", Router: "r", Zone: "trust"},
 		PreNAT: &simulate.Forward{Out: simulate.Port{Zone: "untrust", Interface: "ethernet1/1"}},
@@ -233,7 +234,7 @@ func TestAVersionGapIsNoted(t *testing.T) {
 func policyOf(t *testing.T, file string) rulebase.Vsys {
 	t.Helper()
 	cfg := natConfig(t, file)
-	v, ok := rulebase.Load(func(string, string) (simulate.Target, error) { return simulate.Target{Config: cfg}, nil }, "fw", "vsys1")
+	v, ok := rulebase.Load(func(_, vsys string) (simulate.Target, error) { return withIndexes(cfg, vsys), nil }, "fw", "vsys1")
 	if !ok {
 		t.Fatal("vsys1")
 	}
@@ -250,4 +251,11 @@ func TestANATDoubtJoinsItsReasons(t *testing.T) {
 	if err != nil || string(b) != `{"rule":"r","reason":"the ingress zone is unknown; the source is unknown"}` {
 		t.Errorf("json = %s, %v", b, err)
 	}
+}
+
+// withIndexes is a target over a vsys of cfg with its index provider, as a
+// loader gives it.
+func withIndexes(cfg *config.Config, vsys string) simulate.Target {
+	sc := config.Scope{Sort: config.ScopeVsys, Name: vsys}
+	return simulate.Target{Config: cfg, Indexes: index.NewSet(cfg).Provider(sc)}
 }

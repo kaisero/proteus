@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/okaiser/proteus/internal/config"
+	"github.com/okaiser/proteus/internal/resolve"
 )
 
 // indexOf builds an index for one vsys of a configuration file.
@@ -13,7 +14,7 @@ func indexOf(t *testing.T, path, vsys string) *Index {
 	if err != nil {
 		t.Fatalf("Load %s: %v", path, err)
 	}
-	idx, err := For(cfg, config.Scope{Sort: config.ScopeVsys, Name: vsys})
+	idx, err := New(cfg, config.Scope{Sort: config.ScopeVsys, Name: vsys}, resolve.Security)
 	if err != nil {
 		t.Fatalf("For: %v", err)
 	}
@@ -71,7 +72,7 @@ func TestDynamicGroupExtendsTheChain(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	idx, err := For(cfg, config.Scope{Sort: config.ScopeVsys, Name: "vsys1"})
+	idx, err := New(cfg, config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}, resolve.Security)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -91,7 +91,9 @@ func (l lab) env(t *testing.T) *simulate.Env {
 		if err != nil {
 			return simulate.Target{}, err
 		}
-		idx, err := index.For(cfg, config.Scope{Sort: config.ScopeVsys, Name: vsys})
+		set := index.NewSet(cfg)
+		sc := config.Scope{Sort: config.ScopeVsys, Name: vsys}
+		idx, err := set.Index(sc, resolve.Security)
 		if err != nil {
 			return simulate.Target{}, err
 		}
@@ -99,7 +101,7 @@ func (l lab) env(t *testing.T) *simulate.Env {
 		if rep.VersionGap != "" && !l.quiet {
 			notes = append(notes, reason.New("gap.version", rep.VersionGap))
 		}
-		return simulate.Target{Config: cfg, Index: idx, Notes: notes}, nil
+		return simulate.Target{Config: cfg, Index: idx, Indexes: set.Provider(sc), Notes: notes}, nil
 	}
 	return &simulate.Env{Network: l.net, Load: load}
 }

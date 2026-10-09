@@ -92,11 +92,12 @@ func loadedFirewall(tb testing.TB) (*config.Config, []config.Scope) {
 func BenchmarkRefsIndexEveryScope(b *testing.B) {
 	cfg, scopes := loadedFirewall(b)
 	for b.Loop() {
-		resetEdgeCache()
+		edges, err := ReadEdges(cfg)
+		if err != nil {
+			b.Fatal(err)
+		}
 		for _, sc := range scopes {
-			if _, err := newRefsIndex(NewInterner(), cfg, sc); err != nil {
-				b.Fatal(err)
-			}
+			newRefsIndex(NewInterner(), edges.list, sc)
 		}
 	}
 	b.ReportMetric(float64(len(scopes)), "scopes")
@@ -114,10 +115,4 @@ func BenchmarkReadEdges(b *testing.B) {
 		n = len(e)
 	}
 	b.ReportMetric(float64(n), "edges")
-}
-
-func resetEdgeCache() {
-	edgeCacheMu.Lock()
-	edgeCache = map[string]*edgeCacheEntry{}
-	edgeCacheMu.Unlock()
 }

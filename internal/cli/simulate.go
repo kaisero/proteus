@@ -171,12 +171,16 @@ func (a *app) policyEnv(t estate.Target, noDNS bool) (*simulate.Env, error) {
 	if err != nil {
 		return nil, err
 	}
+	set := index.NewSet(t.Config)
 	env := &simulate.Env{Log: a.log, Load: func(string, string) (simulate.Target, error) {
-		idx, err := index.For(t.Config, t.Scope)
+		idx, err := set.Index(t.Scope, resolve.Security)
 		if err != nil {
 			return simulate.Target{}, err
 		}
-		return simulate.Target{Config: t.Config, Index: idx, Providers: index.Providers{Users: users}, Notes: t.Notes}, nil
+		return simulate.Target{
+			Config: t.Config, Index: idx, Indexes: set.Provider(t.Scope),
+			Providers: index.Providers{Users: users}, Notes: t.Notes,
+		}, nil
 	}, Resolve: a.lookup}
 	if noDNS {
 		env.Resolve = nil

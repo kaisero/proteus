@@ -59,8 +59,13 @@ type Input struct {
 
 // Target is what a simulation reads for one device and vsys.
 type Target struct {
-	Config    *config.Config
-	Index     *index.Index
+	Config *config.Config
+	// Index is the vsys's security index, the one Indexes gives for
+	// resolve.Security; the loader fills both.
+	Index *index.Index
+	// Indexes gives the vsys's index of a rulebase. The loader's owner builds and
+	// keeps the indexes (spec §4.8); a simulation never builds its own.
+	Indexes   func(resolve.Rulebase) (*index.Index, error)
 	Providers index.Providers
 	Notes     Reasons
 }
