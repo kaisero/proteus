@@ -77,6 +77,12 @@ hidden directory and renames it into place, so a reader never sees half a snapsh
 and `fib`. `estate.NewNetwork` reads `interfaces`, `fib`, `rib` and `ha` of every
 device for `simulate routing`, pairing HA members by serial into one node.
 
+A lookup failure matches one kind with `errors.Is`: `ErrNoSnapshot` (nothing to
+pick for the device, id or time), `ErrNoConfig` (the picked snapshot has no
+configuration; `Snapshot.ConfigPath`), `ErrUnreadable` (a stored file is there but
+cannot be read or parsed). The message text stays as it was. An absent zone
+document matches `fs.ErrNotExist`, not `ErrUnreadable`.
+
 ## Build / run pointers
 
 - `go test ./internal/inventory ./internal/fetch ./internal/store ./internal/cli`
@@ -123,6 +129,7 @@ func (s *Store) List(device string) ([]string, error)
 func (s *Store) Resolve(ref string) (Snapshot, error)
 func (s *Store) WithClock(now func() time.Time) *Store
 func (s *Store) Write(meta Meta, docs map[string][]byte, keep int) (Snapshot, error)
+func (sn Snapshot) ConfigPath() (string, error)
 func (sn Snapshot) Has(doc string) bool
 func (sn Snapshot) Path(doc string) string
 func (sn Snapshot) Zones() (*index.ZoneSnapshot, error)

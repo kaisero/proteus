@@ -64,8 +64,8 @@ func Open(st *store.Store, devices, vsys []string, w When) ([]Target, []Hole) {
 // older one, so a caller that pinned a snapshot reads exactly that one.
 func OpenSnapshot(st *store.Store, device, id string, vsys []string, w When) ([]Target, []Hole) {
 	sn, err := st.Get(device, id)
-	if err == nil && !sn.Has(store.ConfigDoc) {
-		err = fmt.Errorf("store: %s@%s has no configuration", device, id)
+	if err == nil {
+		_, err = sn.ConfigPath()
 	}
 	return openSnapshot(device, sn, err, vsys, w)
 }

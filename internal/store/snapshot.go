@@ -1,7 +1,9 @@
 package store
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 
@@ -25,19 +27,42 @@ func (sn Snapshot) Has(doc string) bool {
 	return err == nil
 }
 
+// ConfigPath returns where this snapshot's configuration is stored, or an error
+// that matches ErrNoConfig when the configuration did not arrive.
+func (sn Snapshot) ConfigPath() (string, error) {
+	if !sn.Has(ConfigDoc) {
+		return "", mark(ErrNoConfig, fmt.Errorf("store: %s@%s has no configuration", sn.Device, sn.ID))
+	}
+	return sn.Path(ConfigDoc), nil
+}
+
 // Zones builds the zone snapshot the index reads, from this snapshot's interface
 // list and forwarding table. A zone answer then comes from what the device was
-// doing, not from an inference from its configuration.
+// doing, not from an inference from its configuration. A document that is absent
+// gives an error that matches fs.ErrNotExist; one that cannot be read or parsed
+// gives one that matches ErrUnreadable.
 func (sn Snapshot) Zones() (*index.ZoneSnapshot, error) {
 	i, err := os.Open(sn.Path(InterfacesDoc))
 	if err != nil {
-		return nil, fmt.Errorf("store: %s@%s has no interface list: %w", sn.Device, sn.ID, err)
+		return nil, unreadable(fmt.Errorf("store: %s@%s has no interface list: %w", sn.Device, sn.ID, err), err)
 	}
 	defer func() { _ = i.Close() }()
 	f, err := os.Open(sn.Path(FIBDoc))
 	if err != nil {
-		return nil, fmt.Errorf("store: %s@%s has no forwarding table: %w", sn.Device, sn.ID, err)
+		return nil, unreadable(fmt.Errorf("store: %s@%s has no forwarding table: %w", sn.Device, sn.ID, err), err)
 	}
 	defer func() { _ = f.Close() }()
-	return index.NewZoneSnapshot(sn.Meta.TakenAt, sn.Meta.Host, i, f)
+	zs, err := index.NewZoneSnapshot(sn.Meta.TakenAt, sn.Meta.Host, i, f)
+	if err != nil {
+		return nil, mark(ErrUnreadable, err)
+	}
+	return zs, nil
+}
+
+// unreadable marks err as ErrUnreadable unless the file is absent.
+func unreadable(err, read error) error {
+	if errors.Is(read, fs.ErrNotExist) {
+		return err
+	}
+	return mark(ErrUnreadable, err)
 }

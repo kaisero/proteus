@@ -204,7 +204,7 @@ func (s *Store) List(device string) ([]string, error) {
 	}
 	entries, err := os.ReadDir(filepath.Join(s.root, device))
 	if err != nil {
-		return nil, fmt.Errorf("store: no snapshots of %s: %w", device, err)
+		return nil, missingOr(ErrNoSnapshot, fmt.Errorf("store: no snapshots of %s: %w", device, err), err)
 	}
 	var ids []string
 	for _, e := range entries {
@@ -224,7 +224,8 @@ func (s *Store) Latest(device string) (Snapshot, error) {
 	}
 	id, err := os.Readlink(filepath.Join(s.root, device, "latest"))
 	if err != nil {
-		return Snapshot{}, fmt.Errorf("store: %s has no snapshot with a configuration; run proteus fetch %s", device, device)
+		return Snapshot{}, missingOr(ErrNoSnapshot,
+			fmt.Errorf("store: %s has no snapshot with a configuration; run proteus fetch %s", device, device), err)
 	}
 	return s.Get(device, id)
 }
@@ -240,11 +241,11 @@ func (s *Store) Get(device, id string) (Snapshot, error) {
 	dir := filepath.Join(s.root, device, id)
 	b, err := os.ReadFile(filepath.Join(dir, "meta.json"))
 	if err != nil {
-		return Snapshot{}, fmt.Errorf("store: no snapshot %s@%s", device, id)
+		return Snapshot{}, missingOr(ErrNoSnapshot, fmt.Errorf("store: no snapshot %s@%s", device, id), err)
 	}
 	var m Meta
 	if err := json.Unmarshal(b, &m); err != nil {
-		return Snapshot{}, fmt.Errorf("store: %s@%s: meta.json: %w", device, id, err)
+		return Snapshot{}, mark(ErrUnreadable, fmt.Errorf("store: %s@%s: meta.json: %w", device, id, err))
 	}
 	return Snapshot{Device: device, ID: id, Dir: dir, Meta: m}, nil
 }
@@ -270,8 +271,8 @@ func (s *Store) AtOrBefore(device string, t time.Time) (Snapshot, error) {
 			return sn, nil
 		}
 	}
-	return Snapshot{}, fmt.Errorf("store: %s has no snapshot with a configuration at or before %s",
-		device, t.UTC().Format(time.RFC3339))
+	return Snapshot{}, mark(ErrNoSnapshot, fmt.Errorf("store: %s has no snapshot with a configuration at or before %s",
+		device, t.UTC().Format(time.RFC3339)))
 }
 
 // Resolve reads a snapshot reference: a device name for its latest snapshot, or
