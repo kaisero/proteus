@@ -163,11 +163,10 @@ not a test helper, and production code imports it. `internal/mcp` imports `testi
 for the same call: in a test binary its panic recover panics on, so a bug fails the
 test instead of hiding as `call.internal`. `internal/mcp` is the only
 package that imports the MCP Go SDK (`github.com/modelcontextprotocol/go-sdk`),
-`github.com/google/jsonschema-go` or `golang.org/x/sync`, in its code and in its
-tests. They and the
-modules they bring (`segmentio/asm`, `segmentio/encoding`, `uritemplate`,
-`x/oauth2`, `x/sync`, `x/time`) are the one dependency added for the MCP server;
-any other new dependency needs its own decision.
+`github.com/google/jsonschema-go` or `golang.org/x/sync` (for `singleflight`), in
+its code and in its tests. They and the modules they bring (`segmentio/asm`,
+`segmentio/encoding`, `uritemplate`, `x/oauth2`, `x/time`) are the one dependency
+added for the MCP server; any other new dependency needs its own decision.
 
 The core's freedom from I/O is an absolute property today. A fetcher in the same
 module makes it a conditional one, and conditional invariants decay unless a test

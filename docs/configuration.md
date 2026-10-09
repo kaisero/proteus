@@ -101,7 +101,8 @@ mcp:
 
 The token is never in the inventory: `token_file` names the file that holds it.
 proteus refuses an unknown key, a negative number, a duration it cannot read and a
-`listen` without a port.
+`listen` without a port. A number left out or set to `0` takes its default: `max_queue: 0`
+does not turn the queue off.
 
 ## Settings
 

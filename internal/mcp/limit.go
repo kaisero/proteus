@@ -31,7 +31,8 @@ type limiter struct {
 
 	mu      sync.Mutex
 	waiting int
-	calls   int // calls that have not returned their answer yet
+	calls   int    // calls that have not returned their answer yet
+	arrived uint64 // calls that arrived, ever
 
 	stopping chan struct{}
 	stopOnce sync.Once
@@ -45,7 +46,9 @@ func newLimiter(maxConcurrent, maxQueue int, maxWait, timeout time.Duration) *li
 }
 
 // enter takes a slot for a call, or says why the call is busy. The caller
-// gives the slot back with leave once its work returned.
+// gives the slot back with leave once its work returned. Slots are not
+// handed out in order: a call that arrives as a slot frees can take it
+// before one that waits, so a waiting call can wait up to max_wait.
 func (l *limiter) enter(ctx context.Context) error {
 	select {
 	case <-l.stopping:
@@ -92,7 +95,15 @@ func (l *limiter) leave() { <-l.slots }
 func (l *limiter) begin() {
 	l.mu.Lock()
 	l.calls++
+	l.arrived++
 	l.mu.Unlock()
+}
+
+// begun is how many calls arrived so far.
+func (l *limiter) begun() uint64 {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.arrived
 }
 
 func (l *limiter) end() {

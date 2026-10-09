@@ -199,11 +199,15 @@ func Serve(ctx context.Context, o Options, t sdk.Transport) error {
 		return err
 	case <-ctx.Done():
 	}
+	begun, answering := lim.begun(), lim.answering()
 	lim.stop()
-	// Close waits for the answers in flight to be written.
-	// The SDK's Close refuses every answer not yet written, so it waits a
-	// moment for the answers of the calls that just returned.
-	time.Sleep(answerGrace)
+	// The SDK has no drain hook: its Close refuses every answer not yet
+	// written (jsonrpc2 refuses writes once Close starts). So Serve waits a
+	// moment for the answers of the calls that returned, unless no call ran
+	// or arrived since the stop began. ServeHTTP needs no such wait.
+	if answering > 0 || lim.begun() != begun {
+		time.Sleep(answerGrace)
+	}
 	_ = ss.Close()
 	<-ended
 	return ctx.Err()
@@ -255,6 +259,12 @@ func (m middleware) receive(next sdk.MethodHandler) sdk.MethodHandler {
 			}
 			c.Identity = m.identify(h)
 		}
+		if m.lim != nil {
+			// Deferred before the audit, so it runs after it: stop does not
+			// see a call answered before its audit line is written.
+			m.lim.begin()
+			defer m.lim.end()
+		}
 		defer func() {
 			c.Duration = m.now().Sub(c.Time)
 			if m.audit != nil {
@@ -264,8 +274,6 @@ func (m middleware) receive(next sdk.MethodHandler) sdk.MethodHandler {
 		if m.lim == nil {
 			return m.handle(ctx, next, method, req, c)
 		}
-		m.lim.begin()
-		defer m.lim.end()
 		if err := m.lim.enter(ctx); err != nil {
 			return refused(c, err), nil
 		}
@@ -317,7 +325,10 @@ func (m middleware) bounded(ctx context.Context, next sdk.MethodHandler, method 
 		if o.panicked {
 			select {
 			case <-left:
-				panic(o.panic) // nobody waits to panic on
+				// Nobody waits to panic on. Only a strict server, in a test
+				// binary, gets here: it crashes the test binary on purpose,
+				// so the bug is not lost with the caller that timed out.
+				panic(o.panic)
 			default:
 			}
 		}

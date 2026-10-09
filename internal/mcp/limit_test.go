@@ -241,6 +241,28 @@ func TestServeStopsAfterTheRunningCalls(t *testing.T) {
 	}
 }
 
+// With no call running or arriving, a stop does not wait the answer grace.
+func TestServeStopsAtOnceWhenIdle(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(context.Background())
+	ct, st := sdk.NewInMemoryTransports()
+	served := make(chan error, 1)
+	go func() { served <- Serve(ctx, Options{Env: labEnv(t)}, st) }()
+	cs, err := sdk.NewClient(&sdk.Implementation{Name: "client", Version: "test"}, nil).Connect(context.Background(), ct, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = cs.Close() }()
+	start := time.Now()
+	cancel()
+	if err := <-served; !errors.Is(err, context.Canceled) {
+		t.Errorf("Serve: %v", err)
+	}
+	if d := time.Since(start); d >= answerGrace {
+		t.Errorf("an idle stop took %s", d)
+	}
+}
+
 // When the client goes, Serve returns.
 func TestServeEndsWithTheClient(t *testing.T) {
 	t.Parallel()

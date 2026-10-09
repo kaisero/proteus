@@ -128,6 +128,14 @@ func (m indexSets) of(t estate.Target) estate.Indexes {
 	return s
 }
 
+// indexesOf is a target's own indexes, or a new set over its configuration.
+func indexesOf(t estate.Target) estate.Indexes {
+	if t.Indexes != nil {
+		return t.Indexes
+	}
+	return index.NewSet(t.Config)
+}
+
 // provider is a scope's index of any rulebase, the shape a simulation's
 // target carries.
 func provider(ix estate.Indexes, sc config.Scope) func(resolve.Rulebase) (*index.Index, error) {
@@ -214,7 +222,7 @@ func storeLoader(st *store.Store, when estate.When, net *estate.Network, users i
 		}
 		set, ok := sets[sk]
 		if !ok {
-			set = indexSets{}.of(ts[0])
+			set = indexesOf(ts[0])
 			sets[sk] = set
 		}
 		// Built here, so a failed build is the load's error.
