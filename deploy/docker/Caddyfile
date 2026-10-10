@@ -22,8 +22,15 @@ proteus.example.org {
 		health_interval 30s
 	}
 
+	# The access log keeps no identity: the filter drops the claims header
+	# that the gateway forwards. Caddy already redacts Authorization.
 	log {
 		output stdout
-		format json
+		format filter {
+			wrap json
+			fields {
+				request>headers>X-User-Claims delete
+			}
+		}
 	}
 }

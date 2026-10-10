@@ -218,7 +218,8 @@ flowchart LR
 - **proteus-mcp** runs `proteus mcp --http`. It mounts the store read-only, holds
   the token as a secret, and sits on a network with no route out.
 - **caddy** terminates TLS, limits the request body to 1 MB and forwards to
-  proteus-mcp. It checks the server with `/healthz`.
+  proteus-mcp. It checks the server with `/healthz`. Its access log drops the
+  `X-User-Claims` header, so only the audit holds identities.
 
 Both proteus containers run as UID 10001, read-only, with every capability
 dropped. The server image has no shell. The comments in
