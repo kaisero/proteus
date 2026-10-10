@@ -379,54 +379,91 @@ func TestRuleTypeWithGivenZones(t *testing.T) {
 	}
 }
 
-// Without single and known zones a rule of another type stays a candidate, and the
-// zone stage says so.
+// rule-type with zones that are not given: one derived zone on each side
+// decides as given zones do, with the zones inferred (C5, lab L5). Several
+// derived zones on a side leave an intrazone or interzone rule a candidate with
+// a zone.derived doubt, and the first match decides whether it matters (E20). A
+// given zone the vsys does not define keeps the rule a candidate and the zone
+// stage says so. Each case asserts the decision, not only the candidates.
 func TestRuleTypeWithoutKnownZones(t *testing.T) {
 	t.Parallel()
 	e := env(t, "firewall-ruletype.xml", false)
+	two := simulate.Endpoint{Addrs: []netip.Addr{netip.MustParseAddr("10.1.0.5"), netip.MustParseAddr("10.3.0.5")}}
 	for _, c := range []struct {
-		name   string
-		flow   simulate.Flow
-		want   string
-		reason string
+		name     string
+		flow     simulate.Flow
+		want     string // the candidates, in order
+		doubts   string // each doubt's rule and code
+		decision string // the outcome and its reasons
+		reason   string // in the zone stage's fidelity; "" for none about rule-type
 	}{
 		{
-			// intra-inside does not read its to zone; inter-inside does not name out.
+			// intra-inside: from differs from to; inter-inside does not name out.
 			"derived inside to out",
 			simulate.Flow{Source: ep("10.1.0.5"), Destination: ep("10.3.0.5")},
-			"intra-inside", "the zones are derived, so rule-type could not compare from and to for: intra-inside",
+			"", "", "undecided: the default rule depends on the zones", "",
 		},
 		{
+			// intra-inside: from equals to; inter-inside: an interzone rule within one zone.
 			"derived inside to inside",
 			simulate.Flow{Source: ep("10.1.0.5"), Destination: ep("10.1.0.6")},
-			"intra-inside,inter-inside", "the zones are derived, so rule-type could not compare from and to for: intra-inside, inter-inside",
+			"intra-inside", "", "pass: rule intra-inside (allow)", "",
+		},
+		{
+			// inter-inside: inside to dmz, which it names.
+			"derived inside to dmz",
+			simulate.Flow{Source: ep("10.1.0.5"), Destination: ep("10.2.0.5")},
+			"inter-inside", "", "stop: rule inter-inside (deny)", "",
 		},
 		{
 			// No rule names dmz as its from zone, whatever its type.
 			"derived dmz to inside",
 			simulate.Flow{Source: ep("10.2.0.5"), Destination: ep("10.1.0.5")},
-			"", "",
+			"", "", "undecided: the default rule depends on the zones", "",
+		},
+		{
+			// From inside or out, to dmz: intra-inside and inter-inside are in
+			// doubt above universal-out, and inter-inside denies.
+			"two derived from zones",
+			simulate.Flow{Source: two, Destination: ep("10.2.0.5")},
+			"intra-inside,inter-inside,universal-out",
+			"intra-inside zone.derived; inter-inside zone.derived",
+			"undecided: inter-inside (deny) at position 2 may match first: rule-type interzone not compared: the derived zones are not one on each side",
+			"the zones are derived, so rule-type could not compare from and to for: intra-inside, inter-inside",
 		},
 		{
 			"given but undefined from",
 			simulate.Flow{Source: ep("10.1.0.5"), Destination: ep("10.2.0.5"), FromZone: "nowhere", ToZone: "dmz"},
-			"", "",
+			"", "", "undecided: the default rule depends on the zones", "",
 		},
 		{
 			"given but undefined to",
 			simulate.Flow{Source: ep("10.1.0.5"), Destination: ep("10.2.0.5"), FromZone: "inside", ToZone: "nowhere"},
-			"intra-inside", "a given zone is not defined in the vsys, so rule-type could not compare from and to for: intra-inside",
+			"intra-inside", "", "pass: rule intra-inside (allow)",
+			"a given zone is not defined in the vsys, so rule-type could not compare from and to for: intra-inside",
 		},
 	} {
 		r, v := run(t, e, c.flow)
 		if got := ruleNames(v); got != c.want {
 			t.Errorf("%s: candidates %q, want %q", c.name, got, c.want)
 		}
+		var doubts []string
+		for _, d := range v.Doubts {
+			doubts = append(doubts, d.Rule+" "+string(d.Reasons[0].Code))
+		}
+		if got := strings.Join(doubts, "; "); got != c.doubts {
+			t.Errorf("%s: doubts %q, want %q", c.name, got, c.doubts)
+		}
+		o, why := v.Decision()
+		if got := fmt.Sprintf("%s: %s", o, why.Text()); got != c.decision {
+			t.Errorf("%s: decision %q, want %q", c.name, got, c.decision)
+		}
 		f := stage(r, "derive-zones").Fidelity
-		// Derived zones are inferred, which is weaker than overmatch; the reason stays.
-		if f.Level() == "exact" && c.reason != "" || !strings.Contains(f.String(), c.reason) ||
-			c.reason == "" && strings.Contains(f.String(), "rule-type") {
+		if c.reason != "" && !strings.Contains(f.String(), c.reason) || c.reason == "" && strings.Contains(f.String(), "rule-type") {
 			t.Errorf("%s: derive-zones = %s", c.name, f)
+		}
+		if c.flow.FromZone == "" && f.Level() == "exact" {
+			t.Errorf("%s: derived zones are inferred: %s", c.name, f)
 		}
 	}
 }

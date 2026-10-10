@@ -46,7 +46,10 @@ Eight stages, each ANDing into the running candidate set:
 | `first-match` | exact; overmatch when earlier doubtful candidates share the action; undermatch (undecided) when one has another action, or no rule and the zones are not single and known; not evaluated: application or user only when a candidate up to the decision names one |
 
 `derive-zones` also applies `rule-type` when both zones are given and defined in the
-vsys; otherwise typed rules stay with an overmatch reason. The decision (§4.7): the
+vsys, or derived with one defined zone on each side (inferred, C5). With several
+derived zones on a side, typed rules stay and each gets a `zone.derived` doubt
+(`state.ruleTypeOpen`); with a given zone the vsys does not define, they stay with
+an overmatch reason. The decision (§4.7): the
 first candidate without doubt decides; with none, the default rule
 (`intrazone-default`/`interzone-default`; local, then pushed override, else the
 built-in action; local and pushed that disagree are undecided). Doubts come from

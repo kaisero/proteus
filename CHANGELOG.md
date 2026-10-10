@@ -298,6 +298,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Intrazone and interzone rules now check derived zones.** With `--file` and no
+  zones given, an intrazone rule from `inside` was a candidate for a flow from
+  `inside` to `out`, and the answer could name it. One derived zone on each side
+  now decides rule-type; with several, such a rule is in doubt.
 - **A NAT rule that names a service now waits for the protocol.** Asked with a
   port and no protocol, a NAT rule for `udp/443` took a `tcp/443` flow for sure.
   It is now in doubt, and `needs` asks for the protocol. A protocol given as `6`,

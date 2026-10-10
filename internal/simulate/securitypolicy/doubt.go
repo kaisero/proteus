@@ -122,6 +122,12 @@ func (s *state) doubts() []Doubt {
 				if why := s.categoryDoubt(r.Fields["category"], categories); why.Text != "" {
 					add(why)
 				}
+			case f.name == "rule-type":
+				//nolint:gosec // a rule position cannot reach 2^32; a rulebase is capped far below that
+				if s.ruleTypeOpen != nil && s.ruleTypeOpen.Contains(uint32(r.Position-1)) {
+					add(reason.New("zone.derived", fmt.Sprintf(
+						"rule-type %s not compared: the derived zones are not one on each side", r.RuleType)))
+				}
 			case f.name == "source" || f.name == "destination":
 				//nolint:gosec // a rule position cannot reach 2^32; a rulebase is capped far below that
 				if why, ok := s.opaque[f.name][uint32(r.Position-1)]; ok {

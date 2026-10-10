@@ -223,9 +223,18 @@ func deriveZones(_ context.Context, s *state) (simulate.Outcome, error) {
 		out.Fidelity = simulate.Weakest(out.Fidelity, simulate.OverMatchBecause(reason.New("doubt.nat-rule", why.Text)))
 	}
 	z.From, z.To = from, to
-	// Derived zones are never single and known, so whether from equals to is open:
-	// an intrazone or interzone rule whose zones fit stays a candidate.
-	kept := s.narrowZones(fromB, toB)
+	// One derived zone on each side, defined in the vsys: rule-type compares from
+	// and to as for given zones, and the zones stay inferred (C5). With several
+	// zones, or none, on a side, whether from equals to is open: an intrazone or
+	// interzone rule whose zones fit stays a candidate, and its zone.derived doubt
+	// lets the first match decide whether it matters (E20).
+	kept := roaring.New()
+	if len(from) == 1 && len(to) == 1 && s.defined(from[0]) && s.defined(to[0]) {
+		s.cand.And(s.byRuleType(fromB, toB, from[0] == to[0]))
+	} else {
+		kept = s.narrowZones(fromB, toB)
+		s.ruleTypeOpen = kept
+	}
 	if fromB != nil {
 		details = append(details, "from "+strings.Join(from, ", "))
 	}
@@ -265,7 +274,10 @@ func deriveZones(_ context.Context, s *state) (simulate.Outcome, error) {
 // universal "applies to both interzone and intrazone traffic"; intrazone "only
 // applies to traffic within one of the specified zones", so the to zone is not
 // read; interzone "does not apply to traffic within a zone, even if the same zone
-// is in source and destination columns".
+// is in source and destination columns". As observed on fw02, PAN-OS 12.2.3
+// (L5): an intrazone rule from home takes home to home and not home to wan; an
+// interzone rule from home to home and wan takes home to wan and not home to
+// home.
 func (s *state) byRuleType(from, to *roaring.Bitmap, same bool) *roaring.Bitmap {
 	out := roaring.New()
 	for i, r := range s.rules {
@@ -288,13 +300,15 @@ func (s *state) byRuleType(from, to *roaring.Bitmap, same bool) *roaring.Bitmap 
 	return out
 }
 
-// narrowZones narrows by zone when zone equality is not known. Every rule must
-// name the from zone. Universal and interzone rules must name the to zone too: an
-// interzone match is a universal match between different zones. An intrazone rule
-// does not read its to zone, so it stays when its from zone matches (byRuleType
-// cites the source). Whether from equals to is open, so an intrazone or interzone
-// rule left is a candidate the zones may not match (spec S12, over-match is the
-// safe direction); narrowZones returns them. A nil bitmap does not narrow.
+// narrowZones narrows by zone when zone equality is not known: a given zone the
+// vsys does not define, or derived zones that are not one on each side. Every
+// rule must name the from zone. Universal and interzone rules must name the to
+// zone too: an interzone match is a universal match between different zones. An
+// intrazone rule does not read its to zone, so it stays when its from zone
+// matches (byRuleType cites the source). Whether from equals to is open, so an
+// intrazone or interzone rule left is a candidate the zones may not match (spec
+// S12, over-match is the safe direction); narrowZones returns them, and with
+// derived zones each gets a zone.derived doubt. A nil bitmap does not narrow.
 func (s *state) narrowZones(from, to *roaring.Bitmap) *roaring.Bitmap {
 	if from != nil {
 		s.cand.And(from)

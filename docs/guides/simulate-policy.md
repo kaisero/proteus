@@ -199,8 +199,12 @@ they differ, the hop is undecided.
 
 A rule's `rule-type` is applied too. A `universal` rule needs both zones in its
 lists. An `intrazone` rule matches equal zones only, and an `interzone` rule
-different zones only. Path mode always knows both zones. With `--file`, rule-type
-and the default rules apply only when both zones are given and defined in the vsys.
+different zones only. Path mode always knows both zones. With `--file`, the
+default rules apply only when both zones are given and defined in the vsys.
+Rule-type applies then too, and when the zones are derived with one zone on each
+side; the answer is then inferred. With several derived zones on a side, an
+`intrazone` or `interzone` rule stays in doubt (`zone.derived`), and the answer is
+undecided when that rule could change it.
 
 ## One configuration: `--file`
 
