@@ -55,6 +55,13 @@ func pbf(_ context.Context, s *state) (simulate.Outcome, error) {
 	return out, nil
 }
 
+// NATDoubt names a NAT rule that may match instead of the one a hop applies,
+// and why. The hop's notes carry it, and path policy reads it as a doubt that
+// leaves the hop undecided.
+func NATDoubt(d natsim.Doubt) reason.Reason {
+	return reason.New("path.nat-undermatch", "nat rule "+d.Rule+" may match instead: "+d.Text())
+}
+
 // nat runs the NAT engine on the hop (spec §18 N1, N5): the rule the packet hits
 // and the packet after it. A destination NAT replaces the hop's egress with the
 // lookup of the translated destination; every later hop routes on, and matches its
@@ -99,7 +106,7 @@ func nat(ctx context.Context, s *state) (simulate.Outcome, error) {
 	h.Notes = append(h.Notes, r.Notes...)
 	h.NATDoubts = append(h.NATDoubts, r.Doubts...)
 	for _, d := range r.Doubts {
-		h.Notes = append(h.Notes, reason.New("path.nat-undermatch", "nat rule "+d.Rule+" may match instead: "+d.Text()))
+		h.Notes = append(h.Notes, NATDoubt(d))
 	}
 	out.Unresolved = r.Unresolved
 	out.Fidelity = simulate.Weakest(out.Fidelity, r.Fidelity)

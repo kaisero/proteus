@@ -198,10 +198,20 @@ func deriveZones(_ context.Context, s *state) (simulate.Outcome, error) {
 	case nz.skipped != "":
 		out.Debug = append(out.Debug, nz.skipped)
 	case len(nz.zones) > 0:
-		to, toB = nz.zones, roaring.New()
-		for _, zn := range nz.zones {
-			zb, _ := s.view.Candidates(index.ToZone, zn)
-			toB.Or(zb)
+		if len(nz.doubts) == 0 {
+			to = nz.zones
+		} else if toB != nil {
+			// A NAT rule in doubt may match first and leave the destination as it
+			// is, so the zones without NAT stay candidates (spec S12, over-match
+			// is the safe direction). With none derived, the side does not narrow.
+			to = slices.Compact(slices.Sorted(slices.Values(slices.Concat(to, nz.zones))))
+		}
+		if len(to) > 0 {
+			toB = roaring.New()
+			for _, zn := range to {
+				zb, _ := s.view.Candidates(index.ToZone, zn)
+				toB.Or(zb)
+			}
 		}
 		toVia = append(toVia, nz.describe())
 		details = append(details, nz.describe())

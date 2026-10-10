@@ -171,6 +171,28 @@ func TestNeedsNATPort(t *testing.T) {
 	if again := route("8443"); slices.Equal(codes(t, rr), codes(t, again)) {
 		t.Errorf("routing with a port: %v", codes(t, again))
 	}
+
+	// Path policy reads the hop's NAT doubt as routing does: the path is
+	// undecided, and the port is what decides it (C3).
+	path := func(port string) PathResult {
+		e, err := Policy(context.Background(), natEnv(t), PolicyInput{
+			Flow:   FlowInput{Source: "198.18.1.10", Destination: "198.18.250.10", Protocol: "tcp", Port: port},
+			Device: "fw01", Router: "default",
+		})
+		if err != nil || len(e.Results) != 1 {
+			t.Fatalf("%+v %v", e, err)
+		}
+		return e.Results[0]
+	}
+	pr := path("")
+	if pr.Verdict != "undecided" || !strings.Contains(pr.Answer, "nat rule t-dnat-port may match instead") ||
+		!slices.Equal(needCodes(pr.Needs), needCodes(rr.Needs)) ||
+		pr.Needs[0].Text != "give the destination port; it decides the service of NAT rule t-dnat-port" {
+		t.Errorf("path: %s, needs %+v", pr.Answer, pr.Needs)
+	}
+	if again := path("8443"); slices.Contains(codes(t, again), "path.nat-undermatch") {
+		t.Errorf("path with a port: %s, %v", again.Answer, codes(t, again))
+	}
 }
 
 // securityCauses walks the doubts in rule order before the first certain

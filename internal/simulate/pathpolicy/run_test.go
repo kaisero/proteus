@@ -65,6 +65,9 @@ type lab struct {
 	net      simulate.Network
 	fail     string // a device whose configuration cannot be read
 	quiet    bool   // the loader gives no notes, not even a version gap
+	// predefined puts the device's predefined services (testdata/predefined)
+	// next to each configuration.
+	predefined bool
 }
 
 func (l lab) env(t *testing.T) *simulate.Env {
@@ -75,9 +78,16 @@ func (l lab) env(t *testing.T) *simulate.Env {
 		if !ok {
 			b = pathlab.Config(t, dev, l.defaults[dev])
 		}
-		paths[dev] = filepath.Join(t.TempDir(), dev+".xml")
+		dir := t.TempDir()
+		paths[dev] = filepath.Join(dir, dev+".xml")
 		if err := os.WriteFile(paths[dev], b, 0o600); err != nil {
 			t.Fatal(err)
+		}
+		if l.predefined {
+			p := pathlab.Read(t, filepath.Join(filepath.Dir(pathlab.ConfigFile(dev)), "..", "predefined", config.PredefinedFile))
+			if err := os.WriteFile(filepath.Join(dir, config.PredefinedFile), p, 0o600); err != nil {
+				t.Fatal(err)
+			}
 		}
 	}
 	if l.net == nil {
@@ -243,6 +253,59 @@ func TestThePathFixtureVariants(t *testing.T) {
 	// Undecided at 1 bounds the fidelity: hop 2's exact check does not raise it.
 	if r.Fidelity.Level() != "undermatch" || !strings.Contains(r.Fidelity.String(), disagree) {
 		t.Errorf("fidelity %s", r.Fidelity)
+	}
+}
+
+// withNAT is fw02 with the default rules allowing and two NAT rules from home
+// to labor that translate nothing: nat-https names service-https, which only
+// the device's predefined services define, above nat-any.
+func withNAT(t *testing.T) []byte {
+	t.Helper()
+	entry := func(name, service string) string {
+		return `<entry name="` + name + `"><from><member>home</member></from><to><member>labor</member></to>` +
+			`<source><member>any</member></source><destination><member>any</member></destination>` +
+			`<service>` + service + `</service></entry>`
+	}
+	b := pathlab.Config(t, pathlab.FW02, pathlab.Defaults{Local: pathlab.Entry(pathlab.Interzone, "allow")})
+	return bytes.Replace(b, []byte("<rulebase>"), []byte("<rulebase><nat><rules>"+entry("nat-https", "service-https")+entry("nat-any", "any")+"</rules></nat>"), 1)
+}
+
+// A NAT rule that may match instead of the one routing applied leaves the hop
+// undecided, as a security rule in doubt does (C3, E20); the hop's doubt names
+// the rule with routing's code and text. With the predefined services stored,
+// the rule matches for sure and the same flow decides (lab L4b).
+func TestANATDoubtLeavesThePathUndecided(t *testing.T) {
+	t.Parallel()
+	in := input(pathlab.Destination)
+	in.Flow.Protocol, in.Flow.DestPort = "tcp", 443
+	ask := func(predefined bool) Result {
+		l := lab{config: map[string][]byte{pathlab.FW02: withNAT(t)}, defaults: allowAll, predefined: predefined}
+		r, _, err := Run(context.Background(), l.env(t), in)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return r
+	}
+	r := ask(false)
+	doubt := "path.nat-undermatch: nat rule nat-https may match instead: " +
+		"service service-https is not defined in the configuration (a predefined service?); the snapshot holds no predefined services; " +
+		"a fetch with this release stores them when the device returns them"
+	if r.Verdict != VerdictUndecided || r.At == nil || r.At.Hop != 1 || r.At.Check != checkRouting ||
+		!slices.Equal(codeTexts(r.Hops[0].Doubts), []string{doubt}) || r.Fidelity.Level() != "undermatch" {
+		t.Errorf("without the predefined services: %s, doubts %v, fidelity %s", summary(r), codeTexts(r.Hops[0].Doubts), r.Fidelity)
+	}
+	if !slices.Contains(codeTexts(r.Hops[0].Routing.Notes), doubt) {
+		t.Errorf("routing's note: %v", codeTexts(r.Hops[0].Routing.Notes))
+	}
+	r = ask(true)
+	if want := "allowed | 1 fw02/vsys1 security=pass:interzone-default | 2 fw01/vsys1 security=pass:interzone-default"; summary(r) != want ||
+		len(r.Hops[0].Doubts) != 0 || len(r.Hops[0].Routing.NATDoubts) != 0 {
+		t.Errorf("with the predefined services:\ngot  %s\nwant %s", summary(r), want)
+	}
+	if !slices.ContainsFunc(r.Hops[0].Routing.Notes, func(n reason.Reason) bool {
+		return n.Code == "note.nat-applied" && strings.HasPrefix(n.Text, "nat rule nat-https ")
+	}) {
+		t.Errorf("nat-https applies: %v", codeTexts(r.Hops[0].Routing.Notes))
 	}
 }
 

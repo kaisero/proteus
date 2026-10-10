@@ -195,7 +195,8 @@ func addHoles(holes []simulate.Missing, ms ...simulate.Missing) []simulate.Missi
 // pathDoubts reads the routing facts that leave hop n undecided, and the caps
 // they put on its checks' fidelity (spec §4.5, E21). The hop's PBF list names at
 // most the first rule that can redirect the flow, so an empty one does not prove
-// that none applies: an undermatch PBF stage leaves the hop undecided too.
+// that none applies: an undermatch PBF stage leaves the hop undecided too. Each
+// NAT rule in doubt is one doubt, with the code and text of routing's note.
 func pathDoubts(p routing.Path, n int, stages []simulate.Stage) (simulate.Reasons, []simulate.Fidelity) {
 	h := p.Hops[n-1]
 	var doubts simulate.Reasons
@@ -208,6 +209,12 @@ func pathDoubts(p routing.Path, n int, stages []simulate.Stage) (simulate.Reason
 	}
 	if f, ok := stageFidelity(stages, n, "pbf"); ok && f.Level() == "undermatch" {
 		doubts = append(doubts, f.UnderMatchReasons()...)
+	}
+	// A NAT rule that may match instead of the one routing applied leaves the
+	// hop undecided, as a security rule in doubt does (spec E20): the device
+	// may translate the flow otherwise, or not at all.
+	for _, d := range h.NATDoubts {
+		doubts = append(doubts, routing.NATDoubt(d))
 	}
 	if f, ok := stageFidelity(stages, n, "nat"); ok {
 		switch f.Level() {

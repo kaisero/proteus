@@ -298,6 +298,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A path with a NAT rule in doubt is now undecided.** When a NAT rule above the
+  one applied might match instead, `simulate policy` answered allowed or denied as
+  if the applied rule were certain, and a derived destination zone could lose the
+  zone the flow has without that NAT.
 - **Rules that name `service-http` or `service-https` now decide after the next
   fetch.** `fetch` stores the firewall's predefined services with each snapshot.
   Before, proteus did not know their ports, so every rule naming one stayed in doubt
