@@ -151,6 +151,11 @@ func pbfStage(_ context.Context, s *state) (simulate.Outcome, error) {
 			Detail:   "no configuration for " + s.data.Name + " " + s.nat.Vsys,
 		}, nil
 	}
+	// A given ingress zone the vsys does not define is a question NAT cannot
+	// take (C15): the caller is told the vsys's zones.
+	if c := rulebase.UndefinedZone(v.Config, v.Scope, "from-zone", "from_zone", s.in.Params["from-zone"]); c != nil {
+		return simulate.Outcome{}, c
+	}
 	s.nat.Target = simulate.Target{Config: v.Config, Indexes: v.Indexes}
 	f := s.in.Flow
 	m := v.PBF(sourceAddr(f.Source.Addrs), f.Destination.Addrs[0], f.Protocol, f.DestPort, s.nat.In)

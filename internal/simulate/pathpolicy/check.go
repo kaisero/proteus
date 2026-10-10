@@ -2,6 +2,8 @@ package pathpolicy
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"slices"
 
 	"github.com/okaiser/proteus/internal/reason"
@@ -46,6 +48,13 @@ func (Security) Evaluate(ctx context.Context, env *simulate.Env, h routing.Hop, 
 		return out, &simulate.UnavailableError{Missing: []simulate.Missing{*miss}}
 	}
 	run, err := securitypolicy.Simulation{}.Run(ctx, env, simulate.Input{Device: h.Device, Vsys: h.Vsys, Flow: flow.FirstAddresses()})
+	if _, ok := errors.AsType[*simulate.ChoiceError](err); ok {
+		// A zone the hop's vsys does not define: the check cannot take it, and
+		// the hop's zone doubt leaves the hop undecided (spec §4.4).
+		why := reason.New("zone.undefined", fmt.Sprintf("a zone of the hop is not defined in %s", h.Vsys))
+		out.Verdict, out.Reason, out.Fidelity = NotEvaluated, simulate.Reasons{why}, simulate.Exact
+		return out, nil
+	}
 	if err != nil {
 		return out, err
 	}

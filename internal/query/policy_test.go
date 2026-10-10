@@ -438,3 +438,36 @@ func TestAnEmptySubjectIsAUsageError(t *testing.T) {
 	usageOK(t, SearchInput{Selection: file}.Validate(), "give a search term")
 	usageOK(t, LookupInput{Name: "  ", Selection: file}.Validate(), "give a name to look up")
 }
+
+// A given zone the vsys does not define is a usage error that lists the vsys's
+// zones (C15). With several vsys selected, a vsys without it is a hole and the
+// others answer; with none defining it, the error lists each.
+func TestFileModeRefusesAnUndefinedZone(t *testing.T) {
+	t.Parallel()
+	ask := func(from, to string, vsys ...string) (Envelope[PolicyFileInput, SecurityResult], error) {
+		return PolicyFile(context.Background(), Env{}, PolicyFileInput{
+			Flow:      FlowInput{Source: "10.3.0.5", Destination: "10.1.0.5", Protocol: "tcp", Port: "443", FromZone: from, ToZone: to},
+			Selection: Selection{File: fixture("firewall-ruletype.xml"), Vsys: vsys},
+		})
+	}
+	_, err := ask("nowhere", "inside", "vsys1")
+	u, ok := errors.AsType[*UsageError](err)
+	if !ok || u.Text != "--from-zone nowhere is not a zone of vsys1; its zones: dmz, inside, out" ||
+		u.ToolText != "from_zone nowhere is not a zone of vsys1; its zones: dmz, inside, out" {
+		t.Errorf("one vsys: %v", err)
+	}
+	_, err = ask("out", "nowhere", "vsys1", "vsys2")
+	if u, ok := errors.AsType[*UsageError](err); !ok || u.Text != "--to-zone nowhere is not a zone of vsys1; its zones: dmz, inside, out; "+
+		"--from-zone out is not a zone of vsys2; its zones: dmz, inside" {
+		t.Errorf("no vsys: %v", err)
+	}
+	// vsys2 has no zone out: a hole; vsys1 answers.
+	e, err := ask("out", "dmz", "vsys1", "vsys2")
+	if err != nil || len(e.Results) != 1 || e.Results[0].Answer != "first match: universal-out (allow)" {
+		t.Fatalf("%+v %v", e.Results, err)
+	}
+	if len(e.Holes) != 1 || e.Holes[0].Vsys != "vsys2" || e.Holes[0].Code != "zone.undefined" ||
+		e.Holes[0].Reason != "not checked: from_zone out is not a zone of vsys2; its zones: dmz, inside" {
+		t.Errorf("holes %+v", e.Holes)
+	}
+}

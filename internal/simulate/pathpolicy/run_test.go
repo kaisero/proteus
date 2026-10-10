@@ -475,6 +475,15 @@ func TestTheSecurityCheck(t *testing.T) {
 	if _, err := (Security{}).Evaluate(ctx, &cancelling, h, f); !errors.Is(err, context.Canceled) {
 		t.Errorf("a cancelled run: %v", err)
 	}
+	// A zone the hop's vsys does not define: the check cannot take it (C15), and
+	// the hop's zone doubt leaves the hop undecided.
+	undefined := f
+	undefined.ToZone = "wan"
+	r, err = Security{}.Evaluate(context.Background(), e, h, undefined)
+	if err != nil || r.Verdict != NotEvaluated || r.Fidelity.Level() != "exact" ||
+		!slices.Equal(r.Reason, simulate.Reasons{reason.New("zone.undefined", "a zone of the hop is not defined in vsys1")}) {
+		t.Errorf("undefined zone: %+v, %v", r, err)
+	}
 	nilCfg := *e
 	nilCfg.Load = func(string, string) (simulate.Target, error) { return simulate.Target{}, nil }
 	r, err = Security{}.Evaluate(context.Background(), &nilCfg, h, f)

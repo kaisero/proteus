@@ -301,11 +301,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`simulate policy --file` now checks the first address of a host name.** It
   matched every address the name resolved to, so a rule for the second address
   could answer, unlike path mode. A note now names the other addresses.
-- **Intrazone and interzone rules now check derived zones.** With `--file` and no
-  zones given, an intrazone rule from `inside` was a candidate for a flow from
-  `inside` to `out`, and the answer could name it. One derived zone on each side
-  now decides rule-type; with several, such a rule is in doubt, and `needs` asks
-  for the zones.
+- **Intrazone and interzone rules and the default rules now check derived zones.**
+  With `--file` and no zones given, an intrazone rule from `inside` was a candidate
+  for a flow from `inside` to `out`, and the answer could name it. One derived zone
+  on each side now decides rule-type and the default rule; with several, such a
+  rule is in doubt, and `needs` asks for the zones.
+- **A zone the vsys does not define is now refused.** `--from-zone` and `--to-zone`
+  of `simulate policy --file`, and `--from-zone` of `simulate nat`, exit 2 with the
+  vsys's zones listed. Before, a typo in a zone name could still let an intrazone
+  rule decide the answer.
 - **A NAT rule that names a service now waits for the protocol.** Asked with a
   port and no protocol, a NAT rule for `udp/443` took a `tcp/443` flow for sure.
   It is now in doubt, and `needs` asks for the protocol. A protocol given as `6`,

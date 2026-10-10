@@ -417,3 +417,30 @@ func TestUndefinedService(t *testing.T) {
 		}
 	}
 }
+
+// A given zone the scope does not define is a choice error in the command
+// line's and the tool's words, listing the scope's zones; a defined or empty
+// zone is none (C15).
+func TestUndefinedZone(t *testing.T) {
+	t.Parallel()
+	cfg, _, err := config.Load("../../../testdata/config/firewall-ruletype.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	vsys1 := config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}
+	if c := UndefinedZone(cfg, vsys1, "from-zone", "from_zone", "inside"); c != nil {
+		t.Errorf("defined: %v", c)
+	}
+	if c := UndefinedZone(cfg, vsys1, "from-zone", "from_zone", ""); c != nil {
+		t.Errorf("none given: %v", c)
+	}
+	c := UndefinedZone(cfg, vsys1, "to-zone", "to_zone", "nowhere")
+	if c == nil || c.Question != "--to-zone nowhere is not a zone of vsys1; its zones: dmz, inside, out" ||
+		c.ToolText != "to_zone nowhere is not a zone of vsys1; its zones: dmz, inside, out" || c.Kind != "" {
+		t.Errorf("undefined: %+v", c)
+	}
+	c = UndefinedZone(cfg, config.Scope{Sort: config.ScopeVsys, Name: "vsys9"}, "from-zone", "from_zone", "inside")
+	if c == nil || c.Question != "--from-zone inside is not a zone of vsys9; it defines no zone" {
+		t.Errorf("no zones: %+v", c)
+	}
+}

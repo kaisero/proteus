@@ -438,3 +438,33 @@ func FromFits(r resolve.PBFRule, in simulate.Port) bool {
 	}
 	return in.Zone == "" || slices.Contains(r.From, in.Zone)
 }
+
+// UndefinedZone is the usage error for a zone given to a check that the vsys does
+// not define, or nil when the vsys defines it or none is given. flag is the
+// command line flag and field the tool input that gave it, such as "from-zone"
+// and "from_zone". The text lists the vsys's zones, so the caller can pick one.
+func UndefinedZone(cfg *config.Config, sc config.Scope, flag, field, zone string) *simulate.ChoiceError {
+	if zone == "" {
+		return nil
+	}
+	zones := ZoneNames(cfg, sc)
+	if slices.Contains(zones, zone) {
+		return nil
+	}
+	known := "it defines no zone"
+	if len(zones) > 0 {
+		known = "its zones: " + strings.Join(zones, ", ")
+	}
+	what := fmt.Sprintf("%s is not a zone of %s; %s", zone, sc.Name, known)
+	return &simulate.ChoiceError{Question: "--" + flag + " " + what, ToolText: field + " " + what}
+}
+
+// ZoneNames are the names of the zones a scope defines, sorted.
+func ZoneNames(cfg *config.Config, sc config.Scope) []string {
+	var out []string
+	for _, z := range resolve.ZonesInScope(cfg, sc) {
+		out = append(out, z.Name)
+	}
+	slices.Sort(out)
+	return slices.Compact(out)
+}

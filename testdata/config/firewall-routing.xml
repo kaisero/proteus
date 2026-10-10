@@ -11,6 +11,11 @@
     <entry name="localhost.localdomain">
       <vsys>
         <entry name="vsys1">
+          <zone>
+            <entry name="branch-vpn"/>
+            <entry name="datacenter"/>
+            <entry name="sdwan"/>
+          </zone>
           <tag>
             <entry name="branch"><color>color1</color></entry>
             <entry name="laptop"><color>color2</color></entry>

@@ -199,17 +199,20 @@ they differ, the hop is undecided.
 
 A rule's `rule-type` is applied too. A `universal` rule needs both zones in its
 lists. An `intrazone` rule matches equal zones only, and an `interzone` rule
-different zones only. Path mode always knows both zones. With `--file`, the
-default rules apply only when both zones are given and defined in the vsys.
-Rule-type applies then too, and when the zones are derived with one zone on each
-side; the answer is then inferred. With several derived zones on a side, an
-`intrazone` or `interzone` rule stays in doubt (`zone.derived`), and the answer is
-undecided when that rule could change it.
+different zones only. Path mode always knows both zones. With `--file`, rule-type
+and the default rules apply when both zones are given, and when the zones are
+derived with one zone on each side; the answer is then inferred. With several
+derived zones on a side, or none, an `intrazone` or `interzone` rule stays in doubt
+(`zone.derived`), the answer is undecided when that rule could change it, and a flow
+that no rule matches is undecided.
 
 ## One configuration: `--file`
 
 `--file` checks one configuration file, with no inventory and no path. `--vsys`
-picks the vsys. Give the zones with `--from-zone` and `--to-zone`, both or neither:
+picks the vsys. Give the zones with `--from-zone` and `--to-zone`, both or neither.
+A zone the vsys does not define exits 2, and the message lists the zones of the
+vsys. When several vsys are selected, a vsys without the zone is a hole, and the
+command exits 2 only when no vsys defines it. With zones given:
 
 ```
 $ proteus simulate policy 10.2.0.5 10.1.0.5 --port 443 \
@@ -222,9 +225,10 @@ file / vsys1   testdata/config/firewall-zones.xml
 first match: interzone-default (deny), default rule (built-in)
 ```
 
-Without zones, proteus derives them from the configuration's interfaces and
-routes. A derived zone is always `inferred`, and no default rule can decide: a flow
-that no rule matches is then undecided, "the default rule depends on the zones".
+Without zones, proteus derives them from the configuration's interfaces and routes.
+A derived zone is always `inferred`. With one zone on each side the default rules
+decide; otherwise a flow that no rule matches is undecided, "the default rule
+depends on the zones".
 
 `--file` does not check NAT. The zones are the zones before NAT. Path mode applies
 NAT on each hop.

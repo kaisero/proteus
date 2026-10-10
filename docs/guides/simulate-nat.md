@@ -78,7 +78,7 @@ candidate address.
 | Flag | Effect |
 | --- | --- |
 | `--why` | lists every rule above the match and the field that excluded it, then every stage |
-| `--from-zone`, `--from-interface` | set where the packet arrives, instead of deriving it |
+| `--from-zone`, `--from-interface` | set where the packet arrives, instead of deriving it; a zone the vsys does not define exits 2 and lists its zones |
 | `--router` | picks the logical router when the firewall has several |
 | `--port`, `--protocol`, `--source-port` | complete the packet |
 | `--no-dns` | resolves no FQDN, neither an endpoint nor a translated destination |

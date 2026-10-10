@@ -20,6 +20,7 @@ import (
 	"github.com/okaiser/proteus/internal/reason"
 	"github.com/okaiser/proteus/internal/resolve"
 	"github.com/okaiser/proteus/internal/simulate"
+	"github.com/okaiser/proteus/internal/simulate/rulebase"
 )
 
 // Kind is the registry key and the command name.
@@ -143,10 +144,12 @@ type state struct {
 	view   *index.View
 	rules  []resolve.Rule
 	cand   *roaring.Bitmap
-	// known is whether the flow's zones are single and known: given, one name
-	// each, and defined in the vsys. Only then do the default rules decide (spec
-	// §4.6). Rule-type also decides with one derived zone on each side (C5).
-	known bool
+	// known is whether the flow's zones are single and known: given, or derived
+	// with one zone on each side, and defined in the vsys. Only then do
+	// rule-type and the default rules decide (spec §4.6, C5, C16). from and to
+	// are that pair; the flow's own zones are empty when they are derived.
+	known    bool
+	from, to string
 	// ruleTypeOpen holds the intrazone and interzone rules derived zones could
 	// not judge: several zones, or none, on a side. Each candidate in it has a
 	// zone.derived doubt.
@@ -179,6 +182,16 @@ func (Simulation) Run(ctx context.Context, env *simulate.Env, in simulate.Input)
 	idx, err := t.Index(resolve.Security, in.Vsys)
 	if err != nil {
 		return run, fmt.Errorf("%s: %s/%s: %w", Kind, in.Device, in.Vsys, err)
+	}
+	// A given zone the vsys does not define is a question the check cannot
+	// take (C15): the caller is told the vsys's zones.
+	sc := idx.Scope()
+	for _, g := range []struct{ flag, field, zone string }{
+		{"from-zone", "from_zone", in.Flow.FromZone}, {"to-zone", "to_zone", in.Flow.ToZone},
+	} {
+		if c := rulebase.UndefinedZone(t.Config, sc, g.flag, g.field, g.zone); c != nil {
+			return run, c
+		}
 	}
 	s := &state{env: env, in: in, target: t, idx: idx, view: idx.With(t.Providers), rules: idx.Rules()}
 	s.verdict.Relevance = relevance(t.Providers.Zones, in.Flow)

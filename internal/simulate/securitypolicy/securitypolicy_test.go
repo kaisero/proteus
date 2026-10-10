@@ -408,8 +408,8 @@ func TestRuleTypeWithGivenZones(t *testing.T) {
 // decides as given zones do, with the zones inferred (C5, lab L5). Several
 // derived zones on a side leave an intrazone or interzone rule a candidate with
 // a zone.derived doubt, and the first match decides whether it matters (E20). A
-// given zone the vsys does not define keeps the rule a candidate and the zone
-// stage says so. Each case asserts the decision, not only the candidates.
+// given zone the vsys does not define is refused (C15). Each case asserts the
+// decision, not only the candidates.
 func TestRuleTypeWithoutKnownZones(t *testing.T) {
 	t.Parallel()
 	e := env(t, "firewall-ruletype.xml", false)
@@ -424,9 +424,10 @@ func TestRuleTypeWithoutKnownZones(t *testing.T) {
 	}{
 		{
 			// intra-inside: from differs from to; inter-inside does not name out.
+			// The derived pair chooses the default rule (C16).
 			"derived inside to out",
 			simulate.Flow{Source: ep("10.1.0.5"), Destination: ep("10.3.0.5")},
-			"", "", "undecided: the default rule depends on the zones", "",
+			"", "", "stop: default rule interzone-default (deny), built-in", "",
 		},
 		{
 			// intra-inside: from equals to; inter-inside: an interzone rule within one zone.
@@ -444,7 +445,7 @@ func TestRuleTypeWithoutKnownZones(t *testing.T) {
 			// No rule names dmz as its from zone, whatever its type.
 			"derived dmz to inside",
 			simulate.Flow{Source: ep("10.2.0.5"), Destination: ep("10.1.0.5")},
-			"", "", "undecided: the default rule depends on the zones", "",
+			"", "", "stop: default rule interzone-default (deny), built-in", "",
 		},
 		{
 			// From inside or out, to dmz: intra-inside and inter-inside are in
@@ -455,17 +456,6 @@ func TestRuleTypeWithoutKnownZones(t *testing.T) {
 			"intra-inside zone.derived; inter-inside zone.derived",
 			"undecided: inter-inside (deny) at position 2 may match first: rule-type interzone not compared: the derived zones are not one on each side",
 			"the zones are derived, so rule-type could not compare from and to for: intra-inside, inter-inside",
-		},
-		{
-			"given but undefined from",
-			simulate.Flow{Source: ep("10.1.0.5"), Destination: ep("10.2.0.5"), FromZone: "nowhere", ToZone: "dmz"},
-			"", "", "undecided: the default rule depends on the zones", "",
-		},
-		{
-			"given but undefined to",
-			simulate.Flow{Source: ep("10.1.0.5"), Destination: ep("10.2.0.5"), FromZone: "inside", ToZone: "nowhere"},
-			"intra-inside", "", "pass: rule intra-inside (allow)",
-			"a given zone is not defined in the vsys, so rule-type could not compare from and to for: intra-inside",
 		},
 	} {
 		r, v := run(t, e, c.flow)
@@ -487,8 +477,17 @@ func TestRuleTypeWithoutKnownZones(t *testing.T) {
 		if c.reason != "" && !strings.Contains(f.String(), c.reason) || c.reason == "" && strings.Contains(f.String(), "rule-type") {
 			t.Errorf("%s: derive-zones = %s", c.name, f)
 		}
-		if c.flow.FromZone == "" && f.Level() == "exact" {
+		if f.Level() == "exact" {
 			t.Errorf("%s: derived zones are inferred: %s", c.name, f)
+		}
+	}
+	for _, z := range [][2]string{{"nowhere", "dmz"}, {"inside", "nowhere"}} {
+		_, err := Simulation{}.Run(context.Background(), e, simulate.Input{
+			Flow:   simulate.Flow{Source: ep("10.1.0.5"), Destination: ep("10.2.0.5"), FromZone: z[0], ToZone: z[1]},
+			Device: "fw01", Vsys: "vsys1",
+		})
+		if _, ok := errors.AsType[*simulate.ChoiceError](err); !ok || !strings.Contains(err.Error(), "nowhere is not a zone of vsys1; its zones: dmz, inside, out") {
+			t.Errorf("given %s -> %s: %v", z[0], z[1], err)
 		}
 	}
 }
@@ -558,18 +557,61 @@ func TestDefaultRuleDecides(t *testing.T) {
 	}
 }
 
-// Without single, known zones no default rule decides.
-func TestDefaultRuleNeedsKnownZones(t *testing.T) {
+// One derived zone on each side chooses the default rule as given zones do,
+// and the answer is inferred (C16): different zones take interzone-default,
+// equal zones intrazone-default. Several zones, or none, on a side leave it
+// undecided.
+func TestDefaultRuleWithDerivedZones(t *testing.T) {
 	t.Parallel()
 	e := env(t, "firewall-zones.xml", false)
-	for _, f := range []simulate.Flow{
-		{Source: ep("10.2.0.5"), Destination: ep("10.1.0.5")},                                        // derived
-		{Source: ep("10.2.0.5"), Destination: ep("10.1.0.5"), FromZone: "nowhere", ToZone: "inside"}, // undefined
+	two := simulate.Endpoint{Addrs: []netip.Addr{netip.MustParseAddr("10.2.0.5"), netip.MustParseAddr("10.1.0.6")}}
+	for _, c := range []struct {
+		name string
+		flow simulate.Flow
+		want string // the default rule and its action, or the undecided reason
+	}{
+		{"dmz to inside", simulate.Flow{Source: ep("10.2.0.5"), Destination: ep("10.1.0.5")}, "interzone-default (deny)"},
+		{"dmz to dmz", simulate.Flow{Source: ep("10.2.0.5"), Destination: ep("10.2.0.6")}, "intrazone-default (allow)"},
+		{"dmz or inside to inside", simulate.Flow{Source: two, Destination: ep("10.1.0.5")}, "the default rule depends on the zones"},
+		{"dmz to no zone", simulate.Flow{Source: ep("10.2.0.5"), Destination: ep("192.0.2.9")}, "the default rule depends on the zones"},
 	} {
-		r, v := run(t, e, f)
-		fm := stage(r, "first-match").Fidelity
-		if v.Default != "" || fm.Level() != "undermatch" || !strings.Contains(fm.String(), "the default rule depends on the zones") {
-			t.Errorf("%+v: default %q, first-match %s", f, v.Default, fm)
+		r, v := run(t, e, c.flow)
+		got := v.Default + " (" + v.DefaultAction + ")"
+		if o, why := v.Decision(); v.Default == "" {
+			got = why.Text()
+			if o != Undecided || why[0].Code != "default.zones-unknown" || stage(r, "first-match").Fidelity.Level() != "undermatch" {
+				t.Errorf("%s: %s %v, first-match %s", c.name, o, why, stage(r, "first-match").Fidelity)
+			}
+		}
+		if got != c.want || v.Rule != nil {
+			t.Errorf("%s: %q, want %q", c.name, got, c.want)
+		}
+		if v.Default != "" && (r.Fidelity.Level() != "inferred" || v.Zones.Source != "configuration") {
+			t.Errorf("%s: derived zones are inferred: %s, %s", c.name, r.Fidelity, v.Zones.Source)
+		}
+	}
+}
+
+// A given zone the vsys does not define is a question the check cannot take
+// (C15): the error names the zone and lists the vsys's zones, in the command
+// line's words and the tool's.
+func TestAnUndefinedGivenZoneIsRefused(t *testing.T) {
+	t.Parallel()
+	e := env(t, "firewall-zones.xml", false)
+	for _, c := range []struct {
+		from, to, question, tool string
+	}{
+		{"nowhere", "inside", "--from-zone nowhere", "from_zone nowhere"},
+		{"inside", "nowhere", "--to-zone nowhere", "to_zone nowhere"},
+	} {
+		_, err := Simulation{}.Run(context.Background(), e, simulate.Input{
+			Flow:   simulate.Flow{Source: ep("10.2.0.5"), Destination: ep("10.1.0.5"), FromZone: c.from, ToZone: c.to},
+			Device: "fw01", Vsys: "vsys1",
+		})
+		ce, ok := errors.AsType[*simulate.ChoiceError](err)
+		zones := " is not a zone of vsys1; its zones: dmz, empty-zone, inside, loop"
+		if !ok || ce.Question != c.question+zones || ce.ToolText != c.tool+zones || ce.Kind != "" {
+			t.Errorf("%s -> %s: %v", c.from, c.to, err)
 		}
 	}
 }

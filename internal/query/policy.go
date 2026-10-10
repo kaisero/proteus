@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/netip"
 	"slices"
+	"strings"
 
 	"github.com/okaiser/proteus/internal/estate"
 	"github.com/okaiser/proteus/internal/index"
@@ -17,6 +18,7 @@ import (
 	"github.com/okaiser/proteus/internal/simulate"
 	"github.com/okaiser/proteus/internal/simulate/pathpolicy"
 	"github.com/okaiser/proteus/internal/simulate/routing"
+	"github.com/okaiser/proteus/internal/simulate/rulebase"
 	"github.com/okaiser/proteus/internal/simulate/securitypolicy"
 	"github.com/okaiser/proteus/internal/simulate/topology"
 )
@@ -195,6 +197,11 @@ func PolicyFile(ctx context.Context, env Env, in PolicyFileInput) (Envelope[Poli
 		return none, err
 	}
 	e.Holes = holes
+	ts, zoneHoles, u := givenZones(ts, flow)
+	if u != nil {
+		return none, u
+	}
+	e.Holes = append(e.Holes, zoneHoles...)
 	switch {
 	case len(ts) == 0 && len(holes) > 0:
 		return e, nil // the holes say what is missing
@@ -231,6 +238,36 @@ func PolicyFile(ctx context.Context, env Env, in PolicyFileInput) (Envelope[Poli
 	}
 	e.Unresolved = dedupeUnresolved(runUnresolved(run, t.Device, t.Vsys, true))
 	return e, nil
+}
+
+// givenZones keeps the targets that define the flow's given zones (C15). A
+// target without one is a hole; when no target defines them, the question is a
+// usage error that lists each vsys's zones.
+func givenZones(ts []estate.Target, flow simulate.Flow) ([]estate.Target, []estate.Hole, *UsageError) {
+	var kept []estate.Target
+	var holes []estate.Hole
+	var texts, toolTexts []string
+	for _, t := range ts {
+		var c *simulate.ChoiceError
+		for _, g := range []struct{ flag, field, zone string }{
+			{"from-zone", "from_zone", flow.FromZone}, {"to-zone", "to_zone", flow.ToZone},
+		} {
+			if c = rulebase.UndefinedZone(t.Config, t.Scope, g.flag, g.field, g.zone); c != nil {
+				break
+			}
+		}
+		if c == nil {
+			kept = append(kept, t)
+			continue
+		}
+		texts, toolTexts = append(texts, c.Question), append(toolTexts, c.ToolText)
+		holes = append(holes, estate.NewHole(t.Device, t.Vsys, reason.New("zone.undefined",
+			fmt.Sprintf("not checked: %s", c.ToolText))))
+	}
+	if len(kept) == 0 && len(texts) > 0 {
+		return nil, nil, usage(strings.Join(texts, "; "), strings.Join(toolTexts, "; "))
+	}
+	return kept, holes, nil
 }
 
 // fileEnv is the simulation environment for one target read from a file: its
