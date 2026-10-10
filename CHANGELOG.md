@@ -306,10 +306,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **The sample containers stop cleanly, and the proxy log keeps no identity
   claims.** `docker compose down` now lets proteus-mcp finish its running calls,
-  and proteus-fetch stops its fetch at once and exits 143. Caddy's access log
-  drops the `X-User-Claims` header. Before, the fetch container ignored SIGTERM
-  until Docker killed it after 10 seconds, the server's running calls got only
-  those 10 seconds, and each proxy log line held the user's claims.
+  and proteus-fetch stops its fetch at once and exits 143. The server's whole
+  stop ends within `call_timeout` + `max_wait` + 10 s, also when a call hangs.
+  Caddy's access log drops the `X-User-Claims` header. Before, the fetch
+  container ignored SIGTERM until Docker killed it after 10 seconds, the
+  server's running calls got only those 10 seconds, and each proxy log line held
+  the user's claims.
 - **`--at` and `snapshot diff` pass over a damaged snapshot.** They read the
   next older snapshot that can be read, and a `note.snapshot-skipped` note names
   the one passed over. Before, `--at` stopped at it with a hole, and

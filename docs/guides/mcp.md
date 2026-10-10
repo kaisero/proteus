@@ -227,12 +227,14 @@ dropped. The server image has no shell. The comments in
 their owner and their mode. Until the first fetch writes the export, proteus-mcp
 exits 2 and restarts.
 
-**Give the server time to stop.** On SIGTERM the server waits up to
-`call_timeout` for the running calls, and an answer is written at most
-`call_timeout` + `max_wait` + 10 s after its request. Set the container's stop
-grace period to at least `call_timeout` + `max_wait` + 20 s: 90 s with the
-defaults, as `stop_grace_period` in the sample. A shorter grace lets the
-platform kill the server while calls still answer. The fetch container's script
+**Give the server time to stop.** On SIGTERM the server lets the running calls
+answer, and an answer is written at most `call_timeout` + `max_wait` + 10 s after
+its request. The whole stop ends within that time, also when a call's work does
+not return or a client keeps its request open: the server then closes what is
+left and exits 143. Set the container's stop grace period to at least
+`call_timeout` + `max_wait` + 20 s: 90 s with the defaults, as
+`stop_grace_period` in the sample. A shorter grace lets the platform kill the
+server while calls still answer. The fetch container's script
 passes SIGTERM to the running `proteus fetch` and exits 143 when it ends.
 
 `deploy/portkey.md` registers the server in the Portkey MCP gateway: the URL, the
@@ -316,8 +318,9 @@ each device resolved to, what each stage kept, and at the end the status, the co
 and the duration. A panic's stack goes there too. The work of a call that timed
 out goes on until it returns; its log stays open for it and then also holds what
 the work logged late, when it returned, and the stack of a later panic. On
-SIGTERM the server waits for such work at most `call_timeout` more; what the work
-logs after that is lost, and the lines written before stay. Any other call keeps
+SIGTERM the server waits for such work only until it stops: at most
+`call_timeout` over stdio, and `call_timeout` + `max_wait` + 10 s over HTTP. What
+the work logs after that is lost, and the lines written before stay. Any other call keeps
 its log in memory and drops it: its answer explains itself in its reasons and
 codes. With `--log-level debug` (or `log_level: debug`) every call writes its run
 log. The newest `log_keep` logs stay. The server process also writes one CLI run

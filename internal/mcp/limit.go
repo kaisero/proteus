@@ -122,15 +122,20 @@ func (l *limiter) answering() int {
 // stop refuses every new or waiting call, then waits for the running calls'
 // work to return, at most the call timeout. It reports whether all returned.
 func (l *limiter) stop() bool {
+	ctx, cancel := context.WithTimeout(context.Background(), l.timeout)
+	defer cancel()
+	return l.stopBy(ctx)
+}
+
+// stopBy is stop, waiting until ctx ends at most.
+func (l *limiter) stopBy(ctx context.Context) bool {
 	l.stopOnce.Do(func() { close(l.stopping) })
-	t := time.NewTimer(l.timeout)
-	defer t.Stop()
 	// Every slot taken here is one no call holds: all of them, and the work
 	// has returned.
 	for range cap(l.slots) {
 		select {
 		case l.slots <- struct{}{}:
-		case <-t.C:
+		case <-ctx.Done():
 			return false
 		}
 	}
@@ -140,7 +145,7 @@ func (l *limiter) stop() bool {
 	for l.answering() > 0 {
 		select {
 		case <-tick.C:
-		case <-t.C:
+		case <-ctx.Done():
 			return false
 		}
 	}
