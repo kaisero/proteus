@@ -120,6 +120,24 @@ func TestSearchRefusesAnUnknownKind(t *testing.T) {
 	}
 }
 
+// A reference from the device's own configuration prints with scope config.
+func TestSearchShowsDeviceLevelReferences(t *testing.T) {
+	t.Parallel()
+	e, err := Search(context.Background(), Env{}, SearchInput{Term: "10.88.5.1", Selection: Selection{File: fixture("firewall-device-refs.xml")}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var found bool
+	for _, r := range e.Results {
+		if r.Kind == "static-route" && r.Name == "to-remote" {
+			found = r.Scope == "config" && r.Field == "destination"
+		}
+	}
+	if !found {
+		t.Errorf("no static-route reference with scope config: %+v", e.Results)
+	}
+}
+
 // How a term is matched: the mode asked, or what its type sets.
 func TestMatching(t *testing.T) {
 	t.Parallel()

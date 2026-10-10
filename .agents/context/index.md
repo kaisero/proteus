@@ -27,7 +27,8 @@ Three packages, dependency order strictly one-way — `config` <- `resolve` <- `
   table. It exposes the lookups and the report that comes with them.
   The reference edges are read once per configuration into an edge list
   (`index.ReadEdges`, kept by an `index.Set`); a scope's index holds positions into it, never its own copies, and
-  still sees only its own scope and shared. The list is a materialisation of the
+  still sees only its own scope, shared and the device-level configuration outside
+  any vsys (scope `config`: static routes, IKE gateways). The list is a materialisation of the
   file, not an index — it answers no question and is keyed by nothing — so R10
   still holds, and `TestNoGlobalIndex` is what proves it.
 

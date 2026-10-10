@@ -57,6 +57,7 @@ The fetcher's tests run against `internal/fakepanos`, a fake XML API over TLS on
 | `firewall-shadow.xml`, `firewall-urlprofile-shadow.xml` | a vsys definition shadowing a shared one |
 | `firewall-nested-groups.xml`, `firewall-cyclic-groups.xml` | closure depth and cycles |
 | `firewall-shared-names.xml` | one name, several kinds: tag and address group, address group and service group |
+| `firewall-device-refs.xml` | references from outside any vsys: a static route and an IKE gateway |
 | `firewall-badfilter.xml` | a tag filter the parser refuses |
 | `firewall-literals.xml` | addresses written directly into rule fields |
 | `firewall-lab.xml`, `firewall-paths.xml` | shared pre/post around vsys rulebases, disabled rules |

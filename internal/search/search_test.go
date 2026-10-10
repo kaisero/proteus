@@ -449,3 +449,23 @@ func TestExactAndWithinTestTheWholeObject(t *testing.T) {
 		t.Errorf("to-range reached:\n%s", dump(fs))
 	}
 }
+
+// A static route and an IKE gateway that name objects are references too, from
+// the scope config.
+func TestDeviceLevelReferences(t *testing.T) {
+	t.Parallel()
+	got := run(t, "firewall-device-refs.xml", "vsys1", Query{Term: "10.88.5.1"})
+	if !has(got, "reference static-route to-remote destination net-remote") ||
+		!has(got, "reference security rule to-remote destination net-remote") {
+		t.Errorf("10.88.5.1:\n%s", dump(got))
+	}
+	got = run(t, "firewall-device-refs.xml", "vsys1", Query{Term: "10.88.6.1"})
+	if !has(got, "reference gateway gw-1 peer-address/ip peer-1") {
+		t.Errorf("10.88.6.1:\n%s", dump(got))
+	}
+	for _, f := range got {
+		if f.Stage == StageReference && f.Scope.String() != "config" {
+			t.Errorf("scope %s for %s", f.Scope, line(f))
+		}
+	}
+}

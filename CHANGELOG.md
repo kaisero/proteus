@@ -298,6 +298,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`search` now lists references from the device's own configuration.** A static
+  route or an IKE gateway that names an address object shows as a reference with
+  scope `config`. Before, only rules and objects inside a vsys or shared were
+  found, so such an object looked unused.
 - **`search --within` and `--exact` now compare an address object's whole value.**
   An address range matched when one part of it did: `10.0.0.2-10.0.0.9` was found
   within `10.0.0.0/29` and exactly `10.0.0.4/30`, and the rules using it with it.

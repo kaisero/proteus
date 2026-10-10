@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/okaiser/proteus/internal/config"
+	"github.com/okaiser/proteus/internal/resolve"
 )
 
 func siblingIndex(t *testing.T, vsys string) *Index {
@@ -48,6 +49,37 @@ func TestAnIndexSeesSharedEdges(t *testing.T) {
 		}
 		if refs[0].Field != "destination" {
 			t.Errorf("%s: shared edge at %s, want destination", vsys, refs[0].Field)
+		}
+	}
+}
+
+// The device's own configuration, outside any vsys, names objects too: a static
+// route's destination and an IKE gateway's peer address. Those edges carry the
+// scope config, and every scope's index keeps them.
+func TestAnIndexSeesDeviceLevelEdges(t *testing.T) {
+	t.Parallel()
+	for _, sc := range []config.Scope{{Sort: config.ScopeVsys, Name: "vsys1"}, {Sort: config.ScopeShared}} {
+		cfg, _, err := config.Load("../../testdata/config/firewall-device-refs.xml")
+		if err != nil {
+			t.Fatal(err)
+		}
+		idx, err := New(cfg, sc, resolve.Security)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for name, want := range map[string]string{
+			"net-remote": "/network/virtual-router/default/routing-table/ip/static-route/to-remote destination",
+			"peer-1":     "/network/ike/gateway/gw-1 peer-address/ip",
+		} {
+			var got []string
+			for _, r := range idx.Refs(name) {
+				if r.Scope.Sort == config.ScopeConfig && r.Scope.String() == "config" {
+					got = append(got, r.From+" "+r.Field)
+				}
+			}
+			if len(got) != 1 || !strings.HasSuffix(got[0], want) {
+				t.Errorf("%s: device-level Refs(%s) = %v, want one ending %q", sc, name, got, want)
+			}
 		}
 	}
 }

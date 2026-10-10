@@ -89,6 +89,11 @@ hop's firewall the same question with `test security-policy-match`. On fw02,
   for one address decides it. A search for a prefix or a range, or with `--within`
   or `--exact`, lists each wildcard object that can hold one of its addresses as
   unresolved, with `gap.address-wildcard`, and exits with code 3.
+- **A device-level reference is matched by name alone.** A static route, an IKE
+  gateway or other configuration outside any vsys that names an object is listed
+  as a reference with scope `config`. proteus does not decide which vsys's object
+  that name refers to: a search in any vsys that finds an object of that name
+  lists the reference.
 
 ## Host names
 
