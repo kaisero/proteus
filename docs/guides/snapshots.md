@@ -105,12 +105,17 @@ By default it compares the snapshot before `latest` with `latest`. `--from` and
 these is a usage error (exit 2) that names the flag. A rule that only moved is
 not a change.
 
-`--limit N` keeps the first N results, in the order above, over all devices
-together. A result is one scope of one device: shared or one vsys, with all
-of its changes. There is no default. With results left out, the last line ends
-`; 1 of 3 shown, narrow by device`, and JSON and YAML give the count in
-`summary.omitted`. `omitted` is 0 when nothing is left out. Holes and notes are
-never cut. `--limit` takes 1 or more; `--limit 0` is a usage error (exit 2).
+`--limit N` keeps the first N changes, in the order above, over all scopes and
+devices together. The scope where the limit falls shows its first changes, and
+its count line keeps the whole counts and adds how many it shows:
+`fw01/vsys:vsys1: 1 added, 1 removed, 2 changed (1 of 4 changes shown)`. The
+scopes after it are left out. There is no default. With changes left out, the
+last line ends `; 1 of 4 shown, narrow by device`. In JSON and YAML,
+`summary.found` counts every change and `summary.omitted` the changes left out;
+`omitted` is 0 when nothing is left out. With `--detail summary`, each scope
+counts all of its changes. Holes and notes are never cut: the note of a device
+whose changes are all left out prints below, as `note: fw02: <text>`.
+`--limit` takes 1 or more; `--limit 0` is a usage error (exit 2).
 
 A secret never shows: a key, a password or a password hash, such as a
 certificate's private key, a server profile's password or a local user's

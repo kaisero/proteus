@@ -111,7 +111,7 @@ func (l lookupAnswer) Text(t *textOut) error {
 	if l.e.Summary.Found == 0 {
 		fmt.Fprintf(t, "no element named %q in the selection\n\n", in.Name)
 	}
-	printQualifiers(t, l.Qualifiers())
+	printQualifiers(t, l.Qualifiers(), leftNotes(l.e.Targets, func(i int) bool { return len(byTarget[i]) > 0 })...)
 	fmt.Fprintln(t, l.e.Summary.Answer)
 	return t.err
 }

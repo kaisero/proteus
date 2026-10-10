@@ -128,9 +128,11 @@ func (a *app) emitRun(ans answer, err error) error {
 	return a.emit(ans)
 }
 
-// printQualifiers prints holes and unresolved entries after an answer. Notes print
-// under each target's header instead (printNotes).
-func printQualifiers(t *textOut, q qualifiers) {
+// printQualifiers prints holes and unresolved entries after an answer, then left:
+// the notes of targets that printed no header, as when a limit cut all their
+// results, so that no note is lost. Other notes print under their target's
+// header (printNotes).
+func printQualifiers(t *textOut, q qualifiers, left ...note) {
 	for _, h := range q.Holes {
 		fmt.Fprintf(t, "%s %s: %s\n", t.pal.bad("hole:"), where(h.Device, h.Vsys), h.Reason)
 	}
@@ -142,9 +144,29 @@ func printQualifiers(t *textOut, q qualifiers) {
 		}
 		fmt.Fprintf(t, "%s %s: %s\n", t.pal.warn("unresolved:"), where(u.Device, u.Vsys), text)
 	}
-	if len(q.Holes)+len(q.Unresolved) > 0 {
+	for _, n := range left {
+		fmt.Fprintf(t, "%s %s: %s\n", noteStyle(t.pal, reason.Reason{Code: n.Code})("note:"), where(n.Device, n.Vsys), n.Note)
+	}
+	if len(q.Holes)+len(q.Unresolved)+len(left) > 0 {
 		fmt.Fprintln(t)
 	}
+}
+
+// leftNotes are the notes of the targets that printed no header: shown says
+// which did. A version gap is unresolved and prints there.
+func leftNotes(ts []estate.Target, shown func(i int) bool) []note {
+	var out []note
+	for i, tg := range ts {
+		if shown(i) {
+			continue
+		}
+		for _, n := range tg.Notes {
+			if n.Code != "gap.version" {
+				out = append(out, noteOf(tg.Device, tg.Vsys, n))
+			}
+		}
+	}
+	return out
 }
 
 // printNotes prints a target's notes under its header. A version gap is left for

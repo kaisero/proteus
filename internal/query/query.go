@@ -114,14 +114,15 @@ type Envelope[In, Res any] struct {
 
 // Summary counts the results of a search, a lookup or a snapshot diff over
 // the targets read. Found counts every result; Omitted counts those a limit
-// left out of Results. A snapshot diff's targets are its devices, and a device
-// counts as with a result when one of its scopes changed.
+// left out. A result is a finding of search, a card of lookup, and a single
+// change of snapshot diff. A snapshot diff's targets are its devices, and a
+// device counts as with a result when one of its scopes changed.
 type Summary struct {
 	Answer  string `json:"answer" jsonschema:"the count line of the text output"`
-	Found   int    `json:"found" jsonschema:"results over every target, the omitted ones included"`
+	Found   int    `json:"found" jsonschema:"results over every target, the omitted ones included; for snapshot diff, single changes"`
 	With    int    `json:"with" jsonschema:"targets with a result; for snapshot diff, devices with a change"`
 	Without int    `json:"without" jsonschema:"targets read without a result; for snapshot diff, devices compared without a change"`
-	Omitted int    `json:"omitted" jsonschema:"results the limit left out of the results list; 0 when every result is shown"`
+	Omitted int    `json:"omitted" jsonschema:"results the limit left out; for snapshot diff, single changes; 0 when every result is shown"`
 }
 
 // Summarize converts a full envelope into its summary form: each result through

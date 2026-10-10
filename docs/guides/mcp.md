@@ -82,12 +82,15 @@ before `at`. A date in `at` means the end of that day.
 - `device` is an enum of the exported devices. The client sees the names in the
   tool's input schema, and the server refuses another name.
 - `limit` keeps the first N results, in the answer's usual order, over all
-  devices together. It is 1 or more, and it has no default: without it, the
-  answer holds every result. The summary's `omitted` counts the results left
-  out, and its answer line ends `; 5 of 812 shown, narrow by device, vsys or
-  kind`. Holes, unresolved entries and notes are never cut. A model should pass
-  `limit` for a broad search, such as a large prefix or a common port, so that
-  the answer fits its context.
+  devices together. A result is a finding for `search`, a card for `lookup`,
+  and a single change for `snapshot_diff`, where the scope the limit falls in
+  keeps its first changes and the later scopes are left out. `limit` is 1 or
+  more, and it has no default: without it, the answer holds every result. The
+  summary's `found` counts every result and `omitted` the results left out, and
+  its answer line ends `; 5 of 812 shown, narrow by device, vsys or kind`. Holes,
+  unresolved entries and notes are never cut. A model should pass `limit` for a
+  broad search, such as a large prefix or a common port, so that the answer fits
+  its context.
 
 Each input has a description in the tool's input schema that says what proteus
 evaluates.

@@ -36,5 +36,5 @@ github.com/okaiser/proteus/internal/task  100.0
 github.com/okaiser/proteus/internal/simulate/pathlab  92.4
 github.com/okaiser/proteus/internal/simulate/pathpolicy  100.0
 github.com/okaiser/proteus/internal/reason  100.0
-github.com/okaiser/proteus/internal/query  98.0
+github.com/okaiser/proteus/internal/query  98.1
 github.com/okaiser/proteus/internal/mcp  95.6

@@ -128,7 +128,7 @@ func (s searchAnswer) Text(t *textOut) error {
 		}
 		_ = tb.write(t, "  ", 1)
 	}
-	printQualifiers(t, s.Qualifiers())
+	printQualifiers(t, s.Qualifiers(), leftNotes(s.e.Targets, func(i int) bool { return len(byTarget[i]) > 0 })...)
 	fmt.Fprintln(t, s.e.Summary.Answer)
 	return t.err
 }

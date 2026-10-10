@@ -228,9 +228,14 @@ type DiffSummary struct {
 	Changed int    `json:"changed" jsonschema:"elements changed"`
 }
 
-// Summary is the scope's diff in summary.
+// Summary is the scope's diff in summary. It counts every change of the
+// scope, those a limit left out included, as the answer does.
 func (r DiffResult) Summary() DiffSummary {
 	out := DiffSummary{Answer: r.Answer, Device: r.Device, From: r.From, To: r.To, Scope: r.Scope}
-	out.Added, out.Removed, out.Changed = countChanges(r.Changes)
+	all := r.Changes
+	if r.whole != nil {
+		all = r.whole
+	}
+	out.Added, out.Removed, out.Changed = countChanges(all)
 	return out
 }

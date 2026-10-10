@@ -787,31 +787,42 @@ func TestErrorOf(t *testing.T) {
 	}
 }
 
-// search, lookup and snapshot_diff take limit: the first results, the rest
-// counted in the summary and named on its answer line, also in the text
-// content. A limit below 1 is the SDK's input error.
+// search, lookup and snapshot_diff take limit: the first findings, cards or
+// single changes, the rest counted in the summary and named on its answer
+// line, also in the text content. A limit below 1 is the SDK's input error.
 func TestResultLimit(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	lab := fixture("firewall-lab.xml")
 	cs, rec := serve(t, labEnv(t, snap{"fw01", lab}, snap{"fw02", lab}, snap{"fw01", fixture("firewall-lab-changed.xml")}), true)
+	// units counts what a limit counts: a result of search and lookup, a
+	// single change of snapshot_diff (asked in full, so its changes show).
+	results := func(rs []any) int { return len(rs) }
+	changes := func(rs []any) int {
+		n := 0
+		for _, r := range rs {
+			n += len(r.(map[string]any)["changes"].([]any))
+		}
+		return n
+	}
 	for _, tc := range []struct {
 		tool   string
 		args   map[string]any
 		narrow string
+		units  func([]any) int
 	}{
-		{"search", map[string]any{"value": "198.18.10.100"}, "device, vsys or kind"},
-		{"lookup", map[string]any{"name": "dc01"}, "device or vsys"},
-		{"snapshot_diff", map[string]any{"device": "fw01"}, "device"},
+		{"search", map[string]any{"value": "198.18.10.100"}, "device, vsys or kind", results},
+		{"lookup", map[string]any{"name": "dc01"}, "device or vsys", results},
+		{"snapshot_diff", map[string]any{"device": "fw01", "detail": "full"}, "device", changes},
 	} {
 		whole, err := cs.CallTool(ctx, &sdk.CallToolParams{Name: tc.tool, Arguments: tc.args})
 		if err != nil || whole.IsError {
 			t.Fatalf("%s: %v %s", tc.tool, err, text(whole))
 		}
 		all := plain(t, whole.StructuredContent).(map[string]any)["envelope"].(map[string]any)
-		found := len(all["results"].([]any))
+		found := tc.units(all["results"].([]any))
 		if s := all["summary"].(map[string]any); s["omitted"] != 0.0 || int(s["found"].(float64)) != found || found < 2 {
-			t.Fatalf("%s: whole summary %v, %d results", tc.tool, s, found)
+			t.Fatalf("%s: whole summary %v, %d found", tc.tool, s, found)
 		}
 		tc.args["limit"] = 1
 		res, err := cs.CallTool(ctx, &sdk.CallToolParams{Name: tc.tool, Arguments: tc.args})
@@ -821,14 +832,15 @@ func TestResultLimit(t *testing.T) {
 		env := plain(t, res.StructuredContent).(map[string]any)["envelope"].(map[string]any)
 		s := env["summary"].(map[string]any)
 		line := fmt.Sprintf("; 1 of %d shown, narrow by %s", found, tc.narrow)
-		if len(env["results"].([]any)) != 1 || s["omitted"] != float64(found-1) || !strings.HasSuffix(s["answer"].(string), line) ||
+		kept := env["results"].([]any)
+		if tc.units(kept) != 1 || s["omitted"] != float64(found-1) || !strings.HasSuffix(s["answer"].(string), line) ||
 			env["input"].(map[string]any)["limit"] != 1.0 || !reflect.DeepEqual(env["notes"], all["notes"]) || !reflect.DeepEqual(env["holes"], all["holes"]) {
 			t.Errorf("%s: %v", tc.tool, env)
 		}
 		if first, _, _ := strings.Cut(text(res), "\n"); !strings.HasSuffix(first, line) {
 			t.Errorf("%s: text %q", tc.tool, text(res))
 		}
-		if c := rec.last(t); c.Status != StatusOK || len(c.Answers) != 2 || !strings.HasSuffix(c.Answers[0], line) {
+		if c := rec.last(t); c.Status != StatusOK || len(c.Answers) != 1+len(kept) || !strings.HasSuffix(c.Answers[0], line) {
 			t.Errorf("%s: audit %+v", tc.tool, c)
 		}
 		for _, bad := range []int{0, -1} {

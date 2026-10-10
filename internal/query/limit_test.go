@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -104,40 +105,115 @@ func TestLookupLimit(t *testing.T) {
 	}
 }
 
-// A diff's limit keeps the first scopes over every device; the serial note
-// and a hole stay whole. The summary counts the scopes, and the devices with
-// and without a change.
-func TestSnapshotDiffLimit(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
+// twoChanged is fw01 and fw02, each fetched with the lab configuration and
+// then with the changed one; fw01's second snapshot comes from another
+// serial. changedFW02 false fetches fw02 unchanged.
+func twoChanged(t *testing.T, changedFW02 bool) Env {
+	t.Helper()
 	l := newLab(t)
 	l.write(store.Meta{Device: "fw01", Serial: "000000000001"}, pathlab.Read(t, fixture("firewall-lab.xml")))
 	l.write(store.Meta{Device: "fw01", Serial: "000000000002"}, pathlab.Read(t, fixture("firewall-lab-changed.xml")))
 	l.fetch("fw02", fixture("firewall-lab.xml"))
-	l.fetch("fw02", fixture("firewall-lab.xml"))
-	env := l.env()
+	if changedFW02 {
+		l.fetch("fw02", fixture("firewall-lab-changed.xml"))
+	} else {
+		l.fetch("fw02", fixture("firewall-lab.xml"))
+	}
+	return l.env()
+}
+
+// diffShape is a diff's results as device/scope:changes kept.
+func diffShape(e Envelope[DiffInput, DiffResult]) []string {
+	var out []string
+	for _, r := range e.Results {
+		out = append(out, fmt.Sprintf("%s/%s:%d", r.Device, r.Scope, len(r.Changes)))
+	}
+	return out
+}
+
+// A diff counts single changes: found is every change, and the devices with
+// and without one are counted apart.
+func TestSnapshotDiffCountsChanges(t *testing.T) {
+	t.Parallel()
+	e, err := SnapshotDiff(context.Background(), twoChanged(t, false), DiffInput{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s := e.Summary; s.Found != 4 || s.With != 1 || s.Without != 1 || s.Omitted != 0 || s.Answer != "1 with changes, 1 without, 0 holes" {
+		t.Errorf("summary %+v", s)
+	}
+}
+
+// A diff's limit keeps the first single changes over every scope and device.
+// The scope where it falls keeps its first changes; its answer keeps the whole
+// counts and says how many it shows, and so does its summary form. Later
+// scopes drop out. The serial note and a hole stay whole.
+func TestSnapshotDiffLimit(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	env := twoChanged(t, true)
 	whole, err := SnapshotDiff(ctx, env, DiffInput{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := whole.Summary
-	if s == nil || s.Found != len(whole.Results) || s.With != 1 || s.Without != 1 || s.Omitted != 0 ||
-		s.Answer != "1 with changes, 1 without, 0 holes" || len(whole.Notes) != 1 {
-		t.Fatalf("whole: %+v, notes %v", s, whole.Notes)
+	if got := strings.Join(diffShape(whole), " "); got != "fw01/shared:0 fw01/vsys:vsys1:4 fw01/vsys:vsys2:0 fw02/shared:0 fw02/vsys:vsys1:4 fw02/vsys:vsys2:0" ||
+		whole.Summary.Found != 8 || len(whole.Notes) != 1 {
+		t.Fatalf("whole: %s %+v", got, whole.Summary)
 	}
-	perDevice := len(whole.Results) / 2
-	cut, err := SnapshotDiff(ctx, env, DiffInput{ResultLimit: ResultLimit{Limit: perDevice + 1}})
-	if err != nil {
-		t.Fatal(err)
+	for _, tc := range []struct {
+		limit int
+		shape string
+	}{
+		// The cut falls inside fw02's vsys1, past fw01's scopes.
+		{5, "fw01/shared:0 fw01/vsys:vsys1:4 fw01/vsys:vsys2:0 fw02/shared:0 fw02/vsys:vsys1:1"},
+		// It falls on the end of fw01's vsys1: that scope stays whole.
+		{4, "fw01/shared:0 fw01/vsys:vsys1:4"},
+		{1, "fw01/shared:0 fw01/vsys:vsys1:1"},
+	} {
+		e, err := SnapshotDiff(ctx, env, DiffInput{ResultLimit: ResultLimit{Limit: tc.limit}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := strings.Join(diffShape(e), " "); got != tc.shape {
+			t.Errorf("limit %d: %s, want %s", tc.limit, got, tc.shape)
+		}
+		want := *whole.Summary
+		want.Omitted = 8 - tc.limit
+		want.Answer += fmt.Sprintf("; %d of 8 shown, narrow by device", tc.limit)
+		if *e.Summary != want || !reflect.DeepEqual(e.Notes, whole.Notes) || !reflect.DeepEqual(e.Holes, whole.Holes) || e.Input.Echo().Limit != tc.limit {
+			t.Errorf("limit %d: summary %+v, notes %v", tc.limit, *e.Summary, e.Notes)
+		}
+		last := e.Results[len(e.Results)-1]
+		for i, r := range e.Results {
+			full := whole.Results[i]
+			if !reflect.DeepEqual(r.Changes, full.Changes[:len(r.Changes)]) {
+				t.Errorf("limit %d: %s/%s keeps changes out of order", tc.limit, r.Device, r.Scope)
+			}
+			wantAnswer := full.Answer
+			if len(r.Changes) < len(full.Changes) {
+				wantAnswer += fmt.Sprintf(" (%d of %d changes shown)", len(r.Changes), len(full.Changes))
+			}
+			fs := full.Summary()
+			ws := DiffSummary{
+				Answer: wantAnswer, Device: r.Device, From: r.From, To: r.To, Scope: r.Scope,
+				Added: fs.Added, Removed: fs.Removed, Changed: fs.Changed,
+			}
+			if r.Answer != wantAnswer || r.Summary() != ws {
+				t.Errorf("limit %d: %s answer %q, summary %+v", tc.limit, r.Scope, r.Answer, r.Summary())
+			}
+		}
+		if tc.limit == 1 && last.Answer != "fw01/vsys:vsys1: 1 added, 1 removed, 2 changed (1 of 4 changes shown)" {
+			t.Errorf("limit 1: %q", last.Answer)
+		}
 	}
-	checkCut(t, whole, cut, perDevice+1, "device")
-	if last := cut.Results[perDevice]; last.Device != "fw02" || cut.Input.Echo().Limit != perDevice+1 {
-		t.Errorf("the cut ends on %+v", last)
+	// A limit at or above the count keeps everything.
+	if e, err := SnapshotDiff(ctx, env, DiffInput{ResultLimit: ResultLimit{Limit: 8}}); err != nil || len(e.Results) != 6 || e.Summary.Omitted != 0 {
+		t.Errorf("limit 8: %v %+v", err, e.Summary)
 	}
 
 	// fw02 of diffLab has one snapshot: a hole, counted on the line.
 	e, err := SnapshotDiff(ctx, diffLab(t), DiffInput{ResultLimit: ResultLimit{Limit: 1}})
-	if err != nil || len(e.Results) != 1 || len(e.Holes) != 1 || len(e.Notes) != 1 ||
+	if err != nil || len(e.Holes) != 1 || len(e.Notes) != 1 ||
 		e.Summary.Answer != fmt.Sprintf("1 with changes, 0 without, 1 holes; 1 of %d shown, narrow by device", e.Summary.Found) {
 		t.Errorf("with a hole: %+v %v", e.Summary, err)
 	}
@@ -156,7 +232,7 @@ func TestLimitBelowZero(t *testing.T) {
 	usageOK(t, err, "--limit -1: want 1 or more")
 	_, err = SnapshotDiff(ctx, diffLab(t), DiffInput{ResultLimit: minus})
 	usageOK(t, err, "--limit -1: want 1 or more")
-	if u := minus.checkLimit(); u.ToolText != "limit -1: want 1 or more" {
+	if u := minus.checkLimit(); u.ToolText != "limit -1: want 1 or more, or 0 for no limit" {
 		t.Errorf("tool text %q", u.ToolText)
 	}
 }

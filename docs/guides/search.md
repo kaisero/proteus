@@ -220,7 +220,9 @@ The counts on the summary line are for the whole answer. The end of the line
 says how many findings it shows and what narrows the search. In JSON and YAML,
 `summary.found` counts every finding and `summary.omitted` counts the findings
 that the limit left out. `omitted` is 0 when nothing is left out. Holes,
-unresolved entries and notes are never cut.
+unresolved entries and notes are never cut. In text, the notes of a vsys whose
+findings are all left out print below the findings, as
+`note: fw02/vsys1: <text>`.
 
 `--limit` takes 1 or more. `--limit 0` is a usage error (exit 2).
 `proteus lookup` and `proteus snapshot diff` take `--limit` too.

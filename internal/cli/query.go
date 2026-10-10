@@ -37,7 +37,7 @@ func (a *app) bindDetail(cmd *cobra.Command) {
 // bindLimit registers --limit on a question with many results: search, lookup
 // and snapshot diff. It has no default.
 func bindLimit(cmd *cobra.Command, n *int) {
-	cmd.Flags().IntVar(n, "limit", 0, "keep only the first N results; the summary counts the rest (default: every result)")
+	cmd.Flags().IntVar(n, "limit", 0, "keep only the first N results (findings, cards or changes); the summary counts the rest (default: all)")
 }
 
 // checkLimit refuses a --limit below 1: zero would read as no limit.

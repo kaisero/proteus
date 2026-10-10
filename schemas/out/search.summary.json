@@ -202,7 +202,7 @@
         },
         "found": {
           "type": "integer",
-          "description": "results over every target, the omitted ones included"
+          "description": "results over every target, the omitted ones included; for snapshot diff, single changes"
         },
         "with": {
           "type": "integer",
@@ -214,7 +214,7 @@
         },
         "omitted": {
           "type": "integer",
-          "description": "results the limit left out of the results list; 0 when every result is shown"
+          "description": "results the limit left out; for snapshot diff, single changes; 0 when every result is shown"
         }
       },
       "description": "search, lookup and snapshot diff only: the count of results over the targets read",

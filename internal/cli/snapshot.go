@@ -320,7 +320,18 @@ func (d snapshotDiffAnswer) Text(t *textOut) error {
 		}
 		_ = tb.write(t, "    ", 1)
 	}
-	printQualifiers(t, qualifiers{Holes: d.e.Holes})
+	// A device with no result left prints no header, so its notes go below.
+	shown := map[string]bool{}
+	for _, r := range d.e.Results {
+		shown[r.Device] = true
+	}
+	var left []note
+	for _, n := range d.e.Notes {
+		if !shown[n.Device] {
+			left = append(left, n)
+		}
+	}
+	printQualifiers(t, qualifiers{Holes: d.e.Holes}, left...)
 	fmt.Fprintln(t, d.e.Summary.Answer)
 	return t.err
 }

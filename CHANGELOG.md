@@ -11,8 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Keep a broad answer short with `--limit`.** `search`, `lookup` and
   `snapshot diff`, and their MCP tools with `limit`, can keep only the first N
-  results; the summary says how many it left out and what narrows the question.
-  There is no default, so an answer without a limit is whole as before.
+  findings, cards or changes; the summary says how many it left out and what
+  narrows the question. There is no default, so an answer without a limit is
+  whole as before. `snapshot diff` now ends with a count line and has a
+  `summary` in JSON and YAML, as `search` and `lookup` do.
 - **Let an AI agent ask proteus questions.** `proteus mcp` serves simulate,
   search, lookup and snapshot diff as MCP tools, over stdio or token-protected
   HTTP behind a TLS proxy, with an audit line per call and a container sample.
