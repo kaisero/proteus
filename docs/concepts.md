@@ -40,8 +40,8 @@ The **store** keeps the snapshots:
 ```
 
 Questions read `latest` by default. `--at <time>` reads the newest snapshot at or
-before that time. The store keeps 20 snapshots per device by default
-(`snapshot_keep`).
+before that time. The store keeps the newest 20 snapshots with a configuration
+and the newest 20 without one, per device, by default (`snapshot_keep`).
 
 A snapshot is written to a hidden directory first and then renamed. A reader
 never sees half a snapshot.

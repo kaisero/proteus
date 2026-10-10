@@ -23,7 +23,7 @@ defaults:
   # A device can also set insecure_tls on its own entry.
   insecure_tls: true
   timeout: 60                    # seconds per API call
-  snapshot_keep: 20              # snapshots kept per device
+  snapshot_keep: 20              # snapshots kept per device, with and without a configuration
   username: admin                # the login used to fetch an API key
   password_env: PANOS_PASSWORD   # the environment variable holding its password
   max_snapshot_age: 24h          # answers from older snapshots carry a note

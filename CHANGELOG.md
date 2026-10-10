@@ -304,6 +304,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A run of failed fetches no longer removes the last good snapshots.**
+  `snapshot_keep` now keeps the newest N snapshots with a configuration and the
+  newest N without one. Before, it counted both together, so N failed exports in
+  a row removed every snapshot but the one `latest` names.
 - **`proteus mcp` reads the `PROTEUS_USERS` file once, at start.** A missing or
   invalid file stops the start with exit 2 and names the file; a change needs a
   restart. Before, every call read the file again: the server started with a bad

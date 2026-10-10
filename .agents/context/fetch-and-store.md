@@ -86,7 +86,9 @@ unreadable".
 The root is `$PROTEUS_STORE`, else `~/.local/share/proteus`. `Write` fills a
 hidden directory and renames it into place, so a reader never sees half a snapshot.
 `latest` moves only when `config` arrived. Retention keeps the newest
-`snapshot_keep` snapshots and never removes the one `latest` names.
+`snapshot_keep` snapshots with `config.xml` and the newest `snapshot_keep` without
+it (an unreadable `meta.json` counts as without), and never removes the one
+`latest` names.
 
 `Resolve("fw01")` is the latest snapshot, `Resolve("fw01@<id>")` one in particular.
 `Snapshot.Zones()` builds the index's `ZoneSnapshot` from the stored `interfaces`

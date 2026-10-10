@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -140,6 +141,88 @@ func TestRetentionKeepsLatest(t *testing.T) {
 	}
 	if got, err := s.Latest("fw01"); err != nil || got.ID != first.ID {
 		t.Errorf("latest = %v, %v; want %s kept", got.ID, err, first.ID)
+	}
+}
+
+// failed stores a fetch whose configuration export failed.
+func failed(t *testing.T, s *Store, keep int) Snapshot {
+	t.Helper()
+	sn, err := s.Write(Meta{Device: "fw01", Documents: []DocumentMeta{{Name: ConfigDoc, Error: "export failed"}}},
+		map[string][]byte{}, keep)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return sn
+}
+
+// Retention counts the snapshots with a configuration and those without apart: a
+// run of failed exports never removes the last snapshots that can be analysed.
+func TestRetentionCountsFailedFetchesApart(t *testing.T) {
+	t.Parallel()
+	s := open(t)
+	var good, bad []string
+	for range 3 {
+		sn, err := s.Write(Meta{Device: "fw01"}, docs(t, false), 3)
+		if err != nil {
+			t.Fatal(err)
+		}
+		good = append(good, sn.ID)
+	}
+	for range 3 {
+		bad = append(bad, failed(t, s, 3).ID)
+	}
+	ids, _ := s.List("fw01")
+	if len(ids) != 6 {
+		t.Fatalf("keep 3 of each must keep all six, got %v", ids)
+	}
+	bad = append(bad, failed(t, s, 3).ID)
+	ids, _ = s.List("fw01")
+	want := []string{bad[3], bad[2], bad[1], good[2], good[1], good[0]}
+	if strings.Join(ids, ",") != strings.Join(want, ",") {
+		t.Errorf("after a fourth failed export: %v, want %v (the oldest failed one goes)", ids, want)
+	}
+	if got, err := s.Latest("fw01"); err != nil || got.ID != good[2] {
+		t.Errorf("latest = %v, %v; want %s", got.ID, err, good[2])
+	}
+}
+
+// A good snapshot beyond keep goes when newer good ones arrive, however many failed
+// ones lie between them.
+func TestRetentionKeepsTheNewestGoodOnes(t *testing.T) {
+	t.Parallel()
+	s := open(t)
+	first, _ := s.Write(Meta{Device: "fw01"}, docs(t, false), 1)
+	failed(t, s, 1)
+	second, err := s.Write(Meta{Device: "fw01"}, docs(t, false), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ids, _ := s.List("fw01")
+	if len(ids) != 2 || ids[0] != second.ID || slices.Contains(ids, first.ID) {
+		t.Errorf("List = %v; want %s and the failed one, without %s", ids, second.ID, first.ID)
+	}
+}
+
+// A snapshot directory without a readable meta.json counts as one without a
+// configuration, even when it holds config.xml.
+func TestRetentionCountsAnUnreadableSnapshotAsFailed(t *testing.T) {
+	t.Parallel()
+	s := open(t)
+	broken, _ := s.Write(Meta{Device: "fw01"}, docs(t, false), 1)
+	if err := os.Remove(filepath.Join(broken.Dir, "meta.json")); err != nil {
+		t.Fatal(err)
+	}
+	good, err := s.Write(Meta{Device: "fw01"}, docs(t, false), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ids, _ := s.List("fw01")
+	if strings.Join(ids, ",") != good.ID+","+broken.ID {
+		t.Errorf("List = %v; the unreadable snapshot is the one kept without a configuration", ids)
+	}
+	failed(t, s, 1)
+	if ids, _ = s.List("fw01"); slices.Contains(ids, broken.ID) || !slices.Contains(ids, good.ID) {
+		t.Errorf("List = %v; a newer failed fetch replaces the unreadable one", ids)
 	}
 }
 

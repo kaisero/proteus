@@ -105,8 +105,9 @@ type DocumentMeta struct {
 // It writes into a hidden directory and renames it into place, so a reader never
 // sees half a snapshot. It moves latest only when the configuration arrived, because
 // nothing can be analysed without it, and then prunes the device's oldest snapshots
-// down to keep. meta.Documents may list documents that failed; Write adds an entry
-// for every document in docs that meta does not already name.
+// down to keep with a configuration and keep without. meta.Documents may list
+// documents that failed; Write adds an entry for every document in docs that meta
+// does not already name.
 func (s *Store) Write(meta Meta, docs map[string][]byte, keep int) (Snapshot, error) {
 	if !inventory.ValidName(meta.Device) {
 		return Snapshot{}, fmt.Errorf("store: device name %q is not safe as a directory name", meta.Device)
@@ -185,6 +186,10 @@ func pointLatest(devDir, id string) error {
 }
 
 // prune removes a device's oldest snapshots beyond keep, never the one latest names.
+// It counts the snapshots with a configuration and those without apart and keeps the
+// newest keep of each, so a run of failed fetches cannot remove the last snapshots
+// that can be analysed. A snapshot whose meta.json cannot be read counts as one
+// without a configuration.
 func (s *Store) prune(device string, keep int) error {
 	keep = max(keep, 1)
 	ids, err := s.List(device)
@@ -192,8 +197,11 @@ func (s *Store) prune(device string, keep int) error {
 		return err
 	}
 	latest, _ := os.Readlink(filepath.Join(s.root, device, "latest"))
-	for _, id := range ids[min(keep, len(ids)):] {
-		if id == latest {
+	kept := map[bool]int{}   // by whether the snapshot holds a configuration
+	for _, id := range ids { // newest first
+		withConfig := s.holdsConfig(device, id)
+		kept[withConfig]++
+		if kept[withConfig] <= keep || id == latest {
 			continue
 		}
 		if err := os.RemoveAll(filepath.Join(s.root, device, id)); err != nil {
@@ -201,6 +209,12 @@ func (s *Store) prune(device string, keep int) error {
 		}
 	}
 	return nil
+}
+
+// holdsConfig reports whether a snapshot can be read and holds a configuration.
+func (s *Store) holdsConfig(device, id string) bool {
+	sn, err := s.Get(device, id)
+	return err == nil && sn.Has(ConfigDoc)
 }
 
 // List returns a device's snapshot ids, newest first.

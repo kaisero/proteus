@@ -15,7 +15,7 @@ version: 1
 defaults:
   insecure_tls: true             # see "TLS" below
   timeout: 60                    # seconds per API call
-  snapshot_keep: 20              # snapshots kept per device
+  snapshot_keep: 20              # snapshots kept per device, with and without a configuration
   username: admin                # the login used to get an API key
   password_env: PANOS_PASSWORD   # the variable that holds the password
   max_snapshot_age: 24h          # answers from older snapshots carry a note
@@ -33,6 +33,10 @@ devices:
       site: vienna
     # ha_peer: fw01-b.example.net
 ```
+
+`snapshot_keep` counts two groups apart. A fetch keeps the newest N snapshots
+that hold a configuration and the newest N that do not, such as failed exports.
+It never removes the snapshot that `latest` names.
 
 ### Device fields
 
