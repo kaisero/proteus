@@ -107,6 +107,36 @@ func TestSnapshotDiffPassesOverADamagedSnapshot(t *testing.T) {
 	}
 }
 
+// With --from and --to on one snapshot past a damaged one, the note shows once.
+// With every older snapshot damaged, the hole is a failed load that names them,
+// not "only one snapshot".
+func TestSnapshotDiffNamesDamagedSnapshotsOnce(t *testing.T) {
+	t.Parallel()
+	l := newLab(t)
+	for range 3 {
+		l.write(store.Meta{Device: "fw01"}, pathlab.Read(t, fixture("firewall-lab.xml")))
+	}
+	ids, _ := l.st.List("fw01")
+	sn, _ := l.st.Get("fw01", ids[0])
+	if err := os.Remove(filepath.Join(sn.Dir, "meta.json")); err != nil {
+		t.Fatal(err)
+	}
+	fw01 := Selection{Device: []string{"fw01"}}
+	e, err := SnapshotDiff(context.Background(), l.env(), DiffInput{Selection: fw01, From: "2026-09-28T10:02:30Z", To: "2026-09-28T10:02:30Z"})
+	if err != nil || len(e.Notes) != 1 || e.Notes[0].Code != "note.snapshot-skipped" {
+		t.Errorf("one snapshot on both sides: notes %+v, %v", e.Notes, err)
+	}
+	sn, _ = l.st.Get("fw01", ids[2])
+	if err := os.Remove(filepath.Join(sn.Dir, "meta.json")); err != nil {
+		t.Fatal(err)
+	}
+	e, err = SnapshotDiff(context.Background(), l.env(), DiffInput{Selection: fw01, To: "2026-09-28T10:01:30Z"})
+	if err != nil || len(e.Holes) != 1 || e.Holes[0].Code != "gap.load-failed" ||
+		!strings.Contains(e.Holes[0].Reason, "damaged: "+ids[2]) || strings.Contains(e.Holes[0].Reason, "only one") {
+		t.Errorf("every older one damaged: holes %+v, %v", e.Holes, err)
+	}
+}
+
 // An older configuration that is there but cannot be read is a failed load, not
 // "only one snapshot".
 func TestSnapshotDiffOfAnUnreadableOlderSnapshot(t *testing.T) {

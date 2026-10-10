@@ -90,12 +90,14 @@ once, and checks again for the id after the Mkdir. Only the creator removes the
 directory, and only before its rename. Each file is synced before the rename; the
 snapshot and device directories are synced after it and before `latest` moves, and
 the device directory again after `latest`. A sync failure after the rename says
-the snapshot is stored but not synced.
+the snapshot is stored but not synced; a `latest` that cannot move, that it is
+stored but `latest` does not name it.
 `latest` moves only when `config` arrived. Retention keeps the newest
 `snapshot_keep` snapshots with `config.xml` and the newest `snapshot_keep` without
 it (an unreadable `meta.json` counts as without), and never removes the one
-`latest` names. It also removes `.<id>.partial` and `.latest-*` entries whose
-modification time is more than an hour old: what a crashed write left.
+`latest` names. It also removes `.<id>.partial` and `.latest-<id>` entries, where
+`<id>` is a snapshot id, whose modification time is more than an hour old: what a
+crashed write left.
 
 `Resolve("fw01")` is the latest snapshot, `Resolve("fw01@<id>")` one in particular.
 `Snapshot.Zones()` builds the index's `ZoneSnapshot` from the stored `interfaces`
@@ -114,8 +116,9 @@ without `meta.json` matches `ErrUnreadable` (damaged), not `ErrNoSnapshot` or
 `fs.ErrNotExist`; `snapshot list` shows it as a `gap.load-failed` hole and lists
 the rest. `AtOrBefore` passes over damaged snapshots and names them in
 `Snapshot.Skipped`; `estate.SkipNote` turns that into `note.snapshot-skipped`
-on the targets, the routing data and `snapshot diff`. `Latest` and `Get` never
-fall back.
+on the targets, the routing data and `snapshot diff`. When it skipped damaged
+snapshots and none is readable, its error matches `ErrUnreadable` only
+(`gap.load-failed`) and names them. `Latest` and `Get` never fall back.
 
 ## Build / run pointers
 

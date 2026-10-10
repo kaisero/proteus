@@ -465,11 +465,15 @@ func TestPruneRemovesOldLeftovers(t *testing.T) {
 		t.Fatal(err)
 	}
 	other := filepath.Join(dev, ".keep")
-	if err := os.WriteFile(other, nil, 0o600); err != nil {
-		t.Fatal(err)
+	notAnID := filepath.Join(dev, ".notes.partial")
+	noDot := filepath.Join(dev, "2026-09-01T00-00-00Z.partial")
+	for _, p := range []string{other, notAnID, noDot} {
+		if err := os.WriteFile(p, nil, 0o600); err != nil {
+			t.Fatal(err)
+		}
 	}
 	long := time.Now().Add(-2 * time.Hour)
-	for _, p := range []string{oldPartial, oldLink, other} {
+	for _, p := range []string{oldPartial, oldLink, other, notAnID, noDot} {
 		if err := os.Chtimes(p, long, long); err != nil {
 			t.Fatal(err)
 		}
@@ -477,10 +481,29 @@ func TestPruneRemovesOldLeftovers(t *testing.T) {
 	if _, err := s.Write(Meta{Device: "fw01"}, docs(t, false), 20); err != nil {
 		t.Fatal(err)
 	}
-	for p, want := range map[string]bool{oldPartial: false, oldLink: false, fresh: true, other: true} {
+	for p, want := range map[string]bool{
+		oldPartial: false, oldLink: false, fresh: true, other: true, notAnID: true, noDot: true,
+	} {
 		if _, err := os.Stat(p); (err == nil) != want {
 			t.Errorf("%s: kept %v, want %v", filepath.Base(p), err == nil, want)
 		}
+	}
+}
+
+// A latest that cannot be moved leaves the snapshot stored, and the error says
+// so.
+func TestAFailedLatestNamesTheStoredSnapshot(t *testing.T) {
+	t.Parallel()
+	s := fixed(t)
+	if err := os.MkdirAll(filepath.Join(s.root, "fw01", "latest", "x"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	_, err := s.Write(Meta{Device: "fw01"}, docs(t, false), 20)
+	if err == nil || !strings.HasPrefix(err.Error(), "store: fw01@2026-09-28T10-00-00Z is stored but latest does not name it: ") {
+		t.Errorf("a latest that cannot move: %v", err)
+	}
+	if _, err := s.Get("fw01", "2026-09-28T10-00-00Z"); err != nil {
+		t.Errorf("the snapshot: %v", err)
 	}
 }
 
@@ -652,7 +675,8 @@ func TestAtOrBeforeSkipsADamagedSnapshot(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err = s.AtOrBefore("fw01", later)
-	if !errors.Is(err, ErrNoSnapshot) || !strings.HasSuffix(err.Error(), "; damaged: "+c.ID+", "+b.ID+", "+a.ID) {
+	if !errors.Is(err, ErrUnreadable) || errors.Is(err, ErrNoSnapshot) || errors.Is(err, ErrNoConfig) ||
+		!strings.HasSuffix(err.Error(), "; damaged: "+c.ID+", "+b.ID+", "+a.ID) {
 		t.Errorf("all damaged: %v", err)
 	}
 }

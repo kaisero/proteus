@@ -191,7 +191,7 @@ func (s *Store) Write(meta Meta, docs map[string][]byte, keep int) (Snapshot, er
 	}
 	if _, ok := docs[ConfigDoc]; ok {
 		if err := pointLatest(devDir, id); err != nil {
-			return Snapshot{}, err
+			return Snapshot{}, fmt.Errorf("store: %s@%s is stored but latest does not name it: %w", meta.Device, id, err)
 		}
 		if err := syncDir(devDir); err != nil {
 			return Snapshot{}, notSynced(err)
@@ -250,11 +250,11 @@ func pointLatest(devDir, id string) error {
 	tmp := filepath.Join(devDir, ".latest-"+id)
 	_ = os.Remove(tmp)
 	if err := os.Symlink(id, tmp); err != nil {
-		return fmt.Errorf("store: %w", err)
+		return err
 	}
 	if err := os.Rename(tmp, filepath.Join(devDir, "latest")); err != nil {
 		_ = os.Remove(tmp)
-		return fmt.Errorf("store: %w", err)
+		return err
 	}
 	return nil
 }
@@ -302,14 +302,29 @@ func removeLeftovers(devDir string, now time.Time) {
 		return
 	}
 	for _, e := range entries {
-		n := e.Name()
-		if !strings.HasPrefix(n, ".latest-") && (!strings.HasPrefix(n, ".") || !strings.HasSuffix(n, ".partial")) {
+		if !leftover(e.Name()) {
 			continue
 		}
 		if fi, err := e.Info(); err == nil && now.Sub(fi.ModTime()) > leftoverAge {
-			_ = os.RemoveAll(filepath.Join(devDir, n))
+			_ = os.RemoveAll(filepath.Join(devDir, e.Name()))
 		}
 	}
+}
+
+// leftover reports whether a name is one Write gives a temporary entry:
+// .<id>.partial or .latest-<id>, with a snapshot id.
+func leftover(name string) bool {
+	id, ok := strings.CutPrefix(name, ".latest-")
+	if !ok {
+		var dot, partial bool
+		id, dot = strings.CutPrefix(name, ".")
+		id, partial = strings.CutSuffix(id, ".partial")
+		if !dot || !partial {
+			return false
+		}
+	}
+	_, err := time.Parse(idLayout, id)
+	return err == nil
 }
 
 // holdsConfig reports whether a snapshot can be read and holds a configuration.
@@ -422,7 +437,9 @@ func (s *Store) AtOrBefore(device string, t time.Time) (Snapshot, error) {
 	msg := fmt.Sprintf("store: %s has no snapshot with a configuration at or before %s",
 		device, t.UTC().Format(time.RFC3339))
 	if len(skipped) > 0 {
-		msg += fmt.Sprintf("; damaged: %s", strings.Join(skipped, ", "))
+		// Damaged snapshots are there but cannot be read: a failed read, not a
+		// missing snapshot or configuration.
+		return Snapshot{}, mark(ErrUnreadable, fmt.Errorf("%s; damaged: %s", msg, strings.Join(skipped, ", ")))
 	}
 	err = mark(ErrNoSnapshot, errors.New(msg))
 	if early {

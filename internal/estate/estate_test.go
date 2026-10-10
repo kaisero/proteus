@@ -327,3 +327,20 @@ func TestNetworkNotesASkippedSnapshot(t *testing.T) {
 		t.Errorf("notes = %v", d.Notes)
 	}
 }
+
+// The note names one skipped snapshot or several, in words that fit.
+func TestSkipNote(t *testing.T) {
+	t.Parallel()
+	if _, ok := SkipNote(store.Snapshot{ID: "c"}); ok {
+		t.Error("a snapshot that skipped none has no note")
+	}
+	for skipped, want := range map[string]string{
+		"b":   "snapshot b skipped: its meta.json cannot be read; a answers",
+		"c,b": "snapshots c, b skipped: their meta.json files cannot be read; a answers",
+	} {
+		n, ok := SkipNote(store.Snapshot{ID: "a", Skipped: strings.Split(skipped, ",")})
+		if !ok || n.Code != "note.snapshot-skipped" || n.Text != want {
+			t.Errorf("%s: %+v %v", skipped, n, ok)
+		}
+	}
+}

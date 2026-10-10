@@ -103,7 +103,11 @@ func SnapshotDiff(ctx context.Context, env Env, in DiffInput) (Envelope[DiffInpu
 			continue
 		}
 		e.Read = append(e.Read, d+"@"+older.ID, d+"@"+newer.ID)
-		for _, sn := range []store.Snapshot{newer, older} {
+		sides := []store.Snapshot{newer, older}
+		if older.ID == newer.ID { // --from at or after the snapshot --to picks
+			sides = sides[:1]
+		}
+		for _, sn := range sides {
 			if n, ok := estate.SkipNote(sn); ok {
 				e.Notes = append(e.Notes, NoteOf(d, "", n))
 			}

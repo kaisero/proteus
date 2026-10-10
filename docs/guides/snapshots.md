@@ -138,7 +138,8 @@ Every question takes `--at <time>`. It reads each device's newest snapshot at or
 before that time. A date means the end of that day.
 
 A damaged snapshot, whose `meta.json` cannot be read, is passed over: the answer
-reads the next older one and carries a note that names the skipped one. Without
+reads the next older one and carries a note that names the skipped one. When no
+older one can be read, the device is a hole that names the damaged ones. Without
 `--at`, a damaged `latest` is a hole; proteus does not fall back to an older
 snapshot.
 

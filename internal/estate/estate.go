@@ -265,8 +265,12 @@ func SkipNote(sn store.Snapshot) (reason.Reason, bool) {
 	if len(sn.Skipped) == 0 {
 		return reason.Reason{}, false
 	}
-	return reason.New("note.snapshot-skipped", fmt.Sprintf("snapshot %s skipped: its meta.json cannot be read; %s answers",
-		strings.Join(sn.Skipped, ", "), sn.ID)), true
+	text := fmt.Sprintf("snapshot %s skipped: its meta.json cannot be read; %s answers", sn.Skipped[0], sn.ID)
+	if len(sn.Skipped) > 1 {
+		text = fmt.Sprintf("snapshots %s skipped: their meta.json files cannot be read; %s answers",
+			strings.Join(sn.Skipped, ", "), sn.ID)
+	}
+	return reason.New("note.snapshot-skipped", text), true
 }
 
 // StaleNote is the note on a target whose snapshot is older than the limit.
