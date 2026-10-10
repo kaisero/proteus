@@ -304,6 +304,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The sample containers stop cleanly.** `docker compose down` now lets
+  proteus-mcp finish its running calls, and proteus-fetch stops its fetch at
+  once and exits 143. Before, the fetch container ignored SIGTERM until Docker
+  killed it after 10 seconds, and the server's running calls got only those 10
+  seconds.
 - **`snapshot list` shows the good snapshots when one is damaged.** A snapshot
   whose `meta.json` is missing or unreadable becomes a hole, and the list goes
   on. Before, one such snapshot stopped the command with an error and no list.

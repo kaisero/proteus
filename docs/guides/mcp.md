@@ -226,6 +226,14 @@ dropped. The server image has no shell. The comments in
 their owner and their mode. Until the first fetch writes the export, proteus-mcp
 exits 2 and restarts.
 
+**Give the server time to stop.** On SIGTERM the server waits up to
+`call_timeout` for the running calls, and an answer is written at most
+`call_timeout` + `max_wait` + 10 s after its request. Set the container's stop
+grace period to at least `call_timeout` + `max_wait` + 20 s: 90 s with the
+defaults, as `stop_grace_period` in the sample. A shorter grace lets the
+platform kill the server while calls still answer. The fetch container's script
+passes SIGTERM to the running `proteus fetch` and exits 143 when it ends.
+
 `deploy/portkey.md` registers the server in the Portkey MCP gateway: the URL, the
 static `Authorization: Bearer <token>` header, the identity forwarding through
 `X-User-Claims`, and an address filter at the proxy.
