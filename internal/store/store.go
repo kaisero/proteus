@@ -9,6 +9,7 @@
 package store
 
 import (
+	"cmp"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -140,7 +141,7 @@ func (s *Store) Write(meta Meta, docs map[string][]byte, keep int) (Snapshot, er
 	slices.Sort(names)
 	for _, n := range names {
 		file := n + ".xml"
-		if err := os.WriteFile(filepath.Join(tmp, file), docs[n], 0o600); err != nil {
+		if err := writeFile(filepath.Join(tmp, file), docs[n]); err != nil {
 			return Snapshot{}, fmt.Errorf("store: %w", err)
 		}
 		meta.Documents = recordFile(meta.Documents, n, file, len(docs[n]))
@@ -149,7 +150,7 @@ func (s *Store) Write(meta Meta, docs map[string][]byte, keep int) (Snapshot, er
 	if err != nil {
 		return Snapshot{}, fmt.Errorf("store: %w", err)
 	}
-	if err := os.WriteFile(filepath.Join(tmp, "meta.json"), mb, 0o600); err != nil {
+	if err := writeFile(filepath.Join(tmp, "meta.json"), mb); err != nil {
 		return Snapshot{}, fmt.Errorf("store: %w", err)
 	}
 	if err := os.Rename(tmp, final); err != nil {
@@ -160,10 +161,37 @@ func (s *Store) Write(meta Meta, docs map[string][]byte, keep int) (Snapshot, er
 			return Snapshot{}, err
 		}
 	}
+	// The renames live in the directories: sync them, so a crash cannot lose a
+	// snapshot that Write reported stored.
+	if err := cmp.Or(syncDir(final), syncDir(devDir)); err != nil {
+		return Snapshot{}, fmt.Errorf("store: %w", err)
+	}
 	if err := s.prune(meta.Device, keep); err != nil {
 		return Snapshot{}, err
 	}
 	return Snapshot{Device: meta.Device, ID: id, Dir: final, Meta: meta}, nil
+}
+
+// writeFile writes a file and syncs it, so its data reaches the disk before the
+// snapshot is renamed into place.
+func writeFile(path string, b []byte) error {
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
+	if err != nil {
+		return err
+	}
+	_, err = f.Write(b)
+	return cmp.Or(err, f.Sync(), f.Close())
+}
+
+// syncDir flushes a directory's entries to disk. It is the same as the one in
+// internal/inventory; one small function does not earn a package of its own,
+// and inventory's API is the inventory file.
+func syncDir(dir string) error {
+	d, err := os.Open(dir)
+	if err != nil {
+		return err
+	}
+	return cmp.Or(d.Sync(), d.Close())
 }
 
 // recordFile fills in a document's file and size, adding an entry when the caller

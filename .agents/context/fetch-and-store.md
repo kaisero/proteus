@@ -86,7 +86,9 @@ unreadable".
 The root is `$PROTEUS_STORE`, else `~/.local/share/proteus`. `Write` fills a
 hidden directory and renames it into place, so a reader never sees half a snapshot.
 It makes that directory with `os.Mkdir`, so a second writer of the same id fails at
-once and only the creator removes it.
+once and only the creator removes it. Each file is synced before the rename, and
+the snapshot and device directories after it, so a crash cannot lose a stored
+snapshot.
 `latest` moves only when `config` arrived. Retention keeps the newest
 `snapshot_keep` snapshots with `config.xml` and the newest `snapshot_keep` without
 it (an unreadable `meta.json` counts as without), and never removes the one

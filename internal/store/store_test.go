@@ -286,6 +286,47 @@ func TestWriteCannotMakeItsDirectories(t *testing.T) {
 	}
 }
 
+// Write syncs each file and the directories it renames into. A test cannot see
+// what reached the disk; it checks that the path runs and stores the files whole,
+// and that the helpers report what they cannot open.
+func TestWriteSyncsWhatItStores(t *testing.T) {
+	t.Parallel()
+	s := open(t)
+	sn, err := s.Write(Meta{Device: "fw01"}, docs(t, true), 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, d := range sn.Meta.Documents {
+		b, err := os.ReadFile(sn.Path(d.Name))
+		if err != nil || len(b) == 0 || len(b) != d.Bytes {
+			t.Errorf("%s: %d bytes of %d, %v", d.Name, len(b), d.Bytes, err)
+		}
+	}
+	if len(sn.Meta.Documents) != 3 {
+		t.Errorf("documents = %+v", sn.Meta.Documents)
+	}
+	missing := filepath.Join(t.TempDir(), "absent")
+	if err := syncDir(missing); err == nil {
+		t.Error("syncDir of an absent directory must fail")
+	}
+	if err := writeFile(filepath.Join(missing, "x.xml"), nil); err == nil {
+		t.Error("writeFile into an absent directory must fail")
+	}
+}
+
+// A document that cannot be written fails the write, and nothing is left.
+func TestWriteFailsOnADocumentItCannotWrite(t *testing.T) {
+	t.Parallel()
+	s := open(t)
+	if _, err := s.Write(Meta{Device: "fw01"}, map[string][]byte{"no/such": []byte("<x/>")}, 20); err == nil {
+		t.Error("a document name that is no file name must fail")
+	}
+	entries, _ := os.ReadDir(filepath.Join(s.root, "fw01"))
+	if len(entries) != 0 {
+		t.Errorf("a failed write left %v", entries)
+	}
+}
+
 // Writers of one id that race each other: one stores the snapshot whole, every
 // other fails, and no temporary directory is left.
 func TestConcurrentWritersOfOneID(t *testing.T) {
