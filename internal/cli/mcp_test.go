@@ -495,13 +495,27 @@ func TestMCPReadsTheUsersOnce(t *testing.T) {
 	if code := s.end(); code != 0 {
 		t.Errorf("exit %d", code)
 	}
-	// A bad file stops the start.
-	for _, tc := range []struct {
+	// A bad file stops the start: missing, unreadable or invalid.
+	dir := filepath.Join(c.dir, "users-dir")
+	if err := os.Mkdir(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	cases := []struct {
 		name, path, msg string
 	}{
 		{"missing", filepath.Join(c.dir, "none.json"), "PROTEUS_USERS: open " + filepath.Join(c.dir, "none.json")},
+		{"a directory", dir, "PROTEUS_USERS: " + dir + ": user snapshot"},
 		{"invalid", users, "PROTEUS_USERS: " + users + ": user snapshot"},
-	} {
+	}
+	if os.Geteuid() != 0 {
+		// root reads a file of mode 0000.
+		locked := filepath.Join(c.dir, "locked.json")
+		if err := os.WriteFile(locked, []byte(read(t, "../../testdata/users-snapshot.json")), 0o000); err != nil {
+			t.Fatal(err)
+		}
+		cases = append(cases, struct{ name, path, msg string }{"unreadable", locked, "PROTEUS_USERS: open " + locked + ": permission denied"})
+	}
+	for _, tc := range cases {
 		cc := *c
 		cc.env = maps.Clone(c.env)
 		cc.env["PROTEUS_USERS"] = tc.path

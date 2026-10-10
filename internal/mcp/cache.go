@@ -194,7 +194,7 @@ func (c *Cache) config(ctx context.Context, sn store.Snapshot) (*configEntry, er
 		path := sn.Path(store.ConfigDoc)
 		cfg, rep, err := c.load(path)
 		if err != nil {
-			if _, io := errors.AsType[*fs.PathError](err); !io {
+			if _, ioErr := errors.AsType[*fs.PathError](err); !ioErr {
 				c.put(k, failedLoad{err}, failedBytes, "")
 			}
 			return nil, err

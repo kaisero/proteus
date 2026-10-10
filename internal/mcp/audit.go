@@ -195,8 +195,8 @@ type auditLine struct {
 	Identity       any             `json:"identity"`
 	Tool           string          `json:"tool"`
 	Input          json.RawMessage `json:"input"`
-	Verdict        []string        `json:"verdict"`
-	VerdictCount   int             `json:"verdict_count"`
+	Verdict        []string        `json:"verdict"`       // the summary line and the first 20 result lines
+	VerdictCount   int             `json:"verdict_count"` // the answer lines the client received; with limit, the cut answer's
 	Codes          []reason.Code   `json:"codes"`
 	Snapshots      []string        `json:"snapshots"`
 	DurationMS     int64           `json:"duration_ms"`

@@ -969,7 +969,7 @@ func TestVerdictOf(t *testing.T) {
 		{map[string]any{"results": []any{}}, 0, 0},
 	} {
 		got, n := viewOf(tc.doc).verdict()
-		if len(got) != tc.kept || n != tc.count || (tc.kept > 0 && got[0] != viewOf(tc.doc).answers()[0]) {
+		if len(got) != tc.kept || n != tc.count || !slices.Equal(got, viewOf(tc.doc).answers()[:tc.kept]) {
 			t.Errorf("%v: kept %d of %d", tc.doc, len(got), n)
 		}
 	}

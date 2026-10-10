@@ -284,7 +284,7 @@ container platform collects and keeps them (`--http` only):
 | `identity` | the `audit_claims` of the identity header, each cut to 256 bytes; the operating system user over stdio; `unknown` when none is found |
 | `tool`, `input` | the tool and its inputs as the client sent them |
 | `verdict` | the answer lines: the summary line and the first 20 result lines |
-| `verdict_count` | the number of answer lines before the cut; more than the lines in `verdict` when a broad answer was cut |
+| `verdict_count` | the number of answer lines the client received; more than the lines in `verdict` when a broad answer was cut. With `limit`, it counts the lines of the shortened answer, not every match |
 | `codes` | the reason codes of the holes, unresolved entries and notes |
 | `snapshots` | the snapshots that the answer read, as `<member>@<snapshot id>`: for an HA pair the member whose snapshot answered, for a single device the device |
 | `duration_ms` | the time the call took |
@@ -306,13 +306,15 @@ never reaches the audit or a log.
 each device resolved to, what each stage kept, and at the end the status, the code
 and the duration. A panic's stack goes there too. The work of a call that timed
 out goes on until it returns; its log stays open for it and then also holds what
-the work logged late, when it returned, and the stack of a later panic. Any other
-call keeps its log in memory and drops it: its answer explains itself in its
-reasons and codes. With
-`--log-level debug` (or `log_level: debug`) every call writes its run log. The
-newest `log_keep` logs stay. The server process also writes one CLI run log in the
-CLI's log directory, with its start, settings, the refusal counts and its exit. A
-call that the server refuses as busy gets an audit line and no run log.
+the work logged late, when it returned, and the stack of a later panic. On
+SIGTERM the server waits for such work at most `call_timeout` more; what the work
+logs after that is lost, and the lines written before stay. Any other call keeps
+its log in memory and drops it: its answer explains itself in its reasons and
+codes. With `--log-level debug` (or `log_level: debug`) every call writes its run
+log. The newest `log_keep` logs stay. The server process also writes one CLI run
+log in the CLI's log directory, with its start, settings, the refusal counts and
+its exit. A call that the server refuses as busy gets an audit line and no run
+log.
 
 ## Limits
 

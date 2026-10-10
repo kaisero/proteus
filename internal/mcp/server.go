@@ -103,7 +103,8 @@ type Call struct {
 	// Answers are the answer lines, the summary's first, cut after the
 	// first 20 results' lines.
 	Answers []string
-	// AnswerCount is the number of answer lines before the cut.
+	// AnswerCount is the number of answer lines the client received,
+	// before the cut to 20 results; with limit, those of the cut answer.
 	AnswerCount int
 	// Codes are the reason codes of the holes, unresolved entries and notes.
 	Codes []reason.Code
@@ -294,15 +295,19 @@ func (m middleware) receive(next sdk.MethodHandler) sdk.MethodHandler {
 		var handed chan struct{}
 		defer func() {
 			c.Duration = m.now().Sub(c.Time)
+			// The run log is ended, and handed closed, also when the audit
+			// panics: the work of a timed-out call waits for handed.
+			defer func() {
+				if handed == nil {
+					m.closeLog(log, c)
+					return
+				}
+				defer close(handed)
+				m.endLog(log, c)
+			}()
 			if m.audit != nil {
 				m.audit.Audit(*c)
 			}
-			if handed != nil {
-				m.endLog(log, c)
-				close(handed)
-				return
-			}
-			m.closeLog(log, c)
 		}()
 		if m.lim != nil {
 			if err := m.lim.enter(ctx); err != nil {
@@ -434,10 +439,14 @@ type outcome struct {
 // until it returns. The work fills its own record; the caller's takes it
 // when the work answers in time.
 //
-// After a timeout, bounded returns handed, and the work owns the run log
-// log: once the caller closes handed, having written its own lines, the
+// After a timeout, bounded returns handed, and the work owns the call's run
+// log: once the caller has written its own lines and closed handed, the
 // work writes that it returned, its error and a panic's stack, and closes
-// the log. A slow call's log so keeps what came late.
+// the log. So a slow call's log keeps what came late.
+//
+// The slot is freed once on every path: before the outcome is handed over
+// when the work answers in time, so the caller that has its answer finds the
+// slot free; after the log is closed when the call timed out.
 func (m middleware) bounded(ctx context.Context, next sdk.MethodHandler, method string, req sdk.Request, c *Call, log *runlog.Logger) (res sdk.Result, handed chan struct{}, err error) {
 	work, cancel := context.WithTimeout(ctx, m.lim.timeout)
 	done := make(chan outcome, 1)
@@ -450,8 +459,6 @@ func (m middleware) bounded(ctx context.Context, next sdk.MethodHandler, method 
 	)
 	o := outcome{call: *c}
 	go func() {
-		defer m.lim.leave()
-		defer cancel()
 		func() {
 			// Only a strict server's panic gets here: handle recovers the rest.
 			defer func() {
@@ -464,11 +471,15 @@ func (m middleware) bounded(ctx context.Context, next sdk.MethodHandler, method 
 		}()
 		mu.Lock()
 		if !late {
+			cancel()
+			m.lim.leave()
 			done <- o
 			mu.Unlock()
 			return
 		}
 		mu.Unlock()
+		defer m.lim.leave()
+		defer cancel()
 		<-handed
 		m.lateLog(log, &o.call, o.call.Time)
 		if o.panicked {

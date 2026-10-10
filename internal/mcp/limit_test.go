@@ -138,6 +138,9 @@ func TestATimeoutKeepsTheSlot(t *testing.T) {
 		t.Errorf("audit %+v", c)
 	}
 	eventually(t, "the work sees the deadline", sawDeadline.Load)
+	// The next calls must answer in time, also under a loaded -race run.
+	// Only this goroutine reads the timeout: each call reads it as it starts.
+	m.lim.timeout = time.Minute
 	// The slot is still held: the next call is busy at once.
 	fast := func(ctx context.Context, _ string, _ sdk.Request) (sdk.Result, error) {
 		callOf(ctx).set(func(c *Call) { c.Status = StatusOK })
@@ -156,6 +159,11 @@ func TestATimeoutKeepsTheSlot(t *testing.T) {
 	}
 	if c := rec.last(t); c.Status != StatusOK {
 		t.Errorf("audit after %+v", c)
+	}
+	// The work frees its slot before it hands its answer over: the next
+	// call finds it free, with no queue to wait in.
+	if len(m.lim.slots) != 0 {
+		t.Error("the slot of an answered call is still held")
 	}
 	rec.mu.Lock()
 	n := len(rec.calls)
