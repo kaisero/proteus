@@ -401,3 +401,51 @@ func TestANameWithSeveralKinds(t *testing.T) {
 		t.Errorf("two runs differ:\n%s\n--\n%s", a, b)
 	}
 }
+
+// Exact and within compare an object's whole value. The range 10.0.0.2-10.0.0.9
+// is stored as 10.0.0.2/31, 10.0.0.4/30 and 10.0.0.8/31: two of those lie inside
+// 10.0.0.0/29 and one equals 10.0.0.4/30, but the range is neither within the
+// first nor exactly the second. A wildcard stays unresolved in both modes.
+func TestExactAndWithinTestTheWholeObject(t *testing.T) {
+	t.Parallel()
+	cfg, _, err := config.Load("../../testdata/config/firewall-range.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	idx, err := index.New(cfg, config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}, resolve.Security)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		term string
+		mode Mode
+		want []string
+	}{
+		{"10.0.0.0/29", Within, []string{"h-5 10.0.0.5/32", "n-29 10.0.0.0/29", "n-30 10.0.0.4/30", "r-4-7 10.0.0.4/30"}},
+		{"10.0.0.4/30", Exact, []string{"n-30 10.0.0.4/30", "r-4-7 10.0.0.4/30"}},
+		{"10.0.0.0/28", Within, []string{"h-5 10.0.0.5/32", "n-29 10.0.0.0/29", "n-30 10.0.0.4/30", "r-2-9 10.0.0.2-10.0.0.9", "r-4-7 10.0.0.4/30"}},
+		{"10.0.0.2-10.0.0.9", Exact, []string{"r-2-9 10.0.0.2-10.0.0.9"}},
+		{"10.0.0.2-10.0.0.9", Within, []string{"h-5 10.0.0.5/32", "n-30 10.0.0.4/30", "r-2-9 10.0.0.2-10.0.0.9", "r-4-7 10.0.0.4/30"}},
+		{"10.0.0.5", Exact, []string{"h-5 10.0.0.5/32"}},
+		{"10.0.0.6/31", Within, nil},
+	} {
+		fs, un, err := Run(cfg, idx, Query{Term: tc.term, Mode: tc.mode, Show: []Stage{StageObject}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var got []string
+		for _, f := range fs {
+			got = append(got, f.Name+" "+f.Via)
+		}
+		if strings.Join(got, "|") != strings.Join(tc.want, "|") {
+			t.Errorf("%s %v: got %v, want %v", tc.term, tc.mode, got, tc.want)
+		}
+		if len(un) != 1 || un[0].Value != "wc" {
+			t.Errorf("%s %v: unresolved %+v, want the wildcard", tc.term, tc.mode, un)
+		}
+	}
+	// The rule on the range is not reached through an object the term does not hold.
+	if fs := run(t, "firewall-range.xml", "vsys1", Query{Term: "10.0.0.0/29", Mode: Within}); has(fs, "reference security rule to-range") {
+		t.Errorf("to-range reached:\n%s", dump(fs))
+	}
+}

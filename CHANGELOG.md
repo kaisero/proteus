@@ -298,6 +298,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`search --within` and `--exact` now compare an address object's whole value.**
+  An address range matched when one part of it did: `10.0.0.2-10.0.0.9` was found
+  within `10.0.0.0/29` and exactly `10.0.0.4/30`, and the rules using it with it.
 - **A name used by several kinds of object now counts as each of them.** When a
   tag and an address group, or an address group and a service group, shared a
   name, `search` kept only one kind: it missed the references to the other and

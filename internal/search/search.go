@@ -197,28 +197,62 @@ func (s *searcher) objects() {
 
 // addressObjects matches an address, prefix or range term against address objects.
 func (s *searcher) addressObjects() {
+	if s.q.Mode == Exact || s.q.Mode == Within {
+		s.wholeObjects()
+		s.wildcards()
+		return
+	}
 	for _, p := range s.term.prefixes {
 		var ms []index.Match
-		if s.term.single && s.q.Mode == Auto {
+		if s.term.single {
 			ms = s.idx.Containing(p.Addr())
 		} else {
 			ms = s.idx.Overlapping(p)
 		}
 		for _, m := range ms {
-			switch s.q.Mode {
-			case Exact:
-				if m.Prefix != p {
-					continue
-				}
-			case Within:
-				if m.Prefix.Bits() < p.Bits() || !p.Contains(m.Prefix.Addr()) {
-					continue
-				}
-			}
 			s.addObject("address", m.Name, m.Scope, m.Prefix.String())
 		}
 	}
 	s.wildcards()
+}
+
+// wholeObjects is Exact and Within: they compare an object's whole value with
+// the term, not one piece of it. A range is stored as the prefixes that cover
+// it, and one of them can match the term while the others lie outside it.
+// Exact wants the same prefixes as the term; Within wants every prefix inside
+// the term. Both are written as the fewest aligned prefixes, so an aligned
+// prefix inside the term lies inside one of the term's.
+func (s *searcher) wholeObjects() {
+	pieces := map[string][]netip.Prefix{}
+	values := map[string]string{}
+	for _, o := range resolve.ObjectsInScope(s.cfg, s.sc, "address") {
+		pieces[o.Name], values[o.Name] = index.PrefixesOf(o.Value), o.Value
+	}
+	seen := map[string]bool{}
+	for _, p := range s.term.prefixes {
+		for _, m := range s.idx.Overlapping(p) {
+			if seen[m.Name] {
+				continue
+			}
+			seen[m.Name] = true
+			whole := pieces[m.Name]
+			switch s.q.Mode {
+			case Exact:
+				if !slices.Equal(whole, s.term.prefixes) {
+					continue
+				}
+			case Within:
+				if !s.term.holds(whole) {
+					continue
+				}
+			}
+			via := m.Prefix.String()
+			if len(whole) > 1 {
+				via = values[m.Name]
+			}
+			s.addObject("address", m.Name, m.Scope, via)
+		}
+	}
 }
 
 // wildcards matches the term against the wildcard address objects, which match by
@@ -393,6 +427,18 @@ func (s *searcher) result() []Finding {
 type term struct {
 	prefixes []netip.Prefix // an address, prefix or range; nil otherwise
 	single   bool           // one address
+}
+
+// holds says whether every prefix lies inside one of the term's.
+func (t term) holds(ps []netip.Prefix) bool {
+	for _, q := range ps {
+		if !slices.ContainsFunc(t.prefixes, func(p netip.Prefix) bool {
+			return p.Bits() <= q.Bits() && p.Contains(q.Addr())
+		}) {
+			return false
+		}
+	}
+	return len(ps) > 0
 }
 
 func parseTerm(s string) term {
