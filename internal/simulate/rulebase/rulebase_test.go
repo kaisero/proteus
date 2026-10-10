@@ -126,7 +126,12 @@ func TestSidesAndHolds(t *testing.T) {
 	if len(un) != 0 || src.GetCardinality() != 4 || !dst.Contains(1) {
 		t.Errorf("src %v, dst %v, unresolved %v", src.ToArray(), dst.ToArray(), un)
 	}
-	if !v.Holds("dc01", ip("10.1.10.100")) || v.Holds("dc01", ip("10.1.10.101")) || !v.Holds("10.0.0.0/8", ip("10.1.1.1")) {
+	addrs := v.Addresses()
+	if addrs["dc01"] != "10.1.10.100" {
+		t.Errorf("Addresses()[dc01] = %q", addrs["dc01"])
+	}
+	if !addrs.Holds("dc01", ip("10.1.10.100")) || addrs.Holds("dc01", ip("10.1.10.101")) ||
+		!addrs.Holds("10.0.0.0/8", ip("10.1.1.1")) || addrs.Holds("no-such-object", ip("10.1.1.1")) {
 		t.Error("Holds")
 	}
 }

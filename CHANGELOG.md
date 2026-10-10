@@ -304,6 +304,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **NAT answers quickly on a configuration with many bi-directional rules.**
+  One flow against 300 bi-directional rules among 20,000 address objects now
+  takes about 6 ms and 27 MB (`BenchmarkMatchBidirectional`). Before, each
+  implicit rule read every address object again, which took 1.4 s and 7 GB.
 - **Long group cycles and large group trees no longer stall a question.** Each
   group's members and doubts are worked out once per index build, and groups
   that hold each other are joined first. Before, one cycle of 5,000 address

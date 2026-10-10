@@ -97,10 +97,15 @@ func Match(in Input) MatchResult {
 	src, dst, un := v.Sides(resolve.NAT, sourceAddr(in.Flow.Source.Addrs), in.Flow.Destination.Addrs[0], noNegation)
 	out.Unresolved = append(out.Unresolved, un...)
 	out.Fidelity = simulate.Weakest(out.Fidelity, rulebase.Certainty(resolve.NAT, un))
-	svc := services(v)
+	env := matchEnv{vsys: v, svc: services(v)}
+	// Only an implicit rule asks which address an object holds: read the
+	// objects once, and only for a rulebase that has one.
+	if slices.ContainsFunc(rules, func(r Rule) bool { return r.explicit < 0 }) {
+		env.addrs = v.Addresses()
+	}
 	for i := range rules {
 		r := &rules[i]
-		why, doubts := r.fits(in, out.PreNAT, src, dst, v, svc)
+		why, doubts := r.fits(in, out.PreNAT, src, dst, env)
 		switch {
 		case why != "":
 			out.Excluded = append(out.Excluded, Excluded{Rule: r.label(), Field: why})
@@ -148,9 +153,17 @@ func (r *Rule) label() string {
 	return r.Name
 }
 
+// matchEnv is what every rule of one match reads: the vsys, its services and
+// service groups by kind and name, and its address objects.
+type matchEnv struct {
+	vsys  rulebase.Vsys
+	svc   map[string]string
+	addrs rulebase.Addresses
+}
+
 // fits decides one rule: a field that excludes it, or a doubt, or neither (a sure
 // match).
-func (r *Rule) fits(in Input, pre simulate.Forward, src, dst *roaring.Bitmap, v rulebase.Vsys, svc map[string]string) (string, simulate.Reasons) {
+func (r *Rule) fits(in Input, pre simulate.Forward, src, dst *roaring.Bitmap, env matchEnv) (string, simulate.Reasons) {
 	if r.Disabled {
 		return "disabled", nil
 	}
@@ -175,7 +188,7 @@ func (r *Rule) fits(in Input, pre simulate.Forward, src, dst *roaring.Bitmap, v 
 	if r.ToInterface != "any" && r.ToInterface != "" && r.ToInterface != pre.Out.Interface {
 		return "to-interface " + r.ToInterface + " ≠ " + pre.Out.Interface, nil
 	}
-	if why, doubt := serviceFits(r.Service, in.Flow, svc, v.Config); why != "" {
+	if why, doubt := serviceFits(r.Service, in.Flow, env.svc, env.vsys.Config); why != "" {
 		return why, nil
 	} else if doubt.Text != "" {
 		doubts = append(doubts, doubt)
@@ -192,7 +205,7 @@ func (r *Rule) fits(in Input, pre simulate.Forward, src, dst *roaring.Bitmap, v 
 		if !dst.Contains(pos) {
 			return "destination", nil
 		}
-	} else if !v.Holds(first(r.Fields["destination"]), in.Flow.Destination.Addrs[0]) {
+	} else if !env.addrs.Holds(first(r.Fields["destination"]), in.Flow.Destination.Addrs[0]) {
 		return "destination", nil
 	}
 	return "", doubts

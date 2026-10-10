@@ -301,13 +301,15 @@ func NewTopology(devs []simulate.DeviceData) *Topology
 
 <!-- GENERATED:api ./internal/simulate/rulebase -->
 ```go
+type Addresses map[string]string
 type PBFMatch struct{ ... }
 type PBFPassed struct{ ... }
 type Vsys struct{ ... }
 type ZoneRefusal struct{ ... }
 
+func (m Addresses) Holds(value string, a netip.Addr) bool
 func (p PBFPassed) String() string
-func (v Vsys) Holds(value string, a netip.Addr) bool
+func (v Vsys) Addresses() Addresses
 func (v Vsys) PBF(src, dst netip.Addr, proto string, port uint16, in simulate.Port) PBFMatch
 func (v Vsys) Sides(rb resolve.Rulebase, src, dst netip.Addr, negated func(int) (bool, bool)) (
 func Certainty(rb resolve.Rulebase, unresolved []index.Unresolved) simulate.Fidelity

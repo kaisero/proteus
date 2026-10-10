@@ -122,13 +122,27 @@ func withoutGap(unresolved []index.Unresolved) []index.Unresolved {
 	return out
 }
 
-// Holds reports whether an address, or an address object's value, holds a.
-func (v Vsys) Holds(value string, a netip.Addr) bool {
+// Addresses maps the name of each address object the vsys sees to its value.
+// Reading the objects costs a walk of the configuration, so a caller reads them
+// once per question and asks Holds of the map.
+type Addresses map[string]string
+
+// Addresses returns the address objects the vsys sees.
+func (v Vsys) Addresses() Addresses {
+	objs := resolve.ObjectsInScope(v.Config, v.Scope, "address")
+	out := make(Addresses, len(objs))
+	for _, o := range objs {
+		out[o.Name] = o.Value
+	}
+	return out
+}
+
+// Holds reports whether an address, or the value of the address object of that
+// name, holds a.
+func (m Addresses) Holds(value string, a netip.Addr) bool {
 	vals := []string{value}
-	for _, o := range resolve.ObjectsInScope(v.Config, v.Scope, "address") {
-		if o.Name == value {
-			vals = append(vals, o.Value)
-		}
+	if v, ok := m[value]; ok {
+		vals = append(vals, v)
 	}
 	for _, val := range vals {
 		for _, p := range index.PrefixesOf(val) {
