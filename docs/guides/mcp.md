@@ -47,10 +47,11 @@ The server checks its setup before it answers. A failed check stops it:
 | --- | --- |
 | The export is missing ("run proteus fetch first") | 2 |
 | The export holds a credential, cannot be parsed, or has no device | 2 |
-| `--http` without a token, with a token shorter than 32 bytes, or without `allowed_hosts` or `audit_log` | 2 |
+| `--http` without a token, with a token shorter than 32 bytes, or without `audit_log` | 2 |
 | The export cannot be read, the store cannot be opened, the address cannot be listened on, or the audit file cannot be opened | 1 |
 
-Over HTTP the server prints `proteus mcp: serving http://<address>` on stderr.
+Over HTTP the server prints `proteus mcp: serving http://<address> (Host check on: <hosts>)`
+on stderr, or `(Host check off)` when `allowed_hosts` is not set.
 SIGTERM stops new calls, lets the running calls answer, and exits 143. Ctrl-C
 exits 130. Over stdio the server exits 0 when the client closes the stream.
 
@@ -158,7 +159,7 @@ Over HTTP, some requests do not reach a tool:
 
 | Condition | HTTP status |
 | --- | --- |
-| The Host header is not in `allowed_hosts` | 403 |
+| `allowed_hosts` is set, and the Host header is not in it | 403 |
 | No bearer token, or a wrong one | 401, with `WWW-Authenticate: Bearer` |
 | A body above 1 MiB | 413 |
 | A header block above 16 KiB | 431 |
@@ -229,7 +230,7 @@ its variable and its flag, and for the token rules.
 | --- | --- | --- |
 | `listen` | `127.0.0.1:8765` | the address for `--http` |
 | `token_file` | none | the file with the bearer token; `PROTEUS_MCP_TOKEN` holds the token itself |
-| `allowed_hosts` | none | the Host values that `--http` accepts |
+| `allowed_hosts` | none | the Host values that `--http` accepts; none accepts every Host. Recommended when the proxy forwards a fixed host name |
 | `identity_header` | `X-User-Claims` | the header with the caller's claims, a JSON object |
 | `audit_claims` | `[sub]` | the claims that each audit line records |
 | `audit_log` | none | the audit file; required for `--http` |

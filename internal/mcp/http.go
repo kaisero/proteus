@@ -20,7 +20,9 @@ type HTTPOptions struct {
 	// Token is the bearer token every request but /healthz must carry.
 	Token string
 	// AllowedHosts are the Host header values the server answers, without a
-	// port; any other gives 403.
+	// port; any other gives 403. None turns the Host check off: the token
+	// makes DNS rebinding useless, so the check is defence in depth
+	// (spec 2026-10-10 F6).
 	AllowedHosts []string
 }
 
@@ -37,14 +39,15 @@ const (
 
 // ServeHTTP answers MCP calls over Streamable HTTP on ln, in plain text
 // behind a reverse proxy that terminates TLS, until ctx ends (spec §4.4).
-// Every request but /healthz must name an allowed Host (403) and carry the
-// token (401); refusals are audited, rate-limited per address. When ctx ends
+// Every request but /healthz must carry the token (401) and, when allowed
+// hosts are set, name one of them (403); refusals are audited, rate-limited
+// per address. When ctx ends
 // (SIGTERM), new calls answer call.busy, the running calls get up to the
 // call timeout to answer, the server shuts down, and ServeHTTP returns.
 func ServeHTTP(ctx context.Context, o Options, h HTTPOptions, ln net.Listener) error {
-	if h.Token == "" || len(h.AllowedHosts) == 0 {
+	if h.Token == "" {
 		_ = ln.Close()
-		return errors.New("mcp: --http needs a token and allowed hosts")
+		return errors.New("mcp: --http needs a token")
 	}
 	s, lim, err := build(o, testing.Testing())
 	if err != nil {
@@ -126,8 +129,9 @@ var equal = subtle.ConstantTimeCompare
 // guard checks each request before the SDK sees it: the Host, then the
 // bearer token. /healthz needs neither.
 type guard struct {
-	next     http.Handler
-	digest   [32]byte // SHA-256 of the token
+	next   http.Handler
+	digest [32]byte // SHA-256 of the token
+	// hosts are the allowed Host values; empty accepts every Host.
 	hosts    map[string]bool
 	refusals *refusals
 }
@@ -137,7 +141,7 @@ func (g *guard) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		return
 	}
-	if !g.hosts[hostOf(r.Host)] {
+	if len(g.hosts) > 0 && !g.hosts[hostOf(r.Host)] {
 		g.refusals.refuse(remoteOf(r), http.StatusForbidden)
 		http.Error(w, "host not allowed", http.StatusForbidden)
 		return

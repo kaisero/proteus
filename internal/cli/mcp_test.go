@@ -126,17 +126,62 @@ func TestMCPStartChecks(t *testing.T) {
 	}
 }
 
-// --http without allowed_hosts in any source does not start.
-func TestMCPNeedsAllowedHosts(t *testing.T) {
+// --http without allowed_hosts serves any Host that carries the token, and
+// says so at the start (spec 2026-10-10 F6).
+func TestMCPServesWithoutAllowedHosts(t *testing.T) {
 	t.Parallel()
 	c := mcpLab(t, "")
 	c.env["PROTEUS_MCP_TOKEN"] = mcpTokenValue
-	var errOut bytes.Buffer
-	audit := "--audit-log=" + filepath.Join(c.dir, "audit.jsonl")
-	if code := c.serveMCP(context.Background(), strings.NewReader(""), io.Discard, &errOut, "--http", audit); code != 2 ||
-		!strings.Contains(errOut.String(), "--http needs allowed_hosts") {
-		t.Errorf("exit %d; stderr:\n%s", code, errOut.String())
+	c.env["PROTEUS_MCP_LISTEN"] = freePort(t)
+	ctx, cancel := context.WithCancelCause(context.Background())
+	url, errOut, done := c.startHTTP(ctx, t, io.Discard, "--http", "--audit-log", filepath.Join(c.dir, "audit.jsonl"))
+	if !strings.Contains(errOut.String(), "(Host check off)") {
+		t.Errorf("start line:\n%s", errOut.String())
 	}
+	req, _ := http.NewRequest(http.MethodPost, url, strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`))
+	req.Host = "any.example.test"
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
+	req.Header.Set("Authorization", "Bearer "+mcpTokenValue)
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = io.Copy(io.Discard, res.Body)
+	_ = res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Errorf("any host: %d", res.StatusCode)
+	}
+	cancel(signalCause{syscall.SIGTERM})
+	if code := <-done; code != 143 {
+		t.Errorf("exit %d", code)
+	}
+	if l := c.logFile(); !strings.Contains(l, "Host check off") {
+		t.Errorf("command log:\n%s", l)
+	}
+}
+
+// startHTTP runs proteus mcp with args until ctx ends, and returns the URL
+// it serves once its start line names it, its standard error, and its exit
+// code to come.
+func (c *cli) startHTTP(ctx context.Context, t *testing.T, stdout io.Writer, args ...string) (string, *syncBuffer, chan int) {
+	t.Helper()
+	errOut := &syncBuffer{}
+	done := make(chan int, 1)
+	go func() { done <- c.serveMCP(ctx, strings.NewReader(""), stdout, errOut, args...) }()
+	addr := regexp.MustCompile(`serving (http://\S+)`)
+	for range 1000 {
+		if m := addr.FindStringSubmatch(errOut.String()); m != nil {
+			return m[1] + "/", errOut, done
+		}
+		select {
+		case code := <-done:
+			t.Fatalf("the server ended with %d:\n%s", code, errOut.String())
+		case <-time.After(5 * time.Millisecond):
+		}
+	}
+	t.Fatalf("the server did not start:\n%s", errOut.String())
+	return "", nil, nil
 }
 
 // The export decides what the server answers for: missing, holding
@@ -401,22 +446,9 @@ func TestMCPOverHTTP(t *testing.T) {
 		auditPath := filepath.Join(c.dir, "audit.jsonl")
 		c.env["PROTEUS_MCP_TOKEN"] = mcpTokenValue
 		ctx, cancel := context.WithCancelCause(context.Background())
-		errOut := &syncBuffer{}
-		done := make(chan int, 1)
-		go func() {
-			done <- c.serveMCP(ctx, strings.NewReader(""), io.Discard, errOut, "--http", "--audit-log", auditPath)
-		}()
-		var url string
-		addr := regexp.MustCompile(`serving (http://\S+)`)
-		for range 1000 {
-			if m := addr.FindStringSubmatch(errOut.String()); m != nil {
-				url = m[1] + "/"
-				break
-			}
-			time.Sleep(5 * time.Millisecond)
-		}
-		if url == "" {
-			t.Fatalf("the server did not start:\n%s", errOut.String())
+		url, errOut, done := c.startHTTP(ctx, t, io.Discard, "--http", "--audit-log", auditPath)
+		if !strings.Contains(errOut.String(), "(Host check on: 127.0.0.1)") {
+			t.Errorf("start line:\n%s", errOut.String())
 		}
 		post := func(auth string) (int, string) {
 			t.Helper()

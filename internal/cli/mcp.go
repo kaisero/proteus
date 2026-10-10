@@ -35,7 +35,8 @@ func (a *app) mcpCmd() *cobra.Command {
 
 Without --http the server talks MCP over standard input and output. With --http it
 serves Streamable HTTP in plain text on --listen, behind a reverse proxy that
-terminates TLS; every request needs the bearer token and an allowed Host.
+terminates TLS; every request needs the bearer token, and an allowed Host when
+allowed_hosts is set.
 
 The devices come from <store>/.proteus/inventory.yaml, which proteus fetch writes
 with export_inventory: true. The server never reads the inventory with credentials.
@@ -49,7 +50,7 @@ itself; there is no flag for it.`,
 	f.BoolVar(&useHTTP, "http", false, "serve Streamable HTTP on --listen instead of stdio")
 	f.String("listen", "", "host:port for --http (default 127.0.0.1:8765)")
 	f.String("token-file", "", "the file that holds the bearer token")
-	f.StringSlice("allowed-host", nil, "a Host header value --http answers (repeatable)")
+	f.StringSlice("allowed-host", nil, "a Host header value --http answers (repeatable; none accepts any Host)")
 	f.String("audit-log", "", "the audit file, one JSON line per call (required with --http)")
 	f.Int("max-concurrent", 0, "calls answered at once (default 4)")
 	f.Int("max-queue", 0, "calls waiting for a slot (default 16)")
@@ -259,8 +260,6 @@ func (a *app) runMCP(c *cobra.Command, useHTTP bool) error {
 			return usageErr("--http needs a token: set token_file, --token-file or PROTEUS_MCP_TOKEN")
 		case len(token) < minToken:
 			return usageErr("the token is %d bytes; --http needs at least %d", len(token), minToken)
-		case len(m.AllowedHosts) == 0:
-			return usageErr("--http needs allowed_hosts: set them in the mcp: section, PROTEUS_MCP_ALLOWED_HOSTS or --allowed-host")
 		case m.AuditLog == "":
 			return usageErr("--http needs audit_log: set it in the mcp: section, PROTEUS_MCP_AUDIT_LOG or --audit-log")
 		}
@@ -312,8 +311,12 @@ func (a *app) runMCP(c *cobra.Command, useHTTP bool) error {
 	if err != nil {
 		return err
 	}
-	a.log.Infof(runlog.TagRun, "mcp: serving http://%s", ln.Addr())
-	fmt.Fprintf(a.stderr, "proteus mcp: serving http://%s\n", ln.Addr())
+	check := "Host check off"
+	if len(m.AllowedHosts) > 0 {
+		check = "Host check on: " + strings.Join(m.AllowedHosts, ", ")
+	}
+	a.log.Infof(runlog.TagRun, "mcp: serving http://%s, %s", ln.Addr(), check)
+	fmt.Fprintf(a.stderr, "proteus mcp: serving http://%s (%s)\n", ln.Addr(), check)
 	return mcp.ServeHTTP(ctx, o, mcp.HTTPOptions{Token: token, AllowedHosts: m.AllowedHosts}, ln)
 }
 

@@ -66,6 +66,9 @@ services:
       PROTEUS_LOG_DIR: /var/log/proteus/cli
       PROTEUS_MCP_LISTEN: 0.0.0.0:8765
       PROTEUS_MCP_TOKEN_FILE: /run/secrets/proteus-mcp-token
+      # Optional: the Host check. Caddy forwards the host name it serves, so
+      # set it to that name; leave it out to accept every Host (the token
+      # still guards every request).
       PROTEUS_MCP_ALLOWED_HOSTS: proteus.example.org
       PROTEUS_MCP_IDENTITY_HEADER: X-User-Claims
       PROTEUS_MCP_AUDIT_CLAIMS: sub

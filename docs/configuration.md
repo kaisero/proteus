@@ -86,7 +86,7 @@ except `token_file`, `allowed_hosts` and `audit_log`, which have none.
 mcp:
   listen: 127.0.0.1:8765                 # host:port for --http
   token_file: /run/secrets/proteus-mcp-token
-  allowed_hosts: [proteus.example.org]   # Host header values --http accepts
+  allowed_hosts: [proteus.example.org]   # optional: Host header values --http accepts
   identity_header: X-User-Claims         # the header with the caller's claims
   audit_claims: [sub]                    # the claims each audit line records
   audit_log: /var/log/proteus/mcp-audit.jsonl
@@ -111,8 +111,13 @@ empty `audit_claims` entry. A number left out or set to `0` takes its default:
 logs only, so call logs in the CLI's directory would push out the CLI's logs, and
 the reverse.
 
-`allowed_hosts` entries are host names or addresses without a port and without
-brackets: the server compares the request's Host with its port removed.
+`allowed_hosts` is optional. When it is set, `--http` answers only a request whose
+Host is in the list, and gives 403 to any other. When it is not set, the server
+accepts every Host and its start line says `Host check off`. The token alone keeps
+out a request that DNS rebinding sends, so the Host check is defence in depth. Set
+it when the proxy forwards a fixed host name. Entries are host names or addresses
+without a port and without brackets: the server compares the request's Host with
+its port removed.
 
 Each mcp setting comes from, in rising precedence: its default, the export's `mcp:`
 section, a variable, and a flag. The server reads no other file: not the inventory
@@ -141,7 +146,7 @@ flag: a flag shows in the process list. proteus trims trailing whitespace from t
 token and refuses a token file that others can write. A read-only secret mount
 (mode 0444, owned by root) is fine.
 
-`--http` needs a token of at least 32 bytes, `allowed_hosts` and `audit_log`. Over
+`--http` needs a token of at least 32 bytes and `audit_log`. Over
 stdio no audit file is written unless `audit_log` is set; its lines record the
 operating system user (`auth: stdio`, `identity_source: os`). Over HTTP they record
 the claims of `identity_header` (`auth: token`, `identity_source: header`), or the

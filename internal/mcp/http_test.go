@@ -264,6 +264,41 @@ func TestHTTPLimits(t *testing.T) {
 	}
 }
 
+// Without allowed hosts the guard accepts every Host, and still wants the
+// token (spec 2026-10-10 F6).
+func TestTheGuardWithoutHosts(t *testing.T) {
+	t.Parallel()
+	env := labEnv(t, snap{pathlab.FW01, pathlab.ConfigFile(pathlab.FW01)})
+	s, lim, err := build(Options{Env: env}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := &recorder{}
+	srv := newHTTPServer(s, Options{Audit: rec}, HTTPOptions{Token: testToken}, lim)
+	for _, tc := range []struct {
+		name, host, auth string
+		want             int
+	}{
+		{"any host", "evil.example.test", "Bearer " + testToken, http.StatusOK},
+		{"any host with a port", "anything.example.test:8443", "Bearer " + testToken, http.StatusOK},
+		{"no token", "proteus.example.org", "", http.StatusUnauthorized},
+		{"wrong token", "proteus.example.org", "Bearer " + strings.Repeat("x", 32), http.StatusUnauthorized},
+	} {
+		req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`))
+		req.Host = tc.host
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept", "application/json, text/event-stream")
+		if tc.auth != "" {
+			req.Header.Set("Authorization", tc.auth)
+		}
+		w := httptest.NewRecorder()
+		srv.Handler.ServeHTTP(w, req)
+		if w.Code != tc.want {
+			t.Errorf("%s: %d, want %d", tc.name, w.Code, tc.want)
+		}
+	}
+}
+
 // The server's timeouts and the SDK's options are those of spec §4.4.
 func TestTheHTTPServerSettings(t *testing.T) {
 	t.Parallel()
@@ -277,13 +312,13 @@ func TestTheHTTPServerSettings(t *testing.T) {
 		srv.WriteTimeout != 45*time.Second {
 		t.Errorf("server %+v", srv)
 	}
-	// ServeHTTP refuses to serve without a token or hosts.
+	// ServeHTTP refuses to serve without a token.
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := ServeHTTP(context.Background(), Options{Env: env}, HTTPOptions{Token: testToken}, ln); err == nil {
-		t.Error("served without allowed hosts")
+	if err := ServeHTTP(context.Background(), Options{Env: env}, HTTPOptions{AllowedHosts: []string{"a"}}, ln); err == nil {
+		t.Error("served without a token")
 	}
 	if _, err := ln.Accept(); err == nil {
 		t.Error("the listener stays open")
