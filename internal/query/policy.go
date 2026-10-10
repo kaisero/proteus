@@ -242,32 +242,28 @@ func PolicyFile(ctx context.Context, env Env, in PolicyFileInput) (Envelope[Poli
 
 // givenZones keeps the targets that define the flow's given zones (C15). A
 // target without one is a hole; when no target defines them, the question is a
-// usage error that lists each vsys's zones.
+// usage error that names, per vsys, the zone it lacks and the zones it has.
 func givenZones(ts []estate.Target, flow simulate.Flow) ([]estate.Target, []estate.Hole, *UsageError) {
 	var kept []estate.Target
 	var holes []estate.Hole
 	var texts, toolTexts []string
 	for _, t := range ts {
-		var c *simulate.ChoiceError
-		for _, g := range []struct{ flag, field, zone string }{
-			{"from-zone", "from_zone", flow.FromZone}, {"to-zone", "to_zone", flow.ToZone},
-		} {
-			if c = rulebase.UndefinedZone(t.Config, t.Scope, g.flag, g.field, g.zone); c != nil {
-				break
-			}
-		}
-		if c == nil {
+		r := rulebase.UndefinedZones(t.Config, t.Scope, flow.FromZone, flow.ToZone)
+		if r == nil {
 			kept = append(kept, t)
 			continue
 		}
-		texts, toolTexts = append(texts, c.Question), append(toolTexts, c.ToolText)
-		holes = append(holes, estate.NewHole(t.Device, t.Vsys, reason.New("zone.undefined",
-			fmt.Sprintf("not checked: %s", c.ToolText))))
+		texts, toolTexts = append(texts, r.Choice.Question), append(toolTexts, r.Choice.ToolText)
+		holes = append(holes, estate.NewHole(t.Device, t.Vsys, reason.New("zone.undefined", "not checked: "+r.Text)))
 	}
-	if len(kept) == 0 && len(texts) > 0 {
-		return nil, nil, usage(strings.Join(texts, "; "), strings.Join(toolTexts, "; "))
+	switch {
+	case len(kept) > 0 || len(texts) == 0:
+		return kept, holes, nil
+	case len(texts) == 1:
+		return nil, nil, usage(texts[0], toolTexts[0])
 	}
-	return kept, holes, nil
+	const lead = "no selected vsys defines the given zones: "
+	return nil, nil, usage(lead+strings.Join(texts, "; "), lead+strings.Join(toolTexts, "; "))
 }
 
 // fileEnv is the simulation environment for one target read from a file: its

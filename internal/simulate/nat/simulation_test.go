@@ -146,7 +146,7 @@ func TestSimulatePBFAndChoices(t *testing.T) {
 	t.Parallel()
 	// A given ingress zone the vsys does not define is refused, with its zones (C15).
 	_, _, err := run(t, fw01Env(t, "firewall-routing.xml"), "10.20.5.5", "8.8.8.8", 443, map[string]string{"from-zone": "nowhere", "router": "default"})
-	if c, ok := errors.AsType[*simulate.ChoiceError](err); !ok || c.Question != "--from-zone nowhere is not a zone of vsys1; its zones: branch-vpn, datacenter, sdwan" {
+	if c, ok := errors.AsType[*simulate.ChoiceError](err); !ok || c.Question != "--from-zone nowhere is not a zone of vsys1 (its zones: branch-vpn, datacenter, sdwan)" {
 		t.Errorf("undefined zone: %v", err)
 	}
 	// firewall-routing.xml's PBF rule for branch-vpn, on fw01's tables.

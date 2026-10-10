@@ -121,7 +121,7 @@ func TestSimulateNATExits(t *testing.T) {
 	c.want(2, "simulate", "nat", "198.18.1.10", "no-such-host.invalid", "--device", "fw01", "--no-dns")
 	// A zone the vsys does not define is a usage error that lists its zones (C15).
 	_, errOut, code := c.run("simulate", "nat", "198.18.1.10", "198.18.250.10", "--device", "fw01", "--router", "default", "--from-zone", "nowhere", "--port", "8443")
-	if code != 2 || !strings.Contains(errOut, "--from-zone nowhere is not a zone of vsys1; its zones: ") || !strings.Contains(errOut, "transport") {
+	if code != 2 || !strings.Contains(errOut, "--from-zone nowhere is not a zone of vsys1 (its zones: ") || !strings.Contains(errOut, "transport") {
 		t.Errorf("undefined zone: exit %d, %s", code, errOut)
 	}
 }

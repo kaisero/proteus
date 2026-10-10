@@ -153,8 +153,8 @@ func pbfStage(_ context.Context, s *state) (simulate.Outcome, error) {
 	}
 	// A given ingress zone the vsys does not define is a question NAT cannot
 	// take (C15): the caller is told the vsys's zones.
-	if c := rulebase.UndefinedZone(v.Config, v.Scope, "from-zone", "from_zone", s.in.Params["from-zone"]); c != nil {
-		return simulate.Outcome{}, c
+	if r := rulebase.UndefinedZones(v.Config, v.Scope, s.in.Params["from-zone"], ""); r != nil {
+		return simulate.Outcome{}, r.Choice
 	}
 	s.nat.Target = simulate.Target{Config: v.Config, Indexes: v.Indexes}
 	f := s.in.Flow

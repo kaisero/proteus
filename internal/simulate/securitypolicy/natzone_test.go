@@ -123,6 +123,26 @@ func TestANATDoubtKeepsThePreNATZone(t *testing.T) {
 	}
 }
 
+// While a NAT rule is in doubt, one derived zone on each side is not a known
+// pair: the doubted rule may give another destination zone, so no default rule
+// decides (C16 under S12). Without a port t-dnat-port is in doubt and the
+// pre-NAT zone transport stays alone; with the port it decides, and the pair
+// server chooses again.
+func TestANATDoubtLeavesTheDefaultRuleOpen(t *testing.T) {
+	t.Parallel()
+	f := simulate.Flow{Source: ep("198.19.0.1"), Destination: ep("198.18.250.10"), Protocol: "udp", DestPort: 0}
+	_, v := run(t, natEnv(t), f)
+	o, why := v.Decision()
+	if strings.Join(v.Zones.To, ",") != "transport" || v.Default != "" || o != Undecided || why[0].Code != "default.zones-unknown" {
+		t.Errorf("in doubt: zones %+v, %s %v", v.Zones, o, why)
+	}
+	f.Protocol, f.DestPort = "tcp", 8443
+	_, v = run(t, natEnv(t), f)
+	if o, why := v.Decision(); strings.Join(v.Zones.To, ",") != "server" || o == Undecided {
+		t.Errorf("decided: zones %+v, %s %v", v.Zones, o, why)
+	}
+}
+
 func TestGivenZonesWinOverNAT(t *testing.T) {
 	t.Parallel()
 	r, v := run(t, natEnv(t), simulate.Flow{Source: ep("198.19.0.1"), Destination: ep("198.18.250.10"), DestPort: 8443, FromZone: "transport", ToZone: "transport"})

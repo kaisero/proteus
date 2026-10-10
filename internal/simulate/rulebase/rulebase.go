@@ -439,24 +439,38 @@ func FromFits(r resolve.PBFRule, in simulate.Port) bool {
 	return in.Zone == "" || slices.Contains(r.From, in.Zone)
 }
 
-// UndefinedZone is the usage error for a zone given to a check that the vsys does
-// not define, or nil when the vsys defines it or none is given. flag is the
-// command line flag and field the tool input that gave it, such as "from-zone"
-// and "from_zone". The text lists the vsys's zones, so the caller can pick one.
-func UndefinedZone(cfg *config.Config, sc config.Scope, flag, field, zone string) *simulate.ChoiceError {
-	if zone == "" {
-		return nil
-	}
+// ZoneRefusal is a given zone a scope does not define (C15), and the zones it
+// does define. Choice is the refusal for a front end; Text names it in words
+// neither the command line nor a tool uses, for a hole.
+type ZoneRefusal struct {
+	Choice *simulate.ChoiceError
+	Text   string
+}
+
+// UndefinedZones refuses the first of the given from and to zones the scope
+// does not define; nil when it defines both, or a zone is not given. The
+// refusal names the zone as the command line gives it (--from-zone) and as a
+// tool does (from_zone), and lists the scope's zones, so the caller can pick
+// one. Its kind is simulate.ChoiceZone.
+func UndefinedZones(cfg *config.Config, sc config.Scope, from, to string) *ZoneRefusal {
 	zones := ZoneNames(cfg, sc)
-	if slices.Contains(zones, zone) {
-		return nil
-	}
 	known := "it defines no zone"
 	if len(zones) > 0 {
 		known = "its zones: " + strings.Join(zones, ", ")
 	}
-	what := fmt.Sprintf("%s is not a zone of %s; %s", zone, sc.Name, known)
-	return &simulate.ChoiceError{Question: "--" + flag + " " + what, ToolText: field + " " + what}
+	for _, g := range []struct{ flag, field, side, zone string }{
+		{"--from-zone", "from_zone", "the from zone", from}, {"--to-zone", "to_zone", "the to zone", to},
+	} {
+		if g.zone == "" || slices.Contains(zones, g.zone) {
+			continue
+		}
+		what := fmt.Sprintf("%s is not a zone of %s (%s)", g.zone, sc.Name, known)
+		return &ZoneRefusal{
+			Choice: &simulate.ChoiceError{Kind: simulate.ChoiceZone, Question: g.flag + " " + what, ToolText: g.field + " " + what},
+			Text:   g.side + " " + what,
+		}
+	}
+	return nil
 }
 
 // ZoneNames are the names of the zones a scope defines, sorted.

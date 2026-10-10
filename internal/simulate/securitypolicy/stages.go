@@ -225,9 +225,11 @@ func deriveZones(_ context.Context, s *state) (simulate.Outcome, error) {
 	// inferred (C5, C16). With several zones, or none, on a side, whether from
 	// equals to is open: an intrazone or interzone rule whose zones fit stays a
 	// candidate, and its zone.derived doubt lets the first match decide whether
-	// it matters (E20); with no rule, the default rule is undecided.
+	// it matters (E20); with no rule, the default rule is undecided. A NAT rule
+	// in doubt may give another destination zone, so the pair is not known then
+	// either (spec S12, over-match is the safe direction).
 	kept := roaring.New()
-	if len(from) == 1 && len(to) == 1 && s.defined(from[0]) && s.defined(to[0]) {
+	if len(nz.doubts) == 0 && len(from) == 1 && len(to) == 1 && s.defined(from[0]) && s.defined(to[0]) {
 		s.known, s.from, s.to = true, from[0], to[0]
 		s.cand.And(s.byRuleType(fromB, toB, from[0] == to[0]))
 	} else {

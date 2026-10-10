@@ -185,13 +185,8 @@ func (Simulation) Run(ctx context.Context, env *simulate.Env, in simulate.Input)
 	}
 	// A given zone the vsys does not define is a question the check cannot
 	// take (C15): the caller is told the vsys's zones.
-	sc := idx.Scope()
-	for _, g := range []struct{ flag, field, zone string }{
-		{"from-zone", "from_zone", in.Flow.FromZone}, {"to-zone", "to_zone", in.Flow.ToZone},
-	} {
-		if c := rulebase.UndefinedZone(t.Config, sc, g.flag, g.field, g.zone); c != nil {
-			return run, c
-		}
+	if r := rulebase.UndefinedZones(t.Config, idx.Scope(), in.Flow.FromZone, in.Flow.ToZone); r != nil {
+		return run, r.Choice
 	}
 	s := &state{env: env, in: in, target: t, idx: idx, view: idx.With(t.Providers), rules: idx.Rules()}
 	s.verdict.Relevance = relevance(t.Providers.Zones, in.Flow)

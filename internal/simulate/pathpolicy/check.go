@@ -48,7 +48,7 @@ func (Security) Evaluate(ctx context.Context, env *simulate.Env, h routing.Hop, 
 		return out, &simulate.UnavailableError{Missing: []simulate.Missing{*miss}}
 	}
 	run, err := securitypolicy.Simulation{}.Run(ctx, env, simulate.Input{Device: h.Device, Vsys: h.Vsys, Flow: flow.FirstAddresses()})
-	if _, ok := errors.AsType[*simulate.ChoiceError](err); ok {
+	if c, ok := errors.AsType[*simulate.ChoiceError](err); ok && c.Kind == simulate.ChoiceZone {
 		// A zone the hop's vsys does not define: the check cannot take it, and
 		// the hop's zone doubt leaves the hop undecided (spec §4.4).
 		why := reason.New("zone.undefined", fmt.Sprintf("a zone of the hop is not defined in %s", h.Vsys))

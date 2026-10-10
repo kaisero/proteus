@@ -437,7 +437,7 @@ func TestPolicyFileEdges(t *testing.T) {
 	// A zone the vsys does not define is a usage error that lists its zones (C15).
 	_, errOut, code := c.run("simulate", "policy", "10.2.0.5", "10.1.0.5", "--file", fixture("firewall-ruletype.xml"), "--vsys", "vsys1",
 		"--from-zone", "dmz", "--to-zone", "nowhere")
-	if code != 2 || !strings.Contains(errOut, "--to-zone nowhere is not a zone of vsys1; its zones: dmz, inside, out") {
+	if code != 2 || !strings.Contains(errOut, "--to-zone nowhere is not a zone of vsys1 (its zones: dmz, inside, out)") {
 		t.Errorf("undefined zone: exit %d, %s", code, errOut)
 	}
 	out = c.want(3, "simulate", "policy", "1.1.1.1", "2.2.2.2", "--file", fixture("firewall-zones.xml"), "--vsys", "vsys9", "--output", "json")

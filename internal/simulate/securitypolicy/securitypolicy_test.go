@@ -486,7 +486,7 @@ func TestRuleTypeWithoutKnownZones(t *testing.T) {
 			Flow:   simulate.Flow{Source: ep("10.1.0.5"), Destination: ep("10.2.0.5"), FromZone: z[0], ToZone: z[1]},
 			Device: "fw01", Vsys: "vsys1",
 		})
-		if _, ok := errors.AsType[*simulate.ChoiceError](err); !ok || !strings.Contains(err.Error(), "nowhere is not a zone of vsys1; its zones: dmz, inside, out") {
+		if _, ok := errors.AsType[*simulate.ChoiceError](err); !ok || !strings.Contains(err.Error(), "nowhere is not a zone of vsys1 (its zones: dmz, inside, out)") {
 			t.Errorf("given %s -> %s: %v", z[0], z[1], err)
 		}
 	}
@@ -609,8 +609,8 @@ func TestAnUndefinedGivenZoneIsRefused(t *testing.T) {
 			Device: "fw01", Vsys: "vsys1",
 		})
 		ce, ok := errors.AsType[*simulate.ChoiceError](err)
-		zones := " is not a zone of vsys1; its zones: dmz, empty-zone, inside, loop"
-		if !ok || ce.Question != c.question+zones || ce.ToolText != c.tool+zones || ce.Kind != "" {
+		zones := " is not a zone of vsys1 (its zones: dmz, empty-zone, inside, loop)"
+		if !ok || ce.Question != c.question+zones || ce.ToolText != c.tool+zones || ce.Kind != simulate.ChoiceZone {
 			t.Errorf("%s -> %s: %v", c.from, c.to, err)
 		}
 	}

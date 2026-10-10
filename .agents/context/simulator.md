@@ -46,17 +46,18 @@ Eight stages, each ANDing into the running candidate set:
 | `first-match` | exact; overmatch when earlier doubtful candidates share the action; undermatch (undecided) when one has another action, or no rule and the zones are not single and known; not evaluated: application or user only when a candidate up to the decision names one |
 
 `derive-zones` also applies `rule-type` when both zones are given, or derived with
-one defined zone on each side (inferred, C5); that pair is `state.from`/`state.to`.
-`Run` refuses a given zone the vsys does not define with a `*simulate.ChoiceError`
-that lists its zones (`rulebase.UndefinedZone`, C15); `query.PolicyFile` checks the
-same first (`givenZones`): a usage error, or a hole per vsys when another selected
-vsys defines the zone; and path mode leaves the check not evaluated (the hop has its
-`zone.undefined` doubt). With several derived zones on a side, or none, typed rules
-stay and each gets a `zone.derived` doubt (`state.ruleTypeOpen`). The decision
-(§4.7): the first candidate without doubt decides; with none, the default rule
-chosen by the known pair, given or derived (C16)
-(`intrazone-default`/`interzone-default`; local, then pushed override, else the
-built-in action; local and pushed that disagree are undecided). Doubts come from
+one defined zone on each side and no NAT rule in doubt (inferred, C5); that pair is
+`state.from`/`state.to`. `Run` refuses a given zone the vsys does not define with a
+`*simulate.ChoiceError` of kind `simulate.ChoiceZone` that lists its zones
+(`rulebase.UndefinedZones`, C15); `query.PolicyFile` checks the same first
+(`givenZones`): a usage error, or a hole per vsys when another selected vsys defines
+the zone; and path mode leaves the check not evaluated (the hop has its
+`zone.undefined` doubt). With several derived zones on a side, none, or a NAT rule
+in doubt, typed rules stay and each gets a `zone.derived` doubt
+(`state.ruleTypeOpen`). The decision (§4.7): the first candidate without doubt
+decides; with none, the default rule chosen by the known pair, given or derived
+(C16) (`intrazone-default`/`interzone-default`; local, then pushed override, else
+the built-in action; local and pushed that disagree are undecided). Doubts come from
 `doubt.go` (`ruleFields` classifies every schema child of the rule entry, guarded by
 a test): application, user, HIP, schedule, `application-default`, predefined or
 absent service, a URL category without `--url` or not defined, and an EDL, region or
@@ -303,6 +304,7 @@ func NewTopology(devs []simulate.DeviceData) *Topology
 type PBFMatch struct{ ... }
 type PBFPassed struct{ ... }
 type Vsys struct{ ... }
+type ZoneRefusal struct{ ... }
 
 func (p PBFPassed) String() string
 func (v Vsys) Holds(value string, a netip.Addr) bool
@@ -317,7 +319,7 @@ func Protocol(p string) string
 func ServiceTerm(proto string, port uint16) (string, bool)
 func Undecidable(values []string, defined map[string]bool, keywords ...string) bool
 func UndefinedService(cfg *config.Config, text string) reason.Reason
-func UndefinedZone(cfg *config.Config, sc config.Scope, flag, field, zone string) *simulate.ChoiceError
+func UndefinedZones(cfg *config.Config, sc config.Scope, from, to string) *ZoneRefusal
 func ZoneNames(cfg *config.Config, sc config.Scope) []string
 ```
 <!-- /GENERATED:api -->

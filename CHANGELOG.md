@@ -298,6 +298,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A zone the vsys does not define is now refused.** `--from-zone` and `--to-zone`
+  of `simulate policy --file`, and `--from-zone` of `simulate nat`, exit 2 with the
+  vsys's zones listed. Before, a typo in a zone name could still let an intrazone
+  rule decide the answer.
 - **`search` now lists references from the device's own configuration.** A static
   route or an IKE gateway that names an address object shows as a reference with
   scope `config`. Before, only rules and objects inside a vsys or shared were
@@ -325,10 +329,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   for a flow from `inside` to `out`, and the answer could name it. One derived zone
   on each side now decides rule-type and the default rule; with several, such a
   rule is in doubt, and `needs` asks for the zones.
-- **A zone the vsys does not define is now refused.** `--from-zone` and `--to-zone`
-  of `simulate policy --file`, and `--from-zone` of `simulate nat`, exit 2 with the
-  vsys's zones listed. Before, a typo in a zone name could still let an intrazone
-  rule decide the answer.
 - **A NAT rule that names a service now waits for the protocol.** Asked with a
   port and no protocol, a NAT rule for `udp/443` took a `tcp/443` flow for sure.
   It is now in doubt, and `needs` asks for the protocol. A protocol given as `6`,

@@ -452,13 +452,16 @@ func TestFileModeRefusesAnUndefinedZone(t *testing.T) {
 	}
 	_, err := ask("nowhere", "inside", "vsys1")
 	u, ok := errors.AsType[*UsageError](err)
-	if !ok || u.Text != "--from-zone nowhere is not a zone of vsys1; its zones: dmz, inside, out" ||
-		u.ToolText != "from_zone nowhere is not a zone of vsys1; its zones: dmz, inside, out" {
+	if !ok || u.Text != "--from-zone nowhere is not a zone of vsys1 (its zones: dmz, inside, out)" ||
+		u.ToolText != "from_zone nowhere is not a zone of vsys1 (its zones: dmz, inside, out)" {
 		t.Errorf("one vsys: %v", err)
 	}
 	_, err = ask("out", "nowhere", "vsys1", "vsys2")
-	if u, ok := errors.AsType[*UsageError](err); !ok || u.Text != "--to-zone nowhere is not a zone of vsys1; its zones: dmz, inside, out; "+
-		"--from-zone out is not a zone of vsys2; its zones: dmz, inside" {
+	if u, ok := errors.AsType[*UsageError](err); !ok ||
+		u.Text != "no selected vsys defines the given zones: --to-zone nowhere is not a zone of vsys1 (its zones: dmz, inside, out); "+
+			"--from-zone out is not a zone of vsys2 (its zones: dmz, inside)" ||
+		u.ToolText != "no selected vsys defines the given zones: to_zone nowhere is not a zone of vsys1 (its zones: dmz, inside, out); "+
+			"from_zone out is not a zone of vsys2 (its zones: dmz, inside)" {
 		t.Errorf("no vsys: %v", err)
 	}
 	// vsys2 has no zone out: a hole; vsys1 answers.
@@ -467,7 +470,7 @@ func TestFileModeRefusesAnUndefinedZone(t *testing.T) {
 		t.Fatalf("%+v %v", e.Results, err)
 	}
 	if len(e.Holes) != 1 || e.Holes[0].Vsys != "vsys2" || e.Holes[0].Code != "zone.undefined" ||
-		e.Holes[0].Reason != "not checked: from_zone out is not a zone of vsys2; its zones: dmz, inside" {
+		e.Holes[0].Reason != "not checked: the from zone out is not a zone of vsys2 (its zones: dmz, inside)" {
 		t.Errorf("holes %+v", e.Holes)
 	}
 }

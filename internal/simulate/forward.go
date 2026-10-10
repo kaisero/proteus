@@ -53,8 +53,9 @@ type Forward struct {
 // which of several starts. A command turns it into a usage error.
 type ChoiceError struct {
 	// Kind is what the user chooses: ChoiceDevice or ChoiceRouter, from
-	// Options. It is empty for a question that offers no choice, such as an
-	// input the simulation cannot take; that stays a usage error.
+	// Options. ChoiceZone names a zone the vsys does not define. It is empty
+	// for another question that offers no choice, such as an input the
+	// simulation cannot take. Without options, a choice stays a usage error.
 	Kind     string
 	Question string
 	// ToolText is Question in a tool's words where Question names a command
@@ -71,6 +72,9 @@ type ChoiceError struct {
 const (
 	ChoiceDevice = "device"
 	ChoiceRouter = "router"
+	// ChoiceZone refuses a given zone the vsys does not define; the question
+	// lists the vsys's zones (C15). No input of a tool picks one.
+	ChoiceZone = "zone"
 )
 
 func (e *ChoiceError) Error() string {
