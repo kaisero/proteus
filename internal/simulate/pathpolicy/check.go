@@ -47,9 +47,10 @@ func (Security) Evaluate(ctx context.Context, env *simulate.Env, h routing.Hop, 
 		out.Verdict, out.Reason, out.Fidelity = Undecided, simulate.Reasons{miss.Why()}, simulate.UnderMatch(miss.Why())
 		return out, &simulate.UnavailableError{Missing: []simulate.Missing{*miss}}
 	}
-	// Routing already applied the hop's NAT and gave its zones. Without the
-	// network, the check does not run NAT a second time only to note a zone
-	// the given one wins over (spec §18 N10).
+	// Routing applied the hop's NAT, in the router it traced, and gave the
+	// hop's zones: routing's NAT is the authority. Without the network, the
+	// check does not run NAT a second time, in a router it would guess, only
+	// to note a zone the given one wins over (spec §18 N10).
 	local := *env
 	local.Network = nil
 	run, err := securitypolicy.Simulation{}.Run(ctx, &local, simulate.Input{Device: h.Device, Vsys: h.Vsys, Flow: flow.FirstAddresses()})

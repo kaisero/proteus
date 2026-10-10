@@ -1,8 +1,11 @@
 package index
 
 import (
+	"fmt"
 	"maps"
+	"math/rand/v2"
 	"net/netip"
+	"slices"
 	"strings"
 	"testing"
 
@@ -106,22 +109,21 @@ func TestDynamicGroupWithAParenthesisedFilter(t *testing.T) {
 }
 
 // classifierOf builds a classifier over static groups written as name -> members,
-// and the dynamic group dag.
+// the address h and the dynamic group dag.
 func classifierOf(groups map[string]string) *classifier {
-	c := &classifier{
-		addr: map[string]bool{"h": true}, list: map[string]bool{}, region: map[string]bool{},
-		group: map[string]resolve.Object{"dag": {Name: "dag", Kind: "address-group", Value: "'t'", Dynamic: true}},
-		via:   map[string]string{}, depth: map[string]int{},
+	objs := opaqueObjects{
+		addrs:  []resolve.Object{{Name: "h", Kind: "address", Value: "10.88.0.1"}},
+		groups: []resolve.Object{{Name: "dag", Kind: "address-group", Value: "'t'", Dynamic: true}},
 	}
 	for name, members := range groups {
-		c.group[name] = resolve.Object{Name: name, Kind: "address-group", Value: members}
+		objs.groups = append(objs.groups, resolve.Object{Name: name, Kind: "address-group", Value: members})
 	}
-	return c
+	return newClassifier(objs)
 }
 
 // Every group gets one answer, whatever group a rule names first: a cycle of
 // static groups that holds a dynamic group is opaque in every group of it, and a
-// cycle that holds none is opaque in none, with every group of it answered once.
+// cycle that holds none is opaque in none.
 func TestClassifyAnswersEachGroupOnce(t *testing.T) {
 	t.Parallel()
 	groups := map[string]string{
@@ -156,8 +158,107 @@ func TestClassifyAnswersEachGroupOnce(t *testing.T) {
 				t.Errorf("order %v: %s has no stored answer", order, g)
 			}
 		}
-		if len(c.depth) != 0 || len(c.pending) != 0 {
-			t.Errorf("order %v: walk left state: depth %v, pending %v", order, c.depth, c.pending)
+	}
+}
+
+// denseGroups is n static groups d-0 … that each hold three others of them and
+// the address h, the shape of BenchmarkIndexBuildDenseGroups. With dag set, d-0
+// also holds the dynamic group dag.
+func denseGroups(n int, dag bool) map[string]string {
+	out := map[string]string{}
+	for i := range n {
+		out[fmt.Sprintf("d-%d", i)] = fmt.Sprintf("d-%d, d-%d, d-%d, h", (i+1)%n, (i*7+3)%n, (i*11+5)%n)
+	}
+	if dag {
+		out["d-0"] += ", dag"
+	}
+	return out
+}
+
+// Groups that hold each other densely are decided in work linear in their
+// members, not by walking every way through them: 40 such groups took more
+// than ten minutes to index before. The answers follow reachability, and the
+// reason text is the same on every build.
+func TestClassifyDecidesADenseCycleOnce(t *testing.T) {
+	t.Parallel()
+	const n = 400
+	for _, dag := range []bool{false, true} {
+		groups := denseGroups(n, dag)
+		c := classifierOf(groups)
+		members := 0
+		for _, v := range groups {
+			members += len(strings.Split(v, ", "))
+		}
+		if c.reads > 3*members {
+			t.Errorf("dag %v: %d member reads for %d members, want at most three each", dag, c.reads, members)
+		}
+		texts := map[string]string{}
+		for g := range groups {
+			r := c.classify(g)
+			if (r.Text != "") != dag {
+				t.Errorf("dag %v: classify(%s) = %q", dag, g, r.Text)
+			}
+			texts[g] = r.Text
+		}
+		if !dag {
+			continue
+		}
+		if got := c.classify("d-0").Text; got != opaqueRuntime+" (dag, in group d-0)" {
+			t.Errorf("classify(d-0) = %q", got)
+		}
+		for range 3 {
+			again := classifierOf(groups)
+			for g, want := range texts {
+				if got := again.classify(g).Text; got != want {
+					t.Fatalf("classify(%s) = %q on one build and %q on another", g, want, got)
+				}
+			}
+		}
+	}
+}
+
+// On random graphs of static groups, a group is opaque exactly when it reaches
+// dag, and every via is a member of its group.
+func TestClassifyFollowsReachability(t *testing.T) {
+	t.Parallel()
+	rng := rand.New(rand.NewPCG(1, 2)) //nolint:gosec // a fixed test graph, not a secret
+	for range 500 {
+		n := 1 + rng.IntN(12)
+		groups := map[string][]string{}
+		for i := range n {
+			g := fmt.Sprintf("g-%d", i)
+			for range rng.IntN(4) {
+				groups[g] = append(groups[g], fmt.Sprintf("g-%d", rng.IntN(n)))
+			}
+			if rng.IntN(6) == 0 {
+				groups[g] = append(groups[g], "dag")
+			}
+			groups[g] = append(groups[g], "h")
+		}
+		written := map[string]string{}
+		for g, ms := range groups {
+			written[g] = strings.Join(ms, ", ")
+		}
+		c := classifierOf(written)
+		for g := range groups {
+			seen := map[string]bool{}
+			var reaches func(v string) bool
+			reaches = func(v string) bool {
+				if v == "dag" {
+					return true
+				}
+				if seen[v] {
+					return false
+				}
+				seen[v] = true
+				return slices.ContainsFunc(groups[v], reaches)
+			}
+			if got := c.classify(g).Text != ""; got != reaches(g) {
+				t.Fatalf("%v: classify(%s) opaque %v, want %v", written, g, got, !got)
+			}
+			if v := c.via[g]; v != "" && !slices.Contains(groups[g], v) {
+				t.Fatalf("%v: via[%s] = %s, not a member", written, g, v)
+			}
 		}
 	}
 }

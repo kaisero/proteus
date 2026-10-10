@@ -26,8 +26,10 @@ ci: tidy-check lint test-race test-cov bench-check context-check build vuln
 
 `go test ./internal/archtest -run TestImportDirection` is R12: the read-only core
 imports no I/O, and the packages above it point one way. `TestTestHelpersStayInTests`
-keeps the test helpers `internal/fakepanos` and `internal/simulate/pathlab`, which
-import `testing`, out of every package's non-test code. It runs in `test-race`.
+keeps the test helpers `internal/fakepanos`, `internal/simulate/pathlab` and
+`internal/testconfig`, which import `testing`, out of every package's non-test code.
+It runs in `test-race`. `internal/testconfig` writes the generated group-tree
+configuration the index and card benchmarks share.
 
 ### The coverage ratchet
 

@@ -14,7 +14,7 @@ github.com/okaiser/proteus/internal/schema  90.0
 github.com/okaiser/proteus/internal/digest  74.4
 github.com/okaiser/proteus/internal/config  98.3
 github.com/okaiser/proteus/internal/resolve  97.5
-github.com/okaiser/proteus/internal/index  98.1
+github.com/okaiser/proteus/internal/index  98.2
 github.com/okaiser/proteus/internal/inventory  97.1
 github.com/okaiser/proteus/internal/fetch  100.0
 github.com/okaiser/proteus/internal/store  94.3
@@ -34,6 +34,7 @@ github.com/okaiser/proteus/internal/tools/schemadigest  67.9
 github.com/okaiser/proteus/cmd/proteus  70.6
 github.com/okaiser/proteus/internal/task  100.0
 github.com/okaiser/proteus/internal/simulate/pathlab  92.4
+github.com/okaiser/proteus/internal/testconfig  97.5
 github.com/okaiser/proteus/internal/simulate/pathpolicy  100.0
 github.com/okaiser/proteus/internal/reason  100.0
 github.com/okaiser/proteus/internal/query  98.1

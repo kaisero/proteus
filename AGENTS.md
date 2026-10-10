@@ -166,8 +166,9 @@ answers the questions for every front end: it may import the simulations, `estat
 `runlog` and `reason`, and reaches none of `fetch`, `cli`, `mcp`, Cobra or a
 terminal package; `cli` imports it. `internal/reason` names the reason codes answers
 carry. It imports only the standard library, and every package may import it: each
-rule above allows it. The test helpers `internal/fakepanos` and
-`internal/simulate/pathlab` import `testing`; only tests import them.
+rule above allows it. The test helpers `internal/fakepanos`,
+`internal/simulate/pathlab` and `internal/testconfig` import `testing`; only tests
+import them.
 `internal/reason` also imports `testing`, for `testing.Testing()` alone: its strict
 hook, which makes `reason.New` panic on an unregistered code in a test binary. It is
 not a test helper, and production code imports it. `internal/mcp` imports `testing`

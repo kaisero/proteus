@@ -96,7 +96,7 @@ var queryForbids = append(mod("internal/fetch", "internal/cli", "internal/mcp"),
 
 // testOnly are helper packages for tests. They import testing, so no package's
 // non-test code may reach them.
-var testOnly = []string{"internal/fakepanos", "internal/simulate/pathlab"}
+var testOnly = []string{"internal/fakepanos", "internal/simulate/pathlab", "internal/testconfig"}
 
 // violations reports every rule a graph breaks. graph maps a package of this
 // module to its direct, non-test imports.

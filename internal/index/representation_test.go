@@ -56,6 +56,7 @@ func TestClosureRepresentation(t *testing.T) {
 	h1, _ := idx.Interner().Lookup("h-1")
 	checked := false
 	for _, fam := range idx.families {
+		direct := bitmapSets(fam.closure.direct)
 		forward := bitmapSets(fam.closure.forward)
 		ancestors := bitmapSet(fam.closure.ancestors(h1))
 		reverse := bitmapSets(fam.closure.reverse)
@@ -63,6 +64,9 @@ func TestClosureRepresentation(t *testing.T) {
 			continue
 		}
 		checked = true
+		if got := idx.names(direct[outer]); !slices.Equal(got, []string{"g-middle"}) {
+			t.Errorf("direct members of g-outer = %v", got)
+		}
 		if got := idx.names(forward[outer]); !slices.Equal(slices.Sorted(slices.Values(got)),
 			[]string{"g-inner", "g-middle", "h-1", "h-2"}) {
 			t.Errorf("forward closure of g-outer = %v", got)

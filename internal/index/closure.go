@@ -21,7 +21,7 @@ import (
 // The forward closure is built eagerly. Reverse lookups are computed on first ask,
 // because inverting a dense closure eagerly cost 26 s and 294 MB on the same data.
 type closureIndex struct {
-	direct  map[uint32][]uint32        // group -> direct members
+	direct  map[uint32]*roaring.Bitmap // group -> direct members
 	forward map[uint32]*roaring.Bitmap // group -> transitive members
 
 	unparsed []UnparsedFilter
@@ -50,7 +50,7 @@ type UnparsedFilter struct {
 // one.
 func newClosureIndex(in *Interner, groups, addrs []resolve.Object) *closureIndex {
 	c := &closureIndex{
-		direct:  map[uint32][]uint32{},
+		direct:  map[uint32]*roaring.Bitmap{},
 		forward: map[uint32]*roaring.Bitmap{},
 		reverse: map[uint32]*roaring.Bitmap{},
 	}
@@ -68,7 +68,7 @@ func newClosureIndex(in *Interner, groups, addrs []resolve.Object) *closureIndex
 			}
 			for _, a := range addrs {
 				if filter.Match(a.Tags) {
-					c.direct[gid] = append(c.direct[gid], in.ID(a.Name))
+					c.add(gid, in.ID(a.Name))
 				}
 			}
 			continue
@@ -78,11 +78,21 @@ func newClosureIndex(in *Interner, groups, addrs []resolve.Object) *closureIndex
 			if m == "" {
 				continue
 			}
-			c.direct[gid] = append(c.direct[gid], in.ID(m))
+			c.add(gid, in.ID(m))
 		}
 	}
 	c.settle()
 	return c
+}
+
+// add records a direct member. A group becomes one with its first member.
+func (c *closureIndex) add(g, m uint32) {
+	b, ok := c.direct[g]
+	if !ok {
+		b = roaring.New()
+		c.direct[g] = b
+	}
+	b.Add(m)
 }
 
 // settle builds every group's transitive membership in one pass. Groups may form
@@ -95,16 +105,26 @@ func newClosureIndex(in *Interner, groups, addrs []resolve.Object) *closureIndex
 // Measured on 20,000 addresses and 5,000 rules beside one cycle of 5,000 groups
 // (BenchmarkIndexBuildGroupCycle): the build took 29 s while it ORed the
 // members' sets until none grew; with one pass over the components it takes
-// 69 ms.
+// 73 ms.
 func (c *closureIndex) settle() {
-	for _, comp := range c.components() {
+	// A member that is a group leads the walk on; any other member ends it.
+	groups := func(g uint32) []uint32 {
+		var out []uint32
+		for it := c.direct[g].Iterator(); it.HasNext(); {
+			if m := it.Next(); c.direct[m] != nil {
+				out = append(out, m)
+			}
+		}
+		return out
+	}
+	for _, comp := range components(slices.Sorted(maps.Keys(c.direct)), groups) {
 		b := roaring.New()
 		for _, g := range comp {
-			for _, m := range c.direct[g] {
-				b.Add(m)
+			b.Or(c.direct[g])
+			for it := c.direct[g].Iterator(); it.HasNext(); {
 				// A member of this component has no set yet; its members are
 				// the component's own, added by this loop.
-				if mb, done := c.forward[m]; done {
+				if mb, done := c.forward[it.Next()]; done {
 					b.Or(mb)
 				}
 			}
@@ -121,61 +141,59 @@ func (c *closureIndex) settle() {
 	}
 }
 
-// components returns the groups' strongly connected components, by Tarjan's
-// algorithm, each after every component its groups hold. The walk keeps its own
-// stack rather than recursing, so a long chain of groups costs no call depth.
-func (c *closureIndex) components() [][]uint32 {
+// components returns the strongly connected components of a graph, by Tarjan's
+// algorithm, each after every component its nodes lead to. next gives the nodes
+// a node leads to. The walk keeps its own stack rather than recursing, so a long
+// chain costs no call depth.
+func components[N comparable](nodes []N, next func(N) []N) [][]N {
 	type frame struct {
-		g    uint32
-		next int // the next direct member to visit
+		n    N
+		next []N // the nodes still to visit from n
 	}
-	order := map[uint32]int{} // visit order
-	low := map[uint32]int{}   // lowest visit order the group reaches on the stack
-	onStack := map[uint32]bool{}
-	var stack []uint32
-	var out [][]uint32
-	visit := func(g uint32) frame {
-		order[g], low[g] = len(order), len(order)
-		stack = append(stack, g)
-		onStack[g] = true
-		return frame{g: g}
+	order := map[N]int{} // visit order
+	low := map[N]int{}   // lowest visit order the node reaches on the stack
+	onStack := map[N]bool{}
+	var stack []N
+	var out [][]N
+	visit := func(n N) frame {
+		order[n], low[n] = len(order), len(order)
+		stack = append(stack, n)
+		onStack[n] = true
+		return frame{n: n, next: next(n)}
 	}
-	for _, root := range slices.Sorted(maps.Keys(c.direct)) {
+	for _, root := range nodes {
 		if _, seen := order[root]; seen {
 			continue
 		}
 		walk := []frame{visit(root)}
 		for len(walk) > 0 {
 			f := &walk[len(walk)-1]
-			if members := c.direct[f.g]; f.next < len(members) {
-				m := members[f.next]
-				f.next++
-				if _, isGroup := c.direct[m]; !isGroup {
-					continue
-				}
+			if len(f.next) > 0 {
+				m := f.next[0]
+				f.next = f.next[1:]
 				if _, seen := order[m]; !seen {
 					walk = append(walk, visit(m))
 				} else if onStack[m] {
-					low[f.g] = min(low[f.g], order[m])
+					low[f.n] = min(low[f.n], order[m])
 				}
 				continue
 			}
-			g := f.g
+			n := f.n
 			walk = walk[:len(walk)-1]
 			if len(walk) > 0 {
-				p := walk[len(walk)-1].g
-				low[p] = min(low[p], low[g])
+				p := walk[len(walk)-1].n
+				low[p] = min(low[p], low[n])
 			}
-			if low[g] != order[g] {
+			if low[n] != order[n] {
 				continue
 			}
-			var comp []uint32
+			var comp []N
 			for {
 				top := stack[len(stack)-1]
 				stack = stack[:len(stack)-1]
 				onStack[top] = false
 				comp = append(comp, top)
-				if top == g {
+				if top == n {
 					break
 				}
 			}
@@ -342,7 +360,7 @@ func (i *Index) UnparsedFilters() []UnparsedFilter {
 func (c *closureIndex) directGroups(id uint32, in *Interner) []string {
 	var out []string
 	for g, members := range c.direct {
-		if slices.Contains(members, id) {
+		if members.Contains(id) {
 			out = append(out, in.Name(g))
 		}
 	}
