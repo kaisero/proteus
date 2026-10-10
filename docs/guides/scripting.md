@@ -27,6 +27,7 @@ $ proteus search 10.124.0.1 --vsys vsys1 --show objects --output json \
     "direct": false,
     "fields": null,
     "kinds": null,
+    "limit": 0,
     "mode": "covers",
     "selection": {
       "file": "testdata/config/firewall-multivsys.xml",
@@ -65,7 +66,8 @@ $ proteus search 10.124.0.1 --vsys vsys1 --show objects --output json \
     "answer": "1 with results, 0 without, 0 holes",
     "found": 2,
     "with": 1,
-    "without": 0
+    "without": 0,
+    "omitted": 0
   },
   "holes": [],
   "unresolved": [],
@@ -78,9 +80,11 @@ meaning or is removed.
 
 Each result of `simulate`, `search`, `lookup` and `snapshot diff` has an
 `answer`: one line of the text output that says what the result found, such as
-`denied at hop 2: fw01 / vsys1, rule block-servers (deny)`. `search` and
-`lookup` also print a `summary` with the counts and the count line as its
-`answer`.
+`denied at hop 2: fw01 / vsys1, rule block-servers (deny)`. `search`,
+`lookup` and `snapshot diff` also print a `summary` with the counts and the
+count line as its `answer`. With `--limit N`, `results` holds the first N
+results, and `summary.omitted` counts the ones left out; it is 0 when nothing
+is left out.
 
 A simulate result that is undecided, or whose fidelity is `undermatch`, has a
 `needs` list: the inputs that, given in a second question, can change the

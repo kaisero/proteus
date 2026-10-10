@@ -5,6 +5,7 @@ input:
   direct: false
   fields: null
   kinds: null
+  limit: 0
   mode: covers
   selection:
     file: ../../testdata/config/firewall-multivsys.xml
@@ -68,6 +69,7 @@ summary:
   found: 6
   with: 1
   without: 2
+  omitted: 0
 holes: []
 unresolved: []
 notes: []

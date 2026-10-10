@@ -25,6 +25,7 @@ type snapshotShowOptions struct{ sel selection }
 type snapshotDiffOptions struct {
 	sel      selection
 	from, to string
+	limit    int
 }
 
 func (a *app) snapshotListCmd() *cobra.Command {
@@ -237,6 +238,7 @@ func (a *app) snapshotDiffCmd() *cobra.Command {
 	o.sel.bind(cmd, selectOpts{})
 	cmd.Flags().StringVar(&o.from, "from", "", "compare from the newest snapshot at or before this time (default: the one before --to)")
 	cmd.Flags().StringVar(&o.to, "to", "", "compare to the newest snapshot at or before this time (default: latest)")
+	bindLimit(cmd, &o.limit)
 	a.bindDetail(cmd)
 	return cmd
 }
@@ -247,7 +249,7 @@ type snapshotDiffAnswer struct {
 }
 
 func (a *app) runSnapshotDiff(ctx context.Context, o snapshotDiffOptions) (answer, error) {
-	in := query.DiffInput{Selection: o.sel.input(), From: o.from, To: o.to}
+	in := query.DiffInput{Selection: o.sel.input(), From: o.from, To: o.to, ResultLimit: query.ResultLimit{Limit: o.limit}}
 	if u := in.Validate(); u != nil {
 		return nil, u
 	}
@@ -265,6 +267,8 @@ func (a *app) runSnapshotDiff(ctx context.Context, o snapshotDiffOptions) (answe
 	}
 	return snapshotDiffAnswer{enveloped[query.DiffInput, query.DiffResult]{e}}, nil
 }
+
+func (d snapshotDiffAnswer) Summary() *query.Summary { return d.e.Summary }
 
 func (d snapshotDiffAnswer) SummaryResults() any {
 	return query.Summarize(d.e, query.DiffResult.Summary).Results
@@ -317,6 +321,7 @@ func (d snapshotDiffAnswer) Text(t *textOut) error {
 		_ = tb.write(t, "    ", 1)
 	}
 	printQualifiers(t, qualifiers{Holes: d.e.Holes})
+	fmt.Fprintln(t, d.e.Summary.Answer)
 	return t.err
 }
 

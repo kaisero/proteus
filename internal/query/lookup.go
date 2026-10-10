@@ -25,12 +25,17 @@ type LookupInput struct {
 	Full   bool `json:"full,omitempty" jsonschema:"show every field in the text card"`
 	// Selection is what the lookup runs against.
 	Selection Selection `json:"selection" jsonschema:"the file or the devices to read"`
+	ResultLimit
 }
 
-// Validate holds lookup's input rules: a file without the store's selectors.
+// Validate holds lookup's input rules: no limit below zero, and a file without
+// the store's selectors.
 func (in LookupInput) Validate() *UsageError {
 	if strings.TrimSpace(in.Name) == "" {
 		return usage("give a name to look up", "")
+	}
+	if u := in.checkLimit(); u != nil {
+		return u
 	}
 	return in.Selection.validateFile()
 }
@@ -48,7 +53,8 @@ type LookupResult struct {
 
 // Lookup finds the element on each selected target. A name that means
 // different kinds on different targets is a usage error: the caller has to pick
-// one. The summary counts the cards and the targets with and without one.
+// one. The summary counts the cards and the targets with and without one. A
+// limit keeps the first cards over all targets.
 func Lookup(ctx context.Context, env Env, in LookupInput) (Envelope[LookupInput, LookupResult], error) {
 	var none Envelope[LookupInput, LookupResult]
 	if u := in.Validate(); u != nil {
@@ -99,6 +105,7 @@ func Lookup(ctx context.Context, env Env, in LookupInput) (Envelope[LookupInput,
 	e.Summary.Without = len(ts) - e.Summary.With
 	e.Summary.Answer = lookupCount(e.Summary, len(e.Holes))
 	e.Unresolved, e.Notes = TargetQualifiers(ts)
+	cut(&e, in.ResultLimit, "device or vsys")
 	return e, nil
 }
 

@@ -4,6 +4,7 @@
   "detail": "summary",
   "input": {
     "from": "",
+    "limit": 0,
     "selection": {
       "vsys": [
         "vsys1"
@@ -33,6 +34,13 @@
       "changed": 2
     }
   ],
+  "summary": {
+    "answer": "1 with changes, 0 without, 0 holes",
+    "found": 2,
+    "with": 1,
+    "without": 0,
+    "omitted": 0
+  },
   "holes": [],
   "unresolved": [],
   "notes": []

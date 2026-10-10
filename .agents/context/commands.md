@@ -93,9 +93,15 @@ simulate nat <src> <dst> --device <fw>      the NAT rule and the translated pack
   reporting.md); the text output does not change with it. Each result of a
   question (simulate, search, lookup, snapshot diff) carries `answer`, one line
   of its text output that a `query` builder makes and the renderer prints
-  (`TestGoldenAnswersAreTextLines`); search and lookup add `summary` with the
-  count line as its `answer`. Search prints its findings' answers only with
-  `--why`.
+  (`TestGoldenAnswersAreTextLines`); search, lookup and snapshot diff add
+  `summary` with the count line as its `answer`. Search prints its findings'
+  answers only with `--why`.
+- **`--limit N`** (search, lookup, snapshot diff; MCP `limit`): one field,
+  `query.ResultLimit`, embedded in the query inputs and the MCP arguments. No
+  default. `query.cut` keeps the first N results of the whole, sorted answer;
+  `summary.omitted` counts the rest and the count line ends `; N of M shown,
+  narrow by …`. Holes, unresolved entries and notes are never cut. `--limit 0`
+  is a usage error (`checkLimit`); the MCP input schema has `minimum: 1`.
 - **Colour:** `--color auto|always|never` (also `PROTEUS_COLOR`, inventory `color:`),
   default `auto`. JSON and YAML are never coloured. `NO_COLOR`, `CLICOLOR_FORCE` and
   `TERM=dumb` act on `auto` only; `auto` colours a terminal and nothing else.
@@ -193,6 +199,7 @@ type PathSummary struct{ ... }
 type Point struct{ ... }
 type PolicyFileInput struct{ ... }
 type PolicyInput struct{ ... }
+type ResultLimit struct{ ... }
 type RoutingEcho struct{ ... }
 type RoutingInput struct{ ... }
 type RoutingResult struct{ ... }

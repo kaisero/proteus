@@ -3,6 +3,7 @@ command: snapshot diff
 detail: full
 input:
   from: ""
+  limit: 0
   selection:
     vsys:
       - vsys1
@@ -42,6 +43,12 @@ results:
         kind: security rule
         name: new-rule
         new: allow application=dns destination=any source=net-home
+summary:
+  answer: 1 with changes, 0 without, 0 holes
+  found: 2
+  with: 1
+  without: 0
+  omitted: 0
 holes: []
 unresolved: []
 notes: []

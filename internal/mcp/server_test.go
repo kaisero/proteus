@@ -786,3 +786,60 @@ func TestErrorOf(t *testing.T) {
 		t.Error("the file shape has no tool")
 	}
 }
+
+// search, lookup and snapshot_diff take limit: the first results, the rest
+// counted in the summary and named on its answer line, also in the text
+// content. A limit below 1 is the SDK's input error.
+func TestResultLimit(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	lab := fixture("firewall-lab.xml")
+	cs, rec := serve(t, labEnv(t, snap{"fw01", lab}, snap{"fw02", lab}, snap{"fw01", fixture("firewall-lab-changed.xml")}), true)
+	for _, tc := range []struct {
+		tool   string
+		args   map[string]any
+		narrow string
+	}{
+		{"search", map[string]any{"value": "198.18.10.100"}, "device, vsys or kind"},
+		{"lookup", map[string]any{"name": "dc01"}, "device or vsys"},
+		{"snapshot_diff", map[string]any{"device": "fw01"}, "device"},
+	} {
+		whole, err := cs.CallTool(ctx, &sdk.CallToolParams{Name: tc.tool, Arguments: tc.args})
+		if err != nil || whole.IsError {
+			t.Fatalf("%s: %v %s", tc.tool, err, text(whole))
+		}
+		all := plain(t, whole.StructuredContent).(map[string]any)["envelope"].(map[string]any)
+		found := len(all["results"].([]any))
+		if s := all["summary"].(map[string]any); s["omitted"] != 0.0 || int(s["found"].(float64)) != found || found < 2 {
+			t.Fatalf("%s: whole summary %v, %d results", tc.tool, s, found)
+		}
+		tc.args["limit"] = 1
+		res, err := cs.CallTool(ctx, &sdk.CallToolParams{Name: tc.tool, Arguments: tc.args})
+		if err != nil || res.IsError {
+			t.Fatalf("%s: %v %s", tc.tool, err, text(res))
+		}
+		env := plain(t, res.StructuredContent).(map[string]any)["envelope"].(map[string]any)
+		s := env["summary"].(map[string]any)
+		line := fmt.Sprintf("; 1 of %d shown, narrow by %s", found, tc.narrow)
+		if len(env["results"].([]any)) != 1 || s["omitted"] != float64(found-1) || !strings.HasSuffix(s["answer"].(string), line) ||
+			env["input"].(map[string]any)["limit"] != 1.0 || !reflect.DeepEqual(env["notes"], all["notes"]) || !reflect.DeepEqual(env["holes"], all["holes"]) {
+			t.Errorf("%s: %v", tc.tool, env)
+		}
+		if first, _, _ := strings.Cut(text(res), "\n"); !strings.HasSuffix(first, line) {
+			t.Errorf("%s: text %q", tc.tool, text(res))
+		}
+		if c := rec.last(t); c.Status != StatusOK || len(c.Answers) != 2 || !strings.HasSuffix(c.Answers[0], line) {
+			t.Errorf("%s: audit %+v", tc.tool, c)
+		}
+		for _, bad := range []int{0, -1} {
+			tc.args["limit"] = bad
+			res, err := cs.CallTool(ctx, &sdk.CallToolParams{Name: tc.tool, Arguments: tc.args})
+			if err != nil || !res.IsError || !strings.Contains(text(res), "validating") {
+				t.Errorf("%s limit %d: %v %s", tc.tool, bad, err, text(res))
+			}
+			if c := rec.last(t); c.Status != StatusUsage {
+				t.Errorf("%s limit %d: audit %+v", tc.tool, bad, c)
+			}
+		}
+	}
+}

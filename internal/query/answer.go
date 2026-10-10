@@ -203,11 +203,17 @@ func countChanges(changes []drift.Change) (added, removed, changed int) {
 	return added, removed, changed
 }
 
-// searchCount is search's count line; lookupCount is lookup's.
+// searchCount is search's count line; lookupCount is lookup's. A limit adds
+// how many results it shows (cut).
 func searchCount(s *Summary, holes int) string {
 	return fmt.Sprintf("%d with results, %d without, %d holes", s.With, s.Without, holes)
 }
 
 func lookupCount(s *Summary, holes int) string {
 	return fmt.Sprintf("%d with it, %d without, %d holes", s.With, s.Without, holes)
+}
+
+// diffCount is snapshot diff's count line, over devices.
+func diffCount(s *Summary, holes int) string {
+	return fmt.Sprintf("%d with changes, %d without, %d holes", s.With, s.Without, holes)
 }

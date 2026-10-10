@@ -23,10 +23,11 @@ type DiffInput struct {
 	// To, and To "" is the latest.
 	From string `json:"from,omitempty" jsonschema:"the older point in time; empty for the snapshot before the newer one"`
 	To   string `json:"to,omitempty" jsonschema:"the newer point in time; empty for the latest"`
+	ResultLimit
 }
 
 // Validate holds the diff's input rules: the store's devices only, picked by
-// From and To rather than one time.
+// From and To rather than one time, and no limit below zero.
 func (in DiffInput) Validate() *UsageError {
 	for _, f := range []struct {
 		given bool
@@ -37,7 +38,7 @@ func (in DiffInput) Validate() *UsageError {
 				f.flag+": snapshot diff compares stored snapshots; pick them with from and to")
 		}
 	}
-	return nil
+	return in.checkLimit()
 }
 
 // DiffResult is what changed in one scope of one device.
@@ -52,7 +53,8 @@ type DiffResult struct {
 
 // SnapshotDiff compares two snapshots of each selected device, per scope. A
 // device without two snapshots to compare, or whose configuration cannot be
-// read, is a hole.
+// read, is a hole. The summary counts the scopes compared and the devices with
+// and without a change. A limit keeps the first scopes over all devices.
 func SnapshotDiff(ctx context.Context, env Env, in DiffInput) (Envelope[DiffInput, DiffResult], error) {
 	var none Envelope[DiffInput, DiffResult]
 	if u := in.Validate(); u != nil {
@@ -69,7 +71,8 @@ func SnapshotDiff(ctx context.Context, env Env, in DiffInput) (Envelope[DiffInpu
 		return none, errNoStore
 	}
 	e := envelope[DiffInput, DiffResult]("snapshot diff", in)
-	e.Results = []DiffResult{}
+	e.Results, e.Summary = []DiffResult{}, &Summary{}
+	compared := 0
 	for _, d := range names {
 		if err := ctx.Err(); err != nil {
 			return none, err
@@ -93,15 +96,24 @@ func SnapshotDiff(ctx context.Context, env Env, in DiffInput) (Envelope[DiffInpu
 			continue
 		}
 		before, after := was.Config, now.Config
+		changed := false
 		for _, sc := range diffScopes(before, after, in.Selection.Vsys) {
 			ch := drift.Compare(before, after, sc)
 			if ch == nil {
 				ch = []drift.Change{}
 			}
+			changed = changed || len(ch) > 0
 			e.Results = append(e.Results, DiffResult{Answer: DiffAnswer(d, sc.String(), ch), Device: d, From: older.ID, To: newer.ID, Scope: sc.String(), Changes: ch})
+		}
+		compared++
+		if changed {
+			e.Summary.With++
 		}
 	}
 	slices.Sort(e.Read)
+	e.Summary.Found, e.Summary.Without = len(e.Results), compared-e.Summary.With
+	e.Summary.Answer = diffCount(e.Summary, len(e.Holes))
+	cut(&e, in.ResultLimit, "device")
 	return e, nil
 }
 

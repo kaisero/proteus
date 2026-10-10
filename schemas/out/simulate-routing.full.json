@@ -1057,23 +1057,28 @@
         },
         "found": {
           "type": "integer",
-          "description": "results over every target"
+          "description": "results over every target, the omitted ones included"
         },
         "with": {
           "type": "integer",
-          "description": "targets with a result"
+          "description": "targets with a result; for snapshot diff, devices with a change"
         },
         "without": {
           "type": "integer",
-          "description": "targets read without a result"
+          "description": "targets read without a result; for snapshot diff, devices compared without a change"
+        },
+        "omitted": {
+          "type": "integer",
+          "description": "results the limit left out of the results list; 0 when every result is shown"
         }
       },
-      "description": "search and lookup only: the count of results over the targets read",
+      "description": "search, lookup and snapshot diff only: the count of results over the targets read",
       "required": [
         "answer",
         "found",
         "with",
-        "without"
+        "without",
+        "omitted"
       ],
       "additionalProperties": false
     },

@@ -103,6 +103,7 @@ func TestGoldenJSON(t *testing.T) {
 		args []string
 	}{
 		{"search", 0, []string{"search", "10.124.0.1", "--file", fixture("firewall-multivsys.xml")}},
+		{"search-limit", 0, []string{"search", "10.124.0.1", "--limit", "2", "--file", fixture("firewall-multivsys.xml")}},
 		{"lookup", 0, []string{"lookup", "branch-to-dc", "--file", fixture("firewall-lookup.xml")}},
 		{"snapshot-show-file", 0, []string{"snapshot", "show", "--file", fixture("firewall-multivsys.xml")}},
 		{"simulate-policy", 0, []string{"simulate", "policy", "10.1.0.5", "10.2.0.5", "--port", "443", "--file", fixture("firewall-zones.xml")}},
@@ -196,6 +197,8 @@ func TestGoldenText(t *testing.T) {
 	}{
 		{"search", 0, []string{"search", "10.124.0.1", "--file", fixture("firewall-multivsys.xml")}},
 		{"search-why", 0, []string{"search", "10.124.0.1", "--why", "--file", fixture("firewall-multivsys.xml")}},
+		// With --why, so the JSON twin's answers are lines of it.
+		{"search-limit", 0, []string{"search", "10.124.0.1", "--limit", "2", "--why", "--file", fixture("firewall-multivsys.xml")}},
 		{"lookup", 0, []string{"lookup", "branch-to-dc", "--file", fixture("firewall-lookup.xml")}},
 		{"snapshot-show-file", 0, []string{"snapshot", "show", "--file", fixture("firewall-multivsys.xml")}},
 		{"simulate-policy", 0, []string{"simulate", "policy", "10.1.0.5", "10.2.0.5", "--port", "443", "--file", fixture("firewall-zones.xml")}},

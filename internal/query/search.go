@@ -31,6 +31,7 @@ type SearchInput struct {
 	Direct bool     `json:"direct,omitempty" jsonschema:"follow groups one level up only"`
 	// Selection is what the search runs against.
 	Selection Selection `json:"selection" jsonschema:"the file or the devices to search"`
+	ResultLimit
 }
 
 // searchModes are the modes a search takes, by name.
@@ -42,8 +43,8 @@ var showNames = map[string]search.Stage{
 	"refs": search.StageReference, "literals": search.StageLiteral,
 }
 
-// Validate holds search's input rules: one known mode, known stages to show, and
-// a file without the store's selectors.
+// Validate holds search's input rules: one known mode, known stages to show, no
+// limit below zero, and a file without the store's selectors.
 func (in SearchInput) Validate() *UsageError {
 	if strings.TrimSpace(in.Term) == "" {
 		return usage("give a search term", "")
@@ -56,6 +57,9 @@ func (in SearchInput) Validate() *UsageError {
 			return usage(fmt.Sprintf("--show %q: want objects, groups, refs or literals", st),
 				fmt.Sprintf("show %q: want objects, groups, refs or literals", st))
 		}
+	}
+	if u := in.checkLimit(); u != nil {
+		return u
 	}
 	return in.Selection.validateFile()
 }
@@ -201,7 +205,7 @@ func Detail(f search.Finding) string {
 
 // Search runs the query on each selected target. A target whose index cannot be
 // built becomes a hole. The summary counts the findings and the targets with
-// and without one.
+// and without one. A limit keeps the first findings over all targets.
 func Search(ctx context.Context, env Env, in SearchInput) (Envelope[SearchInput, Finding], error) {
 	var none Envelope[SearchInput, Finding]
 	if u := in.Validate(); u != nil {
@@ -263,6 +267,7 @@ func Search(ctx context.Context, env Env, in SearchInput) (Envelope[SearchInput,
 	e.Summary.Answer = searchCount(e.Summary, len(e.Holes))
 	un, notes := TargetQualifiers(ts)
 	e.Unresolved, e.Notes = append(un, e.Unresolved...), notes
+	cut(&e, in.ResultLimit, "device, vsys or kind")
 	return e, nil
 }
 

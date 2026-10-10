@@ -43,6 +43,10 @@
           },
           "description": "the object kinds searched; empty for every kind"
         },
+        "limit": {
+          "type": "integer",
+          "description": "the most results kept; 0 for every result"
+        },
         "mode": {
           "type": "string",
           "description": "how the term matches: the mode asked (exact, within or contains) or the one the term sets (covers, overlaps or matches)"
@@ -116,6 +120,7 @@
         "direct",
         "fields",
         "kinds",
+        "limit",
         "mode",
         "selection",
         "show",
@@ -197,23 +202,28 @@
         },
         "found": {
           "type": "integer",
-          "description": "results over every target"
+          "description": "results over every target, the omitted ones included"
         },
         "with": {
           "type": "integer",
-          "description": "targets with a result"
+          "description": "targets with a result; for snapshot diff, devices with a change"
         },
         "without": {
           "type": "integer",
-          "description": "targets read without a result"
+          "description": "targets read without a result; for snapshot diff, devices compared without a change"
+        },
+        "omitted": {
+          "type": "integer",
+          "description": "results the limit left out of the results list; 0 when every result is shown"
         }
       },
-      "description": "search and lookup only: the count of results over the targets read",
+      "description": "search, lookup and snapshot diff only: the count of results over the targets read",
       "required": [
         "answer",
         "found",
         "with",
-        "without"
+        "without",
+        "omitted"
       ],
       "additionalProperties": false
     },

@@ -275,7 +275,7 @@ var (
 )
 
 // inputSchema is a tool's input schema: the arguments' schema with the
-// protocol, detail and port ranges, and the device names as an enum when
+// protocol, detail, port and limit ranges, and the device names as an enum when
 // devices is set, as the server adds them at start (spec §3.6).
 func inputSchema(args reflect.Type, devices []string) (*jsonschema.Schema, error) {
 	s, err := jsonschema.ForType(args, nil)
@@ -299,6 +299,9 @@ func inputSchema(args reflect.Type, devices []string) (*jsonschema.Schema, error
 		if p := s.Properties[key]; p != nil {
 			p.Minimum, p.Maximum = jsonschema.Ptr(1.0), jsonschema.Ptr(65535.0)
 		}
+	}
+	if p := s.Properties["limit"]; p != nil {
+		p.Minimum = jsonschema.Ptr(1.0)
 	}
 	if p := s.Properties["device"]; p != nil && devices != nil {
 		if p.Items != nil {

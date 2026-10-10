@@ -83,3 +83,7 @@ Pick one with `--kind address-group`.
 A name that proteus finds nowhere exits with code 1.
 
 `--output json` returns the whole element. It never cuts a list.
+
+When a name is on many devices, `--limit N` keeps the first N cards. The summary
+line then ends `; 1 of 2 shown, narrow by device or vsys`, and JSON and YAML give
+the count of cards left out in `summary.omitted`. There is no default.

@@ -69,7 +69,11 @@ fw01   2026-09-22T08-00-00Z -> 2026-09-28T08-00-00Z
     added   security rule new-rule  allow application=dns destination=any source=net-home
   vsys:vsys2 no changes
     fw01/vsys:vsys2: 0 added, 0 removed, 0 changed
+1 with changes, 0 without, 0 holes
 ```
+
+The last line counts the devices with changes, the devices compared without a
+change, and the holes. A device without two snapshots to compare is a hole.
 
 What it compares:
 
@@ -99,6 +103,13 @@ How it shows a change:
 By default it compares the snapshot before `latest` with `latest`. `--from` and
 `--to` take a snapshot id, an RFC 3339 time or a date. A rule that only moved is
 not a change.
+
+`--limit N` keeps the first N results, in the order above, over all devices
+together. A result is one scope of one device: shared or one vsys, with all
+of its changes. There is no default. With results left out, the last line ends
+`; 1 of 3 shown, narrow by device`, and JSON and YAML give the count in
+`summary.omitted`. `omitted` is 0 when nothing is left out. Holes and notes are
+never cut. `--limit` takes 1 or more; `--limit 0` is a usage error (exit 2).
 
 A secret never shows: a key, a password or a password hash, such as a
 certificate's private key, a server profile's password or a local user's

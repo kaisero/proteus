@@ -25,6 +25,7 @@ type lookupOptions struct {
 	name         string
 	kind         string
 	expand, full bool
+	limit        int
 }
 
 func (a *app) lookupCmd() *cobra.Command {
@@ -49,6 +50,7 @@ func (a *app) lookupCmd() *cobra.Command {
 	f.StringVar(&o.kind, "kind", "", "the kind of element: security-rule or an object kind")
 	f.BoolVar(&o.expand, "expand", false, "show each name's value and every group's members")
 	f.BoolVar(&o.full, "full", false, "show every item of a list")
+	bindLimit(cmd, &o.limit)
 	a.bindDetail(cmd)
 	return cmd
 }
@@ -59,7 +61,10 @@ type lookupAnswer struct {
 }
 
 func (a *app) runLookup(ctx context.Context, o lookupOptions) (answer, error) {
-	in := query.LookupInput{Name: o.name, Kind: o.kind, Expand: o.expand, Full: o.full, Selection: o.sel.input()}
+	in := query.LookupInput{
+		Name: o.name, Kind: o.kind, Expand: o.expand, Full: o.full, Selection: o.sel.input(),
+		ResultLimit: query.ResultLimit{Limit: o.limit},
+	}
 	if u := in.Validate(); u != nil {
 		return nil, u
 	}

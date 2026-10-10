@@ -5,6 +5,7 @@ input:
   expand: false
   full: false
   kind: ""
+  limit: 0
   name: branch-to-dc
   selection:
     file: ../../testdata/config/firewall-lookup.xml
@@ -140,6 +141,7 @@ summary:
   found: 1
   with: 1
   without: 0
+  omitted: 0
 holes: []
 unresolved: []
 notes: []

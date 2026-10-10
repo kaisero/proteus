@@ -66,9 +66,9 @@ before `at`. A date in `at` means the end of that day.
 | `simulate_policy` | `source`, `destination`, `protocol`, `port`, `source_port`, `url`, `application`, `user`, `device`, `router`, `at`, `detail` |
 | `simulate_routing` | `source`, `destination`, `protocol`, `port`, `device`, `router`, `at`, `detail` |
 | `simulate_nat` | `source`, `destination`, `protocol`, `port`, `device` (required), `router`, `at`, `detail` |
-| `search` | `value`, `kind`, `device` (list), `label` (list), `vsys`, `at`, `detail` |
-| `lookup` | `name`, `kind`, `device` (list), `vsys`, `at`, `detail` |
-| `snapshot_diff` | `device`, `from`, `to`, `detail` |
+| `search` | `value`, `kind`, `device` (list), `label` (list), `vsys`, `at`, `detail`, `limit` |
+| `lookup` | `name`, `kind`, `device` (list), `vsys`, `at`, `detail`, `limit` |
+| `snapshot_diff` | `device`, `from`, `to`, `detail`, `limit` |
 
 - `source` and `destination` are an address or a host name. The server resolves a
   host name with its own DNS and checks the first IPv4 address.
@@ -81,6 +81,13 @@ before `at`. A date in `at` means the end of that day.
 - `application` is recorded, not evaluated. It does not change the answer.
 - `device` is an enum of the exported devices. The client sees the names in the
   tool's input schema, and the server refuses another name.
+- `limit` keeps the first N results, in the answer's usual order, over all
+  devices together. It is 1 or more, and it has no default: without it, the
+  answer holds every result. The summary's `omitted` counts the results left
+  out, and its answer line ends `; 5 of 812 shown, narrow by device, vsys or
+  kind`. Holes, unresolved entries and notes are never cut. A model should pass
+  `limit` for a broad search, such as a large prefix or a common port, so that
+  the answer fits its context.
 
 Each input has a description in the tool's input schema that says what proteus
 evaluates.
@@ -105,8 +112,8 @@ Each tool returns structured content of the form `{envelope, error}`:
 
 - `envelope` is the JSON format 2 envelope of the
   [scripting guide](scripting.md): `format`, `command`, `detail`, `input`,
-  `results`, `holes`, `unresolved` and `notes`, and `summary` for `search` and
-  `lookup`. It is null when the call failed.
+  `results`, `holes`, `unresolved` and `notes`, and `summary` for `search`,
+  `lookup` and `snapshot_diff`. It is null when the call failed.
 - `error` is null, or `{code, text, options, needs}` when the call failed.
 
 The JSON schema of each tool's output is in the tool's output schema. The schemas

@@ -44,6 +44,11 @@
         "summary",
         "full"
       ]
+    },
+    "limit": {
+      "type": "integer",
+      "description": "keep only the first N results, in the answer's usual order; the summary's omitted counts the rest. No default: left out, every result is returned",
+      "minimum": 1
     }
   },
   "required": [

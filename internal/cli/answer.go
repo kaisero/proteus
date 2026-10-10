@@ -47,8 +47,8 @@ type detailer interface {
 	SummaryResults() any
 }
 
-// summarizer is an answer whose envelope counts its results: search and
-// lookup.
+// summarizer is an answer whose envelope counts its results: search, lookup
+// and snapshot diff.
 type summarizer interface {
 	Summary() *query.Summary
 }

@@ -20,6 +20,7 @@ type searchOptions struct {
 	exact, within, contains bool
 	direct, why             bool
 	kinds, fields, show     []string
+	limit                   int
 }
 
 func (a *app) searchCmd() *cobra.Command {
@@ -48,6 +49,7 @@ func (a *app) searchCmd() *cobra.Command {
 	f.StringSliceVar(&o.fields, "field", nil, "only references and literals from these fields")
 	f.StringSliceVar(&o.show, "show", nil, "only these stages: objects, groups, refs, literals")
 	f.BoolVar(&o.direct, "direct", false, "groups one level up only")
+	bindLimit(cmd, &o.limit)
 	bindWhy(cmd, &o.why)
 	a.bindDetail(cmd)
 	return cmd
@@ -58,6 +60,7 @@ func (a *app) searchCmd() *cobra.Command {
 func (o searchOptions) input() query.SearchInput {
 	in := query.SearchInput{
 		Term: o.term, Kinds: o.kinds, Fields: o.fields, Show: o.show, Direct: o.direct, Selection: o.sel.input(),
+		ResultLimit: query.ResultLimit{Limit: o.limit},
 	}
 	switch {
 	case o.exact:
