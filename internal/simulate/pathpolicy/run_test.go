@@ -44,7 +44,7 @@ func (n network) Device(name string) (simulate.DeviceData, error) {
 
 // labNet is the fixture's operational data; fw01 loses its default route when
 // noDefault is set, so a destination beyond it has no route there.
-func labNet(t *testing.T, noDefault bool) network {
+func labNet(t testing.TB, noDefault bool) network {
 	t.Helper()
 	n := network{data: map[string]simulate.DeviceData{}}
 	for _, dev := range pathlab.Devices {
@@ -70,7 +70,7 @@ type lab struct {
 	predefined bool
 }
 
-func (l lab) env(t *testing.T) *simulate.Env {
+func (l lab) env(t testing.TB) *simulate.Env {
 	t.Helper()
 	paths := map[string]string{}
 	for _, dev := range pathlab.Devices {
@@ -259,7 +259,7 @@ func TestThePathFixtureVariants(t *testing.T) {
 // withNAT is fw02 with the default rules allowing and two NAT rules from home
 // to labor that translate nothing: nat-https names service-https, which only
 // the device's predefined services define, above nat-any.
-func withNAT(t *testing.T) []byte {
+func withNAT(t testing.TB) []byte {
 	t.Helper()
 	entry := func(name, service string) string {
 		return `<entry name="` + name + `"><from><member>home</member></from><to><member>labor</member></to>` +
@@ -490,6 +490,42 @@ func TestTheSecurityCheck(t *testing.T) {
 	if !isType[*simulate.UnavailableError](err) || r.Verdict != Undecided || r.Fidelity.Level() != "undermatch" ||
 		!slices.Equal(r.Reason, simulate.Reasons{reason.New("gap.config-missing", "the configuration of fw02 vsys1 cannot be read: no configuration")}) {
 		t.Errorf("no configuration: %+v, %v", r, err)
+	}
+}
+
+// countingNet is a network that counts the devices asked of it.
+type countingNet struct {
+	simulate.Network
+	asked *int
+}
+
+func (n countingNet) Device(name string) (simulate.DeviceData, error) {
+	*n.asked++
+	return n.Network.Device(name)
+}
+
+// Routing applied the hop's NAT already: the security check of a path does not
+// read the network to run NAT again, and leaves the caller's environment as it
+// was.
+func TestTheSecurityCheckDoesNotRunNATAgain(t *testing.T) {
+	t.Parallel()
+	asked := 0
+	l := lab{
+		config: map[string][]byte{pathlab.FW02: withNAT(t)}, defaults: allowAll, predefined: true,
+		net: countingNet{Network: labNet(t, false), asked: &asked},
+	}
+	e := l.env(t)
+	f := input(pathlab.Destination).Flow
+	f.Protocol, f.DestPort, f.FromZone, f.ToZone = "tcp", 443, "home", "labor"
+	r, err := Security{}.Evaluate(context.Background(), e, routing.Hop{Device: pathlab.FW02, Vsys: "vsys1"}, f)
+	if err != nil || r.Verdict != Pass {
+		t.Fatalf("check: %+v, %v", r, err)
+	}
+	if asked != 0 {
+		t.Errorf("the check asked the network %d times, want none", asked)
+	}
+	if e.Network == nil {
+		t.Error("the check cleared the caller's network")
 	}
 }
 

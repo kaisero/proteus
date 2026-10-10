@@ -47,7 +47,12 @@ func (Security) Evaluate(ctx context.Context, env *simulate.Env, h routing.Hop, 
 		out.Verdict, out.Reason, out.Fidelity = Undecided, simulate.Reasons{miss.Why()}, simulate.UnderMatch(miss.Why())
 		return out, &simulate.UnavailableError{Missing: []simulate.Missing{*miss}}
 	}
-	run, err := securitypolicy.Simulation{}.Run(ctx, env, simulate.Input{Device: h.Device, Vsys: h.Vsys, Flow: flow.FirstAddresses()})
+	// Routing already applied the hop's NAT and gave its zones. Without the
+	// network, the check does not run NAT a second time only to note a zone
+	// the given one wins over (spec §18 N10).
+	local := *env
+	local.Network = nil
+	run, err := securitypolicy.Simulation{}.Run(ctx, &local, simulate.Input{Device: h.Device, Vsys: h.Vsys, Flow: flow.FirstAddresses()})
 	if c, ok := errors.AsType[*simulate.ChoiceError](err); ok && c.Kind == simulate.ChoiceZone {
 		// A zone the hop's vsys does not define: the check cannot take it, and
 		// the hop's zone doubt leaves the hop undecided (spec §4.4).
