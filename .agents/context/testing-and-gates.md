@@ -8,7 +8,7 @@ Validated against 133ba4a on 2026-09-27 · Purpose: what must pass before a comm
 pre-commit hook runs it, which is why it has to stay fast enough to tolerate.
 
 ```
-ci: tidy-check lint test-race test-cov context-check build vuln
+ci: tidy-check lint test-race test-cov bench-check context-check build vuln
 ```
 
 ## The gates
@@ -19,6 +19,7 @@ ci: tidy-check lint test-race test-cov context-check build vuln
 | `lint` | golangci-lint v2, zero issues tolerated |
 | `test-race` | the shared-index data race class |
 | `test-cov` | coverage falling below the recorded floor |
+| `bench-check` | a benchmark behind a documented figure (R7) that no longer compiles or runs; each runs once |
 | `build` | proteus still cross-compiles for linux/amd64 |
 | `vuln` | govulncheck |
 | `context-check` | these agent docs drifting from the real API |

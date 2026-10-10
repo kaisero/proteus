@@ -18,12 +18,14 @@ import (
 	"github.com/okaiser/proteus/internal/store"
 )
 
-// The size estimates of the cache (spec §12 C18, measured in the plan's
-// survey): a snapshot's configuration with its edge list and three rulebase
-// indexes per vsys retains about 13 times the configuration file's bytes, and
-// the schema digest of each PAN-OS version about 9 MB once per process.
+// The size estimates of the cache (spec §12 C18): a snapshot's configuration
+// with its edge list and three rulebase indexes per vsys retains about 28
+// times the configuration file's bytes (BenchmarkCacheRetention: 27.2 on the
+// multi-vsys fixture, three vsys in 2.4 KB), and the schema digest of each
+// PAN-OS version about 9 MB once per process. A large file retains less per
+// byte, so the factor errs toward dropping a snapshot early.
 const (
-	configFactor = 13
+	configFactor = 28
 	digestBytes  = 9 << 20
 	// opFactor sizes a snapshot's operational tables by their files' bytes.
 	// It is an estimate, not a measurement: the parsed tables keep less text

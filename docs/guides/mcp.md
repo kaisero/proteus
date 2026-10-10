@@ -273,8 +273,8 @@ its variable and its flag, and for the token rules.
 | `max_cache` | `2048` | the cache of loaded snapshots, in MB |
 
 The cache keeps each loaded snapshot and its indexes. A loaded configuration takes
-about 13 times its file size. Size `max_cache` with that factor and the number of
-devices.
+about 28 times its file size (`BenchmarkCacheRetention` in `internal/mcp`). Size
+`max_cache` with that factor and the number of devices.
 
 ## Audit and run logs
 
