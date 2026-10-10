@@ -69,6 +69,7 @@ Every item names its **component** (the package or area it changes) and one **ta
 | 50 | feature | mcp | Ask the user for needs and choices with elicitation |
 | 51 | feature | mcp | Publish OAuth resource metadata if Portkey is dropped |
 | 52 | bug | simulate/routing, simulate/nat | NAT in the first vsys of an inter-vsys path sees the wrong egress zone |
+| 53 | qa | simulate/securitypolicy | A doubted NAT rule's own post-NAT zone is not a derived destination zone |
 
 ---
 
@@ -482,3 +483,16 @@ Source for each: the code audit of 2026-10-10 and the cleanup plan
 - The fix moves the external-zone change into `zones()`, before NAT. It follows the
   admin guide only. Do it only after a check on a firewall with multi-vsys and
   external zones (item 5): the lab firewalls have one vsys.
+
+### 53. A doubted NAT rule's own post-NAT zone is not a derived destination zone
+
+- **Tag:** qa · **Component:** simulate/securitypolicy · **Source:** review of plan
+  `docs/plans/2026-10-10-cleanup.md` T5
+- With derived zones, the security check keeps the pre-NAT destination zone and the
+  zone after the NAT rule that applies. A NAT rule in doubt above it may translate
+  the destination to a third zone; that zone is not added, so a security rule whose
+  to zone is only that zone drops out. The stage says `doubt.nat-rule` (overmatch),
+  but the candidate set can be too narrow.
+- Only the fan-out kind reaches this: path mode gives the zones, and a NAT doubt
+  leaves its hop undecided. Fix: translate each doubted rule too, and add its
+  post-NAT zone.

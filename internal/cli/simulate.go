@@ -122,7 +122,7 @@ func printRun(w *textOut, run simulate.Run, t estate.Target, v securitypolicy.Ve
 			fmt.Fprintf(w, "  dns        %s -> %v\n", ep.Name, ep.Addrs)
 		}
 	}
-	for _, n := range simulate.DNSNotes(flow, true) {
+	for _, n := range simulate.DNSNotes(flow, "checked") {
 		fmt.Fprintf(w, "  %s\n", noteStyle(w.pal, n)("note: "+n.Text))
 	}
 	zones := "not evaluated"

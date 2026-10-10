@@ -302,9 +302,9 @@ func TestServiceFitsAsksForAPortOnlyWhenItHelps(t *testing.T) {
 	}
 }
 
-// predefinedMatch matches one flow from home to wan, destination 10.88.10.100,
+// matchFile matches one flow from home to wan, destination 10.88.10.100,
 // against the configuration at path, and names the rule hit and the doubts' codes.
-func predefinedMatch(t *testing.T, path, proto string, port uint16) (string, MatchResult) {
+func matchFile(t *testing.T, path, proto string, port uint16) (string, MatchResult) {
 	t.Helper()
 	cfg, _, err := config.Load(path)
 	if err != nil {
@@ -340,7 +340,7 @@ func TestPredefinedServicesDecideNAT(t *testing.T) {
 		{"udp", 443, "none"},
 		{"tcp", 8443, "none"},
 	} {
-		rule, m := predefinedMatch(t, "../../../testdata/predefined/config.xml", tc.proto, tc.port)
+		rule, m := matchFile(t, "../../../testdata/predefined/config.xml", tc.proto, tc.port)
 		if rule != tc.rule || len(m.Doubts) != 0 || m.Fidelity.Level() != "exact" {
 			t.Errorf("%s/%d: rule %s, want %s; doubts %v, fidelity %s", tc.proto, tc.port, rule, tc.rule, m.Doubts, m.Fidelity)
 		}
@@ -370,7 +370,7 @@ func TestNATWithoutAProtocolIsADoubt(t *testing.T) {
 		{"icmp", 0, "none", ""},
 		{"1", 0, "none", ""},
 	} {
-		rule, m := predefinedMatch(t, "../../../testdata/config/firewall-nat-protocol.xml", tc.proto, tc.port)
+		rule, m := matchFile(t, "../../../testdata/config/firewall-nat-protocol.xml", tc.proto, tc.port)
 		var doubts []string
 		for _, d := range m.Doubts {
 			doubts = append(doubts, d.Rule+" "+string(d.Reasons[0].Code))
@@ -383,7 +383,7 @@ func TestNATWithoutAProtocolIsADoubt(t *testing.T) {
 			t.Errorf("%q/%d: rule %s, want %s; doubts %v, want %q; fidelity %s", tc.proto, tc.port, rule, tc.rule, doubts, tc.doubts, m.Fidelity)
 		}
 	}
-	_, m := predefinedMatch(t, "../../../testdata/config/firewall-nat-protocol.xml", "", 443)
+	_, m := matchFile(t, "../../../testdata/config/firewall-nat-protocol.xml", "", 443)
 	if got := m.Doubts[0].Text(); got != "service svc-udp-443 not known without a protocol: give the protocol" {
 		t.Errorf("text %q", got)
 	}
@@ -404,7 +404,7 @@ func TestConfiguredServicesHideThePredefinedOnes(t *testing.T) {
 		{80, "none"},
 		{8080, "none"},
 	} {
-		rule, m := predefinedMatch(t, "../../../testdata/predefined-configured/config.xml", "tcp", tc.port)
+		rule, m := matchFile(t, "../../../testdata/predefined-configured/config.xml", "tcp", tc.port)
 		if rule != tc.rule || len(m.Doubts) != 0 || m.Fidelity.Level() != "exact" {
 			t.Errorf("tcp/%d: rule %s, want %s; doubts %v, fidelity %s", tc.port, rule, tc.rule, m.Doubts, m.Fidelity)
 		}
@@ -423,7 +423,7 @@ func TestWithoutPredefinedServicesNATStaysInDoubt(t *testing.T) {
 	if err := os.WriteFile(path, b, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	rule, m := predefinedMatch(t, path, "tcp", 443)
+	rule, m := matchFile(t, path, "tcp", 443)
 	if rule != "none" || len(m.Doubts) != 2 || m.Fidelity.Level() != "overmatch" {
 		t.Fatalf("rule %s, doubts %v, fidelity %s", rule, m.Doubts, m.Fidelity)
 	}

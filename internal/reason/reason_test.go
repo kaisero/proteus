@@ -103,7 +103,7 @@ var specCodes = map[Class][]string{
 	Zone:    {"missing", "undefined", "placeholder", "vsys-unknown", "derived"},
 	Default: {"precedence-unverified", "zones-unknown", "invalid-action", "vsys-missing"},
 	DNS:     {"other-addresses", "canonical-name"},
-	Input:   {"port", "protocol", "url", "device", "router"},
+	Input:   {"port", "protocol", "url", "device", "router", "from-zone", "to-zone"},
 	Note:    {"snapshot-stale", "ha-peer", "local-services", "later-deny"},
 	Call:    {"timeout", "busy", "usage", "choice", "internal"},
 	Verdict: {"rule", "default", "relevant-route", "not-relevant"},

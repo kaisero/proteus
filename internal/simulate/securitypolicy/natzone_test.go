@@ -81,7 +81,7 @@ func TestANATDoubtKeepsThePreNATZone(t *testing.T) {
 		`<source><member>any</member></source><destination><member>198.18.250.10</member></destination>` +
 		`<service>service-https</service></entry><entry name="t-dnat-port">`
 	b = bytes.Replace(b, []byte(`<entry name="t-dnat-port">`), []byte(doubted), 1)
-	ask := func(predefined bool) (simulate.Run, Verdict) {
+	ask := func(predefined, zones bool) (simulate.Run, Verdict) {
 		dir := t.TempDir()
 		path := filepath.Join(dir, "firewall-nat.xml")
 		if err := os.WriteFile(path, b, 0o600); err != nil {
@@ -96,11 +96,11 @@ func TestANATDoubtKeepsThePreNATZone(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		e := envPath(t, path, true)
+		e := envPath(t, path, zones)
 		e.Network = fw01Network(t)
 		return run(t, e, simulate.Flow{Source: ep("198.19.0.1"), Destination: ep("198.18.250.10"), DestPort: 8443})
 	}
-	r, v := ask(false)
+	r, v := ask(false, true)
 	st := stage(r, "derive-zones")
 	if strings.Join(v.Zones.To, ",") != "server,transport" || !strings.Contains(st.Detail, "to server (after NAT rule t-dnat-port)") ||
 		!strings.Contains(st.Fidelity.String(), "nat rule nat-https: service service-https is not defined") {
@@ -109,9 +109,17 @@ func TestANATDoubtKeepsThePreNATZone(t *testing.T) {
 	if !slices.ContainsFunc(v.Candidates, func(r resolve.Rule) bool { return r.Name == "t-allow-8443" }) {
 		t.Errorf("the post-NAT rule stays a candidate: %v", v.Candidates)
 	}
-	_, v = ask(true)
+	_, v = ask(true, true)
 	if strings.Join(v.Zones.To, ",") != "server" || first(v) != "t-allow-8443" {
 		t.Errorf("with the predefined services: zones %+v, first %s", v.Zones, first(v))
+	}
+	// Zones from the configuration, which places no zone on the destination:
+	// the side does not narrow, and NAT's zone is only named, not claimed.
+	r, v = ask(false, false)
+	st = stage(r, "derive-zones")
+	if len(v.Zones.To) != 0 || strings.Contains(v.Zones.Source, "after NAT") || strings.Contains(st.Detail, "(after NAT rule") ||
+		!strings.Contains(v.Zones.Detail, "NAT may give to server (after NAT rule t-dnat-port), but a NAT rule is in doubt") {
+		t.Errorf("no pre-NAT zone: zones %+v, detail %q", v.Zones, st.Detail)
 	}
 }
 

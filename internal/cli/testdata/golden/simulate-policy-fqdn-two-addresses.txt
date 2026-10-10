@@ -2,7 +2,7 @@
 file / vsys1   ../../testdata/config/firewall-simulate.xml
   dns        www.example.com -> [198.51.100.7 203.0.113.10]
   note: www.example.com has the canonical name web.cdn.example.net, as this machine's resolver reports it
-  note: www.example.com resolved to 2 addresses; traced 198.51.100.7, not 203.0.113.10
+  note: www.example.com resolved to 2 addresses; checked 198.51.100.7, not 203.0.113.10
   zones      not evaluated
   relevance  unknown: no stored forwarding table
   fidelity   inferred: earlier candidates in doubt share the action allow: to-web-by-name; not evaluated: zones

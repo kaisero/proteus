@@ -226,7 +226,7 @@ func PolicyFile(ctx context.Context, env Env, in PolicyFileInput) (Envelope[Poli
 	for _, n := range t.Notes {
 		e.Notes = append(e.Notes, NoteOf(t.Device, t.Vsys, n))
 	}
-	for _, n := range simulate.DNSNotes(flow, true) {
+	for _, n := range simulate.DNSNotes(flow, "checked") {
 		e.Notes = append(e.Notes, NoteOf(t.Device, t.Vsys, n))
 	}
 	e.Unresolved = dedupeUnresolved(runUnresolved(run, t.Device, t.Vsys, true))

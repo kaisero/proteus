@@ -177,7 +177,7 @@ func (s *state) serviceDoubt(vs []string, defined map[string]bool) reason.Reason
 	// doubt comes first and the answer asks for no port.
 	judged := slices.ContainsFunc(vs, func(v string) bool { return v != "application-default" && defined[v] })
 	f := s.in.Flow
-	if proto := strings.ToLower(f.Protocol); judged && (f.DestPort == 0 || (proto != "tcp" && proto != "udp" && proto != "sctp")) {
+	if proto := rulebase.Protocol(f.Protocol); judged && (f.DestPort == 0 || (proto != "tcp" && proto != "udp" && proto != "sctp")) {
 		return reason.New("doubt.service-no-port",
 			fmt.Sprintf("service not evaluated without a tcp, udp or sctp port (%s)", strings.Join(vs, ", ")))
 	}

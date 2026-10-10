@@ -85,7 +85,7 @@ func (Simulation) Run(ctx context.Context, env *simulate.Env, in simulate.Input)
 	run.Stages = stages
 	run.Device, run.Vsys = d.Name, s.nat.Vsys
 	run.Fidelity = simulate.Overall(stages)
-	s.result.Notes = append(append(simulate.DNSNotes(in.Flow, true), s.notes...), s.result.Notes...)
+	s.result.Notes = append(append(simulate.DNSNotes(in.Flow, "traced"), s.notes...), s.result.Notes...)
 	run.Output = s.result
 	run.Notes = d.Notes
 	return run, err

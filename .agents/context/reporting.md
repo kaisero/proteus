@@ -198,12 +198,14 @@ separately.
 
 `needs` (`query/needs.go`) reads codes only. `doubt.service-no-port` and
 `path.nat-no-port` need `input.port` (tcp, udp, sctp or no protocol) and
-`input.protocol` when the flow has none: `simulate nat` asked without a
-protocol lists both. `path.nat-no-protocol`, a port the NAT service holds with
-no protocol given, needs `input.protocol`. A protocol given as 6, 17 or 132
-counts as tcp, udp or sctp (`rulebase.Protocol`). `doubt.category-no-url` needs `input.url`. The emitters
-give the unfixable code first: a service that is only application-default or
-not defined is `doubt.service-application-default` or
+`input.protocol` when the flow has none: `simulate nat` asked without a protocol
+lists both. `path.nat-no-protocol`, a port the NAT service holds with no
+protocol given, needs `input.protocol`. A protocol given as 6, 17 or 132 counts
+as tcp, udp or sctp (`rulebase.Protocol`). `doubt.category-no-url` needs
+`input.url`. `zone.derived` and `default.zones-unknown` need `input.from-zone`
+and `input.to-zone` when no zone was given; path mode gives the zones and asks
+for none. The emitters give the unfixable code first: a service that is only
+application-default or not defined is `doubt.service-application-default` or
 `doubt.service-predefined`, a category that is not defined is
 `doubt.category-undefined`, with or without a port or URL. A file check lists
 the doubts in rule order before the first certain match and stops at the first

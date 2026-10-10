@@ -165,7 +165,7 @@
               "properties": {
                 "code": {
                   "type": "string",
-                  "description": "the input's code: input.port, input.protocol or input.url"
+                  "description": "the input's code: input.port, input.protocol, input.url, input.from-zone or input.to-zone"
                 },
                 "input": {
                   "type": "string",

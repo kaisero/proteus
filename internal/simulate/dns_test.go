@@ -25,13 +25,16 @@ func TestDNSNotes(t *testing.T) {
 		reason.New("dns.other-addresses", "src.example resolved to 2 addresses; traced 198.18.0.1, not 2001:db8::1"),
 		reason.New("dns.other-addresses", "dst.example resolved to 3 addresses; traced 198.18.0.2, not 198.18.0.3, 198.18.0.4"),
 	}
-	if got := DNSNotes(f, true); len(got) != len(want) || got[0] != want[0] || got[1] != want[1] || got[2] != want[2] {
+	if got := DNSNotes(f, "traced"); len(got) != len(want) || got[0] != want[0] || got[1] != want[1] || got[2] != want[2] {
 		t.Errorf("traced: %v", got)
 	}
-	if got := DNSNotes(f, false); len(got) != 1 || got[0] != want[0] {
+	if got := DNSNotes(f, "checked"); len(got) != 3 || got[2].Text != "dst.example resolved to 3 addresses; checked 198.18.0.2, not 198.18.0.3, 198.18.0.4" {
+		t.Errorf("checked: %v", got)
+	}
+	if got := DNSNotes(f, ""); len(got) != 1 || got[0] != want[0] {
 		t.Errorf("not traced, only the alias: %v", got)
 	}
-	if got := DNSNotes(Flow{Source: Addr(netip.MustParseAddr("198.18.0.1"))}, true); got != nil {
+	if got := DNSNotes(Flow{Source: Addr(netip.MustParseAddr("198.18.0.1"))}, "traced"); got != nil {
 		t.Errorf("an address has no DNS note: %v", got)
 	}
 }

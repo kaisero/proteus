@@ -210,6 +210,31 @@ func TestServicesByPort(t *testing.T) {
 	}
 }
 
+// A protocol given by number decides as its name does: 6 is tcp in the service
+// stage and in the service doubts, so custom-port decides.
+func TestAProtocolNumberDecidesTheService(t *testing.T) {
+	t.Parallel()
+	e := env(t, "firewall-simulate.xml", false)
+	answer := func(proto string) string {
+		_, v := run(t, e, simulate.Flow{Source: ep("10.0.0.1"), Destination: ep("10.5.0.9"), Protocol: proto, DestPort: 8443})
+		o, why := v.Decision()
+		var doubts []string
+		for _, d := range v.Doubts {
+			doubts = append(doubts, d.Rule+" "+string(d.Reasons[0].Code))
+		}
+		return fmt.Sprintf("%s: %s; doubts %v", o, why.Text(), doubts)
+	}
+	tcp := answer("tcp")
+	if !strings.HasPrefix(tcp, "pass: rule custom-port (allow)") {
+		t.Errorf("tcp: %s", tcp)
+	}
+	for _, proto := range []string{"6", "TCP"} {
+		if got := answer(proto); got != tcp {
+			t.Errorf("%s: %s, want %s", proto, got, tcp)
+		}
+	}
+}
+
 func TestURLCategories(t *testing.T) {
 	t.Parallel()
 	e := env(t, "firewall-simulate.xml", false)

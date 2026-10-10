@@ -18,7 +18,7 @@ import (
 // its name as a tool takes it, and Text says what to give and which rules it
 // decides, in the tool's words.
 type Need struct {
-	Code  reason.Code `json:"code" jsonschema:"the input's code: input.port, input.protocol or input.url"`
+	Code  reason.Code `json:"code" jsonschema:"the input's code: input.port, input.protocol, input.url, input.from-zone or input.to-zone"`
 	Input string      `json:"input" jsonschema:"the input to give in a second call"`
 	Text  string      `json:"text" jsonschema:"what to give and which rules it decides"`
 }
@@ -42,6 +42,8 @@ var needKinds = []struct {
 	{"input.protocol", "protocol", "give the protocol: tcp, udp or sctp", "the service"},
 	{"input.port", "port", "give the destination port", "the service"},
 	{"input.url", "url", "give the URL", "the URL category"},
+	{"input.from-zone", "from_zone", "give the source zone, with to_zone", "the rule-type"},
+	{"input.to-zone", "to_zone", "give the destination zone, with from_zone", "the rule-type"},
 }
 
 // needsOf is what the causes need from a second call, given the flow asked.
@@ -49,7 +51,8 @@ var needKinds = []struct {
 // and the protocol too when none was given (the tools have no protocol
 // default); icmp or another protocol never needs a port. A protocol given by
 // number counts by its name. A NAT service whose port fits without a protocol
-// needs the protocol. Every other code
+// needs the protocol. Derived zones that leave rule-type or the default rule
+// open need both zones. Every other code
 // needs nothing a second call can give: a predefined category, an
 // application, a user, a gap, a path, a zone or a default rule. The result is
 // never nil, so an undecided answer prints [] when nothing helps.
@@ -75,6 +78,13 @@ func needsOf(flow simulate.Flow, causes []cause) []Need {
 		case "path.nat-no-protocol":
 			if flow.Protocol == "" {
 				add("input.protocol", c.rule)
+			}
+		case "zone.derived", "default.zones-unknown":
+			// Given zones settle rule-type and the default rule; one
+			// configuration takes both or neither.
+			if flow.FromZone == "" {
+				add("input.from-zone", c.rule)
+				add("input.to-zone", c.rule)
 			}
 		case "doubt.category-no-url":
 			if flow.URL == "" {
@@ -206,11 +216,13 @@ func securityNeeds(flow simulate.Flow, verdict string, v *securitypolicy.Verdict
 
 // pathNeeds is a path answer's needs: each undecided check's doubts and each
 // hop's NAT doubts; the fidelity's reasons too unless a check or a NAT rule met
-// a doubt no input can fix.
+// a doubt no input can fix. The path gives each hop's zones, so no zone is
+// asked for.
 func pathNeeds(flow simulate.Flow, r pathpolicy.Result) []Need {
 	if !holdsBack(r.Verdict == pathpolicy.VerdictUndecided, r.Fidelity) {
 		return nil
 	}
+	flow.FromZone, flow.ToZone = "path", "path"
 	var causes []cause
 	blocked := false
 	for _, h := range r.Hops {

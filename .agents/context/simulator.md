@@ -49,16 +49,16 @@ Eight stages, each ANDing into the running candidate set:
 vsys, or derived with one defined zone on each side (inferred, C5). With several
 derived zones on a side, typed rules stay and each gets a `zone.derived` doubt
 (`state.ruleTypeOpen`); with a given zone the vsys does not define, they stay with
-an overmatch reason. The decision (§4.7): the
-first candidate without doubt decides; with none, the default rule
-(`intrazone-default`/`interzone-default`; local, then pushed override, else the
-built-in action; local and pushed that disagree are undecided). Doubts come from
-`doubt.go` (`ruleFields` classifies every schema child of the rule entry, guarded by
-a test): application, user, HIP, schedule, `application-default`, predefined or
-absent service, a URL category without `--url` or not defined, and an EDL, region or
-dynamic group as source or destination (`index.View.Opaque`, E23). Any stage at
-undermatch leaves the flow undecided. A version gap is a note and `inferred` (E25),
-not unresolved. `Verdict.Decision()` gives `Pass`, `Stop` or `Undecided`.
+an overmatch reason. The decision (§4.7): the first candidate without doubt decides;
+with none, the default rule (`intrazone-default`/`interzone-default`; local, then
+pushed override, else the built-in action; local and pushed that disagree are
+undecided). Doubts come from `doubt.go` (`ruleFields` classifies every schema child
+of the rule entry, guarded by a test): application, user, HIP, schedule,
+`application-default`, predefined or absent service, a URL category without `--url`
+or not defined, and an EDL, region or dynamic group as source or destination
+(`index.View.Opaque`, E23). Any stage at undermatch leaves the flow undecided. A
+version gap is a note and `inferred` (E25), not unresolved. `Verdict.Decision()`
+gives `Pass`, `Stop` or `Undecided`.
 
 Negated rules are inverted in the resolve stages. A rule without a category matches
 any URL. Relevance (S14) comes from the zone locator: a route more specific than a
@@ -106,20 +106,20 @@ with interfaces without a router).
 ### pathpolicy
 
 `pathpolicy.Run(ctx, env, in)` answers a flow along its path (spec 2026-10-07 §4,
-§5). It is a function package, not a registered kind. It runs routing once, then
-per hop: the path's doubts (ECMP, a PBF rule, PBF or NAT undermatch, each NAT
-rule in doubt, a start by a default route), zone validity (both zones named, defined in the hop's vsys, not a
-placeholder), and each `Check` in list order. Today the one check is `Security`:
-securitypolicy with the hop's zones given and each endpoint trimmed to the traced
-address. Its fidelity is the weakest of the address, zone and `first-match` stages,
-capped by a routed start or inferred NAT; a version gap is inferred. A hop that
-routing drops runs no check. The fold: the first undecided or stopping hop sets
-`At`; undecided wins over stop on one hop; a later stop after an undecided point is
-a note; hops after a stop carry `AfterDeny`; with no point, routing's end decides
-(delivered or local: allowed; dropped: denied; any other end: undecided). Routing's
-`ChoiceError` and `UnavailableError` return unchanged; an unreadable hop
-configuration is a hole. `internal/simulate/pathlab` is the two-firewall fixture
-its tests share with the CLI's.
+§5). It is a function package, not a registered kind. It runs routing once, then per
+hop: the path's doubts (ECMP, a PBF rule, PBF or NAT undermatch, each NAT rule in
+doubt, a start by a default route), zone validity (both zones named, defined in the
+hop's vsys, not a placeholder), and each `Check` in list order. Today the one check
+is `Security`: securitypolicy with the hop's zones given and each endpoint trimmed
+to the traced address. Its fidelity is the weakest of the address, zone and
+`first-match` stages, capped by a routed start or inferred NAT; a version gap is
+inferred. A hop that routing drops runs no check. The fold: the first undecided or
+stopping hop sets `At`; undecided wins over stop on one hop; a later stop after an
+undecided point is a note; hops after a stop carry `AfterDeny`; with no point,
+routing's end decides (delivered or local: allowed; dropped: denied; any other end:
+undecided). Routing's `ChoiceError` and `UnavailableError` return unchanged; an
+unreadable hop configuration is a hole. `internal/simulate/pathlab` is the
+two-firewall fixture its tests share with the CLI's.
 
 ## Build / run pointers
 
@@ -186,7 +186,7 @@ func (rs Reasons) Text() string
 func (rs Reasons) Texts() []string
 func (t Target) Index(rb resolve.Rulebase, vsys string) (*index.Index, error)
 func Addr(a netip.Addr) Endpoint
-func DNSNotes(f Flow, traced bool) Reasons
+func DNSNotes(f Flow, used string) Reasons
 func Execute[S any](ctx context.Context, kind string, state *S, steps []Step[S], keepBitmaps bool, log *runlog.Logger) ([]Stage, error)
 func NewMissing(device string, r reason.Reason) Missing
 func NotEvaluated(dimensions ...string) Fidelity

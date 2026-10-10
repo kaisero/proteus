@@ -371,7 +371,7 @@ func TestEndpointOrdersAndNamesTheAlias(t *testing.T) {
 	// File mode checks the first address, as path mode does (D1b), and names
 	// the others in a note.
 	if err != nil || !slices.Equal(codes, []string{"dns.canonical-name", "dns.other-addresses"}) ||
-		e.Notes[1].Note != "app.example.test resolved to 4 addresses; traced 10.1.0.5, not 2001:db8::1, 2001:db8::2, 10.1.0.6" {
+		e.Notes[1].Note != "app.example.test resolved to 4 addresses; checked 10.1.0.5, not 2001:db8::1, 2001:db8::2, 10.1.0.6" {
 		t.Errorf("file notes: %+v %v", e.Notes, err)
 	}
 	if len(e.Results) != 1 || fmt.Sprint(e.Results[0].Run.Input.Flow.Destination.Addrs) != "[10.1.0.5]" ||
@@ -398,7 +398,7 @@ func TestFileModeChecksTheFirstSourceAddress(t *testing.T) {
 		t.Errorf("checked %v: %s, %s", r.Run.Input.Flow.Source.Addrs, r.Verdict, r.Answer)
 	}
 	if len(e.Notes) != 1 || e.Notes[0].Code != "dns.other-addresses" ||
-		e.Notes[0].Note != "two.example.test resolved to 2 addresses; traced 10.1.0.5, not 10.3.0.5" {
+		e.Notes[0].Note != "two.example.test resolved to 2 addresses; checked 10.1.0.5, not 10.3.0.5" {
 		t.Errorf("notes %+v", e.Notes)
 	}
 }

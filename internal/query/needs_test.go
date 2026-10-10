@@ -225,6 +225,39 @@ func TestNeedsNATProtocol(t *testing.T) {
 	}
 }
 
+// Derived zones that leave rule-type or the default rule open need both zones:
+// from inside to an address no interface holds, intra-inside and inter-inside
+// are in doubt and the default rule depends on the zones. Given zones decide.
+func TestNeedsZones(t *testing.T) {
+	t.Parallel()
+	ask := func(from, to string) SecurityResult {
+		e, err := PolicyFile(context.Background(), Env{}, PolicyFileInput{
+			Flow:      FlowInput{Source: "10.1.0.5", Destination: "8.8.8.8", Protocol: "tcp", Port: "443", FromZone: from, ToZone: to},
+			Selection: Selection{File: fixture("firewall-ruletype.xml"), Vsys: []string{"vsys1"}},
+		})
+		if err != nil || len(e.Results) != 1 {
+			t.Fatalf("%+v %v", e, err)
+		}
+		return e.Results[0]
+	}
+	r := ask("", "")
+	if got := needCodes(r.Needs); r.Verdict != "undecided" || !slices.Equal(got, []string{"input.from-zone from_zone", "input.to-zone to_zone"}) ||
+		r.Needs[0].Text != "give the source zone, with to_zone; it decides the rule-type of rules intra-inside, inter-inside" {
+		t.Errorf("derived: %s, needs %+v", r.Answer, r.Needs)
+	}
+	if again := ask("inside", "out"); again.Verdict == "undecided" || again.Needs != nil {
+		t.Errorf("given: %s, needs %+v", again.Answer, again.Needs)
+	}
+	// Without a rule, the default rule alone names no rule.
+	ns := needsOf(simulate.Flow{}, []cause{{code: "default.zones-unknown"}})
+	if len(ns) != 2 || ns[1].Text != "give the destination zone, with from_zone" {
+		t.Errorf("default rule: %+v", ns)
+	}
+	if ns := needsOf(simulate.Flow{FromZone: "inside", ToZone: "out"}, []cause{{code: "zone.derived"}}); len(ns) != 0 {
+		t.Errorf("given zones: %+v", ns)
+	}
+}
+
 // securityCauses walks the doubts in rule order before the first certain
 // match, and stops at the first doubt no input can fix.
 func TestSecurityCausesStopAtAnUnfixableDoubt(t *testing.T) {

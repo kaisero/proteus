@@ -206,12 +206,15 @@ func deriveZones(_ context.Context, s *state) (simulate.Outcome, error) {
 			// is the safe direction). With none derived, the side does not narrow.
 			to = slices.Compact(slices.Sorted(slices.Values(slices.Concat(to, nz.zones))))
 		}
-		if len(to) > 0 {
-			toB = roaring.New()
-			for _, zn := range to {
-				zb, _ := s.view.Candidates(index.ToZone, zn)
-				toB.Or(zb)
-			}
+		if len(to) == 0 {
+			// Nothing narrows the side, so NAT names a zone only as a note.
+			toVia = append(toVia, "NAT may give "+nz.describe()+", but a NAT rule is in doubt")
+			break
+		}
+		toB = roaring.New()
+		for _, zn := range to {
+			zb, _ := s.view.Candidates(index.ToZone, zn)
+			toB.Or(zb)
 		}
 		toVia = append(toVia, nz.describe())
 		details = append(details, nz.describe())

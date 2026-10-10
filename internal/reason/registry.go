@@ -77,9 +77,11 @@ var registry = []Entry{
 	{Code: "gap.vsys-missing", Class: Gap, Description: "the configuration has no vsys of the asked name"},
 
 	{Code: "input.device", Class: Input, Description: "give the device"},
+	{Code: "input.from-zone", Class: Input, Description: "give the source zone"},
 	{Code: "input.port", Class: Input, Description: "give the destination port"},
 	{Code: "input.protocol", Class: Input, Description: "give the protocol"},
 	{Code: "input.router", Class: Input, Description: "give the virtual router"},
+	{Code: "input.to-zone", Class: Input, Description: "give the destination zone"},
 	{Code: "input.url", Class: Input, Description: "give the URL"},
 
 	{Code: "note.dns-rewrite", Class: Note, Description: "a NAT rule also rewrites DNS answers, which is not simulated"},
