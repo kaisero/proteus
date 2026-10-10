@@ -634,7 +634,7 @@ func TestTheAuditLog(t *testing.T) {
 	when := time.Date(2026, 10, 10, 9, 0, 0, 0, time.FixedZone("x", 3600))
 	a.Audit(Call{
 		Time: when, Tool: "search", Input: json.RawMessage(`{"value":"dc01"}`), Status: StatusOK,
-		Answers: []string{"found"}, Codes: []reason.Code{"note.stale"}, Snapshots: []string{"fw01@1"},
+		Answers: []string{"found"}, AnswerCount: 1, Codes: []reason.Code{"note.stale"}, Snapshots: []string{"fw01@1"},
 		Duration: 1500 * time.Millisecond, Identity: Identity{Auth: AuthToken, Source: SourceHeader, Claims: map[string]string{"sub": "alice"}},
 	})
 	a.Audit(Call{Time: when, Tool: "search", Status: StatusBusy, Code: "call.busy", Identity: Identity{Auth: AuthToken, Source: SourceNone}})
@@ -662,12 +662,12 @@ func TestTheAuditLog(t *testing.T) {
 		}
 	}
 	want := `{"time":"2026-10-10T08:00:00Z","auth":"token","identity_source":"header","identity":{"sub":"alice"},"tool":"search",` +
-		`"input":{"value":"dc01"},"verdict":["found"],"codes":["note.stale"],"snapshots":["fw01@1"],"duration_ms":1500,"status":"ok"}`
+		`"input":{"value":"dc01"},"verdict":["found"],"verdict_count":1,"codes":["note.stale"],"snapshots":["fw01@1"],"duration_ms":1500,"status":"ok"}`
 	if lines[1] != want {
 		t.Errorf("line\n%s\nwant\n%s", lines[1], want)
 	}
 	want = `{"time":"2026-10-10T08:00:00Z","auth":"token","identity_source":"none","identity":"unknown","tool":"search",` +
-		`"input":null,"verdict":[],"codes":[],"snapshots":[],"duration_ms":0,"status":"busy","code":"call.busy"}`
+		`"input":null,"verdict":[],"verdict_count":0,"codes":[],"snapshots":[],"duration_ms":0,"status":"busy","code":"call.busy"}`
 	if lines[2] != want {
 		t.Errorf("line\n%s\nwant\n%s", lines[2], want)
 	}

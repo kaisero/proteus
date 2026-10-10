@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/netip"
+	"os"
 	"path/filepath"
 	"reflect"
 	"slices"
@@ -877,6 +878,99 @@ func TestSnapshotDiffRefusesABadTime(t *testing.T) {
 		}
 		if c := rec.last(t); c.Status != StatusUsage || c.Code != "call.usage" {
 			t.Errorf("%s: audit %+v", name, c)
+		}
+	}
+}
+
+// A broad answer keeps its audit line short: the verdict holds the summary
+// line and the first 20 result lines, verdict_count every answer line.
+func TestTheVerdictIsCut(t *testing.T) {
+	t.Parallel()
+	lab := fixture("firewall-lab.xml")
+	b := pathlab.Read(t, lab)
+	var bulk strings.Builder
+	for i := range 1000 {
+		fmt.Fprintf(&bulk, `<entry name="bulk-host-%04d"><ip-netmask>198.18.200.1/32</ip-netmask></entry>`, i)
+	}
+	shared := `<entry name="shared-dns"><ip-netmask>9.9.9.9/32</ip-netmask></entry>`
+	if !bytes.Contains(b, []byte(shared)) {
+		t.Fatal("the lab configuration changed")
+	}
+	broad := filepath.Join(t.TempDir(), "broad.xml")
+	if err := os.WriteFile(broad, bytes.Replace(b, []byte(shared), []byte(shared+bulk.String()), 1), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	s, err := newServer(Options{Env: labEnv(t, snap{"fw01", broad}), Audit: AuditTo(&out), Version: "test"}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	ct, st := sdk.NewInMemoryTransports()
+	ss, err := s.Connect(ctx, st, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cs, err := sdk.NewClient(&sdk.Implementation{Name: "client", Version: "test"}, nil).Connect(ctx, ct, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = cs.Close(); _ = ss.Wait() })
+	res, err := cs.CallTool(ctx, &sdk.CallToolParams{Name: "search", Arguments: map[string]any{"value": "198.18.200.1", "device": []string{"fw01"}}})
+	if err != nil || res.IsError {
+		t.Fatalf("%v %s", err, text(res))
+	}
+	env := plain(t, res.StructuredContent).(map[string]any)["envelope"].(map[string]any)
+	results := env["results"].([]any)
+	// Each shared object is a finding in vsys1 and in vsys2, and vsys1's
+	// net-labor holds the address: 2,001 findings.
+	if len(results) != 2001 {
+		t.Fatalf("%d results", len(results))
+	}
+	lines := strings.Split(strings.TrimSuffix(out.String(), "\n"), "\n")
+	if len(lines) != 1 || len(lines[0]) >= 16<<10 {
+		t.Fatalf("%d lines, the first %d bytes", len(lines), len(lines[0]))
+	}
+	var line struct {
+		Verdict      []string `json:"verdict"`
+		VerdictCount int      `json:"verdict_count"`
+	}
+	if err := json.Unmarshal([]byte(lines[0]), &line); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{env["summary"].(map[string]any)["answer"].(string)}
+	for _, r := range results[:20] {
+		want = append(want, r.(map[string]any)["answer"].(string))
+	}
+	if !slices.Equal(line.Verdict, want) || line.VerdictCount != 1+len(results) {
+		t.Errorf("verdict %q, count %d; want %q, count %d", line.Verdict, line.VerdictCount, want, 1+len(results))
+	}
+}
+
+// The verdict keeps the summary line and 20 result lines; an answer without
+// a summary keeps 20 result lines.
+func TestVerdictOf(t *testing.T) {
+	t.Parallel()
+	results := func(n int) []any {
+		var rs []any
+		for i := range n {
+			rs = append(rs, map[string]any{"answer": fmt.Sprint(i)})
+		}
+		return rs
+	}
+	for _, tc := range []struct {
+		doc         map[string]any
+		kept, count int
+	}{
+		{map[string]any{"summary": map[string]any{"answer": "s"}, "results": results(25)}, 21, 26},
+		{map[string]any{"summary": map[string]any{"answer": "s"}, "results": results(20)}, 21, 21},
+		{map[string]any{"results": results(25)}, 20, 25},
+		{map[string]any{"results": results(3)}, 3, 3},
+		{map[string]any{"results": []any{}}, 0, 0},
+	} {
+		got, n := viewOf(tc.doc).verdict()
+		if len(got) != tc.kept || n != tc.count || (tc.kept > 0 && got[0] != viewOf(tc.doc).answers()[0]) {
+			t.Errorf("%v: kept %d of %d", tc.doc, len(got), n)
 		}
 	}
 }

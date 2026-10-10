@@ -196,6 +196,7 @@ type auditLine struct {
 	Tool           string          `json:"tool"`
 	Input          json.RawMessage `json:"input"`
 	Verdict        []string        `json:"verdict"`
+	VerdictCount   int             `json:"verdict_count"`
 	Codes          []reason.Code   `json:"codes"`
 	Snapshots      []string        `json:"snapshots"`
 	DurationMS     int64           `json:"duration_ms"`
@@ -208,7 +209,7 @@ func lineOf(c Call) auditLine {
 	l := auditLine{
 		Time: c.Time.UTC(), Auth: c.Identity.Auth, IdentitySource: c.Identity.Source, Identity: "unknown",
 		Tool: c.Tool, Input: c.Input,
-		Verdict: c.Answers, Codes: c.Codes, Snapshots: c.Snapshots,
+		Verdict: c.Answers, VerdictCount: c.AnswerCount, Codes: c.Codes, Snapshots: c.Snapshots,
 		DurationMS: c.Duration.Milliseconds(), Status: c.Status, Code: c.Code,
 	}
 	if c.Identity.Claims != nil {

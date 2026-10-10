@@ -269,7 +269,7 @@ renamed files. With `audit_log: -` the lines go to standard output, and the
 container platform collects and keeps them (`--http` only):
 
 ```json
-{"time":"2026-10-10T08:00:00Z","auth":"token","identity_source":"header","identity":{"sub":"alice"},"tool":"simulate_policy","input":{"source":"198.18.1.10","destination":"198.18.10.100","port":443},"verdict":["allowed"],"codes":[],"snapshots":["fw01@2026-10-10T07-00-00Z","fw02@2026-10-10T07-00-00Z"],"duration_ms":120,"status":"ok"}
+{"time":"2026-10-10T08:00:00Z","auth":"token","identity_source":"header","identity":{"sub":"alice"},"tool":"simulate_policy","input":{"source":"198.18.1.10","destination":"198.18.10.100","port":443},"verdict":["allowed"],"verdict_count":1,"codes":[],"snapshots":["fw01@2026-10-10T07-00-00Z","fw02@2026-10-10T07-00-00Z"],"duration_ms":120,"status":"ok"}
 ```
 
 | Field | Content |
@@ -278,7 +278,8 @@ container platform collects and keeps them (`--http` only):
 | `identity_source` | `header`, `none` (header missing or not a JSON object) or `os` (stdio) |
 | `identity` | the `audit_claims` of the identity header, each cut to 256 bytes; the operating system user over stdio; `unknown` when none is found |
 | `tool`, `input` | the tool and its inputs as the client sent them |
-| `verdict` | the answer lines of the result |
+| `verdict` | the answer lines: the summary line and the first 20 result lines |
+| `verdict_count` | the number of answer lines before the cut; more than the lines in `verdict` when a broad answer was cut |
 | `codes` | the reason codes of the holes, unresolved entries and notes |
 | `snapshots` | the snapshots that the answer read, as `<member>@<snapshot id>`: for an HA pair the member whose snapshot answered, for a single device the device |
 | `duration_ms` | the time the call took |

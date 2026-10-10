@@ -304,6 +304,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A broad MCP answer now writes a short audit line.** The `verdict` keeps the
+  summary line and the first 20 result lines, and `verdict_count` holds the full
+  count. Before, a search with thousands of findings wrote all of them into one
+  audit line.
 - **A bad `--from` or `--to` in `snapshot diff` is now a usage error.** It exits
   2 and names the flag, as a bad `--at` does; the MCP tool names `from` or `to`.
   Before, every device became a hole that blamed `--at`, and the command exited 3.

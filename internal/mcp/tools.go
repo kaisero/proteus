@@ -219,7 +219,7 @@ func answer[In query.Echoer[E], E, R, S any](ctx context.Context, e query.Envelo
 	v := viewOf(doc)
 	c.set(func(c *Call) {
 		c.Status = StatusOK
-		c.Answers = v.answers()
+		c.Answers, c.AnswerCount = v.verdict()
 		c.Codes = v.codes()
 		c.Snapshots = e.Read
 	})

@@ -99,8 +99,11 @@ type Call struct {
 	Status string          // StatusOK, StatusUsage, ...
 	// Code is the error's code; empty when the call answered.
 	Code reason.Code
-	// Answers are the answer lines, the summary's first.
+	// Answers are the answer lines, the summary's first, cut after the
+	// first 20 results' lines.
 	Answers []string
+	// AnswerCount is the number of answer lines before the cut.
+	AnswerCount int
 	// Codes are the reason codes of the holes, unresolved entries and notes.
 	Codes []reason.Code
 	// Snapshots are the snapshots read, as device@id.
@@ -451,7 +454,7 @@ func (m middleware) handle(ctx context.Context, next sdk.MethodHandler, method s
 			c.Status, c.Code = StatusInternal, "call.internal"
 			// The handler may have filled the record before it failed; the
 			// call gave no answer.
-			c.Answers, c.Codes, c.Snapshots = nil, nil, nil
+			c.Answers, c.AnswerCount, c.Codes, c.Snapshots = nil, 0, nil, nil
 			c.Stack = fmt.Appendf(nil, "panic: %v\n\n%s", p, debug.Stack())
 			res, err = refused(&Call{}, errInternal), nil
 		}
