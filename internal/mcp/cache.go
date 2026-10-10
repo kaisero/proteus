@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"sync"
 
@@ -28,6 +29,9 @@ const (
 	// It is an estimate, not a measurement: the parsed tables keep less text
 	// than the XML they come from.
 	opFactor = 2
+	// failedBytes sizes a configuration that did not load: its error and the
+	// item. An estimate.
+	failedBytes = 1 << 10
 )
 
 // itemKey names a cached item: a kind and a snapshot.
@@ -158,13 +162,29 @@ func (e *configEntry) keep(k indexKey, idx *index.Index) {
 	e.built[k] = idx
 }
 
+// failedLoad is a configuration that did not load, cached under its
+// snapshot's key.
+type failedLoad struct{ err error }
+
+// entryOf is a cached configuration value: the entry, or the load's error.
+func entryOf(v any) (*configEntry, error) {
+	if f, ok := v.(failedLoad); ok {
+		return nil, f.err
+	}
+	return v.(*configEntry), nil
+}
+
 // config is a snapshot's configuration: cached, or loaded once for every
 // caller that asks while it loads. The load runs apart from ctx; ctx bounds
 // only the wait.
+//
+// A configuration that does not load keeps its error in the cache: a
+// snapshot never changes, so it would fail the same way again. A file that
+// cannot be opened or read is not kept: it may be readable later.
 func (c *Cache) config(ctx context.Context, sn store.Snapshot) (*configEntry, error) {
 	k := itemKey{kind: "config", member: sn.Device, id: sn.ID}
 	if v, ok := c.get(k); ok {
-		return v.(*configEntry), nil
+		return entryOf(v)
 	}
 	v, err := c.loads.do(ctx, "config|"+sn.Device+"|"+sn.ID, func() (any, error) {
 		// A load that finished just before this one began has filled it.
@@ -174,6 +194,9 @@ func (c *Cache) config(ctx context.Context, sn store.Snapshot) (*configEntry, er
 		path := sn.Path(store.ConfigDoc)
 		cfg, rep, err := c.load(path)
 		if err != nil {
+			if _, io := errors.AsType[*fs.PathError](err); !io {
+				c.put(k, failedLoad{err}, failedBytes, "")
+			}
 			return nil, err
 		}
 		e := &configEntry{cfg: cfg, rep: rep, set: index.NewSet(cfg), built: map[indexKey]*index.Index{}}
@@ -183,7 +206,7 @@ func (c *Cache) config(ctx context.Context, sn store.Snapshot) (*configEntry, er
 	if err != nil {
 		return nil, err
 	}
-	return v.(*configEntry), nil
+	return entryOf(v)
 }
 
 // HA implements estate.OpSource: the snapshot's HA state, read once.
