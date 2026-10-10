@@ -137,5 +137,10 @@ entry's short line leaves such values out.
 Every question takes `--at <time>`. It reads each device's newest snapshot at or
 before that time. A date means the end of that day.
 
+A damaged snapshot, whose `meta.json` cannot be read, is passed over: the answer
+reads the next older one and carries a note that names the skipped one. Without
+`--at`, a damaged `latest` is a hole; proteus does not fall back to an older
+snapshot.
+
 An answer from a snapshot older than `max_snapshot_age` (default 24h) carries a
 note. Change the limit with `--max-age 7d`.

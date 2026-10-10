@@ -531,7 +531,7 @@ func TestGetTellsADamagedSnapshotFromAMissingOne(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err := s.Get("fw01", damaged.ID)
-	if !errors.Is(err, ErrUnreadable) || errors.Is(err, ErrNoSnapshot) ||
+	if !errors.Is(err, ErrUnreadable) || errors.Is(err, ErrNoSnapshot) || errors.Is(err, fs.ErrNotExist) ||
 		!strings.HasPrefix(err.Error(), "store: fw01@"+damaged.ID+": meta.json: ") {
 		t.Errorf("Get of a snapshot without meta.json: %v", err)
 	}
@@ -622,6 +622,38 @@ func TestAtOrBefore(t *testing.T) {
 	}
 	if _, err := s.AtOrBefore("fw02", at(11, 0)); err == nil {
 		t.Error("a device never fetched has none")
+	}
+}
+
+// AtOrBefore passes over damaged snapshots, as it passes over ones without a
+// configuration, and names them in Skipped. With nothing readable left, its error
+// names them.
+func TestAtOrBeforeSkipsADamagedSnapshot(t *testing.T) {
+	t.Parallel()
+	s := open(t)
+	a, _ := s.Write(Meta{Device: "fw01"}, docs(t, false), 20) // 10:00
+	b, _ := s.Write(Meta{Device: "fw01"}, docs(t, false), 20) // 10:01
+	c, _ := s.Write(Meta{Device: "fw01"}, docs(t, false), 20) // 10:02
+	if err := os.Remove(filepath.Join(c.Dir, "meta.json")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(b.Dir, "meta.json"), []byte("{"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	later := time.Date(2026, 9, 28, 11, 0, 0, 0, time.UTC)
+	got, err := s.AtOrBefore("fw01", later)
+	if err != nil || got.ID != a.ID || strings.Join(got.Skipped, ",") != c.ID+","+b.ID {
+		t.Errorf("AtOrBefore = %s skipping %v, %v; want %s skipping %s and %s", got.ID, got.Skipped, err, a.ID, c.ID, b.ID)
+	}
+	if sn, _ := s.Get("fw01", a.ID); len(sn.Skipped) != 0 {
+		t.Errorf("Get names skipped snapshots: %v", sn.Skipped)
+	}
+	if err := os.Remove(filepath.Join(a.Dir, "meta.json")); err != nil {
+		t.Fatal(err)
+	}
+	_, err = s.AtOrBefore("fw01", later)
+	if !errors.Is(err, ErrNoSnapshot) || !strings.HasSuffix(err.Error(), "; damaged: "+c.ID+", "+b.ID+", "+a.ID) {
+		t.Errorf("all damaged: %v", err)
 	}
 }
 

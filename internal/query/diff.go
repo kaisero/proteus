@@ -2,6 +2,7 @@ package query
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"time"
@@ -102,6 +103,11 @@ func SnapshotDiff(ctx context.Context, env Env, in DiffInput) (Envelope[DiffInpu
 			continue
 		}
 		e.Read = append(e.Read, d+"@"+older.ID, d+"@"+newer.ID)
+		for _, sn := range []store.Snapshot{newer, older} {
+			if n, ok := estate.SkipNote(sn); ok {
+				e.Notes = append(e.Notes, NoteOf(d, "", n))
+			}
+		}
 		// After an HA failover the entry's snapshots come from the other member,
 		// whose configuration is synced but not identical.
 		if was, now := older.Meta.Serial, newer.Meta.Serial; was != "" && now != "" && was != now {
@@ -181,9 +187,14 @@ func pair(st *store.Store, device string, from, to time.Time) (store.Snapshot, s
 		older, err := st.AtOrBefore(device, from)
 		return older, newer, err
 	}
+	// AtOrBefore passes over a damaged snapshot, so the one before the newer is
+	// the next one that can be read.
 	older, err := st.AtOrBefore(device, newer.Meta.TakenAt.Add(-1))
-	if err != nil {
+	switch {
+	case errors.Is(err, store.ErrNoSnapshot):
 		return older, newer, fmt.Errorf("only one snapshot with a configuration at or before %s; nothing to compare", newer.ID)
+	case err != nil:
+		return older, newer, err
 	}
 	return older, newer, nil
 }

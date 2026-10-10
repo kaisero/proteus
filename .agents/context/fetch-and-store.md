@@ -110,8 +110,12 @@ cannot be read or parsed). `Latest` and `AtOrBefore` on a device whose snapshots
 all lack a configuration match both `ErrNoSnapshot` and `ErrNoConfig`; test
 `ErrNoConfig` first. The message text stays as it was. An absent zone document
 matches `fs.ErrNotExist`, not `ErrUnreadable`. `Get` of a snapshot directory
-without `meta.json` matches `ErrUnreadable` (damaged), not `ErrNoSnapshot`;
-`snapshot list` shows it as a `gap.load-failed` hole and lists the rest.
+without `meta.json` matches `ErrUnreadable` (damaged), not `ErrNoSnapshot` or
+`fs.ErrNotExist`; `snapshot list` shows it as a `gap.load-failed` hole and lists
+the rest. `AtOrBefore` passes over damaged snapshots and names them in
+`Snapshot.Skipped`; `estate.SkipNote` turns that into `note.snapshot-skipped`
+on the targets, the routing data and `snapshot diff`. `Latest` and `Get` never
+fall back.
 
 ## Build / run pointers
 

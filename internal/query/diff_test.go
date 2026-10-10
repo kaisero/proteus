@@ -77,6 +77,58 @@ func TestSnapshotDiffOfAnUnreadableConfiguration(t *testing.T) {
 	}
 }
 
+// Without From, a damaged snapshot before the newer one is passed over: the
+// diff compares the next older one that can be read, and a note names the
+// skipped one.
+func TestSnapshotDiffPassesOverADamagedSnapshot(t *testing.T) {
+	t.Parallel()
+	l := newLab(t)
+	l.write(store.Meta{Device: "fw01"}, pathlab.Read(t, fixture("firewall-lab.xml")))
+	l.write(store.Meta{Device: "fw01"}, pathlab.Read(t, fixture("firewall-lab.xml")))
+	l.write(store.Meta{Device: "fw01"}, pathlab.Read(t, fixture("firewall-lab-changed.xml")))
+	ids, err := l.st.List("fw01")
+	if err != nil || len(ids) != 3 {
+		t.Fatalf("ids %v, %v", ids, err)
+	}
+	sn, _ := l.st.Get("fw01", ids[1])
+	if err := os.Remove(filepath.Join(sn.Dir, "meta.json")); err != nil {
+		t.Fatal(err)
+	}
+	e, err := SnapshotDiff(context.Background(), l.env(), DiffInput{Selection: Selection{Device: []string{"fw01"}}})
+	if err != nil || len(e.Holes) != 0 || len(e.Results) == 0 {
+		t.Fatalf("%+v %v", e, err)
+	}
+	if r := e.Results[0]; r.From != ids[2] || r.To != ids[0] {
+		t.Errorf("compared %s with %s, want %s with %s", r.From, r.To, ids[2], ids[0])
+	}
+	if len(e.Notes) != 1 || e.Notes[0].Code != "note.snapshot-skipped" || e.Notes[0].Device != "fw01" ||
+		!strings.Contains(e.Notes[0].Note, ids[1]) {
+		t.Errorf("notes %+v", e.Notes)
+	}
+}
+
+// An older configuration that is there but cannot be read is a failed load, not
+// "only one snapshot".
+func TestSnapshotDiffOfAnUnreadableOlderSnapshot(t *testing.T) {
+	t.Parallel()
+	l := newLab(t)
+	l.write(store.Meta{Device: "fw01"}, pathlab.Read(t, fixture("firewall-lab.xml")))
+	l.write(store.Meta{Device: "fw01"}, pathlab.Read(t, fixture("firewall-lab.xml")))
+	ids, _ := l.st.List("fw01")
+	sn, _ := l.st.Get("fw01", ids[1])
+	p := sn.Path(store.ConfigDoc)
+	if err := os.Remove(p); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Base(p), p); err != nil { // a link to itself cannot be read
+		t.Fatal(err)
+	}
+	e, err := SnapshotDiff(context.Background(), l.env(), DiffInput{Selection: Selection{Device: []string{"fw01"}}})
+	if err != nil || len(e.Holes) != 1 || e.Holes[0].Code != "gap.load-failed" || strings.Contains(e.Holes[0].Reason, "only one") {
+		t.Errorf("%+v %v", e.Holes, err)
+	}
+}
+
 // A diff reads the store: a file, a time or a fresh fetch is refused, as are an
 // unknown device and an env without the estate.
 func TestSnapshotDiffInputRules(t *testing.T) {

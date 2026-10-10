@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/okaiser/proteus/internal/config"
@@ -186,6 +187,10 @@ func openSnapshot(d string, sn store.Snapshot, err error, vsys []string, w When)
 	w.Log.Infof(runlog.TagSnap, "%s: snapshot %s taken %s, PAN-OS %s read with the %s schema",
 		d, sn.ID, sn.Meta.TakenAt.Format(time.RFC3339), cfg.Version(), cfg.DigestVersion())
 	var notes simulate.Reasons
+	if n, ok := SkipNote(sn); ok {
+		w.Log.Warnf(runlog.TagSnap, "%s: %s", d, n.Text)
+		notes = append(notes, n)
+	}
 	if age := w.Now.Sub(sn.Meta.TakenAt); w.MaxAge > 0 && age > w.MaxAge {
 		notes = append(notes, reason.New("note.snapshot-stale", StaleNote(sn.ID, age, w.MaxAge)))
 	}
@@ -252,6 +257,16 @@ func scopes(device string, sn *store.Snapshot, cfg *config.Config, rep config.Re
 		holes = append(holes, NewHole(device, v, reason.New("gap.vsys-missing", fmt.Sprintf("no vsys %s; it has %v", v, have))))
 	}
 	return out, holes
+}
+
+// SkipNote is the note on a snapshot picked by time past damaged newer ones, and
+// false when none was passed over.
+func SkipNote(sn store.Snapshot) (reason.Reason, bool) {
+	if len(sn.Skipped) == 0 {
+		return reason.Reason{}, false
+	}
+	return reason.New("note.snapshot-skipped", fmt.Sprintf("snapshot %s skipped: its meta.json cannot be read; %s answers",
+		strings.Join(sn.Skipped, ", "), sn.ID)), true
 }
 
 // StaleNote is the note on a target whose snapshot is older than the limit.

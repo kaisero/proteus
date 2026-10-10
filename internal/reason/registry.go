@@ -105,6 +105,7 @@ var registry = []Entry{
 	{Code: "note.nat-pool", Class: Note, Description: "a NAT rule translates the source to one of several addresses; later hops match the first"},
 	{Code: "note.rib-unreadable", Class: Note, Description: "the device's routing table cannot be read, so route protocols and alternates are missing"},
 	{Code: "note.serial-changed", Class: Note, Description: "the snapshots come from different firewalls, as after an HA failover"},
+	{Code: "note.snapshot-skipped", Class: Note, Description: "a damaged snapshot was passed over at the asked time, and an older one answers"},
 	{Code: "note.snapshot-stale", Class: Note, Description: "the snapshot is older than the freshness limit"},
 	{Code: "note.tls-off", Class: Note, Description: "the device was fetched without TLS certificate verification"},
 

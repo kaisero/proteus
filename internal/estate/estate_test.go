@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -264,5 +265,65 @@ func TestGapOf(t *testing.T) {
 	}
 	if !errors.Is(coded("gap.fib-missing", inner), inner) {
 		t.Error("a coded error must keep its cause")
+	}
+}
+
+// damage removes the meta.json of fw01's newest snapshot in a storeWith store and
+// returns its id.
+func damage(t *testing.T, st *store.Store) string {
+	t.Helper()
+	sn, err := st.Latest("fw01")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(filepath.Join(sn.Dir, "meta.json")); err != nil {
+		t.Fatal(err)
+	}
+	return sn.ID
+}
+
+// --at passes over a damaged snapshot to the next one that can be read, with a
+// note that names it. latest and a pinned id never fall back: they are holes.
+func TestADamagedSnapshotIsSkippedOnlyByTime(t *testing.T) {
+	t.Parallel()
+	st := storeWith(t)
+	id := damage(t, st)
+	now := t0.Add(2 * time.Hour)
+	ts, holes := Open(st, []string{"fw01"}, nil, When{At: now, Now: now})
+	if got := names(ts); got != "fw01/vsys1,fw01/vsys2" || len(holes) != 0 {
+		t.Fatalf("at %s: %s, holes %v", now, got, holes)
+	}
+	want := "snapshot " + id + " skipped: its meta.json cannot be read; " + ts[0].Snapshot.ID + " answers"
+	for _, tg := range ts {
+		if len(tg.Notes) != 1 || tg.Notes[0].Code != "note.snapshot-skipped" || tg.Notes[0].Text != want {
+			t.Errorf("%s notes = %v", tg.Vsys, tg.Notes)
+		}
+	}
+	for name, open := range map[string]func() ([]Target, []Hole){
+		"latest": func() ([]Target, []Hole) { return Open(st, []string{"fw01"}, nil, When{Now: now}) },
+		"@id":    func() ([]Target, []Hole) { return OpenSnapshot(st, "fw01", id, nil, When{Now: now}) },
+	} {
+		ts, holes := open()
+		if len(ts) != 0 || len(holes) != 1 || holes[0].Code != "gap.load-failed" || !strings.Contains(holes[0].Reason, id) {
+			t.Errorf("%s: %v, holes %+v", name, names(ts), holes)
+		}
+	}
+}
+
+// The routing data read at a time carries the same note.
+func TestNetworkNotesASkippedSnapshot(t *testing.T) {
+	t.Parallel()
+	st := networkStore(t,
+		snap{dev: "fw01", serial: "S1", at: t0, docs: routingDocs(t, "fw01", nil)},
+		snap{dev: "fw01", serial: "S1", at: t0.Add(time.Hour), docs: routingDocs(t, "fw01", nil)},
+	)
+	id := damage(t, st)
+	n := NewNetwork(st, []string{"fw01"}, When{At: t0.Add(2 * time.Hour), Now: t0.Add(2 * time.Hour)})
+	d, err := n.Device("fw01")
+	if err != nil || d.TakenAt != t0 {
+		t.Fatalf("fw01 = %+v, %v", d, err)
+	}
+	if len(d.Notes) != 1 || d.Notes[0].Code != "note.snapshot-skipped" || !strings.Contains(d.Notes[0].Text, id) {
+		t.Errorf("notes = %v", d.Notes)
 	}
 }

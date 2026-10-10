@@ -310,9 +310,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   drops the `X-User-Claims` header. Before, the fetch container ignored SIGTERM
   until Docker killed it after 10 seconds, the server's running calls got only
   those 10 seconds, and each proxy log line held the user's claims.
+- **`--at` and `snapshot diff` pass over a damaged snapshot.** They read the
+  next older snapshot that can be read, and a `note.snapshot-skipped` note names
+  the one passed over. Before, `--at` stopped at it with a hole, and
+  `snapshot diff` said there was only one snapshot to compare.
 - **`snapshot list` shows the good snapshots when one is damaged.** A snapshot
   whose `meta.json` is missing or unreadable becomes a hole, and the list goes
   on. Before, one such snapshot stopped the command with an error and no list.
+  Questions that read such a snapshot through `latest`, `device@id` or `--at`
+  now give the hole code `gap.load-failed`, not `gap.snapshot-missing`.
 - **A device named twice in `fetch` is fetched once.** Before, both fetches
   ran together and wrote the same snapshot, so one failed and the run exited 3.
   Two runs that store one device in the same second now fail the second one at

@@ -14,6 +14,9 @@ type Snapshot struct {
 	ID     string
 	Dir    string
 	Meta   Meta
+	// Skipped names the damaged snapshots, newest first, that AtOrBefore passed
+	// over to pick this one. Every other lookup leaves it empty.
+	Skipped []string
 }
 
 // Path returns where a document of this snapshot is stored.

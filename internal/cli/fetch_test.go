@@ -414,6 +414,18 @@ func TestSnapshotListGoesOnPastADamagedSnapshot(t *testing.T) {
 		!strings.Contains(after.Holes[0].Text, damaged) {
 		t.Errorf("holes = %+v", after.Holes)
 	}
+	// --at passes over the damaged snapshot to the older one, with a note.
+	at, _ := time.Parse("2006-01-02T15-04-05Z", damaged)
+	atFlag := at.Add(30 * time.Second).Format(time.RFC3339)
+	note := "note: snapshot " + damaged + " skipped: its meta.json cannot be read; " + before.Results[2].ID + " answers"
+	if out := c.want(0, "snapshot", "show", "--device", "fw01", "--at", atFlag); !strings.Contains(out, note) {
+		t.Errorf("snapshot show --at: missing %q in:\n%s", note, out)
+	}
+	var shown struct{ Notes []struct{ Code, Text string } }
+	if err := json.Unmarshal([]byte(c.want(0, "snapshot", "show", "--device", "fw01", "--at", atFlag, "--output", "json")), &shown); err != nil ||
+		len(shown.Notes) == 0 || shown.Notes[0].Code != "note.snapshot-skipped" {
+		t.Errorf("snapshot show --at json: %v %+v", err, shown)
+	}
 }
 
 // A snapshot pruned between List and Get no longer exists: it is left out, with

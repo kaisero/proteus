@@ -100,6 +100,7 @@ func Open(st *store.Store, devices, vsys []string, w When) ([]Target, []Hole)
 func OpenFile(path string, vsys []string, log *runlog.Logger) ([]Target, []Hole, error)
 func OpenSnapshot(st *store.Store, device, id string, vsys []string, w When) ([]Target, []Hole)
 func ParseAt(s string) (time.Time, error)
+func SkipNote(sn store.Snapshot) (reason.Reason, bool)
 func StaleNote(id string, age, limit time.Duration) string
 ```
 <!-- /GENERATED:api -->

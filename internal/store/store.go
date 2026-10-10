@@ -369,8 +369,9 @@ func (s *Store) Get(device, id string) (Snapshot, error) {
 	if err != nil {
 		if _, serr := os.Stat(dir); serr == nil {
 			// The snapshot is there but its meta.json is not readable: Write renames a
-			// snapshot into place whole, so it is damaged, not missing.
-			return Snapshot{}, mark(ErrUnreadable, fmt.Errorf("store: %s@%s: meta.json: %w", device, id, err))
+			// snapshot into place whole, so it is damaged, not missing. The OS error is
+			// text only: a damaged snapshot must not match fs.ErrNotExist.
+			return Snapshot{}, mark(ErrUnreadable, fmt.Errorf("store: %s@%s: meta.json: %s", device, id, err.Error()))
 		}
 		return Snapshot{}, missingOr(ErrNoSnapshot, fmt.Errorf("store: no snapshot %s@%s", device, id), err)
 	}
@@ -384,23 +385,33 @@ func (s *Store) Get(device, id string) (Snapshot, error) {
 // AtOrBefore returns the newest snapshot of a device that holds a configuration and
 // was taken at or before t. Devices are fetched at different moments, so one time
 // picks a different snapshot on each. Spec §15 C8.
+//
+// A damaged snapshot, whose meta.json cannot be read, is passed over as one
+// without a configuration is; the snapshot returned names it in Skipped. One that
+// is gone since the list was read is passed over silently.
 func (s *Store) AtOrBefore(device string, t time.Time) (Snapshot, error) {
 	ids, err := s.List(device)
 	if err != nil {
 		return Snapshot{}, err
 	}
-	early := false           // a snapshot at or before t exists, without a configuration
+	early := false // a snapshot at or before t exists, without a configuration
+	var skipped []string
 	for _, id := range ids { // newest first
 		taken, _ := time.Parse(idLayout, id)
 		if taken.After(t) {
 			continue
 		}
 		sn, err := s.Get(device, id)
-		if err != nil {
-			return Snapshot{}, err
+		switch {
+		case errors.Is(err, ErrNoSnapshot):
+			continue
+		case err != nil:
+			skipped = append(skipped, id)
+			continue
 		}
 		_, err = sn.ConfigPath()
 		if err == nil {
+			sn.Skipped = skipped
 			return sn, nil
 		}
 		if errors.Is(err, ErrUnreadable) {
@@ -408,8 +419,12 @@ func (s *Store) AtOrBefore(device string, t time.Time) (Snapshot, error) {
 		}
 		early = true
 	}
-	err = mark(ErrNoSnapshot, fmt.Errorf("store: %s has no snapshot with a configuration at or before %s",
-		device, t.UTC().Format(time.RFC3339)))
+	msg := fmt.Sprintf("store: %s has no snapshot with a configuration at or before %s",
+		device, t.UTC().Format(time.RFC3339))
+	if len(skipped) > 0 {
+		msg += fmt.Sprintf("; damaged: %s", strings.Join(skipped, ", "))
+	}
+	err = mark(ErrNoSnapshot, errors.New(msg))
 	if early {
 		err = mark(ErrNoConfig, err)
 	}
