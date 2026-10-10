@@ -1,0 +1,59 @@
+<config version="11.2.0" urldb="paloaltonetworks" detail-version="11.2.5">
+  <shared/>
+  <devices>
+    <entry name="localhost.localdomain">
+      <vsys>
+        <entry name="vsys1">
+          <tag>
+            <entry name="web"><color>color1</color></entry>
+          </tag>
+          <address>
+            <entry name="h-web"><ip-netmask>10.88.4.10</ip-netmask></entry>
+            <entry name="h-api"><ip-netmask>10.88.4.20</ip-netmask></entry>
+            <entry name="dual"><ip-netmask>10.88.4.30</ip-netmask></entry>
+          </address>
+          <address-group>
+            <entry name="web"><static><member>h-web</member></static></entry>
+            <entry name="webgrp"><static><member>h-api</member></static></entry>
+            <entry name="g-dual-addr"><static><member>dual</member></static></entry>
+          </address-group>
+          <service>
+            <entry name="svc-web"><protocol><tcp><port>8443</port></tcp></protocol></entry>
+            <entry name="dual"><protocol><tcp><port>9000</port></tcp></protocol></entry>
+          </service>
+          <service-group>
+            <entry name="webgrp"><members><member>svc-web</member></members></entry>
+            <entry name="g-dual-svc"><members><member>dual</member></members></entry>
+          </service-group>
+          <rulebase><security><rules>
+            <entry name="by-tag">
+              <source><member>any</member></source>
+              <destination><member>any</member></destination>
+              <service><member>any</member></service>
+              <tag><member>web</member></tag>
+              <action>allow</action>
+            </entry>
+            <entry name="to-web">
+              <source><member>any</member></source>
+              <destination><member>web</member></destination>
+              <service><member>any</member></service>
+              <action>allow</action>
+            </entry>
+            <entry name="src-webgrp">
+              <source><member>webgrp</member></source>
+              <destination><member>any</member></destination>
+              <service><member>any</member></service>
+              <action>allow</action>
+            </entry>
+            <entry name="svc-webgrp">
+              <source><member>any</member></source>
+              <destination><member>any</member></destination>
+              <service><member>webgrp</member></service>
+              <action>allow</action>
+            </entry>
+          </rules></security></rulebase>
+        </entry>
+      </vsys>
+    </entry>
+  </devices>
+</config>

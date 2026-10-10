@@ -298,6 +298,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A name used by several kinds of object now counts as each of them.** When a
+  tag and an address group, or an address group and a service group, shared a
+  name, `search` kept only one kind: it missed the references to the other and
+  could give a group the wrong kind, and a service group could pass as holding an
+  address. A reference to such a name now says which kind its field names.
 - **Groups that hold each other now give the same answer on every run.** When
   address groups formed a cycle, which groups held an address depended on the order
   the index was built in, so a rule on one of them was found on some runs and

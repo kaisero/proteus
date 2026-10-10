@@ -126,7 +126,7 @@ func (r *rulesIndex) addLiteral(f Field, value string, bit uint32) {
 // holds it at any depth.
 func (i *Index) RulesReaching(f Field, name string) *roaring.Bitmap {
 	var rep Report
-	return i.RulesWith(f, i.reach(name, &rep)...)
+	return i.RulesWith(f, i.reach(f, name, &rep)...)
 }
 
 // RulesWith returns the rules naming any of the ids in a field.

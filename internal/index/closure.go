@@ -1,12 +1,14 @@
 package index
 
 import (
+	"maps"
 	"slices"
 	"strings"
 	"sync"
 
 	"github.com/RoaringBitmap/roaring/v2"
 
+	"github.com/okaiser/proteus/internal/config"
 	"github.com/okaiser/proteus/internal/resolve"
 )
 
@@ -36,16 +38,17 @@ type UnparsedFilter struct {
 	Reason string
 }
 
-// newClosureIndex builds group membership from both kinds of group.
+// newClosureIndex builds the membership of one group kind. Address groups come
+// in two sorts, static and dynamic; the other group kinds are static only.
 //
 // A static group lists its members. A dynamic group carries a tag filter, and its
 // members are the visible objects whose tags satisfy it — which is why the closure
 // is scope-bound: the same filter selects different objects in different device
 // groups. A filter this build cannot parse contributes no members and is recorded
 // in UnparsedFilters rather than guessed at.
-// A group set other than address groups carries no tag filter, so only the first is
-// checked for one. PAN-OS gives a dynamic filter to address groups alone.
-func newClosureIndex(in *Interner, groups, addrs []resolve.Object, others ...[]resolve.Object) *closureIndex {
+// addrs are the objects a tag filter selects from; nil for a group kind without
+// one.
+func newClosureIndex(in *Interner, groups, addrs []resolve.Object) *closureIndex {
 	c := &closureIndex{
 		direct:  map[uint32][]uint32{},
 		forward: map[uint32]*roaring.Bitmap{},
@@ -76,16 +79,6 @@ func newClosureIndex(in *Interner, groups, addrs []resolve.Object, others ...[]r
 				continue
 			}
 			c.direct[gid] = append(c.direct[gid], in.ID(m))
-		}
-	}
-	for _, set := range others {
-		for _, g := range set {
-			gid := in.ID(g.Name)
-			for m := range strings.SplitSeq(g.Value, ", ") {
-				if m = strings.TrimSpace(m); m != "" {
-					c.direct[gid] = append(c.direct[gid], in.ID(m))
-				}
-			}
 		}
 	}
 	cut := false
@@ -162,60 +155,168 @@ func (c *closureIndex) ancestors(member uint32) *roaring.Bitmap {
 	return b
 }
 
-// GroupsOf returns every group holding the named object, directly or through
-// nesting.
-func (i *Index) GroupsOf(name string) []string {
-	id, known := i.in.Lookup(name)
-	if !known {
-		return nil
+// addressGroups is the group kind whose closure reads tag filters too.
+const addressGroups = "address-group"
+
+// groupFamily is the closure of one group kind and the kinds its members can be.
+type groupFamily struct {
+	kind    string   // the group kind: address-group, service-group, application-group
+	members []string // the kinds its member list can name, from the schema
+	closure *closureIndex
+}
+
+// memberKinds reads from the schema the kinds a group kind's member list can name.
+// Groups nest, so the member list is the group's field that can name the group
+// kind itself; a group's tag field cannot.
+func memberKinds(cfg *config.Config, group string) []string {
+	fields := cfg.FieldKinds("/" + group)
+	for _, f := range slices.Sorted(maps.Keys(fields)) {
+		if slices.Contains(fields[f], group) {
+			return fields[f]
+		}
 	}
-	b := i.closure.ancestors(id)
+	return nil
+}
+
+// fieldFamilies picks, for each rule field, the group families whose groups the
+// field can name, as the schema declares. reach asks only those.
+func fieldFamilies(kinds map[string][]string, fams []groupFamily) map[Field][]*groupFamily {
+	out := map[Field][]*groupFamily{}
+	for n, name := range fieldNames {
+		for j := range fams {
+			if slices.Contains(kinds[name], fams[j].kind) {
+				out[Field(n)] = append(out[Field(n)], &fams[j])
+			}
+		}
+	}
+	return out
+}
+
+// names turns a bitmap of ids into names, in id order.
+func (i *Index) names(b *roaring.Bitmap) []string {
 	out := make([]string, 0, b.GetCardinality())
-	it := b.Iterator()
-	for it.HasNext() {
+	for it := b.Iterator(); it.HasNext(); {
 		out = append(out, i.in.Name(it.Next()))
 	}
 	return out
 }
 
-// UnparsedFilters returns the dynamic groups whose filters could not be read.
-// Their membership is missing from the index, and this is how a caller finds out.
-func (i *Index) UnparsedFilters() []UnparsedFilter {
-	return append([]UnparsedFilter{}, i.closure.unparsed...)
+// Group is a group holding a member, with the group's kind.
+type Group struct {
+	Kind string
+	Name string
 }
 
-// DirectGroupsOf returns the groups that name a member directly, not through
-// another group. It answers "which group do I edit", which the transitive list of
-// GroupsOf hides.
-func (i *Index) DirectGroupsOf(name string) []string {
+// GroupsHolding returns the groups holding an object of a kind: at any depth, or
+// with direct only the groups that name it. Only the group kinds that can hold
+// that kind are asked, so an address group and a service group of one name stay
+// two groups. The groups come by kind, then name.
+func (i *Index) GroupsHolding(kind, name string, direct bool) []Group {
 	id, known := i.in.Lookup(name)
 	if !known {
 		return nil
 	}
+	var out []Group
+	for _, fam := range i.families {
+		if !slices.Contains(fam.members, kind) {
+			continue
+		}
+		var names []string
+		if direct {
+			names = fam.closure.directGroups(id, i.in)
+		} else {
+			names = i.names(fam.closure.ancestors(id))
+			slices.Sort(names)
+		}
+		for _, n := range names {
+			out = append(out, Group{Kind: fam.kind, Name: n})
+		}
+	}
+	return out
+}
+
+// GroupsOf returns every group holding the named object, directly or through
+// nesting, in any group family.
+func (i *Index) GroupsOf(name string) []string {
+	id, known := i.in.Lookup(name)
+	if !known {
+		return nil
+	}
+	b := roaring.New()
+	for _, fam := range i.families {
+		b.Or(fam.closure.ancestors(id))
+	}
+	return i.names(b)
+}
+
+// groupsReaching returns the groups of the field's families holding a name.
+func (i *Index) groupsReaching(f Field, name string) []string {
+	id, known := i.in.Lookup(name)
+	if !known {
+		return nil
+	}
+	b := roaring.New()
+	for _, fam := range i.fieldFamilies[f] {
+		b.Or(fam.closure.ancestors(id))
+	}
+	return i.names(b)
+}
+
+// UnparsedFilters returns the dynamic groups whose filters could not be read.
+// Their membership is missing from the index, and this is how a caller finds out.
+func (i *Index) UnparsedFilters() []UnparsedFilter {
+	out := []UnparsedFilter{}
+	for _, fam := range i.families {
+		out = append(out, fam.closure.unparsed...)
+	}
+	return out
+}
+
+// directGroups returns the groups that name a member directly, sorted.
+func (c *closureIndex) directGroups(id uint32, in *Interner) []string {
 	var out []string
-	for g, members := range i.closure.direct {
+	for g, members := range c.direct {
 		if slices.Contains(members, id) {
-			out = append(out, i.in.Name(g))
+			out = append(out, in.Name(g))
 		}
 	}
 	slices.Sort(out)
 	return out
 }
 
-// MembersOf returns the transitive members of a group.
+// DirectGroupsOf returns the groups that name a member directly, not through
+// another group, in any group family. It answers "which group do I edit", which
+// the transitive list of GroupsOf hides.
+func (i *Index) DirectGroupsOf(name string) []string {
+	id, known := i.in.Lookup(name)
+	if !known {
+		return nil
+	}
+	var out []string
+	for _, fam := range i.families {
+		out = append(out, fam.closure.directGroups(id, i.in)...)
+	}
+	slices.Sort(out)
+	return slices.Compact(out)
+}
+
+// MembersOf returns the transitive members of a group, of every group kind that
+// has a group of that name.
 func (i *Index) MembersOf(group string) []string {
 	id, known := i.in.Lookup(group)
 	if !known {
 		return nil
 	}
-	b, ok := i.closure.forward[id]
-	if !ok {
+	b := roaring.New()
+	found := false
+	for _, fam := range i.families {
+		if m, ok := fam.closure.forward[id]; ok {
+			b.Or(m)
+			found = true
+		}
+	}
+	if !found {
 		return nil
 	}
-	out := make([]string, 0, b.GetCardinality())
-	it := b.Iterator()
-	for it.HasNext() {
-		out = append(out, i.in.Name(it.Next()))
-	}
-	return out
+	return i.names(b)
 }

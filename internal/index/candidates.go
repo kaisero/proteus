@@ -52,7 +52,7 @@ func (v *View) Candidates(f Field, value string) (*roaring.Bitmap, Report) {
 		rep.Hits = append(rep.Hits, hits...)
 		rep.Unresolved = append(rep.Unresolved, un...)
 		for _, h := range hits {
-			out.Or(i.RulesWith(f, i.reach(h.Name, &rep)...))
+			out.Or(i.RulesWith(f, i.reach(f, h.Name, &rep)...))
 		}
 		out.Or(r.literalRules(f, value))
 	}
@@ -60,7 +60,7 @@ func (v *View) Candidates(f Field, value string) (*roaring.Bitmap, Report) {
 	// Whatever its value space, a value can also be the name of an object or group.
 	_, named := i.in.Lookup(value)
 	if named {
-		out.Or(i.RulesWith(f, i.reach(value, &rep)...))
+		out.Or(i.RulesWith(f, i.reach(f, value, &rep)...))
 	}
 
 	if anyRules := i.RulesWithAny(f); !anyRules.IsEmpty() {
@@ -161,14 +161,16 @@ func dedupeUnresolved(in []Unresolved) []Unresolved {
 	return out
 }
 
-// reach returns the interned ids a name reaches: the name itself and every group
-// holding it, recording the groups in the report.
-func (i *Index) reach(name string, rep *Report) []uint32 {
+// reach returns the interned ids a name reaches in a field: the name itself and
+// every group holding it, recording the groups in the report. Only groups of a
+// kind the field can name count: a service group holds no source address, even
+// when an address group of the same name does.
+func (i *Index) reach(f Field, name string, rep *Report) []uint32 {
 	var ids []uint32
 	if id, known := i.in.Lookup(name); known {
 		ids = append(ids, id)
 	}
-	groups := i.GroupsOf(name)
+	groups := i.groupsReaching(f, name)
 	rep.Groups = append(rep.Groups, groups...)
 	return append(ids, i.idsOf(groups)...)
 }

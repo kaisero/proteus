@@ -335,17 +335,69 @@ func TestAUserSnapshotResolvesDirectoryGroups(t *testing.T) {
 	}
 }
 
-// groupKind prefers a group kind, falls back to the first kind a name has, and
-// to "group" for a name nothing defines.
-func TestGroupKindPrefersAGroupKind(t *testing.T) {
+// A name can be several kinds at once: tag web and address group web, address
+// group webgrp and service group webgrp. Each kind finds its own groups and its
+// own references, and a reference to a name found as several kinds says which
+// kind its field names.
+func TestANameWithSeveralKinds(t *testing.T) {
 	t.Parallel()
-	s := &searcher{byName: map[string][]string{
-		"both": {"tag", "address-group"},
-		"tag":  {"tag"},
-	}}
-	for name, want := range map[string]string{"both": "address-group", "tag": "tag", "nothing": "group"} {
-		if got := s.groupKind(name); got != want {
-			t.Errorf("groupKind(%q) = %q, want %q", name, got, want)
+	const fixture = "firewall-shared-names.xml"
+	for _, tc := range []struct {
+		term      string
+		want, not []string
+	}{
+		{"web", []string{
+			"object address-group web  name",
+			"object tag web  name",
+			"reference security rule to-web destination web (address-group)",
+			"reference security rule by-tag tag web (tag)",
+		}, nil},
+		{"10.88.4.10", []string{
+			"group address-group web  holds h-web",
+			"reference security rule to-web destination web",
+		}, []string{"reference security rule by-tag"}},
+		{"webgrp", []string{
+			"object address-group webgrp  name",
+			"object service-group webgrp  name",
+			"reference security rule src-webgrp source webgrp (address-group)",
+			"reference security rule svc-webgrp service webgrp (service-group)",
+		}, nil},
+		{"tcp/8443", []string{
+			"object service svc-web",
+			"group service-group webgrp  holds svc-web",
+			"reference security rule svc-webgrp service webgrp",
+		}, []string{"group address-group webgrp", "reference security rule src-webgrp"}},
+		{"10.88.4.20", []string{
+			"group address-group webgrp  holds h-api",
+			"reference security rule src-webgrp source webgrp",
+		}, []string{"group service-group webgrp", "reference security rule svc-webgrp"}},
+		{"10.88.4.30", []string{"group address-group g-dual-addr  holds dual"}, []string{"group service-group"}},
+		{"tcp/9000", []string{"group service-group g-dual-svc  holds dual"}, []string{"group address-group"}},
+	} {
+		got := run(t, fixture, "vsys1", Query{Term: tc.term})
+		for _, want := range tc.want {
+			if !has(got, want) {
+				t.Errorf("%s: missing %q in:\n%s", tc.term, want, dump(got))
+			}
 		}
+		for _, not := range tc.not {
+			if has(got, not) {
+				t.Errorf("%s: unexpected %q in:\n%s", tc.term, not, dump(got))
+			}
+		}
+		// A name found as one kind needs no kind in its reference.
+		if tc.term != "web" && tc.term != "webgrp" && strings.Contains(dump(got), "(") {
+			t.Errorf("%s: a kind named without need:\n%s", tc.term, dump(got))
+		}
+	}
+	// Direct asks one level up, by kind too.
+	got := run(t, fixture, "vsys1", Query{Term: "tcp/8443", Direct: true})
+	if !has(got, "group service-group webgrp  holds svc-web") || has(got, "group address-group") {
+		t.Errorf("direct:\n%s", dump(got))
+	}
+	// The order is stable: stage, kind, name, field.
+	a, b := dump(run(t, fixture, "vsys1", Query{Term: "webgrp"})), dump(run(t, fixture, "vsys1", Query{Term: "webgrp"}))
+	if a != b {
+		t.Errorf("two runs differ:\n%s\n--\n%s", a, b)
 	}
 }

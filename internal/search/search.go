@@ -12,6 +12,7 @@ import (
 	"cmp"
 	"errors"
 	"fmt"
+	"maps"
 	"net/netip"
 	"slices"
 	"strings"
@@ -99,8 +100,27 @@ type searcher struct {
 
 	found      []Finding
 	unresolved []index.Unresolved
-	names      map[string]string // an object or group found, to its kind
-	byName     map[string][]string
+	// names maps an object or group found to the kinds it was found as. A name
+	// can have several: a tag and an address group, an address group and a
+	// service group.
+	names  map[string]map[string]bool
+	byName map[string][]string
+}
+
+// foundAs records a name as found with a kind.
+func (s *searcher) foundAs(name, kind string) {
+	if s.names == nil {
+		s.names = map[string]map[string]bool{}
+	}
+	if s.names[name] == nil {
+		s.names[name] = map[string]bool{}
+	}
+	s.names[name][kind] = true
+}
+
+// namesFound lists the names found, sorted.
+func (s *searcher) namesFound() []string {
+	return slices.Sorted(maps.Keys(s.names))
 }
 
 // kindsByName maps every object name visible in the scope to its kinds, once.
@@ -131,10 +151,7 @@ func (s *searcher) addObject(kind, name string, scope config.Scope, via string) 
 	if !s.kindAllowed(kind) {
 		return
 	}
-	if s.names == nil {
-		s.names = map[string]string{}
-	}
-	s.names[name] = kind
+	s.foundAs(name, kind)
 	s.found = append(s.found, Finding{Stage: StageObject, Kind: kind, Name: name, Scope: scope, Via: via})
 }
 
@@ -229,69 +246,54 @@ func (s *searcher) wildcards() {
 	}
 }
 
-// groups is stage 3: every group holding an object found.
+// groups is stage 3: every group holding an object found. A name found as
+// several kinds is asked once per kind, and each kind finds only the groups that
+// can hold it: an address group holds addresses, a service group services.
 func (s *searcher) groups() {
-	members := make([]string, 0, len(s.names))
-	for n := range s.names {
-		members = append(members, n)
-	}
-	slices.Sort(members)
-	for _, m := range members {
-		var gs []string
-		if s.q.Direct {
-			gs = s.idx.DirectGroupsOf(m)
-		} else {
-			gs = s.idx.GroupsOf(m)
-		}
-		for _, g := range gs {
-			kind := s.groupKind(g)
-			if !s.kindAllowed(kind) {
-				continue
+	for _, m := range s.namesFound() {
+		for _, k := range slices.Sorted(maps.Keys(s.names[m])) {
+			for _, g := range s.idx.GroupsHolding(k, m, s.q.Direct) {
+				if !s.kindAllowed(g.Kind) {
+					continue
+				}
+				s.foundAs(g.Name, g.Kind)
+				s.found = append(s.found, Finding{Stage: StageGroup, Kind: g.Kind, Name: g.Name, Scope: s.sc, Via: "holds " + m})
 			}
-			if _, seen := s.names[g]; !seen {
-				s.names[g] = kind
-			}
-			s.found = append(s.found, Finding{Stage: StageGroup, Kind: kind, Name: g, Scope: s.sc, Via: "holds " + m})
 		}
 	}
-}
-
-// groupKind names the kind of a group by the kinds its name is defined as, preferring
-// a group kind.
-func (s *searcher) groupKind(name string) string {
-	kinds := s.kindsByName()[name]
-	for _, k := range kinds {
-		if strings.Contains(k, "group") {
-			return k
-		}
-	}
-	if len(kinds) > 0 {
-		return kinds[0]
-	}
-	return "group"
 }
 
 // references is stage 4: every place that names an object or group found.
 //
-// A reference counts only when the field can name the found object's kind. A tag
-// and an address group can share a name, and a tag field naming the tag does not
-// name the group.
+// A reference counts only when the field can name a kind the name was found as.
+// A tag and an address group can share a name, and a tag field naming the tag
+// does not name the group. When the name was found as several kinds, the finding
+// says which kind the field names.
 func (s *searcher) references() {
-	names := make([]string, 0, len(s.names))
-	for n := range s.names {
-		names = append(names, n)
-	}
-	slices.Sort(names)
-	for _, n := range names {
-		kind := s.names[n]
+	for _, n := range s.namesFound() {
+		kinds := s.names[n]
 		for _, r := range s.idx.Refs(n) {
-			if !slices.Contains(r.Candidates, kind) || !s.fieldAllowed(r.Field) {
+			if !s.fieldAllowed(r.Field) {
 				continue
+			}
+			var named []string
+			for _, k := range r.Candidates {
+				if kinds[k] {
+					named = append(named, k)
+				}
+			}
+			if len(named) == 0 {
+				continue
+			}
+			via := r.Target
+			if len(kinds) > 1 {
+				slices.Sort(named)
+				via += " (" + strings.Join(named, ", ") + ")"
 			}
 			rk, rn := referrer(r.From)
 			s.found = append(s.found, Finding{
 				Stage: StageReference, Kind: rk, Name: rn, Scope: r.Scope,
-				Field: r.Field, Via: r.Target, Path: r.From,
+				Field: r.Field, Via: via, Path: r.From,
 			})
 		}
 	}

@@ -170,3 +170,72 @@ func TestMembersOfANonGroupIsEmpty(t *testing.T) {
 		}
 	}
 }
+
+// An address group and a service group named webgrp are two groups: each holds
+// its own members, and a field reaches only the groups it can name.
+func TestEachGroupKindHasItsOwnClosure(t *testing.T) {
+	t.Parallel()
+	idx := indexOf(t, "../../testdata/config/firewall-shared-names.xml", "vsys1")
+	for _, tc := range []struct {
+		kind, name string
+		direct     bool
+		want       []Group
+	}{
+		{"service", "svc-web", false, []Group{{"service-group", "webgrp"}}},
+		{"service", "svc-web", true, []Group{{"service-group", "webgrp"}}},
+		{"address", "h-api", false, []Group{{"address-group", "webgrp"}}},
+		{"address", "h-web", true, []Group{{"address-group", "web"}}},
+		{"tag", "web", false, nil},
+		{"address", "nothing", false, nil},
+	} {
+		if got := idx.GroupsHolding(tc.kind, tc.name, tc.direct); !slices.Equal(got, tc.want) {
+			t.Errorf("GroupsHolding(%s, %s, %v) = %v, want %v", tc.kind, tc.name, tc.direct, got, tc.want)
+		}
+	}
+	for _, tc := range []struct {
+		f     Field
+		value string
+		rule  string
+		want  bool
+	}{
+		{Service, "tcp/8443", "svc-webgrp", true},
+		{Source, "10.88.4.20", "src-webgrp", true},
+		{Source, "svc-web", "src-webgrp", false},
+		{Service, "h-api", "svc-webgrp", false},
+		{Destination, "h-web", "to-web", true},
+	} {
+		b, _ := idx.Candidates(tc.f, tc.value)
+		if got := ruleNames(idx, b)[tc.rule]; got != tc.want {
+			t.Errorf("Candidates(%s, %s) has %s: %v, want %v", tc.f, tc.value, tc.rule, got, tc.want)
+		}
+	}
+	if got := slices.Sorted(slices.Values(idx.MembersOf("webgrp"))); !slices.Equal(got, []string{"h-api", "svc-web"}) {
+		t.Errorf("MembersOf(webgrp) = %v, want both kinds' members", got)
+	}
+	if got := idx.DirectGroupsOf("svc-web"); !slices.Equal(got, []string{"webgrp"}) {
+		t.Errorf("DirectGroupsOf(svc-web) = %v", got)
+	}
+	if got := idx.MembersOf("svc-web"); got != nil {
+		t.Errorf("MembersOf(svc-web) = %v, want none", got)
+	}
+}
+
+// The member kinds of each group kind come from the schema: the group's field
+// that can name the group kind itself.
+func TestGroupMemberKindsComeFromTheSchema(t *testing.T) {
+	t.Parallel()
+	cfg, _, err := config.Load("../../testdata/config/firewall-shared-names.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for group, want := range map[string][]string{
+		"address-group":     {"address", "address-group"},
+		"service-group":     {"service", "service-group"},
+		"application-group": {"application", "application-container", "application-filter", "application-group"},
+		"no-such-group":     nil,
+	} {
+		if got := memberKinds(cfg, group); !slices.Equal(got, want) {
+			t.Errorf("memberKinds(%s) = %v, want %v", group, got, want)
+		}
+	}
+}

@@ -27,7 +27,8 @@ snapshot older than `When.MaxAge` and a version gap become `Target.Notes`.
 `Run(cfg, idx, Query)` runs five stages in order: objects by value (address terms
 through `Containing`/`Overlapping`, any other term through every field's resolvers
 with the query's `Providers`), objects by name (every kind `resolve.ObjectKinds`
-lists), groups (`GroupsOf`, or `DirectGroupsOf` with `Direct`), references
+lists), groups (`GroupsHolding` per kind a name was found as, one level up with
+`Direct`), references
 (`Refs` and `ProfileUses`), literals (`RulesWithAddr`/`RulesWithPrefix`). Modes
 `Exact`, `Within`, `Contains` change stage one; `Kinds`, `Fields`, `Show` filter.
 
@@ -36,8 +37,8 @@ lists), groups (`GroupsOf`, or `DirectGroupsOf` with `Direct`), references
 `Find(cfg, idx, name, kind)` returns one `Card` per element of that name visible in
 the scope: a security rule (`idx.Rules()`) or an object of any kind
 `resolve.ObjectKinds` lists. `Rule` lays a rule out in the rule editor's sections;
-`Object` gives a value, members, profiles and the groups holding it
-(`DirectGroupsOf`). Every `Item` carries its value and children to full depth; a
+`Object` gives a value, members, profiles and the groups of its kind holding it
+(`GroupsHolding` with direct). Every `Item` carries its value and children to full depth; a
 name no object defines is `Literal` (an address or prefix) or `Predefined` (in
 source, destination, service, category). The command cuts trees at three levels
 and lists at five items; JSON carries the whole card.

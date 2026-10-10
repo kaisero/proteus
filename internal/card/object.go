@@ -49,10 +49,12 @@ func Object(cfg *config.Config, idx *index.Index, o resolve.Object) Card {
 		}
 		c.Sections = append(c.Sections, Section{Title: title, Rows: []Row{{Text: it.Value}}})
 	}
-	if held := idx.DirectGroupsOf(o.Name); len(held) > 0 {
+	// Only groups that can hold the object's kind: a service group of the
+	// same name as an address group holds no address.
+	if held := idx.GroupsHolding(o.Kind, o.Name, true); len(held) > 0 {
 		var items []Item
 		for _, g := range held {
-			items = append(items, Item{Name: g})
+			items = append(items, Item{Name: g.Name})
 		}
 		c.Sections = append(c.Sections, Section{Title: "held by", Rows: []Row{{Items: items}}})
 	}

@@ -267,3 +267,19 @@ func TestAPredefinedServiceCard(t *testing.T) {
 		t.Errorf("configured service-https = %+v", c)
 	}
 }
+
+// An address and a service may share a name; each card lists only the groups of
+// its own kind that hold it.
+func TestHeldByKeepsToTheObjectsKind(t *testing.T) {
+	t.Parallel()
+	held := map[string]string{}
+	for _, c := range find(t, "firewall-shared-names.xml", "dual", "") {
+		held[c.Kind] = flat(row(c, "held by", "").Items)
+	}
+	if held["address"] != "g-dual-addr" || held["service"] != "g-dual-svc" {
+		t.Errorf("held by = %v", held)
+	}
+	if got := flat(row(one(t, "firewall-shared-names.xml", "svc-web"), "held by", "").Items); got != "webgrp" {
+		t.Errorf("svc-web held by %s", got)
+	}
+}
