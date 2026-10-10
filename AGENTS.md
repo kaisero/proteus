@@ -30,7 +30,7 @@ The fetcher is the one package that talks to a device. It asks for an API key, r
 `<show>` commands and exports the configuration; `fetch.Client` refuses any other
 op command before it reaches the device, and has no method for anything else.
 
-Check: `go test ./... -run TestPublicAPIIsReadOnly`
+Check: `go test ./internal/archtest -run TestPublicAPIIsReadOnly`
 Check: `go test ./internal/fetch -run TestOnlyReadCalls`
 
 ## R3 — Nothing is dropped silently
@@ -64,7 +64,7 @@ A shared dynamic address group resolves to different members in different vsys.
 A global resolution silently merges sibling vsys and returns answers that are
 wrong rather than incomplete.
 
-Check: `go test ./internal/config -run TestScopedResolution`
+Check: `go test ./internal/index -run TestScopedResolution`
 
 ## R6 — Retired
 
