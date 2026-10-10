@@ -100,16 +100,20 @@ func TestSearchInputRules(t *testing.T) {
 func TestSearchRefusesAnUnknownKind(t *testing.T) {
 	t.Parallel()
 	file := Selection{File: fixture("firewall-lab.xml")}
-	_, err := Search(context.Background(), Env{}, SearchInput{Term: "web", Kinds: []string{"addr"}, Selection: file})
-	usageOK(t, err, `--kind "addr": want one of `)
+	_, err := Search(context.Background(), Env{}, SearchInput{Term: "web", Kinds: []string{"addr", "servce", "zz-none"}, Selection: file})
+	usageOK(t, err, `--kind "addr": did you mean address, address-group?`)
 	u, _ := errors.AsType[*UsageError](err)
-	list := strings.TrimPrefix(u.Text, `--kind "addr": want one of `)
-	kinds := strings.Split(list, ", ")
-	if !slices.IsSorted(kinds) || !slices.Contains(kinds, "address") || !slices.Contains(kinds, "service") {
-		t.Errorf("kinds %q", list)
+	lines := strings.Split(u.Text, "\n")
+	if len(lines) != 4 || lines[1] != `--kind "servce": did you mean service?` ||
+		lines[2] != `--kind "zz-none": no kind is close` || !strings.HasPrefix(lines[3], "known kinds: ") {
+		t.Fatalf("text %q", u.Text)
 	}
-	if u.ToolText != `kind "addr": want one of `+list {
-		t.Errorf("tool text %q", u.ToolText)
+	kinds := strings.Split(strings.TrimPrefix(lines[3], "known kinds: "), ", ")
+	if !slices.IsSorted(kinds) || !slices.Contains(kinds, "address") || !slices.Contains(kinds, "service") {
+		t.Errorf("kinds %q", lines[3])
+	}
+	if want := strings.ReplaceAll(u.Text, "--kind", "kind"); u.ToolText != want {
+		t.Errorf("tool text %q, want %q", u.ToolText, want)
 	}
 	// The store has two targets on fw01 and a hole on fw02: still one error.
 	_, err = Search(context.Background(), labStore(t), SearchInput{Term: "web", Kinds: []string{"address", "addr"}})
@@ -117,6 +121,23 @@ func TestSearchRefusesAnUnknownKind(t *testing.T) {
 	e, err := Search(context.Background(), labStore(t), SearchInput{Term: "198.18.10.100", Kinds: []string{"address"}})
 	if err != nil || len(e.Results) == 0 {
 		t.Fatalf("a known kind: %v %+v", err, e.Summary)
+	}
+}
+
+// The closest kinds come first, at most five; a case slip is no edit.
+func TestNearKinds(t *testing.T) {
+	t.Parallel()
+	known := map[string]bool{"address": true, "address-group": true, "service": true, "tag": true, "zone": true}
+	for in, want := range map[string]string{
+		"Service": "service", "tags": "tag", "addr": "address, address-group", "xyz": "", "zon": "zone", "tg": "tag",
+	} {
+		if got := strings.Join(nearKinds(in, known), ", "); got != want {
+			t.Errorf("nearKinds(%q) = %q, want %q", in, got, want)
+		}
+	}
+	many := map[string]bool{"a1": true, "a2": true, "a3": true, "a4": true, "a5": true, "a6": true}
+	if got := nearKinds("a", many); len(got) != 5 || got[0] != "a1" {
+		t.Errorf("nearKinds(a) = %v, want five", got)
 	}
 }
 

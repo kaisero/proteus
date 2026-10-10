@@ -306,9 +306,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   route or an IKE gateway that names an address object shows as a reference with
   scope `config`. Before, only rules and objects inside a vsys or shared were
   found, so such an object looked unused.
-- **`search --within` and `--exact` now compare an address object's whole value.**
-  An address range matched when one part of it did: `10.0.0.2-10.0.0.9` was found
-  within `10.0.0.0/29` and exactly `10.0.0.4/30`, and the rules using it with it.
+- **`search --within` and `--exact` now compare an address's whole value.** An
+  address range, as an object or written into a rule, matched when one part of it
+  did: `10.0.0.2-10.0.0.9` was found within `10.0.0.0/29` and exactly
+  `10.0.0.4/30`, and so were the rules that use it.
 - **A name used by several kinds of object now counts as each of them.** When a
   tag and an address group, or an address group and a service group, shared a
   name, `search` kept only one kind: it missed the references to the other and

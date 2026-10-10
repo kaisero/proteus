@@ -1,6 +1,7 @@
 package query
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -91,14 +92,62 @@ func (in SearchInput) checkKinds(ts []estate.Target) *UsageError {
 			known[k] = true
 		}
 	}
+	var lines, toolLines []string
 	for _, k := range in.Kinds {
-		if !known[k] {
-			list := strings.Join(slices.Sorted(maps.Keys(known)), ", ")
-			return usage(fmt.Sprintf("--kind %q: want one of %s", k, list),
-				fmt.Sprintf("kind %q: want one of %s", k, list))
+		if known[k] {
+			continue
+		}
+		hint := "no kind is close"
+		if near := nearKinds(k, known); len(near) > 0 {
+			hint = "did you mean " + strings.Join(near, ", ") + "?"
+		}
+		lines = append(lines, fmt.Sprintf("--kind %q: %s", k, hint))
+		toolLines = append(toolLines, fmt.Sprintf("kind %q: %s", k, hint))
+	}
+	if len(lines) == 0 {
+		return nil
+	}
+	list := "known kinds: " + strings.Join(slices.Sorted(maps.Keys(known)), ", ")
+	return usage(strings.Join(append(lines, list), "\n"), strings.Join(append(toolLines, list), "\n"))
+}
+
+// nearKinds lists the known kinds closest to an unknown one, at most five: a
+// kind that starts with it or that it starts with, or one at most two edits
+// away. The closest come first.
+func nearKinds(k string, known map[string]bool) []string {
+	k = strings.ToLower(k)
+	dist := map[string]int{}
+	for c := range known {
+		d := editDistance(k, c)
+		if d <= 2 || strings.HasPrefix(c, k) || strings.HasPrefix(k, c) {
+			dist[c] = d
 		}
 	}
-	return nil
+	near := slices.SortedFunc(maps.Keys(dist), func(a, b string) int {
+		return cmp.Or(cmp.Compare(dist[a], dist[b]), cmp.Compare(a, b))
+	})
+	return near[:min(len(near), 5)]
+}
+
+// editDistance is the Levenshtein distance of two strings, by byte.
+func editDistance(a, b string) int {
+	prev := make([]int, len(b)+1)
+	for j := range prev {
+		prev[j] = j
+	}
+	for i := 1; i <= len(a); i++ {
+		cur := make([]int, len(b)+1)
+		cur[0] = i
+		for j := 1; j <= len(b); j++ {
+			cost := 1
+			if a[i-1] == b[j-1] {
+				cost = 0
+			}
+			cur[j] = min(prev[j]+1, cur[j-1]+1, prev[j-1]+cost)
+		}
+		prev = cur
+	}
+	return prev[len(b)]
 }
 
 // query is the search query the input asks.

@@ -167,7 +167,8 @@ type groupFamily struct {
 
 // memberKinds reads from the schema the kinds a group kind's member list can name.
 // Groups nest, so the member list is the group's field that can name the group
-// kind itself; a group's tag field cannot.
+// kind itself; a group's tag field cannot. It is nil when the schema has no such
+// field; GroupsHolding then asks that group kind for every kind.
 func memberKinds(cfg *config.Config, group string) []string {
 	fields := cfg.FieldKinds("/" + group)
 	for _, f := range slices.Sorted(maps.Keys(fields)) {
@@ -242,7 +243,9 @@ func (i *Index) GroupsHolding(kind, name string, direct bool) []Group {
 	}
 	var out []Group
 	for _, fam := range i.families {
-		if !slices.Contains(fam.members, kind) {
+		// A group kind whose members the schema does not name is asked for
+		// every kind: a group too many beats a group missing (spec S12).
+		if fam.members != nil && !slices.Contains(fam.members, kind) {
 			continue
 		}
 		var names []string

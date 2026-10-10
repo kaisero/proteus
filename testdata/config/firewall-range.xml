@@ -19,6 +19,24 @@
               <service><member>any</member></service>
               <action>allow</action>
             </entry>
+            <entry name="lit-range">
+              <source><member>any</member></source>
+              <destination><member>10.0.0.2-10.0.0.9</member></destination>
+              <service><member>any</member></service>
+              <action>allow</action>
+            </entry>
+            <entry name="lit-30">
+              <source><member>any</member></source>
+              <destination><member>10.0.0.4/30</member></destination>
+              <service><member>any</member></service>
+              <action>allow</action>
+            </entry>
+            <entry name="lit-host">
+              <source><member>10.0.0.5</member></source>
+              <destination><member>any</member></destination>
+              <service><member>any</member></service>
+              <action>allow</action>
+            </entry>
           </rules></security></rulebase>
         </entry>
       </vsys>

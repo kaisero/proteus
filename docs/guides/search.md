@@ -110,9 +110,9 @@ file / vsys1   testdata/config/firewall-multivsys.xml
 1 with results, 0 without, 0 holes
 ```
 
-`--within` and `--exact` compare an address object's whole value. The range
-`10.0.0.2-10.0.0.9` is not within `10.0.0.0/29`, because two of its addresses lie
-outside it, and it is not exactly `10.0.0.4/30`.
+`--within` and `--exact` compare an address's whole value, in an object or written
+into a rule. The range `10.0.0.2-10.0.0.9` is not within `10.0.0.0/29`, because
+two of its addresses lie outside it, and it is not exactly `10.0.0.4/30`.
 
 `--contains` is a text search. It is not matching. Use it to find a long URL in a
 custom URL category, because a category name cannot hold it:

@@ -829,8 +829,8 @@ func TestSearchRefusesAnUnknownKind(t *testing.T) {
 	t.Parallel()
 	c := newCLI(t)
 	out, errOut, code := c.run("search", "web", "--kind", "addr", "--file", "../../testdata/config/firewall-lab.xml")
-	if code != 2 || out != "" || !strings.Contains(errOut, `--kind "addr": want one of `) ||
-		!strings.Contains(errOut, "address, address-group") {
+	if code != 2 || out != "" || !strings.Contains(errOut, `--kind "addr": did you mean address, address-group?`) ||
+		!strings.Contains(errOut, "\nknown kinds: address, address-group") {
 		t.Errorf("exit %d\nstdout:\n%s\nstderr:\n%s", code, out, errOut)
 	}
 	c.want(0, "search", "web", "--kind", "address-group", "--file", "../../testdata/config/firewall-lab.xml")

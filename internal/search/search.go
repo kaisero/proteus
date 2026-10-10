@@ -231,15 +231,8 @@ func (s *searcher) wholeObjects() {
 			}
 			seen[m.Name] = true
 			whole := pieces[m.Name]
-			switch s.q.Mode {
-			case Exact:
-				if !slices.Equal(whole, s.term.prefixes) {
-					continue
-				}
-			case Within:
-				if !s.term.holds(whole) {
-					continue
-				}
+			if !s.wholeMatch(whole) {
+				continue
 			}
 			via := m.Prefix.String()
 			if len(whole) > 1 {
@@ -248,6 +241,15 @@ func (s *searcher) wholeObjects() {
 			s.addObject("address", m.Name, m.Scope, via)
 		}
 	}
+}
+
+// wholeMatch says whether a whole value, as its prefixes, matches the term in
+// Exact or Within mode: the same prefixes, or every prefix inside the term.
+func (s *searcher) wholeMatch(whole []netip.Prefix) bool {
+	if s.q.Mode == Exact {
+		return slices.Equal(whole, s.term.prefixes)
+	}
+	return s.term.holds(whole)
 }
 
 // wildcards matches the term against the wildcard address objects, which match by
@@ -358,6 +360,7 @@ func referrer(path string) (string, string) {
 }
 
 // literals is stage 5: rules that write the term into a field, with no object.
+// In Exact and Within mode a written value counts only as a whole.
 func (s *searcher) literals() {
 	if s.term.prefixes == nil || s.q.Mode == Contains {
 		return
@@ -374,6 +377,12 @@ func (s *searcher) literals() {
 			}
 			for it := b.Iterator(); it.HasNext(); {
 				r := rules[it.Next()]
+				// Exact and Within take a written value whole, as for objects.
+				if (s.q.Mode == Exact || s.q.Mode == Within) && !slices.ContainsFunc(r.Fields[f.String()], func(v string) bool {
+					return s.wholeMatch(index.PrefixesOf(v))
+				}) {
+					continue
+				}
 				s.found = append(s.found, Finding{
 					Stage: StageLiteral, Kind: "security rule", Name: r.Name, Scope: r.Scope,
 					Field: f.String(), Via: strings.Join(r.Fields[f.String()], ", "),

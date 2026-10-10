@@ -457,6 +457,32 @@ func TestExactAndWithinTestTheWholeObject(t *testing.T) {
 	}
 }
 
+// A value written into a rule counts as a whole in exact and within mode too:
+// the literal range 10.0.0.2-10.0.0.9 is neither within 10.0.0.0/29 nor exactly
+// 10.0.0.4/30, though it overlaps both.
+func TestExactAndWithinTestTheWholeLiteral(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		term string
+		mode Mode
+		want []string
+	}{
+		{"10.0.0.0/29", Within, []string{"lit-30 destination", "lit-host source"}},
+		{"10.0.0.4/30", Exact, []string{"lit-30 destination"}},
+		{"10.0.0.2-10.0.0.9", Exact, []string{"lit-range destination"}},
+		{"10.0.0.5", Exact, []string{"lit-host source"}},
+		{"10.0.0.0/29", Auto, []string{"lit-30 destination", "lit-host source", "lit-range destination"}},
+	} {
+		var got []string
+		for _, f := range run(t, "firewall-range.xml", "vsys1", Query{Term: tc.term, Mode: tc.mode, Show: []Stage{StageLiteral}}) {
+			got = append(got, f.Name+" "+f.Field)
+		}
+		if strings.Join(got, "|") != strings.Join(tc.want, "|") {
+			t.Errorf("%s %v: got %v, want %v", tc.term, tc.mode, got, tc.want)
+		}
+	}
+}
+
 // A static route and an IKE gateway that name objects are references too, from
 // the scope config.
 func TestDeviceLevelReferences(t *testing.T) {

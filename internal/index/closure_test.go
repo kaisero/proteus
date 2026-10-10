@@ -247,3 +247,18 @@ func TestGroupMemberKindsComeFromTheSchema(t *testing.T) {
 		}
 	}
 }
+
+// A group kind whose member kinds the schema does not give is asked for every
+// kind, so a group is never missed: here every family has lost its member
+// kinds, and the address dual is held by all three groups named for it.
+func TestAGroupKindWithoutMemberKindsHoldsEveryKind(t *testing.T) {
+	t.Parallel()
+	idx := indexOf(t, "../../testdata/config/firewall-shared-names.xml", "vsys1")
+	for _, fam := range idx.families {
+		fam.members = nil
+	}
+	want := []Group{{"address-group", "g-dual-addr"}, {"application-group", "g-dual-app"}, {"service-group", "g-dual-svc"}}
+	if got := idx.GroupsHolding("address", "dual", true); !slices.Equal(got, want) {
+		t.Errorf("GroupsHolding(address, dual) = %v, want %v", got, want)
+	}
+}

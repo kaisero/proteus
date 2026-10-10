@@ -723,7 +723,7 @@ func TestSearchRefusesAnUnknownKind(t *testing.T) {
 	got, _ := plain(t, res.StructuredContent).(map[string]any)
 	e, _ := got["error"].(map[string]any)
 	msg, _ := e["text"].(string)
-	if e["code"] != "call.usage" || !strings.HasPrefix(msg, `kind "addr": want one of `) ||
+	if e["code"] != "call.usage" || !strings.HasPrefix(msg, "kind \"addr\": did you mean address, address-group?\nknown kinds: ") ||
 		!strings.Contains(msg, "address, address-group") || strings.Contains(msg, "--") {
 		t.Errorf("error %v", e)
 	}
