@@ -203,46 +203,74 @@ func TestRunFetchesThePredefinedServices(t *testing.T) {
 	if len(res.Notes) != 0 {
 		t.Errorf("notes: %v", res.Notes)
 	}
+	if predefinedCmd != fakepanos.PredefinedCmd {
+		t.Errorf("fetch asks %q, the fake device answers %q", predefinedCmd, fakepanos.PredefinedCmd)
+	}
 }
 
 // A device that refuses the predefined command, as an older release may, gives a
-// note and a complete fetch: the document is optional.
+// note and a complete fetch: the document is optional. So does an accepted answer
+// without a <service> element, such as an empty result or a proxy's HTML page:
+// nothing is stored, so no reader meets it.
 func TestARefusedPredefinedDocumentIsANote(t *testing.T) {
 	t.Parallel()
-	d := fullDevice(t)
-	d.Ops[fakepanos.PredefinedCmd] = fakepanos.Refusal("17", "show -> predefined is unexpected")
-	l, err := runlog.Open(runlog.Options{Dir: t.TempDir(), Command: "fetch", Level: runlog.Debug})
-	if err != nil {
-		t.Fatal(err)
+	for name, answer := range map[string]string{
+		"refused":      fakepanos.Refusal("17", "show -> predefined is unexpected"),
+		"empty result": `<response status="success"><result/></response>`,
+		"html page":    `<html><head><title>Sign in</title></head><body><p>Sign in first</p></body></html>`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			d := fullDevice(t)
+			d.Ops[fakepanos.PredefinedCmd] = answer
+			l, err := runlog.Open(runlog.Options{Dir: t.TempDir(), Command: "fetch", Level: runlog.Debug})
+			if err != nil {
+				t.Fatal(err)
+			}
+			s := NewState(target(d.Start(t)), Documents, ActiveOptions{}, l)
+			recs, err := task.Run(context.Background(), "lab", &s, Steps(), task.Options{Log: l})
+			if err != nil {
+				t.Fatal(err)
+			}
+			_ = l.Close()
+			docs := recs[len(recs)-1]
+			if docs.Slug != "documents" || docs.Status != task.OK || docs.Detail != "6 of 7 documents" ||
+				len(docs.Notes) != 1 || docs.Notes[0].Code != "note.fetch-predefined-missing" {
+				t.Errorf("documents step = %+v", docs)
+			}
+			if len(s.Result.Notes) != 1 || s.Result.Notes[0].Text != "the device did not return its predefined services; rules that use them stay in doubt" {
+				t.Errorf("notes = %v", s.Result.Notes)
+			}
+			for _, o := range s.Result.Outcomes {
+				if o.Err != nil || o.Name == Predefined.Name {
+					t.Errorf("outcome %+v: a refused optional document is not a document outcome", o)
+				}
+			}
+			if _, ok := s.Result.Docs[Predefined.Name]; ok || s.Result.OK(Predefined.Name) {
+				t.Error("a refused document did not arrive")
+			}
+			b, err := os.ReadFile(l.Path())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !strings.Contains(string(b), "[WARN] [API] lab: predefined refused") {
+				t.Errorf("the refusal is not warned about:\n%s", b)
+			}
+		})
 	}
-	s := NewState(target(d.Start(t)), Documents, ActiveOptions{}, l)
-	recs, err := task.Run(context.Background(), "lab", &s, Steps(), task.Options{Log: l})
-	if err != nil {
-		t.Fatal(err)
+}
+
+// The check reads the whole answer: it must parse and hold the element.
+func TestHoldsService(t *testing.T) {
+	t.Parallel()
+	if err := holdsService([]byte(fakepanos.PredefinedServices)); err != nil {
+		t.Errorf("the L4 answer: %v", err)
 	}
-	_ = l.Close()
-	docs := recs[len(recs)-1]
-	if docs.Slug != "documents" || docs.Status != task.OK || docs.Detail != "6 of 7 documents" ||
-		len(docs.Notes) != 1 || docs.Notes[0].Code != "note.fetch-predefined-missing" {
-		t.Errorf("documents step = %+v", docs)
+	if err := holdsService([]byte(`<response><result><service><entry>`)); err == nil || !strings.Contains(err.Error(), "not XML") {
+		t.Errorf("a cut answer: %v", err)
 	}
-	if len(s.Result.Notes) != 1 || s.Result.Notes[0].Text != "the device did not return its predefined services; rules that use them stay in doubt" {
-		t.Errorf("notes = %v", s.Result.Notes)
-	}
-	for _, o := range s.Result.Outcomes {
-		if o.Err != nil || o.Name == Predefined.Name {
-			t.Errorf("outcome %+v: a refused optional document is not a document outcome", o)
-		}
-	}
-	if _, ok := s.Result.Docs[Predefined.Name]; ok || s.Result.OK(Predefined.Name) {
-		t.Error("a refused document did not arrive")
-	}
-	b, err := os.ReadFile(l.Path())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(b), "[WARN] [API] lab: predefined refused") {
-		t.Errorf("the refusal is not warned about:\n%s", b)
+	if err := holdsService([]byte(`<response status="success"><result/></response>`)); err == nil || !strings.Contains(err.Error(), "no <service>") {
+		t.Errorf("an empty result: %v", err)
 	}
 }
 

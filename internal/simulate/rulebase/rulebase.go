@@ -386,12 +386,13 @@ func Defined(cfg *config.Config, sc config.Scope, rb resolve.Rulebase, field str
 
 // UndefinedService is the doubt of a rule that names a service no scope defines,
 // with text saying what. A configuration without the device's predefined services
-// does not hold service-http and service-https; the device answers them to a show
-// command (as observed on fw02, PAN-OS 12.2.3, L4), so a fetch stores them, and
-// the text says so.
+// does not hold service-http and service-https. The device answers them to a show
+// command (as observed on fw02, PAN-OS 12.2.3, L4), so a fetch stores them when
+// the device returns them, and the text says so. The snapshot may predate that
+// fetch, or the device may have refused it; the text holds for both.
 func UndefinedService(cfg *config.Config, text string) reason.Reason {
 	if cfg == nil || cfg.Predefined() == nil {
-		text += "; fetch again to store the predefined services"
+		text += "; the snapshot holds no predefined services; a fetch with this release stores them when the device returns them"
 	}
 	return reason.New("doubt.service-predefined", text)
 }

@@ -322,13 +322,28 @@ func TestLoadReadsThePredefinedServices(t *testing.T) {
 	}
 }
 
-// A predefined.xml that cannot be read fails the load and names the file:
-// skipping it would hide data.
+// A well-formed predefined.xml without a <service> element holds no predefined
+// services: the configuration loads, and rules that name them stay in doubt.
+func TestLoadReadsAPredefinedFileWithoutServicesAsNone(t *testing.T) {
+	t.Parallel()
+	for name, body := range map[string]string{
+		"empty result": `<response status="success"><result/></response>`,
+		"html page":    `<html><body><p>Sign in first</p></body></html>`,
+	} {
+		cfg, _, err := Load(predefinedDir(t, body))
+		if err != nil || cfg.Predefined() != nil {
+			t.Errorf("%s: want no predefined services and no error, got %v", name, err)
+		}
+	}
+}
+
+// A predefined.xml that cannot be read or parsed fails the load and names the
+// file: skipping it would hide data.
 func TestLoadRejectsABadPredefinedFile(t *testing.T) {
 	t.Parallel()
 	for name, body := range map[string]string{
-		"malformed":  `<response status="success"><result><service><entry name="service-http">`,
-		"no service": `<response status="success"><result/></response>`,
+		"malformed":      `<response status="success"><result><service><entry name="service-http">`,
+		"malformed html": `<html><body><p>Sign in<br></body></html>`,
 	} {
 		_, _, err := Load(predefinedDir(t, body))
 		if err == nil || !strings.Contains(err.Error(), PredefinedFile) {

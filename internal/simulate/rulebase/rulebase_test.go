@@ -255,7 +255,7 @@ func TestPBFADiscardThatMayMatchEndsTheScan(t *testing.T) {
 		m := v.PBF(ip("10.88.5.5"), ip("10.88.9.5"), "tcp", port, dmz)
 		if !m.Found || m.Rule.Name != "dmz-https" || m.Note != reason.New("path.pbf", "pbf rule dmz-https may drop this packet, "+
 			"if it matches: the rule names a service the configuration does not define, such as a predefined one; "+
-			"fetch again to store the predefined services") {
+			"the snapshot holds no predefined services; a fetch with this release stores them when the device returns them") {
 			t.Errorf("%d: %+v", port, m)
 		}
 	}
@@ -409,8 +409,8 @@ func TestUndefinedService(t *testing.T) {
 		want string
 	}{
 		{with, "x"},
-		{without, "x; fetch again to store the predefined services"},
-		{nil, "x; fetch again to store the predefined services"},
+		{without, "x; the snapshot holds no predefined services; a fetch with this release stores them when the device returns them"},
+		{nil, "x; the snapshot holds no predefined services; a fetch with this release stores them when the device returns them"},
 	} {
 		if r := UndefinedService(tc.cfg, "x"); r.Code != "doubt.service-predefined" || r.Text != tc.want {
 			t.Errorf("%+v, want %q", r, tc.want)

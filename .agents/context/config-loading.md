@@ -35,8 +35,9 @@ Two details are load-bearing and both have regression tests:
 (`PredefinedFile`) is in the same directory, `Load` reads it too: the device's
 answer to the predefined service command, bare `<service>` or wrapped (L4).
 `Config.Predefined()` returns it under a `<predefined>` element, so its path is
-`/predefined/service`; it is not part of `Root()`, so a walk never sees it. No file
-loads as before; a file that cannot be read fails the load and names the file.
+`/predefined/service`; it is not part of `Root()`, so a walk never sees it. No file,
+or a well-formed file without `<service>`, loads without them (the doubt stays); a
+file that cannot be read or parsed fails the load and names the file.
 The node is hand-modelled (R8, `schema.HandModelled`).
 
 Only 11.2 digests ship. Another version is read with the nearest digest: the

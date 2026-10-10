@@ -64,8 +64,9 @@ func (c *Config) Predefined() *Element { return c.predefined }
 //
 // When PredefinedFile sits next to the configuration, Load reads it too, so a
 // stored snapshot and --file on its config.xml see the same predefined services.
-// No file: the configuration loads without them. A file that cannot be read fails
-// the load, because skipping it would hide data.
+// No file, or a well-formed file without a <service> element: the configuration
+// loads without them, and rules that name them stay in doubt. A file that cannot
+// be read or parsed fails the load, because skipping it would hide data.
 func Load(path string) (*Config, Report, error) {
 	var rep Report
 	f, err := os.Open(path)
@@ -108,7 +109,7 @@ func Load(path string) (*Config, Report, error) {
 }
 
 // loadPredefined reads the device's predefined services, or returns nil when the
-// file is absent.
+// file is absent or holds no <service> element.
 //
 // The device answers <show><predefined><xpath>/predefined/service</xpath></predefined></show>
 // with <response status="success"><result><service> and one entry per service, in
@@ -126,6 +127,9 @@ func loadPredefined(path string) (*Element, error) {
 	}
 	defer func() { _ = f.Close() }()
 	svc, err := parseTreeAt(f, "service")
+	if errors.Is(err, errNoElement) {
+		return nil, nil
+	}
 	if err != nil {
 		return nil, fmt.Errorf("config: %s: %w", path, err)
 	}

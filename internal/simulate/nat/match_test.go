@@ -363,8 +363,8 @@ func TestConfiguredServicesHideThePredefinedOnes(t *testing.T) {
 		{8080, "none"},
 	} {
 		rule, m := predefinedMatch(t, "../../../testdata/predefined-configured/config.xml", "tcp", tc.port)
-		if rule != tc.rule || len(m.Doubts) != 0 {
-			t.Errorf("tcp/%d: rule %s, want %s; doubts %v", tc.port, rule, tc.rule, m.Doubts)
+		if rule != tc.rule || len(m.Doubts) != 0 || m.Fidelity.Level() != "exact" {
+			t.Errorf("tcp/%d: rule %s, want %s; doubts %v, fidelity %s", tc.port, rule, tc.rule, m.Doubts, m.Fidelity)
 		}
 	}
 }
@@ -386,7 +386,7 @@ func TestWithoutPredefinedServicesNATStaysInDoubt(t *testing.T) {
 		t.Fatalf("rule %s, doubts %v, fidelity %s", rule, m.Doubts, m.Fidelity)
 	}
 	for _, d := range m.Doubts {
-		if r := d.Reasons[0]; r.Code != "doubt.service-predefined" || !strings.HasSuffix(r.Text, "; fetch again to store the predefined services") {
+		if r := d.Reasons[0]; r.Code != "doubt.service-predefined" || !strings.HasSuffix(r.Text, "; the snapshot holds no predefined services; a fetch with this release stores them when the device returns them") {
 			t.Errorf("%s: %+v", d.Rule, r)
 		}
 	}

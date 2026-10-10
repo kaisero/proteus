@@ -32,7 +32,7 @@ func TestParseScope(t *testing.T) {
 			t.Errorf("ParseScope(%q) = %+v, want %+v", in, got, want)
 		}
 	}
-	for _, bad := range []string{"", "nope", "vsys:", "shared:x", "dg:x", "tpl:x", "tplstack:x"} {
+	for _, bad := range []string{"", "nope", "vsys:", "shared:x", "dg:x", "tpl:x", "tplstack:x", "predefined"} {
 		if _, err := ParseScope(bad); err == nil {
 			t.Errorf("ParseScope(%q) must fail", bad)
 		}
@@ -45,7 +45,6 @@ func TestScopeRoundTrips(t *testing.T) {
 	for _, s := range []Scope{
 		{Sort: ScopeShared},
 		{Sort: ScopeVsys, Name: "vsys1"},
-		{Sort: ScopePredefined},
 	} {
 		got, err := ParseScope(s.String())
 		if err != nil {

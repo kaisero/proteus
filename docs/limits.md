@@ -29,10 +29,10 @@ proteus reports each of these limits in its answers. It does not hide them.
 - **No return path.** Only the forward path is checked. Asymmetric routing is not
   detected.
 - **Doubtful rules can leave a hop undecided.** Application, `application-default`,
-  absent services, predefined services the snapshot does not hold, user, HIP, schedule, PAN-DB URL categories,
-  regions, external dynamic lists and dynamic address groups are not evaluated. A
-  rule that names one of them before the match makes the hop undecided, unless it
-  has the same action as the match.
+  absent services, predefined services the snapshot does not hold, user, HIP,
+  schedule, PAN-DB URL categories, regions, external dynamic lists and dynamic
+  address groups are not evaluated. A rule that names one of them before the match
+  makes the hop undecided, unless it has the same action as the match.
 - **Default-rule overrides that disagree.** When the local and the pushed override
   of a default rule have different actions, the hop is undecided. The precedence is
   not verified on a Panorama-managed firewall.

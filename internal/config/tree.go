@@ -140,8 +140,12 @@ func (e *Element) segments(named bool) []string {
 // it never ends the parse.
 func parseTree(r io.Reader) (*Element, error) { return parseTreeAt(r, "config") }
 
+// errNoElement says a well-formed document holds no element of the name asked.
+var errNoElement = errors.New("no such element")
+
 // parseTreeAt reads a document and returns the first element of the name, in
-// either shape parseTree reads.
+// either shape parseTree reads. A well-formed document without one gives an
+// error that matches errNoElement.
 func parseTreeAt(r io.Reader, rootName string) (*Element, error) {
 	dec := xml.NewDecoder(r)
 	var root *Element
@@ -191,7 +195,7 @@ func parseTreeAt(r io.Reader, rootName string) (*Element, error) {
 		}
 	}
 	if root == nil {
-		return nil, fmt.Errorf("no <%s> element found", rootName)
+		return nil, fmt.Errorf("no <%s> element found: %w", rootName, errNoElement)
 	}
 	return root, nil
 }

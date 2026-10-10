@@ -60,8 +60,9 @@ func chainFor(sc config.Scope) []config.Scope {
 	return chain
 }
 
-// predefined is the scope of what the device itself defines. Every chain starts
-// there: a configured object of the same name hides it.
+// predefinedScope is the scope of what the device itself defines. Every chain
+// starts there: a configured object of the same name hides it. It is read for
+// every kind, but only services are stored there today.
 var predefinedScope = config.Scope{Sort: config.ScopePredefined}
 
 // objectsInChain walks the chain shared first, so a later definition replaces an

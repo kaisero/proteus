@@ -22,6 +22,9 @@ func TestDocumentNamesAreUniqueAndFileSafe(t *testing.T) {
 		if d.Fetch == nil {
 			t.Errorf("%s has no Fetch", d.Name)
 		}
+		if d.Optional != nil && d.Optional.Refused.Code == "" {
+			t.Errorf("%s is optional and has no note for a refusal", d.Name)
+		}
 	}
 	if Documents[0].Name != "config" {
 		t.Error("the configuration comes first: nothing can be analysed without it")

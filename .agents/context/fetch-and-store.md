@@ -47,11 +47,13 @@ a URL. A transport error is retried once; a refusal (HTTP 4xx, or
 
 A `Document` is a name and a fetch function. `Documents` lists them:
 `config` (export), `system-info`, `interfaces`, `fib`, `rib`, `ha`, `predefined`.
-**Adding a fetcher is adding one `Document` value and listing it.** An `Optional`
-document is one a release may refuse: an API refusal adds its `Refused` note to
-`Result.Notes`, records no outcome and leaves the step complete; a transport failure
-fails it as any other. `predefined` is optional: it was checked on PAN-OS 12.2.3
-only (L4), and its note is `note.fetch-predefined-missing`. `OpDocument(name, cmds...)`
+**Adding a fetcher is adding one `Document` value and listing it.** A document with
+`Optional` set is one a release may refuse: an API refusal, or an answer that fails
+`Optional.Check`, adds the `Optional.Refused` note to `Result.Notes`, stores
+nothing, records no outcome and leaves the step complete; a transport failure fails
+it as any other. `predefined` is optional: it was checked on PAN-OS 12.2.3 only
+(L4), its check needs a `<service>` element, and its note is
+`note.fetch-predefined-missing`. `OpDocument(name, cmds...)`
 tries each show command in order until the device accepts one; `fib` and `rib` use
 this to fall back from the Advanced Routing command to the legacy one. On an
 Advanced Routing device the legacy route command answers success with a deprecation
@@ -114,6 +116,7 @@ type APIError struct{ ... }
 type ActiveOptions struct{ ... }
 type Client struct{ ... }
 type Document struct{ ... }
+type Optional struct{ ... }
 type Outcome struct{ ... }
 type Result struct{ ... }
 type State struct{ ... }

@@ -86,8 +86,10 @@ Check: `go test -bench . ./...`
 A node modelled by hand rather than read from the schema is registered in
 `internal/schema.HandModelled`, with the reason and the schema path.
 
-Today two nodes are registered: the built-in action of the default security rules,
-and the pushed default security rules under `shared/post-rulebase`.
+Today four nodes are registered: the built-in action of the default security rules,
+the pushed default security rules under `shared/post-rulebase`, the matching fields
+of a security rule, and the device's predefined services under
+`predefined/service`.
 
 Check: `go test ./internal/schema -run TestHandModelledIsDeclared`
 

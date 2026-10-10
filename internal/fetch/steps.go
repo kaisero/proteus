@@ -112,18 +112,34 @@ func (s *State) stay(note reason.Reason) (task.Result, error) {
 	return task.Result{Detail: "fetched this device as it is", Notes: []reason.Reason{note}}, nil
 }
 
+// refusal returns why an optional document counts as refused, or nil: the device
+// refused the command, or its answer failed the document's check.
+func refusal(d Document, b []byte, err error) error {
+	if d.Optional == nil {
+		return nil
+	}
+	if _, refused := errors.AsType[*APIError](err); refused {
+		return err
+	}
+	if err == nil && d.Optional.Check != nil {
+		return d.Optional.Check(b)
+	}
+	return nil
+}
+
 // documentsStep fetches every document. A failed document is recorded and makes
-// the step partial. An optional document the device refuses is not recorded as a
-// document: it adds its note, and the step stays complete.
+// the step partial. An optional document the device refuses, or answers in a
+// shape its check rejects, is not recorded as a document: it adds its note, and
+// the step stays complete.
 func documentsStep(ctx context.Context, s *State) (task.Result, error) {
 	failed := 0
 	var r task.Result
 	for _, d := range s.Docs {
 		b, err := d.Fetch(ctx, s.client)
-		if _, refused := errors.AsType[*APIError](err); refused && d.Optional {
-			s.Log.Warnf(runlog.TagAPI, "%s: %s refused: %v", s.Target.Name, d.Name, err)
-			s.Result.Notes = append(s.Result.Notes, d.Refused)
-			r.Notes = append(r.Notes, d.Refused)
+		if why := refusal(d, b, err); why != nil {
+			s.Log.Warnf(runlog.TagAPI, "%s: %s refused: %v", s.Target.Name, d.Name, why)
+			s.Result.Notes = append(s.Result.Notes, d.Optional.Refused)
+			r.Notes = append(r.Notes, d.Optional.Refused)
 			continue
 		}
 		s.Result.Outcomes = append(s.Result.Outcomes, Outcome{Name: d.Name, Bytes: len(b), Err: err})

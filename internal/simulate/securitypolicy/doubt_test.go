@@ -109,7 +109,7 @@ func TestDoubts(t *testing.T) {
 			"8 dmz-schedule: schedule not evaluated (work-hours)",
 			"9 dmz-pandb: url category not defined in the configuration, such as a PAN-DB category (news)",
 			"10 dmz-custom: url category not evaluated without a URL (my-cat)",
-			"11 dmz-predefined: service predefined or not defined in the configuration (service-https); fetch again to store the predefined services",
+			"11 dmz-predefined: service predefined or not defined in the configuration (service-https); the snapshot holds no predefined services; a fetch with this release stores them when the device returns them",
 			"12 dmz-no-service: service absent",
 		}},
 		{"port and URL", flow(443, "tcp", "shop.example.com"), []string{
@@ -121,7 +121,7 @@ func TestDoubts(t *testing.T) {
 			"7 dmz-user: destination-hip not evaluated (hip-a)",
 			"8 dmz-schedule: schedule not evaluated (work-hours)",
 			"9 dmz-pandb: url category not defined in the configuration, such as a PAN-DB category (news)",
-			"11 dmz-predefined: service predefined or not defined in the configuration (service-https); fetch again to store the predefined services",
+			"11 dmz-predefined: service predefined or not defined in the configuration (service-https); the snapshot holds no predefined services; a fetch with this release stores them when the device returns them",
 			"12 dmz-no-service: service absent",
 		}},
 		{"no port", flow(0, "icmp", ""), []string{
@@ -134,7 +134,7 @@ func TestDoubts(t *testing.T) {
 			"8 dmz-schedule: schedule not evaluated (work-hours)",
 			"9 dmz-pandb: url category not defined in the configuration, such as a PAN-DB category (news)",
 			"10 dmz-custom: url category not evaluated without a URL (my-cat)",
-			"11 dmz-predefined: service predefined or not defined in the configuration (service-https); fetch again to store the predefined services",
+			"11 dmz-predefined: service predefined or not defined in the configuration (service-https); the snapshot holds no predefined services; a fetch with this release stores them when the device returns them",
 			"12 dmz-no-service: service absent",
 		}},
 	} {
@@ -342,7 +342,7 @@ func TestPredefinedServicesDecideTheServiceStage(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, v = run(t, envPath(t, path, false), flow(443))
-	if got := doubtList(v); got != "1 web-https: service predefined or not defined in the configuration (service-https); fetch again to store the predefined services" {
+	if got := doubtList(v); got != "1 web-https: service predefined or not defined in the configuration (service-https); the snapshot holds no predefined services; a fetch with this release stores them when the device returns them" {
 		t.Errorf("without predefined.xml: %s", got)
 	}
 }
