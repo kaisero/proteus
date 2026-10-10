@@ -302,7 +302,7 @@ func TestServiceTerm(t *testing.T) {
 		proto string
 		port  uint16
 		want  string
-	}{{"tcp", 443, "tcp/443"}, {"UDP", 53, "udp/53"}, {"sctp", 9, "sctp/9"}, {"tcp", 0, ""}, {"icmp", 8, ""}, {"6", 443, ""}} {
+	}{{"tcp", 443, "tcp/443"}, {"UDP", 53, "udp/53"}, {"sctp", 9, "sctp/9"}, {"tcp", 0, ""}, {"icmp", 8, ""}, {"6", 443, "tcp/443"}, {"17", 53, "udp/53"}, {"132", 9, "sctp/9"}, {"1", 8, ""}} {
 		got, ok := ServiceTerm(tc.proto, tc.port)
 		if got != tc.want || ok != (tc.want != "") {
 			t.Errorf("%s/%d = %q %v", tc.proto, tc.port, got, ok)

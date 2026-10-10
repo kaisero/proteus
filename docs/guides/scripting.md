@@ -93,7 +93,8 @@ An empty list means no input can help. A result that is decided and not
 `undermatch` has no `needs` key; a decided result with fidelity `undermatch` can
 have one.
 `simulate nat` asked without a protocol lists `input.protocol` beside
-`input.port`.
+`input.port`; asked with a port but no protocol, it lists `input.protocol` for
+each NAT rule whose service holds that port.
 
 The questions also take `--detail summary`. The envelope then says
 `"detail": "summary"`, and each result keeps the answer, the verdict, the

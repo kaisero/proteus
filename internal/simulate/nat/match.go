@@ -213,9 +213,10 @@ func services(v rulebase.Vsys) map[string]string {
 
 // serviceFits matches a NAT rule's single service against the flow's protocol and
 // destination port. A service no scope defines, such as service-http in a
-// snapshot without the predefined services, and a flow without a port are
-// doubts. A service object's source port is not read (spec §18, the probe flows
-// set none).
+// snapshot without the predefined services, a flow without a port, and a flow
+// without a protocol whose port the service holds are doubts. A protocol given
+// by number compares by its name. A service object's source port is not read
+// (spec §18, the probe flows set none).
 func serviceFits(name string, f simulate.Flow, svc map[string]string, cfg *config.Config) (string, reason.Reason) {
 	if name == "" || name == "any" {
 		return "", reason.Reason{}
@@ -225,15 +226,26 @@ func serviceFits(name string, f simulate.Flow, svc map[string]string, cfg *confi
 	if !anyDefined(name, svc, 0) {
 		return "", rulebase.UndefinedService(cfg, "service "+name+" is not defined in the configuration (a predefined service?)")
 	}
-	if f.DestPort == 0 {
-		return "", reason.New("path.nat-no-port", "service "+name+" not known without a port: give the destination port")
+	proto := rulebase.Protocol(f.Protocol)
+	// A service names tcp or udp and its ports (schemas/schema.xml,
+	// service/entry/protocol, 11.2.0), so a flow of another protocol, such as
+	// icmp, has no port to give: no service holds it.
+	switch proto {
+	case "", "tcp", "udp", "sctp":
+		if f.DestPort == 0 {
+			return "", reason.New("path.nat-no-port", "service "+name+" not known without a port: give the destination port")
+		}
 	}
-	matched, known := serviceHolds(name, strings.ToLower(f.Protocol), int(f.DestPort), svc, 0)
+	matched, known := serviceHolds(name, proto, int(f.DestPort), svc, 0)
 	switch {
 	case !known:
 		return "", rulebase.UndefinedService(cfg, "service "+name+" is not defined in the configuration (a predefined service?)")
 	case !matched:
 		return "service " + name, reason.Reason{}
+	case proto == "":
+		// The port fits a protocol of the service; without the flow's own, the
+		// rule only may match.
+		return "", reason.New("path.nat-no-protocol", "service "+name+" not known without a protocol: give the protocol")
 	}
 	return "", reason.Reason{}
 }

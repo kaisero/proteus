@@ -298,6 +298,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A NAT rule that names a service now waits for the protocol.** Asked with a
+  port and no protocol, a NAT rule for `udp/443` took a `tcp/443` flow for sure.
+  It is now in doubt, and `needs` asks for the protocol. A protocol given as `6`,
+  `17` or `132` counts as tcp, udp or sctp.
 - **A path with a NAT rule in doubt is now undecided.** When a NAT rule above the
   one applied might match instead, `simulate policy` answered allowed or denied as
   if the applied rule were certain, and a derived destination zone could lose the

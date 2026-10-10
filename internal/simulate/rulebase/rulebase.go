@@ -362,10 +362,25 @@ func (m pbfServiceMatch) judge(i int, values []string) ([]reason.Reason, bool) {
 	return nil, false
 }
 
+// protocolNames are the IANA protocol numbers of the protocols a service names,
+// which the command line takes as a flow's protocol.
+var protocolNames = map[string]string{"6": "tcp", "17": "udp", "132": "sctp"}
+
+// Protocol is a flow's protocol by name, lower case: 6, 17 and 132 read as tcp,
+// udp and sctp, so a protocol given by number compares as the name a service
+// uses.
+func Protocol(p string) string {
+	p = strings.ToLower(p)
+	if n, ok := protocolNames[p]; ok {
+		return n
+	}
+	return p
+}
+
 // ServiceTerm is the flow's protocol and destination port as a service query,
 // "tcp/443". False when there is no port, or the protocol has none.
 func ServiceTerm(proto string, port uint16) (string, bool) {
-	proto = strings.ToLower(proto)
+	proto = Protocol(proto)
 	if port == 0 || (proto != "tcp" && proto != "udp" && proto != "sctp") {
 		return "", false
 	}

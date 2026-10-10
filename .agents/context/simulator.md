@@ -305,6 +305,7 @@ func Defined(cfg *config.Config, sc config.Scope, rb resolve.Rulebase, field str
 func FromFits(r resolve.PBFRule, in simulate.Port) bool
 func Load(load func(device, vsys string) (simulate.Target, error), device, vsys string) (Vsys, bool)
 func PassedText(ps []PBFPassed) string
+func Protocol(p string) string
 func ServiceTerm(proto string, port uint16) (string, bool)
 func Undecidable(values []string, defined map[string]bool, keywords ...string) bool
 func UndefinedService(cfg *config.Config, text string) reason.Reason

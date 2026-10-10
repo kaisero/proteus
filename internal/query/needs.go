@@ -9,6 +9,7 @@ import (
 	"github.com/okaiser/proteus/internal/simulate/nat"
 	"github.com/okaiser/proteus/internal/simulate/pathpolicy"
 	"github.com/okaiser/proteus/internal/simulate/routing"
+	"github.com/okaiser/proteus/internal/simulate/rulebase"
 	"github.com/okaiser/proteus/internal/simulate/securitypolicy"
 )
 
@@ -46,7 +47,9 @@ var needKinds = []struct {
 // needsOf is what the causes need from a second call, given the flow asked.
 // A service judged without a port needs the port only for tcp, udp or sctp,
 // and the protocol too when none was given (the tools have no protocol
-// default); icmp or another protocol never needs a port. Every other code
+// default); icmp or another protocol never needs a port. A protocol given by
+// number counts by its name. A NAT service whose port fits without a protocol
+// needs the protocol. Every other code
 // needs nothing a second call can give: a predefined category, an
 // application, a user, a gap, a path, a zone or a default rule. The result is
 // never nil, so an undecided answer prints [] when nothing helps.
@@ -62,12 +65,16 @@ func needsOf(flow simulate.Flow, causes []cause) []Need {
 	for _, c := range causes {
 		switch c.code {
 		case "doubt.service-no-port", "path.nat-no-port":
-			proto := strings.ToLower(flow.Protocol)
+			proto := rulebase.Protocol(flow.Protocol)
 			if proto == "" {
 				add("input.protocol", c.rule)
 			}
 			if flow.DestPort == 0 && (proto == "" || proto == "tcp" || proto == "udp" || proto == "sctp") {
 				add("input.port", c.rule)
+			}
+		case "path.nat-no-protocol":
+			if flow.Protocol == "" {
+				add("input.protocol", c.rule)
 			}
 		case "doubt.category-no-url":
 			if flow.URL == "" {

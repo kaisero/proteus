@@ -199,7 +199,9 @@ separately.
 `needs` (`query/needs.go`) reads codes only. `doubt.service-no-port` and
 `path.nat-no-port` need `input.port` (tcp, udp, sctp or no protocol) and
 `input.protocol` when the flow has none: `simulate nat` asked without a
-protocol lists both. `doubt.category-no-url` needs `input.url`. The emitters
+protocol lists both. `path.nat-no-protocol`, a port the NAT service holds with
+no protocol given, needs `input.protocol`. A protocol given as 6, 17 or 132
+counts as tcp, udp or sctp (`rulebase.Protocol`). `doubt.category-no-url` needs `input.url`. The emitters
 give the unfixable code first: a service that is only application-default or
 not defined is `doubt.service-application-default` or
 `doubt.service-predefined`, a category that is not defined is

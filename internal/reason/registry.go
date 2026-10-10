@@ -116,6 +116,7 @@ var registry = []Entry{
 	{Code: "path.loop", Class: Path, Description: "the path returns to a device it already crossed"},
 	{Code: "path.nat-distribution", Class: Path, Description: "a NAT rule distributes sessions over several addresses and the path follows one"},
 	{Code: "path.nat-no-port", Class: Path, Description: "a NAT rule depends on the port and the question gives none"},
+	{Code: "path.nat-no-protocol", Class: Path, Description: "a NAT rule depends on the protocol and the question gives none"},
 	{Code: "path.nat-undermatch", Class: Path, Description: "the NAT stage may miss a rule the device would match"},
 	{Code: "path.next-hop-type", Class: Path, Description: "a route has a next-hop type the answer does not read yet"},
 	{Code: "path.no-route", Class: Path, Description: "a hop has no route to the destination"},

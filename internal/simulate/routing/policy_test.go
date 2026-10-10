@@ -114,7 +114,7 @@ func TestDestinationNAT(t *testing.T) {
 	t.Parallel()
 	n, load := policyNet(t, "firewall-routing.xml")
 	f := flow("10.30.0.7", "198.51.100.10")
-	f.DestPort = 3389
+	f.Protocol, f.DestPort = "tcp", 3389
 	run, err := Simulation{}.Run(context.Background(), &simulate.Env{Network: n, Load: load}, simulate.Input{Flow: f, Params: map[string]string{"device": "fw"}})
 	h := run.Output.(Path).Hops[0]
 	if err != nil || !strings.HasSuffix(notes(h), "; nat rule dnat-portal (sdwan -> datacenter): destination 198.51.100.10 -> 10.1.10.100") ||
@@ -196,7 +196,7 @@ func TestDestinationNATPortAndFQDN(t *testing.T) {
 		return []netip.Addr{netip.MustParseAddr("10.1.10.101")}, nil
 	}}
 	f := flow("10.1.5.5", "198.51.100.40")
-	f.DestPort = 3389
+	f.Protocol, f.DestPort = "tcp", 3389
 	run, _ := Simulation{}.Run(context.Background(), env, simulate.Input{Flow: f})
 	if h := run.Output.(Path).Hops[0]; !strings.Contains(notes(h), "destination 198.51.100.40 -> 10.1.10.100:3390") || h.PostNAT.DestPort != 3390 {
 		t.Errorf("port: %q", notes(h))
@@ -221,7 +221,7 @@ func TestTheTranslatedDestinationHasNoRoute(t *testing.T) {
 	))
 	load := func(_, vsys string) (simulate.Target, error) { return withIndexes(cfg, vsys), nil }
 	f := flow("10.1.5.5", "198.51.100.40")
-	f.DestPort = 3389
+	f.Protocol, f.DestPort = "tcp", 3389
 	run, _ := Simulation{}.Run(context.Background(), &simulate.Env{Network: n, Load: load},
 		simulate.Input{Flow: f, Params: map[string]string{"device": "fw", "router": "default"}})
 	p := run.Output.(Path)

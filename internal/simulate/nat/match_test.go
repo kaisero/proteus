@@ -347,6 +347,48 @@ func TestPredefinedServicesDecideNAT(t *testing.T) {
 	}
 }
 
+// A NAT rule's service names its protocol. Without one in the flow, a port the
+// service holds is a doubt, not a sure match: udp/443's rule above tcp/443's does
+// not take the flow. A protocol given by number compares by its name, and a
+// protocol without ports, such as icmp, matches no service for sure.
+func TestNATWithoutAProtocolIsADoubt(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		proto  string
+		port   uint16
+		rule   string
+		doubts string // each doubt's rule and codes
+	}{
+		{"", 443, "none", "dnat-udp path.nat-no-protocol; dnat-tcp path.nat-no-protocol"},
+		{"", 0, "none", "dnat-udp path.nat-no-port; dnat-tcp path.nat-no-port"},
+		{"", 80, "none", ""},
+		{"tcp", 443, "dnat-tcp", ""},
+		{"udp", 443, "dnat-udp", ""},
+		{"6", 443, "dnat-tcp", ""},
+		{"17", 443, "dnat-udp", ""},
+		{"132", 443, "none", ""},
+		{"icmp", 0, "none", ""},
+		{"1", 0, "none", ""},
+	} {
+		rule, m := predefinedMatch(t, "../../../testdata/config/firewall-nat-protocol.xml", tc.proto, tc.port)
+		var doubts []string
+		for _, d := range m.Doubts {
+			doubts = append(doubts, d.Rule+" "+string(d.Reasons[0].Code))
+		}
+		want := "exact"
+		if tc.doubts != "" {
+			want = "overmatch"
+		}
+		if rule != tc.rule || strings.Join(doubts, "; ") != tc.doubts || m.Fidelity.Level() != want {
+			t.Errorf("%q/%d: rule %s, want %s; doubts %v, want %q; fidelity %s", tc.proto, tc.port, rule, tc.rule, doubts, tc.doubts, m.Fidelity)
+		}
+	}
+	_, m := predefinedMatch(t, "../../../testdata/config/firewall-nat-protocol.xml", "", 443)
+	if got := m.Doubts[0].Text(); got != "service svc-udp-443 not known without a protocol: give the protocol" {
+		t.Errorf("text %q", got)
+	}
+}
+
 // As observed on fw02, PAN-OS 12.2.3 (L7): a configured service with a predefined
 // name wins. vsys1's service-https is tcp/8443 and shared's service-http is
 // tcp/8081, so the predefined ports no longer match.

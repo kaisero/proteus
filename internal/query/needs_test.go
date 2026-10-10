@@ -195,6 +195,36 @@ func TestNeedsNATPort(t *testing.T) {
 	}
 }
 
+// path.nat-no-protocol: a port the NAT rule's service holds decides nothing
+// without the protocol, so the protocol is what a second call gives. A
+// protocol given by number decides as its name does.
+func TestNeedsNATProtocol(t *testing.T) {
+	t.Parallel()
+	ask := func(proto string) NATResult {
+		e, err := NAT(context.Background(), natEnv(t), NATInput{
+			Flow:   FlowInput{Source: "198.18.1.10", Destination: "198.18.250.10", Protocol: proto, Port: "8443"},
+			Device: "fw01", Router: "default", FromZone: "transport",
+		})
+		if err != nil || len(e.Results) != 1 {
+			t.Fatalf("%+v %v", e, err)
+		}
+		return e.Results[0]
+	}
+	r := ask("")
+	if got := needCodes(r.Needs); len(r.Doubts) != 1 || r.Doubts[0].Rule != "t-dnat-port" || !slices.Equal(got, []string{"input.protocol protocol"}) ||
+		r.Needs[0].Text != "give the protocol: tcp, udp or sctp; it decides the service of NAT rule t-dnat-port" {
+		t.Errorf("no protocol: %s, needs %+v", r.Answer, r.Needs)
+	}
+	for _, proto := range []string{"tcp", "6"} {
+		if again := ask(proto); again.Rule == nil || again.Rule.Name != "t-dnat-port" || again.Needs != nil {
+			t.Errorf("%s: %s, needs %+v", proto, again.Answer, again.Needs)
+		}
+	}
+	if again := ask("udp"); again.Rule != nil && again.Rule.Name == "t-dnat-port" {
+		t.Errorf("udp: %s", again.Answer)
+	}
+}
+
 // securityCauses walks the doubts in rule order before the first certain
 // match, and stops at the first doubt no input can fix.
 func TestSecurityCausesStopAtAnUnfixableDoubt(t *testing.T) {
