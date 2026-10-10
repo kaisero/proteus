@@ -298,6 +298,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A wildcard address object now matches the addresses its mask allows.** An
+  object such as `10.88.2.1/0.0.255.0` matched no address, so a simulation skipped
+  the rules using it and a later rule answered.
 - **A dynamic group whose filter starts with a parenthesis now counts as dynamic.**
   A filter such as `('web' or 'db')` was read as one member name, so no address
   reached the group and the rules using it were skipped.

@@ -160,7 +160,7 @@ func Search(ctx context.Context, env Env, in SearchInput) (Envelope[SearchInput,
 			e.Holes = append(e.Holes, estate.NewHole(t.Device, t.Vsys, reason.New("gap.load-failed", err.Error())))
 			continue
 		}
-		fs, err := search.Run(t.Config, idx, q)
+		fs, un, err := search.Run(t.Config, idx, q)
 		if err != nil {
 			// Only a term --within cannot read is the caller's to fix.
 			if errors.Is(err, search.ErrWithinNeedsAddress) {
@@ -176,11 +176,15 @@ func Search(ctx context.Context, env Env, in SearchInput) (Envelope[SearchInput,
 				Answer: FindingAnswer(tg, f.Kind, f.Name, f.Field), Target: tg, Finding: f, Scope: f.Scope.String(), TargetIndex: i,
 			})
 		}
+		for _, u := range un {
+			e.Unresolved = append(e.Unresolved, Unresolved{Device: t.Device, Vsys: t.Vsys, Value: u.Value, Reason: u.Reason, Code: u.Code})
+		}
 		e.Summary.count(len(fs))
 	}
 	e.Summary.Without = len(ts) - e.Summary.With
 	e.Summary.Answer = searchCount(e.Summary, len(e.Holes))
-	e.Unresolved, e.Notes = TargetQualifiers(ts)
+	un, notes := TargetQualifiers(ts)
+	e.Unresolved, e.Notes = append(un, e.Unresolved...), notes
 	return e, nil
 }
 

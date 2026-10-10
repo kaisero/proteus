@@ -235,3 +235,12 @@ func TestDynamicGroupWithAParenthesisedFilter(t *testing.T) {
 		t.Errorf("members = %q, sections %+v", got, d.Sections)
 	}
 }
+
+// A wildcard address object shows its address and mask (L2).
+func TestWildcardAddressShowsItsValue(t *testing.T) {
+	t.Parallel()
+	a := one(t, "firewall-wildcard.xml", "wc")
+	if got := row(a, "value", "").Text; got != "wildcard 10.88.2.1/0.0.255.0" {
+		t.Errorf("value = %q, sections %+v", got, a.Sections)
+	}
+}

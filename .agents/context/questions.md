@@ -95,7 +95,7 @@ type Mode int
 type Query struct{ ... }
 type Stage string
 
-func Run(cfg *config.Config, idx *index.Index, q Query) ([]Finding, error)
+func Run(cfg *config.Config, idx *index.Index, q Query) ([]Finding, []index.Unresolved, error)
 ```
 <!-- /GENERATED:api -->
 

@@ -75,18 +75,19 @@ type Finding struct {
 // address, a prefix or a range.
 var ErrWithinNeedsAddress = errors.New("search: within mode needs an address, a prefix or a range")
 
-// Run searches one scope.
-func Run(cfg *config.Config, idx *index.Index, q Query) ([]Finding, error) {
+// Run searches one scope. Unresolved lists the objects the term cannot decide:
+// a wildcard address object that may hold addresses of a prefix term.
+func Run(cfg *config.Config, idx *index.Index, q Query) ([]Finding, []index.Unresolved, error) {
 	s := &searcher{cfg: cfg, idx: idx, q: q, sc: idx.Scope()}
 	s.term = parseTerm(q.Term)
 	if q.Mode == Within && s.term.prefixes == nil {
-		return nil, ErrWithinNeedsAddress
+		return nil, nil, ErrWithinNeedsAddress
 	}
 	s.objects()
 	s.groups()
 	s.references()
 	s.literals()
-	return s.result(), nil
+	return s.result(), s.unresolved, nil
 }
 
 type searcher struct {
@@ -96,9 +97,10 @@ type searcher struct {
 	sc   config.Scope
 	term term
 
-	found  []Finding
-	names  map[string]string // an object or group found, to its kind
-	byName map[string][]string
+	found      []Finding
+	unresolved []index.Unresolved
+	names      map[string]string // an object or group found, to its kind
+	byName     map[string][]string
 }
 
 // kindsByName maps every object name visible in the scope to its kinds, once.
@@ -197,6 +199,32 @@ func (s *searcher) addressObjects() {
 				}
 			}
 			s.addObject("address", m.Name, m.Scope, m.Prefix.String())
+		}
+	}
+	s.wildcards()
+}
+
+// wildcards matches the term against the wildcard address objects, which match by
+// mask. One address decides them. Any other term, or a mode that compares
+// values, cannot: an object that may hold an address of the term is unresolved
+// (owner decision C1).
+func (s *searcher) wildcards() {
+	if !s.kindAllowed("address") {
+		return
+	}
+	for _, w := range s.idx.Wildcards() {
+		if s.term.single && s.q.Mode == Auto {
+			if w.Contains(s.term.prefixes[0].Addr()) {
+				s.addObject("address", w.Name, w.Scope, w.Value)
+			}
+			continue
+		}
+		for _, p := range s.term.prefixes {
+			if w.Overlaps(p) {
+				s.unresolved = append(s.unresolved,
+					index.NewUnresolved(w.Name, "address", index.WildcardUndecided(w, s.q.Term)))
+				break
+			}
 		}
 	}
 }

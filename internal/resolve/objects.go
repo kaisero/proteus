@@ -22,6 +22,9 @@ type Object struct {
 	// Dynamic is set for an address group with a dynamic element. Its Value is
 	// then the tag filter, not a member list.
 	Dynamic bool
+	// Wildcard is set for an address with an ip-wildcard element. Its Value is
+	// then an address and a wildcard mask, a.b.c.d/m.m.m.m, not a prefix.
+	Wildcard bool
 }
 
 // Objects returns the objects of one kind visible to the target, with a
@@ -128,7 +131,8 @@ func readObjects(root *config.Element, sc config.Scope, kind string, within []st
 				// The element says a group is dynamic, not its filter text. As
 				// observed on fw02, PAN-OS 12.2.3: a filter may start with "(";
 				// "not" is refused (L1, L1b).
-				Dynamic: kind == "address-group" && e.Child("dynamic") != nil,
+				Dynamic:  kind == "address-group" && e.Child("dynamic") != nil,
+				Wildcard: kind == "address" && e.Child("ip-wildcard") != nil,
 
 				Description: e.Child("description").TextOr(""),
 			})

@@ -78,6 +78,14 @@ hop's firewall the same question with `test security-policy-match`. On fw02,
 - A path ends where it leaves the inventory, also into a tunnel.
 - Firewalls in virtual wire or Layer 2 mode are not seen on a path.
 
+## search
+
+- **A prefix cannot decide a wildcard address object.** A wildcard object, such as
+  `10.88.2.1/0.0.255.0`, matches an address by mask, and a simulation or a search
+  for one address decides it. A search for a prefix or a range, or with `--within`
+  or `--exact`, lists each wildcard object that can hold one of its addresses as
+  unresolved, with `gap.address-wildcard`, and exits with code 3.
+
 ## Host names
 
 - **Only the first IPv4 address is checked.** A source or destination given as a

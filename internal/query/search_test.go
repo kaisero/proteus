@@ -189,3 +189,17 @@ func TestTargets(t *testing.T) {
 		t.Errorf("absent file: %v", err)
 	}
 }
+
+// A prefix search cannot decide a wildcard object; the envelope lists it as
+// unresolved for the target it came from (decision C1).
+func TestSearchListsAWildcardAsUnresolved(t *testing.T) {
+	t.Parallel()
+	e, err := Search(context.Background(), Env{}, SearchInput{Term: "10.88.0.0/16", Selection: Selection{File: fixture("firewall-wildcard.xml")}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(e.Unresolved) != 1 || e.Unresolved[0].Value != "wc" || e.Unresolved[0].Code != "gap.address-wildcard" ||
+		e.Unresolved[0].Vsys != "vsys1" {
+		t.Errorf("unresolved: %+v", e.Unresolved)
+	}
+}

@@ -51,6 +51,7 @@ var registry = []Entry{
 	{Code: "doubt.service-predefined", Class: Doubt, Description: "a rule names a predefined service, whose ports the configuration does not hold"},
 	{Code: "doubt.source-unknown", Class: Doubt, Description: "a NAT rule names a source and the question gives none"},
 
+	{Code: "gap.address-wildcard", Class: Gap, Description: "a wildcard address object matches by mask, and a prefix query cannot decide it"},
 	{Code: "gap.application-container", Class: Gap, Description: "an application container groups predefined applications, whose members the configuration does not hold"},
 	{Code: "gap.application-filter", Class: Gap, Description: "an application filter selects predefined applications by metadata the configuration does not hold"},
 	{Code: "gap.category-match", Class: Gap, Description: "a Category Match URL category lists PAN-DB categories, whose contents the configuration does not hold"},

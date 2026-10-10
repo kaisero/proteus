@@ -22,7 +22,7 @@ func run(t *testing.T, fixture, vsys string, q Query) []Finding {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := Run(cfg, idx, q)
+	got, _, err := Run(cfg, idx, q)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -130,11 +130,65 @@ func TestAddressModes(t *testing.T) {
 	}
 }
 
+// A wildcard object matches by mask (L2). One address decides it, so the object,
+// its group and the rules naming either are found. A prefix, or a mode that
+// compares values, cannot decide it: the object is unresolved (decision C1).
+func TestWildcardObjects(t *testing.T) {
+	t.Parallel()
+	cfg, _, err := config.Load("../../testdata/config/firewall-wildcard.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	idx, err := index.New(cfg, config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}, resolve.Security)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		term       string
+		mode       Mode
+		kinds      []string
+		found      bool
+		unresolved bool
+	}{
+		{"10.88.7.1", Auto, nil, true, false},
+		{"10.88.200.1", Auto, nil, true, false},
+		{"10.88.7.2", Auto, nil, false, false},
+		{"10.89.7.1", Auto, nil, false, false},
+		{"10.88.0.0/16", Auto, nil, false, true},
+		{"10.88.0.0/16", Within, nil, false, true},
+		{"10.88.7.1", Exact, nil, false, true},
+		{"10.88.7.0-10.88.7.1", Auto, nil, false, true},
+		{"10.89.0.0/16", Auto, nil, false, false},
+		{"10.88.0.0/16", Auto, []string{"service"}, false, false},
+		{"0.0.255", Contains, nil, true, false},
+	} {
+		fs, un, err := Run(cfg, idx, Query{Term: tc.term, Mode: tc.mode, Kinds: tc.kinds})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := has(fs, "object address wc  10.88.2.1/0.0.255.0"); got != tc.found {
+			t.Errorf("%s (%d): found %v, want %v:\n%s", tc.term, tc.mode, got, tc.found, dump(fs))
+		}
+		if tc.found && tc.mode == Auto {
+			for _, want := range []string{"group address-group g-wc  holds wc", "reference security rule from-wc source", "reference security rule to-g-wc destination"} {
+				if !has(fs, want) {
+					t.Errorf("%s: %q missing:\n%s", tc.term, want, dump(fs))
+				}
+			}
+		}
+		got := len(un) == 1 && un[0].Value == "wc" && un[0].Code == "gap.address-wildcard" &&
+			strings.Contains(un[0].Reason, tc.term)
+		if got != tc.unresolved || len(un) > 1 {
+			t.Errorf("%s (%d): unresolved %v, want %v", tc.term, tc.mode, un, tc.unresolved)
+		}
+	}
+}
+
 func TestWithinNeedsAnAddress(t *testing.T) {
 	t.Parallel()
 	cfg, _, _ := config.Load("../../testdata/config/firewall-multivsys.xml")
 	idx, _ := index.New(cfg, config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}, resolve.Security)
-	if _, err := Run(cfg, idx, Query{Term: "web", Mode: Within}); !errors.Is(err, ErrWithinNeedsAddress) {
+	if _, _, err := Run(cfg, idx, Query{Term: "web", Mode: Within}); !errors.Is(err, ErrWithinNeedsAddress) {
 		t.Errorf("got %v", err)
 	}
 }
