@@ -31,6 +31,13 @@ var handModelled = []HandModel{
 			"every child, and a candidate that sets a matching field no stage evaluates has a doubt",
 		Owner: "internal/simulate/securitypolicy",
 	},
+	{
+		Path: "/config/predefined/service",
+		Reason: "the firewall schema does not describe the device's predefined services; fetch reads " +
+			"them with <show><predefined><xpath>/predefined/service</xpath></predefined></show>, and " +
+			"each entry has the shape of a configured service (as observed on fw02, PAN-OS 12.2.3, L4)",
+		Owner: "internal/resolve",
+	},
 }
 
 // HandModelled returns the registered hand-modelled nodes.

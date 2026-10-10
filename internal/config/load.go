@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -27,7 +28,12 @@ type Config struct {
 	digestVersion string
 	schema        *loadedSchema
 	root          *Element
+	predefined    *Element
 }
+
+// PredefinedFile is the file next to a configuration that holds the device's
+// predefined services. fetch stores it as the document "predefined".
+const PredefinedFile = "predefined.xml"
 
 // Version returns the schema version from the config root, e.g. 11.2.0.
 func (c *Config) Version() string { return c.version }
@@ -44,11 +50,22 @@ func (c *Config) Digest() *schema.Node { return c.schema.root }
 // Root returns the parsed config element. It is read-only.
 func (c *Config) Root() *Element { return c.root }
 
+// Predefined returns the device's predefined objects as a <predefined> element
+// holding a <service> element, or nil when the configuration came without them.
+// It is read-only, and it is not part of Root: a walk of the configuration never
+// sees it.
+func (c *Config) Predefined() *Element { return c.predefined }
+
 // Load reads a configuration file and the schema digest that describes it.
 //
 // A configuration arrives in two shapes. type=export&category=configuration
 // yields a bare <config>; type=config&action=show wraps it in
 // <response><result>. Both load.
+//
+// When PredefinedFile sits next to the configuration, Load reads it too, so a
+// stored snapshot and --file on its config.xml see the same predefined services.
+// No file: the configuration loads without them. A file that cannot be read fails
+// the load, because skipping it would hide data.
 func Load(path string) (*Config, Report, error) {
 	var rep Report
 	f, err := os.Open(path)
@@ -78,12 +95,43 @@ func Load(path string) (*Config, Report, error) {
 	if err != nil {
 		return nil, rep, err
 	}
+	pre, err := loadPredefined(filepath.Join(filepath.Dir(path), PredefinedFile))
+	if err != nil {
+		return nil, rep, err
+	}
 	cfg := &Config{
 		path: path, version: version, detailVersion: root.Attr("detail-version"),
-		digestVersion: dv, schema: sch, root: root,
+		digestVersion: dv, schema: sch, root: root, predefined: pre,
 	}
 	rep.VersionGap = cfg.VersionGap()
 	return cfg, rep, nil
+}
+
+// loadPredefined reads the device's predefined services, or returns nil when the
+// file is absent.
+//
+// The device answers <show><predefined><xpath>/predefined/service</xpath></predefined></show>
+// with <response status="success"><result><service> and one entry per service, in
+// the shape of a configured service (as observed on fw02, PAN-OS 12.2.3, L4). The
+// file is read bare or wrapped, as a configuration is. The <service> element is
+// kept under a <predefined> element, so its path is /predefined/service, as on the
+// device.
+func loadPredefined(path string) (*Element, error) {
+	f, err := os.Open(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("config: open %s: %w", path, err)
+	}
+	defer func() { _ = f.Close() }()
+	svc, err := parseTreeAt(f, "service")
+	if err != nil {
+		return nil, fmt.Errorf("config: %s: %w", path, err)
+	}
+	pre := &Element{Name: "predefined", Children: []*Element{svc}}
+	svc.Parent = pre
+	return pre, nil
 }
 
 // DigestVersion returns the PAN-OS version of the schema the configuration was read

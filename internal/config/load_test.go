@@ -262,3 +262,84 @@ func TestLoadRejectsAConfigWithNoVersion(t *testing.T) {
 		t.Errorf("want an error naming the missing version, got %v", err)
 	}
 }
+
+// predefinedDir writes a configuration with a predefined.xml next to it and
+// returns the configuration's path.
+func predefinedDir(t *testing.T, predefined string) string {
+	t.Helper()
+	dir := t.TempDir()
+	b, err := os.ReadFile("../../testdata/predefined/config.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "config.xml"), b, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, PredefinedFile), []byte(predefined), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return filepath.Join(dir, "config.xml")
+}
+
+// The device's predefined services load from the file next to the configuration,
+// as the device answers them (L4), wrapped or bare. Without the file the
+// configuration loads as before.
+func TestLoadReadsThePredefinedServices(t *testing.T) {
+	t.Parallel()
+	entries := func(cfg *Config) string {
+		var out []string
+		for _, e := range cfg.Predefined().Find("service", "entry") {
+			out = append(out, e.Attr("name")+" "+e.Child("protocol").Child("tcp").Child("port").Text+" "+e.SchemaPath())
+		}
+		return strings.Join(out, "; ")
+	}
+	const want = "service-http 80,8080 /predefined/service/entry; service-https 443 /predefined/service/entry"
+	wrapped, _, err := Load("../../testdata/predefined/config.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := entries(wrapped); got != want {
+		t.Errorf("wrapped: %s", got)
+	}
+	bare, _, err := Load(predefinedDir(t, `<service><entry name="service-http"><protocol><tcp><port>80,8080</port></tcp></protocol></entry>`+
+		`<entry name="service-https"><protocol><tcp><port>443</port></tcp></protocol></entry></service>`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := entries(bare); got != want {
+		t.Errorf("bare: %s", got)
+	}
+	// The predefined services are not part of the configuration's own tree.
+	if wrapped.Root().Child("predefined") != nil || wrapped.Root().Find("service", "entry") != nil {
+		t.Error("the predefined services reached the configuration tree")
+	}
+	without, _, err := Load("../../testdata/config/firewall-nat-cases.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if without.Predefined() != nil {
+		t.Error("a configuration without predefined.xml has no predefined services")
+	}
+}
+
+// A predefined.xml that cannot be read fails the load and names the file:
+// skipping it would hide data.
+func TestLoadRejectsABadPredefinedFile(t *testing.T) {
+	t.Parallel()
+	for name, body := range map[string]string{
+		"malformed":  `<response status="success"><result><service><entry name="service-http">`,
+		"no service": `<response status="success"><result/></response>`,
+	} {
+		_, _, err := Load(predefinedDir(t, body))
+		if err == nil || !strings.Contains(err.Error(), PredefinedFile) {
+			t.Errorf("%s: want an error naming %s, got %v", name, PredefinedFile, err)
+		}
+	}
+	path := predefinedDir(t, "")
+	if err := os.Chmod(filepath.Join(filepath.Dir(path), PredefinedFile), 0); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := Load(path); err == nil || !strings.Contains(err.Error(), "open") || !strings.Contains(err.Error(), PredefinedFile) {
+		t.Errorf("unreadable: want an open error naming the file, got %v", err)
+	}
+}

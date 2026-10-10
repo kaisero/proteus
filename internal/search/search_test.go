@@ -273,6 +273,30 @@ func TestAPortFindsServices(t *testing.T) {
 	}
 }
 
+// A port finds a predefined service, stored next to the configuration (L4), in
+// scope predefined, with the groups and rules that use it.
+func TestAPortFindsAPredefinedService(t *testing.T) {
+	t.Parallel()
+	got := run(t, "../predefined/config.xml", "vsys1", Query{Term: "tcp/8080"})
+	for _, want := range []string{
+		"object service service-http  tcp/8080",
+		"group service-group g-web",
+		"reference nat rule dnat-http service service-http",
+	} {
+		if !has(got, want) {
+			t.Errorf("missing %q:\n%s", want, dump(got))
+		}
+	}
+	for _, f := range got {
+		if f.Name == "service-http" && f.Scope.String() != "predefined" {
+			t.Errorf("service-http in scope %s", f.Scope)
+		}
+	}
+	if has(got, "object service service-https") {
+		t.Errorf("tcp/8080 is not service-https:\n%s", dump(got))
+	}
+}
+
 func TestReferrer(t *testing.T) {
 	t.Parallel()
 	for path, want := range map[string]string{

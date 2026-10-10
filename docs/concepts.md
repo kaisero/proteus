@@ -25,6 +25,7 @@ with one XML file per document and a `meta.json`:
 | `fib.xml` | forwarding table | zones of an address, routing paths |
 | `rib.xml` | routing table | `simulate routing --rib` |
 | `ha.xml` | high-availability state | reading the active member of a pair |
+| `predefined.xml` | the device's predefined services | the ports of `service-http` and `service-https` |
 
 The **store** keeps the snapshots:
 
@@ -33,6 +34,7 @@ The **store** keeps the snapshots:
   fw01/
     2026-09-27T17-05-00Z/
       config.xml  system-info.xml  interfaces.xml  fib.xml  rib.xml  ha.xml
+      predefined.xml
       meta.json
     latest -> 2026-09-27T17-05-00Z
 ```

@@ -31,6 +31,14 @@ Two details are load-bearing and both have regression tests:
   the outermost one closes. Stopping at the first nested close found 1 reference
   edge where the correct walk finds 18.
 
+**Predefined services sit next to the configuration.** When `predefined.xml`
+(`PredefinedFile`) is in the same directory, `Load` reads it too: the device's
+answer to the predefined service command, bare `<service>` or wrapped (L4).
+`Config.Predefined()` returns it under a `<predefined>` element, so its path is
+`/predefined/service`; it is not part of `Root()`, so a walk never sees it. No file
+loads as before; a file that cannot be read fails the load and names the file.
+The node is hand-modelled (R8, `schema.HandModelled`).
+
 Only 11.2 digests ship. Another version is read with the nearest digest: the
 highest not above it, else the lowest (spec §9). `Report.VersionGap` and
 `Config.VersionGap()` name both versions, and every index `Candidates` report
@@ -119,6 +127,7 @@ func (c *Config) FieldKinds(suffix string) map[string][]string
 func (c *Config) KindContainer(kind string) []string
 func (c *Config) KindContainers(kind string) [][]string
 func (c *Config) Path() string
+func (c *Config) Predefined() *Element
 func (c *Config) Root() *Element
 func (c *Config) Version() string
 func (c *Config) VersionGap() string

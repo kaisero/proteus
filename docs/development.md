@@ -112,7 +112,8 @@ firewall's own `test security-policy-match`.
 ## Add a fetched document
 
 Add a `Document` to `internal/fetch/documents.go` and list it in `Documents`. The
-run, the store and the snapshot metadata take it from there.
+run, the store and the snapshot metadata take it from there. Mark it `Optional`,
+with the note a refusal adds, when a release may not know the command.
 
 ## Rules
 

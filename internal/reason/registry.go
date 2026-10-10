@@ -88,6 +88,7 @@ var registry = []Entry{
 	{Code: "note.fetch-ha-state", Class: Note, Description: "the HA state is neither active nor passive, so the fetch stays on the device asked"},
 	{Code: "note.fetch-peer-unconfirmed", Class: Note, Description: "the device is passive and its peer does not confirm the pair, so the fetch stays on the device asked"},
 	{Code: "note.fetch-peer-unusable", Class: Note, Description: "the device is passive and its peer cannot be used, so the fetch stays on the device asked"},
+	{Code: "note.fetch-predefined-missing", Class: Note, Description: "the device did not return its predefined services, so rules that name them stay in doubt"},
 	{Code: "note.fresh-document-failed", Class: Note, Description: "a fresh fetch did not get one document"},
 	{Code: "note.fresh-failed", Class: Note, Description: "a fresh fetch failed, so the answer comes from the previous snapshot"},
 	{Code: "note.ha-binding", Class: Note, Description: "a NAT rule is bound to an HA device; the binding is ignored"},

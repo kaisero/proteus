@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/okaiser/proteus/internal/reason"
 	"github.com/okaiser/proteus/internal/runlog"
 )
 
@@ -16,6 +17,11 @@ import (
 type Document struct {
 	Name  string
 	Fetch func(ctx context.Context, c *Client) ([]byte, error)
+	// Optional marks a document a device may refuse, such as one an older release
+	// does not know. A refusal adds the Refused note and is not a failed document;
+	// a transport failure still is.
+	Optional bool
+	Refused  reason.Reason
 }
 
 // OpDocument is a document read by show commands. The first command the device
@@ -64,6 +70,22 @@ var (
 		"<show><routing><fib/></routing></show>")
 )
 
+// Predefined is the device's predefined services, which no configuration holds.
+// The device answers with service-http and service-https, each in the shape of a
+// configured service (as observed on fw02, PAN-OS 12.2.3, L4). The command was
+// checked on that release only, so a refusal is a note, not a failure.
+var Predefined = optional(OpDocument("predefined", predefinedCmd),
+	reason.New("note.fetch-predefined-missing",
+		"the device did not return its predefined services; rules that use them stay in doubt"))
+
+const predefinedCmd = "<show><predefined><xpath>/predefined/service</xpath></predefined></show>"
+
+// optional makes a document one the device may refuse, with the note a refusal adds.
+func optional(d Document, refused reason.Reason) Document {
+	d.Optional, d.Refused = true, refused
+	return d
+}
+
 // The routing and HA documents.
 var (
 	// RoutingRIB is the routing table, installed or not. Advanced Routing answers
@@ -84,7 +106,7 @@ const haStateCmd = "<show><high-availability><state/></high-availability></show>
 
 // Documents is what every fetch collects, in order. The configuration comes first
 // because nothing can be analysed without it.
-var Documents = []Document{RunningConfig, SystemInfo, Interfaces, RoutingFIB, RoutingRIB, HAState}
+var Documents = []Document{RunningConfig, SystemInfo, Interfaces, RoutingFIB, RoutingRIB, HAState, Predefined}
 
 // System is what a snapshot records from show system info.
 type System struct {

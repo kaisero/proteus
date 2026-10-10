@@ -14,6 +14,8 @@ for an API key. It then reads the documents listed in
 
 - It fetches up to eight firewalls at the same time.
 - A failed document is recorded in `meta.json`. The rest of the snapshot is kept.
+- The predefined services are optional. A firewall that refuses them gives a note,
+  and the fetch is still complete. Rules that name them then stay in doubt.
 - A failed firewall does not stop the others. `fetch` then exits with code 3.
 - When a device is the passive member of an HA pair, `fetch` reads the active peer
   instead and says so. Set `ha_peer` in the inventory when the peer's reported

@@ -244,3 +244,26 @@ func TestWildcardAddressShowsItsValue(t *testing.T) {
 		t.Errorf("value = %q, sections %+v", got, a.Sections)
 	}
 }
+
+// lookup shows a predefined service stored next to the configuration (L4) with
+// its ports and scope predefined, and a rule naming it with the ports. A
+// configured service of the same name hides it (L7).
+func TestAPredefinedServiceCard(t *testing.T) {
+	t.Parallel()
+	s := one(t, "../predefined/config.xml", "service-https")
+	if s.Kind != "service" || s.Scope.String() != "predefined" || row(s, "value", "").Text != "tcp/443" || s.Shadows != "" {
+		t.Errorf("service-https = %+v", s)
+	}
+	g := one(t, "../predefined/config.xml", "g-web")
+	if flat(row(g, "members", "").Items) != "service-http(tcp/80,8080)" {
+		t.Errorf("g-web = %+v", g.Sections)
+	}
+	r := one(t, "../predefined/config.xml", "web-https")
+	if got := flat(row(r, "service", "").Items); got != "service-https(tcp/443)" {
+		t.Errorf("web-https service = %s", got)
+	}
+	c := one(t, "../predefined-configured/config.xml", "service-https")
+	if c.Scope.String() != "vsys:vsys1" || row(c, "value", "").Text != "tcp/8443" || c.Shadows != "predefined" {
+		t.Errorf("configured service-https = %+v", c)
+	}
+}

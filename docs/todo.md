@@ -40,7 +40,7 @@ Every item names its **component** (the package or area it changes) and one **ta
 | 21 | feature | simulate, estate, cmd | Estate simulation for policy (M5): path mode done, fan-out open |
 | 22 | feature | simulate/securitypolicy, index | Evaluate application and user |
 | 23 | qa | simulate/securitypolicy, index | Derived zones on overlay networks |
-| 24 | feature | resolve, card, simulate/securitypolicy | Table of predefined services (high priority) |
+| 24 | done | resolve, card, simulate/securitypolicy | ~~Table of predefined services~~ (fetched from the device, no table) |
 | 25 | feature | card, cmd | NAT and PBF rules in `lookup` |
 | 26 | feature | search, drift, cmd | `--compare` across devices and time |
 | 27 | done | mcp, cmd | ~~MCP server~~ (`proteus mcp`, spec `docs/specs/2026-10-09-mcp-server.md`) |
@@ -267,14 +267,11 @@ item 7, and delete the fetched data and API keys from the scratch directory.
 
 ### 24. Table of predefined services
 
-- **Tag:** feature · **Component:** resolve, card, simulate/securitypolicy · **Source:** spec §14 item 6, K6
-- A table of PAN-OS predefined services and their ports (`service-http`,
-  `service-https`, …), so `lookup --expand` shows their ports and the service stage
-  evaluates them. Hand-written data: needs an explicit exception to AGENTS.md R1.
-- **High priority.** A predefined, absent or `application-default` service puts a
-  rule in doubt, and a doubtful rule can leave a path hop undecided. In the first lab
-  run of the path probe (fw02, 2026-10-08), the one undecided hop came from a rule
-  with service `application-default`.
+- **Tag:** done · **Component:** resolve, card, simulate/securitypolicy · **Source:** spec §14 item 6, K6
+- Done without a table: `fetch` reads the predefined services from the device into
+  each snapshot (`predefined.xml`), and every service reader sees them in scope
+  `predefined`, below shared. A snapshot without them keeps the doubt.
+  `application-default` still puts a rule in doubt.
 
 ### 25. NAT and PBF rules in `lookup`
 

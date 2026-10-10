@@ -5,4 +5,5 @@
   fib         7295 bytes
   rib         15939 bytes
   ha          163 bytes
+  predefined  245 bytes
   ‹ok›stored‹/› fw01@2026-09-28T10-00-00Z (PA-VM, PAN-OS 11.2.5, serial 007900000000001)

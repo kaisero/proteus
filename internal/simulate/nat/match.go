@@ -9,6 +9,7 @@ import (
 
 	"github.com/RoaringBitmap/roaring/v2"
 
+	"github.com/okaiser/proteus/internal/config"
 	"github.com/okaiser/proteus/internal/index"
 	"github.com/okaiser/proteus/internal/reason"
 	"github.com/okaiser/proteus/internal/resolve"
@@ -174,7 +175,7 @@ func (r *Rule) fits(in Input, pre simulate.Forward, src, dst *roaring.Bitmap, v 
 	if r.ToInterface != "any" && r.ToInterface != "" && r.ToInterface != pre.Out.Interface {
 		return "to-interface " + r.ToInterface + " ≠ " + pre.Out.Interface, nil
 	}
-	if why, doubt := serviceFits(r.Service, in.Flow, svc); why != "" {
+	if why, doubt := serviceFits(r.Service, in.Flow, svc, v.Config); why != "" {
 		return why, nil
 	} else if doubt.Text != "" {
 		doubts = append(doubts, doubt)
@@ -211,17 +212,18 @@ func services(v rulebase.Vsys) map[string]string {
 }
 
 // serviceFits matches a NAT rule's single service against the flow's protocol and
-// destination port. A service the configuration does not define, such as the
-// predefined service-http, and a flow without a port are doubts. A service object's
-// source port is not read (spec §18, the probe flows set none).
-func serviceFits(name string, f simulate.Flow, svc map[string]string) (string, reason.Reason) {
+// destination port. A service no scope defines, such as service-http in a
+// snapshot without the predefined services, and a flow without a port are
+// doubts. A service object's source port is not read (spec §18, the probe flows
+// set none).
+func serviceFits(name string, f simulate.Flow, svc map[string]string, cfg *config.Config) (string, reason.Reason) {
 	if name == "" || name == "any" {
 		return "", reason.Reason{}
 	}
 	// A port decides only a service the configuration defines: when neither
 	// the service nor any group member is defined, no port helps.
 	if !anyDefined(name, svc, 0) {
-		return "", reason.New("doubt.service-predefined", "service "+name+" is not defined in the configuration (a predefined service?)")
+		return "", rulebase.UndefinedService(cfg, "service "+name+" is not defined in the configuration (a predefined service?)")
 	}
 	if f.DestPort == 0 {
 		return "", reason.New("path.nat-no-port", "service "+name+" not known without a port: give the destination port")
@@ -229,7 +231,7 @@ func serviceFits(name string, f simulate.Flow, svc map[string]string) (string, r
 	matched, known := serviceHolds(name, strings.ToLower(f.Protocol), int(f.DestPort), svc, 0)
 	switch {
 	case !known:
-		return "", reason.New("doubt.service-predefined", "service "+name+" is not defined in the configuration (a predefined service?)")
+		return "", rulebase.UndefinedService(cfg, "service "+name+" is not defined in the configuration (a predefined service?)")
 	case !matched:
 		return "service " + name, reason.Reason{}
 	}

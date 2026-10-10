@@ -30,6 +30,9 @@ results:
       - name: ha
         file: ha.xml
         bytes: 163
+      - name: predefined
+        file: predefined.xml
+        bytes: 245
   - device: fw01
     vsys: vsys2
     snapshot: 2026-09-28T10-01-00Z
@@ -58,6 +61,9 @@ results:
       - name: ha
         file: ha.xml
         bytes: 163
+      - name: predefined
+        file: predefined.xml
+        bytes: 245
 holes: []
 unresolved: []
 notes: []

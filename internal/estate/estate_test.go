@@ -155,6 +155,33 @@ func TestOpenReportsAnUnreadableConfiguration(t *testing.T) {
 	}
 }
 
+// A snapshot with predefined services loads with them; one stored before they
+// were fetched loads as before; a predefined.xml that cannot be read is a hole
+// that names the file.
+func TestOpenReadsThePredefinedServices(t *testing.T) {
+	t.Parallel()
+	st, _ := store.Open(t.TempDir())
+	cfg := fixture(t, "firewall-lab.xml")
+	for dev, pre := range map[string]string{"with": fakePredefined, "bad": "<response><result><service>"} {
+		if _, err := st.Write(store.Meta{Device: dev}, map[string][]byte{store.ConfigDoc: cfg, "predefined": []byte(pre)}, 20); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := st.Write(store.Meta{Device: "old"}, map[string][]byte{store.ConfigDoc: cfg}, 20); err != nil {
+		t.Fatal(err)
+	}
+	ts, holes := Open(st, []string{"with", "old", "bad"}, nil, When{Now: t0})
+	if names(ts) != "with/vsys1,with/vsys2,old/vsys1,old/vsys2" || len(holes) != 1 || holes[0].Code != "gap.load-failed" || !strings.Contains(holes[0].Reason, "predefined.xml") {
+		t.Fatalf("targets %s, holes %v", names(ts), holes)
+	}
+	if ts[0].Config.Predefined() == nil || ts[2].Config.Predefined() != nil {
+		t.Error("only the snapshot with predefined.xml has predefined services")
+	}
+}
+
+const fakePredefined = `<response status="success"><result><service>` +
+	`<entry name="service-https"><protocol><tcp><port>443</port></tcp></protocol></entry></service></result></response>`
+
 func TestParseAt(t *testing.T) {
 	t.Parallel()
 	for in, want := range map[string]time.Time{

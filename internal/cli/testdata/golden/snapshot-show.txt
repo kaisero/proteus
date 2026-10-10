@@ -6,5 +6,6 @@ fw01   snapshot 2026-09-28T10-01-00Z (2m)
   fib         7295 bytes
   rib         15939 bytes
   ha          163 bytes
+  predefined  245 bytes
   vsys1    PAN-OS 11.2.5, security rules: 6
   vsys2    PAN-OS 11.2.5, security rules: 3

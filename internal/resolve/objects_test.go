@@ -302,3 +302,47 @@ func TestConfigScopeHoldsNoObjectsOfItsOwn(t *testing.T) {
 		t.Errorf("zones = %v, want none", zones)
 	}
 }
+
+// serviceList is each service as name=value@scope, with the scope it hides.
+func serviceList(objs []Object) string {
+	var out []string
+	for _, o := range objs {
+		s := o.Name + "=" + o.Value + "@" + o.Scope.String()
+		if o.ShadowedFrom != nil {
+			s += " hides " + o.ShadowedFrom.String()
+		}
+		out = append(out, s)
+	}
+	return strings.Join(out, "; ")
+}
+
+// Every scope sees the device's predefined services below shared. As observed on
+// fw02, PAN-OS 12.2.3: the device defines service-http as tcp/80,8080 and
+// service-https as tcp/443 (L4), and a configured service of the same name wins,
+// vsys, then shared, then predefined (L7).
+func TestPredefinedServicesSitBelowShared(t *testing.T) {
+	t.Parallel()
+	vsys1 := config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}
+	shared := config.Scope{Sort: config.ScopeShared}
+	plain := loadT(t, "../../testdata/predefined/config.xml")
+	for _, sc := range []config.Scope{shared, vsys1} {
+		if got := serviceList(ObjectsInScope(plain, sc, "service")); got != "service-http=tcp/80,8080@predefined; service-https=tcp/443@predefined" {
+			t.Errorf("%s: %s", sc, got)
+		}
+	}
+	configured := loadT(t, "../../testdata/predefined-configured/config.xml")
+	if got := serviceList(ObjectsInScope(configured, vsys1, "service")); got != "service-http=tcp/8081@shared hides predefined; service-https=tcp/8443@vsys:vsys1 hides predefined" {
+		t.Errorf("vsys1: %s", got)
+	}
+	if got := serviceList(ObjectsInScope(configured, shared, "service")); got != "service-http=tcp/8081@shared hides predefined; service-https=tcp/443@predefined" {
+		t.Errorf("shared: %s", got)
+	}
+	// Only services are predefined; other kinds see nothing new.
+	if got := ObjectsInScope(plain, vsys1, "address"); len(got) != 0 {
+		t.Errorf("addresses: %+v", got)
+	}
+	// Without the file, the names are not defined.
+	if got := ObjectsInScope(loadT(t, "../../testdata/config/firewall-nat-cases.xml"), vsys1, "service"); strings.Contains(serviceList(got), "predefined") {
+		t.Errorf("no predefined.xml: %s", serviceList(got))
+	}
+}

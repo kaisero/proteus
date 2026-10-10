@@ -28,6 +28,8 @@ results:
         bytes: 15939
       - name: ha
         bytes: 163
+      - name: predefined
+        bytes: 245
     stages:
       - slug: resolve
         name: resolve the inventory entry
@@ -47,7 +49,7 @@ results:
       - slug: documents
         name: fetch the documents
         status: ok
-        detail: 6 of 6 documents
+        detail: 7 of 7 documents
         elapsed_ms: 0
       - slug: store
         name: store the snapshot

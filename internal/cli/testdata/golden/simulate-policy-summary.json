@@ -153,7 +153,7 @@
           "reasons": [
             {
               "code": "doubt.service-predefined",
-              "text": "service predefined or not defined in the configuration (service-https)"
+              "text": "service predefined or not defined in the configuration (service-https); fetch again to store the predefined services"
             }
           ]
         },

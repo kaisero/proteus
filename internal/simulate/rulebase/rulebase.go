@@ -319,6 +319,7 @@ type pbfServiceMatch struct {
 	hits       *roaring.Bitmap // rules whose service carries the flow
 	defined    map[string]bool // the service names the configuration defines
 	unresolved []index.Unresolved
+	cfg        *config.Config
 }
 
 // pbfServices matches the flow's protocol and port against the PBF rules' services
@@ -335,7 +336,7 @@ func (v Vsys) pbfServices(rules []resolve.PBFRule, proto string, port uint16) pb
 	}
 	b, rep := idx.Candidates(index.Service, term)
 	out.term, out.hits, out.unresolved = term, b, withoutGap(rep.Unresolved)
-	out.defined = Defined(v.Config, v.Scope, resolve.PBF, "service")
+	out.defined, out.cfg = Defined(v.Config, v.Scope, resolve.PBF, "service"), v.Config
 	return out
 }
 
@@ -355,7 +356,7 @@ func (m pbfServiceMatch) judge(i int, values []string) ([]reason.Reason, bool) {
 		return []reason.Reason{reason.New("doubt.service-application-default",
 			"the rule uses service application-default, whose ports depend on the application")}, true
 	case Undecidable(values, m.defined):
-		return []reason.Reason{reason.New("doubt.service-predefined",
+		return []reason.Reason{UndefinedService(m.cfg,
 			"the rule names a service the configuration does not define, such as a predefined one")}, true
 	}
 	return nil, false
@@ -381,6 +382,18 @@ func Defined(cfg *config.Config, sc config.Scope, rb resolve.Rulebase, field str
 		}
 	}
 	return out
+}
+
+// UndefinedService is the doubt of a rule that names a service no scope defines,
+// with text saying what. A configuration without the device's predefined services
+// does not hold service-http and service-https; the device answers them to a show
+// command (as observed on fw02, PAN-OS 12.2.3, L4), so a fetch stores them, and
+// the text says so.
+func UndefinedService(cfg *config.Config, text string) reason.Reason {
+	if cfg == nil || cfg.Predefined() == nil {
+		text += "; fetch again to store the predefined services"
+	}
+	return reason.New("doubt.service-predefined", text)
 }
 
 // Undecidable reports whether a field names a value the configuration cannot

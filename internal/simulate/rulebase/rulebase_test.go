@@ -254,7 +254,8 @@ func TestPBFADiscardThatMayMatchEndsTheScan(t *testing.T) {
 	for _, port := range []uint16{443, 8443} {
 		m := v.PBF(ip("10.88.5.5"), ip("10.88.9.5"), "tcp", port, dmz)
 		if !m.Found || m.Rule.Name != "dmz-https" || m.Note != reason.New("path.pbf", "pbf rule dmz-https may drop this packet, "+
-			"if it matches: the rule names a service the configuration does not define, such as a predefined one") {
+			"if it matches: the rule names a service the configuration does not define, such as a predefined one; "+
+			"fetch again to store the predefined services") {
 			t.Errorf("%d: %+v", port, m)
 		}
 	}
@@ -366,6 +367,53 @@ func TestUndecidable(t *testing.T) {
 	} {
 		if got := Undecidable(tc.values, defined, "application-default"); got != tc.want {
 			t.Errorf("%v = %v", tc.values, got)
+		}
+	}
+}
+
+// PBF sees the predefined services too (L4): dmz-https takes tcp/443 for sure,
+// and tcp/8443 goes on to dmz-out.
+func TestPBFMatchesAPredefinedService(t *testing.T) {
+	t.Parallel()
+	cfg, _, err := config.Load("../../../testdata/predefined/config.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	v, ok := Load(func(_, vsys string) (simulate.Target, error) { return withIndexes(cfg, vsys), nil }, "fw", "vsys1")
+	if !ok {
+		t.Fatal("vsys1")
+	}
+	dmz := simulate.Port{Zone: "dmz"}
+	if m := v.PBF(ip("10.88.5.5"), ip("10.88.9.5"), "tcp", 443, dmz); !m.Found || m.Rule.Name != "dmz-https" || strings.Contains(m.Note.Text, "if it matches") {
+		t.Errorf("tcp/443: %+v", m)
+	}
+	if m := v.PBF(ip("10.88.5.5"), ip("10.88.9.5"), "tcp", 8443, dmz); !m.Found || m.Rule.Name != "dmz-out" || strings.Contains(m.Note.Text, "if it matches") {
+		t.Errorf("tcp/8443: %+v", m)
+	}
+}
+
+// The doubt of an undefined service says to fetch again only when the
+// configuration came without the device's predefined services.
+func TestUndefinedService(t *testing.T) {
+	t.Parallel()
+	with, _, err := config.Load("../../../testdata/predefined/config.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	without, _, err := config.Load("../../../testdata/config/firewall-pbf-service.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		cfg  *config.Config
+		want string
+	}{
+		{with, "x"},
+		{without, "x; fetch again to store the predefined services"},
+		{nil, "x; fetch again to store the predefined services"},
+	} {
+		if r := UndefinedService(tc.cfg, "x"); r.Code != "doubt.service-predefined" || r.Text != tc.want {
+			t.Errorf("%+v, want %q", r, tc.want)
 		}
 	}
 }

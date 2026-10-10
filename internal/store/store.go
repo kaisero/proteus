@@ -23,7 +23,7 @@ import (
 )
 
 // The document names the store reads itself. They must equal the names fetch gives
-// them; store cannot import fetch (R12), so a test in cmd/proteus checks.
+// them; store cannot import fetch (R12), so a test in internal/cli checks.
 const (
 	ConfigDoc     = "config"
 	InterfacesDoc = "interfaces"

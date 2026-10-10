@@ -182,10 +182,73 @@ func TestStoreAndFetchAgreeOnDocumentNames(t *testing.T) {
 		store.ConfigDoc:     fetch.RunningConfig.Name,
 		store.InterfacesDoc: fetch.Interfaces.Name,
 		store.FIBDoc:        fetch.RoutingFIB.Name,
+		store.RIBDoc:        fetch.RoutingRIB.Name,
+		store.HADoc:         fetch.HAState.Name,
 	} {
 		if got != want {
 			t.Errorf("store says %q, fetch says %q", got, want)
 		}
+	}
+	// config reads the predefined services next to the configuration by file name.
+	if config.PredefinedFile != fetch.Predefined.Name+".xml" {
+		t.Errorf("config reads %q, fetch stores %q", config.PredefinedFile, fetch.Predefined.Name+".xml")
+	}
+}
+
+// The predefined services are stored with the snapshot, and the stored
+// configuration sees them (L4).
+func TestFetchStoresThePredefinedServices(t *testing.T) {
+	t.Parallel()
+	inv, st := setup(t, lab(t).Start(t))
+	if _, err := fetchText(context.Background(), fetcher{inv: inv, st: st, getenv: getenv}, "fw01"); err != nil {
+		t.Fatal(err)
+	}
+	sn, err := st.Resolve("fw01")
+	if err != nil || !sn.Has(fetch.Predefined.Name) {
+		t.Fatalf("predefined.xml not stored: %v", err)
+	}
+	cfg, _, err := config.Load(sn.Path(store.ConfigDoc))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for _, o := range resolve.ObjectsInScope(cfg, config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}, "service") {
+		if o.Scope.Sort == config.ScopePredefined {
+			names = append(names, o.Name+" "+o.Value)
+		}
+	}
+	if got := strings.Join(names, ", "); got != "service-http tcp/80,8080, service-https tcp/443" {
+		t.Errorf("predefined services = %s", got)
+	}
+}
+
+// A device that refuses the predefined services gives a note and a complete
+// fetch; the snapshot records the note and no failed document.
+func TestFetchWithoutThePredefinedServicesIsComplete(t *testing.T) {
+	t.Parallel()
+	d := lab(t)
+	d.Ops[fakepanos.PredefinedCmd] = fakepanos.Refusal("17", "show -> predefined is unexpected")
+	inv, st := setup(t, d.Start(t))
+	f := fetcher{inv: inv, st: st, getenv: getenv}
+	ans := fetchAnswer{results: f.each(context.Background(), []string{"fw01"})}
+	if err := ans.Status(); err != nil {
+		t.Errorf("a refused optional document is a complete fetch, got %v", err)
+	}
+	q := ans.Qualifiers()
+	if len(q.Notes) != 2 || q.Notes[1].Code != "note.fetch-predefined-missing" {
+		t.Errorf("notes = %+v", q.Notes)
+	}
+	var out bytes.Buffer
+	_ = ans.Text(&textOut{w: &out})
+	if !strings.Contains(out.String(), "note: the device did not return its predefined services") || strings.Contains(out.String(), "FAILED") {
+		t.Errorf("text:\n%s", out.String())
+	}
+	sn, err := st.Resolve("fw01")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sn.Has(fetch.Predefined.Name) || len(sn.Meta.Documents) != 6 || len(sn.Meta.Notes) != 1 {
+		t.Errorf("meta = %+v", sn.Meta)
 	}
 }
 
@@ -292,7 +355,7 @@ func TestHousekeeping(t *testing.T) {
 	c.want(0, "fetch", "--label", "site=s1")
 	c.want(2, "snapshot", "list", "../x")
 	out := c.want(0, "snapshot", "list", "fw01")
-	if !strings.HasPrefix(out, "* ") || !strings.Contains(out, "6 documents, 0 failed") {
+	if !strings.HasPrefix(out, "* ") || !strings.Contains(out, "7 documents, 0 failed") {
 		t.Errorf("snapshot list:\n%s", out)
 	}
 	var env struct{ Results []struct{ Latest bool } }

@@ -298,6 +298,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Rules that name `service-http` or `service-https` now decide after the next
+  fetch.** `fetch` stores the firewall's predefined services with each snapshot.
+  Before, proteus did not know their ports, so every rule naming one stayed in doubt
+  and could leave a NAT or policy answer undecided.
 - **A PBF rule now matches only the services it names, and a no-pbf rule that
   names an application no longer ends the search.** A no-pbf rule for `tcp/22`
   also took `tcp/443`, so a later forward rule was never found and the path was

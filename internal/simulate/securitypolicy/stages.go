@@ -370,9 +370,10 @@ func viaDefault(via string) bool {
 	return err == nil && p.Bits() == 0
 }
 
-// matchService narrows by port. Rules naming application-default, or a service the
-// configuration does not define such as service-https, cannot be evaluated from a
-// configuration; they stay, and the stage says so.
+// matchService narrows by port. Rules naming application-default, or a service no
+// scope defines, such as service-https in a snapshot without the predefined
+// services, cannot be evaluated from a configuration; they stay, and the stage says
+// so.
 func matchService(_ context.Context, s *state) (simulate.Outcome, error) {
 	term, ok := rulebase.ServiceTerm(s.in.Flow.Protocol, s.in.Flow.DestPort)
 	if !ok {

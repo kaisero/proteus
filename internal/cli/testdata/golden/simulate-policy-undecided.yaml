@@ -141,7 +141,7 @@ results:
         rule: dmz-predefined
         reasons:
           - code: doubt.service-predefined
-            text: service predefined or not defined in the configuration (service-https)
+            text: service predefined or not defined in the configuration (service-https); fetch again to store the predefined services
       - position: 12
         rule: dmz-no-service
         reasons:

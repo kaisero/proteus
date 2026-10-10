@@ -46,8 +46,12 @@ a URL. A transport error is retried once; a refusal (HTTP 4xx, or
 `status="error"` with HTTP 200) is not.
 
 A `Document` is a name and a fetch function. `Documents` lists them:
-`config` (export), `system-info`, `interfaces`, `fib`, `rib`, `ha`. **Adding a
-fetcher is adding one `Document` value and listing it.** `OpDocument(name, cmds...)`
+`config` (export), `system-info`, `interfaces`, `fib`, `rib`, `ha`, `predefined`.
+**Adding a fetcher is adding one `Document` value and listing it.** An `Optional`
+document is one a release may refuse: an API refusal adds its `Refused` note to
+`Result.Notes`, records no outcome and leaves the step complete; a transport failure
+fails it as any other. `predefined` is optional: it was checked on PAN-OS 12.2.3
+only (L4), and its note is `note.fetch-predefined-missing`. `OpDocument(name, cmds...)`
 tries each show command in order until the device accepts one; `fib` and `rib` use
 this to fall back from the Advanced Routing command to the legacy one. On an
 Advanced Routing device the legacy route command answers success with a deprecation
@@ -84,7 +88,8 @@ hidden directory and renames it into place, so a reader never sees half a snapsh
 
 `Resolve("fw01")` is the latest snapshot, `Resolve("fw01@<id>")` one in particular.
 `Snapshot.Zones()` builds the index's `ZoneSnapshot` from the stored `interfaces`
-and `fib`. `estate.NewNetwork` reads `interfaces`, `fib`, `rib` and `ha` of every
+and `fib`. `config.Load` on the stored `config.xml` reads `predefined.xml` beside
+it; a snapshot stored before that document existed loads without it. `estate.NewNetwork` reads `interfaces`, `fib`, `rib` and `ha` of every
 device for `simulate routing`, pairing HA members by serial into one node.
 
 A lookup failure matches one kind with `errors.Is`: `ErrNoSnapshot` (nothing to

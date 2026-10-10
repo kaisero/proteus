@@ -183,3 +183,80 @@ func TestALoginErrorNamesTheDeviceOnce(t *testing.T) {
 		t.Errorf("err = %v", err)
 	}
 }
+
+// The predefined services arrive as the device answers them (L4), and the fake
+// device answers them as fw02 did.
+func TestRunFetchesThePredefinedServices(t *testing.T) {
+	t.Parallel()
+	d := fullDevice(t)
+	res, err := run(context.Background(), target(d.Start(t)), Documents, ActiveOptions{}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := os.ReadFile("../../testdata/predefined/predefined.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := string(res.Docs[Predefined.Name]); got != strings.TrimSpace(string(want)) || got != fakepanos.PredefinedServices {
+		t.Errorf("predefined = %s", got)
+	}
+	if len(res.Notes) != 0 {
+		t.Errorf("notes: %v", res.Notes)
+	}
+}
+
+// A device that refuses the predefined command, as an older release may, gives a
+// note and a complete fetch: the document is optional.
+func TestARefusedPredefinedDocumentIsANote(t *testing.T) {
+	t.Parallel()
+	d := fullDevice(t)
+	d.Ops[fakepanos.PredefinedCmd] = fakepanos.Refusal("17", "show -> predefined is unexpected")
+	l, err := runlog.Open(runlog.Options{Dir: t.TempDir(), Command: "fetch", Level: runlog.Debug})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := NewState(target(d.Start(t)), Documents, ActiveOptions{}, l)
+	recs, err := task.Run(context.Background(), "lab", &s, Steps(), task.Options{Log: l})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = l.Close()
+	docs := recs[len(recs)-1]
+	if docs.Slug != "documents" || docs.Status != task.OK || docs.Detail != "6 of 7 documents" ||
+		len(docs.Notes) != 1 || docs.Notes[0].Code != "note.fetch-predefined-missing" {
+		t.Errorf("documents step = %+v", docs)
+	}
+	if len(s.Result.Notes) != 1 || s.Result.Notes[0].Text != "the device did not return its predefined services; rules that use them stay in doubt" {
+		t.Errorf("notes = %v", s.Result.Notes)
+	}
+	for _, o := range s.Result.Outcomes {
+		if o.Err != nil || o.Name == Predefined.Name {
+			t.Errorf("outcome %+v: a refused optional document is not a document outcome", o)
+		}
+	}
+	if _, ok := s.Result.Docs[Predefined.Name]; ok || s.Result.OK(Predefined.Name) {
+		t.Error("a refused document did not arrive")
+	}
+	b, err := os.ReadFile(l.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(b), "[WARN] [API] lab: predefined refused") {
+		t.Errorf("the refusal is not warned about:\n%s", b)
+	}
+}
+
+// A transport failure of an optional document fails it as any other.
+func TestAnOptionalDocumentFailsOnATransportError(t *testing.T) {
+	t.Parallel()
+	d := device()
+	s := State{Docs: []Document{Predefined}, client: loggedIn(t, d), Result: Result{Docs: map[string][]byte{}}}
+	d.DropFirst = 2
+	r, err := documentsStep(context.Background(), &s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Status != task.Partial || len(r.Notes) != 0 || len(s.Result.Outcomes) != 1 || s.Result.Outcomes[0].Err == nil {
+		t.Errorf("result %+v, outcomes %+v", r, s.Result.Outcomes)
+	}
+}

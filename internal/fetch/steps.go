@@ -2,6 +2,7 @@ package fetch
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -111,10 +112,20 @@ func (s *State) stay(note reason.Reason) (task.Result, error) {
 	return task.Result{Detail: "fetched this device as it is", Notes: []reason.Reason{note}}, nil
 }
 
+// documentsStep fetches every document. A failed document is recorded and makes
+// the step partial. An optional document the device refuses is not recorded as a
+// document: it adds its note, and the step stays complete.
 func documentsStep(ctx context.Context, s *State) (task.Result, error) {
 	failed := 0
+	var r task.Result
 	for _, d := range s.Docs {
 		b, err := d.Fetch(ctx, s.client)
+		if _, refused := errors.AsType[*APIError](err); refused && d.Optional {
+			s.Log.Warnf(runlog.TagAPI, "%s: %s refused: %v", s.Target.Name, d.Name, err)
+			s.Result.Notes = append(s.Result.Notes, d.Refused)
+			r.Notes = append(r.Notes, d.Refused)
+			continue
+		}
 		s.Result.Outcomes = append(s.Result.Outcomes, Outcome{Name: d.Name, Bytes: len(b), Err: err})
 		if err != nil {
 			failed++
@@ -129,7 +140,7 @@ func documentsStep(ctx context.Context, s *State) (task.Result, error) {
 			s.Result.System = sys
 		}
 	}
-	r := task.Result{Detail: fmt.Sprintf("%d of %d documents", len(s.Docs)-failed, len(s.Docs))}
+	r.Detail = fmt.Sprintf("%d of %d documents", len(s.Result.Docs), len(s.Docs))
 	if failed > 0 {
 		r.Status = task.Partial
 	}

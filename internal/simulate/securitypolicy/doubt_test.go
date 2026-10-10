@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/netip"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -107,7 +109,7 @@ func TestDoubts(t *testing.T) {
 			"8 dmz-schedule: schedule not evaluated (work-hours)",
 			"9 dmz-pandb: url category not defined in the configuration, such as a PAN-DB category (news)",
 			"10 dmz-custom: url category not evaluated without a URL (my-cat)",
-			"11 dmz-predefined: service predefined or not defined in the configuration (service-https)",
+			"11 dmz-predefined: service predefined or not defined in the configuration (service-https); fetch again to store the predefined services",
 			"12 dmz-no-service: service absent",
 		}},
 		{"port and URL", flow(443, "tcp", "shop.example.com"), []string{
@@ -119,7 +121,7 @@ func TestDoubts(t *testing.T) {
 			"7 dmz-user: destination-hip not evaluated (hip-a)",
 			"8 dmz-schedule: schedule not evaluated (work-hours)",
 			"9 dmz-pandb: url category not defined in the configuration, such as a PAN-DB category (news)",
-			"11 dmz-predefined: service predefined or not defined in the configuration (service-https)",
+			"11 dmz-predefined: service predefined or not defined in the configuration (service-https); fetch again to store the predefined services",
 			"12 dmz-no-service: service absent",
 		}},
 		{"no port", flow(0, "icmp", ""), []string{
@@ -132,7 +134,7 @@ func TestDoubts(t *testing.T) {
 			"8 dmz-schedule: schedule not evaluated (work-hours)",
 			"9 dmz-pandb: url category not defined in the configuration, such as a PAN-DB category (news)",
 			"10 dmz-custom: url category not evaluated without a URL (my-cat)",
-			"11 dmz-predefined: service predefined or not defined in the configuration (service-https)",
+			"11 dmz-predefined: service predefined or not defined in the configuration (service-https); fetch again to store the predefined services",
 			"12 dmz-no-service: service absent",
 		}},
 	} {
@@ -312,5 +314,35 @@ func TestFQDNResolutionDoubt(t *testing.T) {
 	_, v = run(t, e, simulate.Flow{Source: ep("10.0.0.1"), Destination: ep("203.0.113.10")})
 	if len(v.Doubts) != 0 || first(v) != "allow-web" {
 		t.Errorf("an address: doubts %v, first %s", v.Doubts, first(v))
+	}
+}
+
+// A rule naming service-https decides once the predefined services are stored
+// (L4): tcp/443 hits it, tcp/80 goes on. A snapshot without them keeps the rule
+// in doubt and says that a fetch stores them.
+func TestPredefinedServicesDecideTheServiceStage(t *testing.T) {
+	t.Parallel()
+	flow := func(port uint16) simulate.Flow {
+		return simulate.Flow{Source: ep("10.88.1.5"), Destination: ep("10.88.10.100"), FromZone: "home", ToZone: "wan", DestPort: port}
+	}
+	e := envPath(t, "../../../testdata/predefined/config.xml", false)
+	r, v := run(t, e, flow(443))
+	if first(v) != "web-https" || len(v.Doubts) != 0 || len(v.Undecided) != 0 || stage(r, "match-service").Fidelity.Level() != "exact" {
+		t.Errorf("tcp/443: rule %s, doubts %s, undecided %v, service stage %s", first(v), doubtList(v), v.Undecided, stage(r, "match-service").Fidelity)
+	}
+	if _, v := run(t, e, flow(80)); first(v) != "web-rest" || len(v.Doubts) != 0 {
+		t.Errorf("tcp/80: rule %s, doubts %s", first(v), doubtList(v))
+	}
+	b, err := os.ReadFile("../../../testdata/predefined/config.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "config.xml")
+	if err := os.WriteFile(path, b, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, v = run(t, envPath(t, path, false), flow(443))
+	if got := doubtList(v); got != "1 web-https: service predefined or not defined in the configuration (service-https); fetch again to store the predefined services" {
+		t.Errorf("without predefined.xml: %s", got)
 	}
 }

@@ -36,7 +36,10 @@ So the lowest set bit is the first match.
 
 `ObjectsInScope(cfg, scope, kind)` walks the chain shared first, so a vsys
 definition replaces a shared one of the same name and records what it replaced in
-`ShadowedFrom`. `ObjectsAt` takes an explicit container path, for the kinds whose
+`ShadowedFrom`. Below shared sits the scope `predefined` (`config.ScopePredefined`):
+the device's predefined services, when the configuration came with
+`predefined.xml`. Every scope sees them, and a configured service of the same name
+hides them, the vsys's over shared's over the predefined one (lab facts L4, L7). `ObjectsAt` takes an explicit container path, for the kinds whose
 name is ambiguous in the schema.
 
 `objectValue` reduces an object to the one value that identifies it, and PAN-OS

@@ -60,8 +60,17 @@ func chainFor(sc config.Scope) []config.Scope {
 	return chain
 }
 
+// predefined is the scope of what the device itself defines. Every chain starts
+// there: a configured object of the same name hides it.
+var predefinedScope = config.Scope{Sort: config.ScopePredefined}
+
 // objectsInChain walks the chain shared first, so a later definition replaces an
 // earlier one and the replacement is recorded.
+//
+// The device's predefined services come before shared, when the configuration
+// came with them. As observed on fw02, PAN-OS 12.2.3: the device defines
+// service-http and service-https (L4), and a configured service of the same name
+// wins, the vsys's over shared's over the predefined one (L7).
 func objectsInChain(cfg *config.Config, chain []config.Scope, kind string, within []string) []Object {
 	// Where a kind sits under a scope comes from the schema: most are direct
 	// children, but a custom URL category and every security profile live under
@@ -75,8 +84,8 @@ func objectsInChain(cfg *config.Config, chain []config.Scope, kind string, withi
 	}
 	byName := map[string]Object{}
 	var order []string
-	for _, sc := range chain {
-		for _, o := range readObjects(cfg.Root(), sc, kind, within) {
+	for _, sc := range append([]config.Scope{predefinedScope}, chain...) {
+		for _, o := range readObjects(cfg, sc, kind, within) {
 			if prev, seen := byName[o.Name]; seen {
 				prevScope := prev.Scope
 				o.ShadowedFrom = &prevScope
@@ -106,20 +115,35 @@ func scopeContainer(sc config.Scope) ([]string, bool) {
 	}
 }
 
-// readObjects reads one scope's objects of one kind.
-//
-// The container path is matched exactly.
-func readObjects(root *config.Element, sc config.Scope, kind string, within []string) []Object {
+// scopeElements returns the elements a scope's objects sit under: the predefined
+// element, or the containers scopeContainer names, matched by the scope's name.
+func scopeElements(cfg *config.Config, sc config.Scope) []*config.Element {
+	if sc.Sort == config.ScopePredefined {
+		if p := cfg.Predefined(); p != nil {
+			return []*config.Element{p}
+		}
+		return nil
+	}
 	path, ok := scopeContainer(sc)
 	if !ok {
 		return nil
 	}
+	var out []*config.Element
+	for _, container := range cfg.Root().Find(path...) {
+		if sc.Name == "" || container.Attr("name") == sc.Name {
+			out = append(out, container)
+		}
+	}
+	return out
+}
+
+// readObjects reads one scope's objects of one kind.
+//
+// The container path is matched exactly.
+func readObjects(cfg *config.Config, sc config.Scope, kind string, within []string) []Object {
 	inner := append(append([]string{}, within...), "entry")
 	var out []Object
-	for _, container := range root.Find(path...) {
-		if sc.Name != "" && container.Attr("name") != sc.Name {
-			continue
-		}
+	for _, container := range scopeElements(cfg, sc) {
 		for _, e := range container.Find(inner...) {
 			out = append(out, Object{
 				Name:    e.Attr("name"),

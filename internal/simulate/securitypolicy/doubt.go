@@ -185,7 +185,7 @@ func (s *state) serviceDoubt(vs []string, defined map[string]bool) reason.Reason
 		}
 	}
 	if len(unknown) > 0 {
-		return reason.New("doubt.service-predefined",
+		return rulebase.UndefinedService(s.target.Config,
 			fmt.Sprintf("service predefined or not defined in the configuration (%s)", strings.Join(unknown, ", ")))
 	}
 	return reason.Reason{}

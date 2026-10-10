@@ -10,6 +10,7 @@ func TestScopeString(t *testing.T) {
 	}{
 		{Scope{Sort: ScopeShared}, "shared"},
 		{Scope{Sort: ScopeVsys, Name: "vsys1"}, "vsys:vsys1"},
+		{Scope{Sort: ScopePredefined}, "predefined"},
 	} {
 		if got := tc.s.String(); got != tc.want {
 			t.Errorf("got %q, want %q", got, tc.want)
@@ -44,6 +45,7 @@ func TestScopeRoundTrips(t *testing.T) {
 	for _, s := range []Scope{
 		{Sort: ScopeShared},
 		{Sort: ScopeVsys, Name: "vsys1"},
+		{Sort: ScopePredefined},
 	} {
 		got, err := ParseScope(s.String())
 		if err != nil {

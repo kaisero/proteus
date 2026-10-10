@@ -306,6 +306,7 @@ func Load(load func(device, vsys string) (simulate.Target, error), device, vsys 
 func PassedText(ps []PBFPassed) string
 func ServiceTerm(proto string, port uint16) (string, bool)
 func Undecidable(values []string, defined map[string]bool, keywords ...string) bool
+func UndefinedService(cfg *config.Config, text string) reason.Reason
 ```
 <!-- /GENERATED:api -->
 

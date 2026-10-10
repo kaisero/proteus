@@ -14,10 +14,13 @@ const (
 	ScopeShared ScopeSort = iota
 	ScopeVsys
 	ScopeConfig // outside any vsys, e.g. mgt-config
+	// ScopePredefined holds what the device itself defines, such as the
+	// predefined services. Every scope sees it below shared.
+	ScopePredefined
 )
 
 var scopePrefix = map[ScopeSort]string{
-	ScopeShared: "shared", ScopeVsys: "vsys", ScopeConfig: "config",
+	ScopeShared: "shared", ScopeVsys: "vsys", ScopeConfig: "config", ScopePredefined: "predefined",
 }
 
 // scopeNeedsName reports whether a scope of this sort is named.
