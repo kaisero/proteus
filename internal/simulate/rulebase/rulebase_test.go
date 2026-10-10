@@ -2,6 +2,7 @@ package rulebase
 
 import (
 	"errors"
+	"maps"
 	"net/netip"
 	"strings"
 	"testing"
@@ -213,7 +214,7 @@ func TestPBFMatchesTheService(t *testing.T) {
 		for _, p := range m.Passed {
 			passed = append(passed, p.String())
 		}
-		if !m.Found || m.Rule.Name != tc.rule || m.Sure != tc.sure || strings.Join(passed, "; ") != tc.passed || len(m.Unresolved) != 0 {
+		if !m.Found || m.Rule.Name != tc.rule || strings.Contains(m.Note.Text, "if it matches") == tc.sure || strings.Join(passed, "; ") != tc.passed || len(m.Unresolved) != 0 {
 			t.Errorf("%s/%d: %+v", tc.proto, tc.port, m)
 		}
 	}
@@ -232,7 +233,7 @@ func TestPBFGoesPastANoPBFRuleThatMayMatch(t *testing.T) {
 	t.Parallel()
 	v := pbfServiceVsys(t)
 	m := v.PBF(ip("10.88.4.5"), ip("10.88.9.5"), "tcp", 22, simulate.Port{Zone: "lab"})
-	if !m.Found || m.Rule.Name != "lab-out" || !m.Sure || len(m.Passed) != 1 || m.Passed[0].Rule != "lab-app-no-pbf" ||
+	if !m.Found || m.Rule.Name != "lab-out" || strings.Contains(m.Note.Text, "if it matches") || len(m.Passed) != 1 || m.Passed[0].Rule != "lab-app-no-pbf" ||
 		m.Passed[0].Doubts[0].Code != "doubt.application" {
 		t.Fatalf("%+v", m)
 	}
@@ -250,18 +251,11 @@ func TestPBFADiscardThatMayMatchEndsTheScan(t *testing.T) {
 	t.Parallel()
 	v := pbfServiceVsys(t)
 	dmz := simulate.Port{Zone: "dmz"}
-	for _, tc := range []struct {
-		port uint16
-		rule string
-		code reason.Code
-	}{
-		{443, "dmz-https", "doubt.service-predefined"},
-		{8443, "dmz-https", "doubt.service-predefined"},
-	} {
-		m := v.PBF(ip("10.88.5.5"), ip("10.88.9.5"), "tcp", tc.port, dmz)
-		if !m.Found || m.Rule.Name != tc.rule || m.Sure || len(m.Doubts) != 1 || m.Doubts[0].Code != tc.code ||
-			!strings.HasPrefix(m.Note.Text, "pbf rule "+tc.rule+" may drop this packet, if it matches: ") {
-			t.Errorf("%d: %+v", tc.port, m)
+	for _, port := range []uint16{443, 8443} {
+		m := v.PBF(ip("10.88.5.5"), ip("10.88.9.5"), "tcp", port, dmz)
+		if !m.Found || m.Rule.Name != "dmz-https" || m.Note != reason.New("path.pbf", "pbf rule dmz-https may drop this packet, "+
+			"if it matches: the rule names a service the configuration does not define, such as a predefined one") {
+			t.Errorf("%d: %+v", port, m)
 		}
 	}
 }
@@ -273,14 +267,6 @@ func TestPBFServiceJudge(t *testing.T) {
 	v := pbfServiceVsys(t)
 	rules := v.Target.PBFRules()
 	m := v.pbfServices(rules, "tcp", 443)
-	rule := func(svc ...string) resolve.PBFRule {
-		r := resolve.PBFRule{}
-		r.Fields = map[string][]string{}
-		if svc != nil {
-			r.Fields["service"] = svc
-		}
-		return r
-	}
 	for _, tc := range []struct {
 		svc  []string
 		fits bool
@@ -292,7 +278,7 @@ func TestPBFServiceJudge(t *testing.T) {
 		{[]string{"service-https"}, true, "doubt.service-predefined"},
 		{[]string{"svc-ssh"}, false, ""},
 	} {
-		why, fits := m.judge(len(rules), rule(tc.svc...)) // a position no rule has
+		why, fits := m.judge(len(rules), tc.svc) // a position no rule has
 		code := reason.Code("")
 		if len(why) > 0 {
 			code = why[0].Code
@@ -301,7 +287,7 @@ func TestPBFServiceJudge(t *testing.T) {
 			t.Errorf("%v: fits %v %v", tc.svc, fits, why)
 		}
 	}
-	if why, fits := v.pbfServices(rules, "", 0).judge(0, rule("svc-ssh")); !fits || why[0].Code != "doubt.service-no-port" {
+	if why, fits := v.pbfServices(rules, "", 0).judge(0, []string{"svc-ssh"}); !fits || why[0].Code != "doubt.service-no-port" {
 		t.Errorf("no port: %v %v", why, fits)
 	}
 	if got := v.pbfServices(nil, "tcp", 443); got.term != "" {
@@ -327,14 +313,41 @@ func TestServiceTerm(t *testing.T) {
 // names either only may match.
 func TestPBFNotEvaluated(t *testing.T) {
 	t.Parallel()
-	r := resolve.PBFRule{}
-	r.Fields = map[string][]string{"application": {"any"}, "source-user": {`corp\ops`}}
-	if got := notEvaluated(r); len(got) != 1 || got[0].Code != "doubt.not-evaluated.user" {
+	fields := map[string][]string{"application": {"any"}, "source-user": {`corp\ops`}}
+	if got := notEvaluated(fields); len(got) != 1 || got[0].Code != "doubt.not-evaluated.user" {
 		t.Errorf("user: %v", got)
 	}
-	r.Fields["source-user"] = []string{"any"}
-	if got := notEvaluated(r); got != nil {
+	fields["source-user"] = []string{"any"}
+	if got := notEvaluated(fields); got != nil {
 		t.Errorf("any: %v", got)
+	}
+}
+
+// R1: a PBF rule field the configuration leaves out holds its schema default. The
+// 11.2.0 digest gives "any" for the service, the application and the source user.
+func TestPBFDefaultsComeFromTheSchema(t *testing.T) {
+	t.Parallel()
+	v := pbfServiceVsys(t)
+	want := map[string]string{"service": "any", "application": "any", "source-user": "any"}
+	if got := pbfDefaults(v.Config); !maps.Equal(got, want) {
+		t.Errorf("defaults = %v", got)
+	}
+	got := withDefaults(map[string][]string{"service": {"svc-ssh"}}, map[string]string{"service": "any", "application": "any"})
+	if strings.Join(got["service"], ",") != "svc-ssh" || strings.Join(got["application"], ",") != "any" || got["source-user"] != nil {
+		t.Errorf("withDefaults = %v", got)
+	}
+}
+
+// A no-pbf rule without service, application or source user holds their default,
+// any, so it matches for sure and ends the scan.
+func TestPBFNoPBFWithoutServiceEndsTheScan(t *testing.T) {
+	t.Parallel()
+	v := pbfServiceVsys(t)
+	for _, port := range []uint16{443, 0} {
+		m := v.PBF(ip("10.88.6.5"), ip("10.88.9.5"), "tcp", port, simulate.Port{Zone: "bare"})
+		if !m.Found || m.Rule.Name != "bare-no-pbf" || m.Note != (reason.Reason{}) || len(m.Passed) != 0 {
+			t.Errorf("tcp/%d: %+v", port, m)
+		}
 	}
 }
 

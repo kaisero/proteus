@@ -224,18 +224,29 @@ func TestDNSNotesLeadTheResult(t *testing.T) {
 func TestSimulatePBFMatchesTheService(t *testing.T) {
 	t.Parallel()
 	env := fw01Env(t, "firewall-pbf-service.xml")
-	params := map[string]string{"from-zone": "home", "router": "default"}
 	for _, tc := range []struct {
+		proto  string
 		port   uint16
 		detail string
 		level  string
 	}{
-		{22, "no-pbf rule ssh-no-pbf leaves the packet to routing", "exact"},
-		{443, "pbf rule home-out may forward this packet to ethernet1/4 via 198.18.0.1", "inferred"},
+		{"tcp", 22, "no-pbf rule ssh-no-pbf leaves the packet to routing", "exact"},
+		{"tcp", 443, "pbf rule home-out may forward this packet to ethernet1/4 via 198.18.0.1", "inferred"},
+		{"udp", 22, "pbf rule home-out may forward this packet to ethernet1/4 via 198.18.0.1", "inferred"},
 	} {
-		r, _, _ := run(t, env, "10.88.3.5", "10.88.9.5", tc.port, params)
+		f := simulate.Flow{
+			Source:      simulate.Addr(netip.MustParseAddr("10.88.3.5")),
+			Destination: simulate.Addr(netip.MustParseAddr("10.88.9.5")),
+			Protocol:    tc.proto,
+			DestPort:    tc.port,
+		}
+		params := map[string]string{"device": "fw01", "from-zone": "home", "router": "default"}
+		r, err := Simulation{}.Run(context.Background(), env, simulate.Input{Flow: f, Params: params})
+		if err != nil {
+			t.Fatal(err)
+		}
 		if st := r.Stages[1]; st.Slug != "pbf" || st.Detail != tc.detail || st.Fidelity.Level() != tc.level {
-			t.Errorf("tcp/%d: %s %q %s", tc.port, st.Slug, st.Detail, st.Fidelity)
+			t.Errorf("%s/%d: %s %q %s", tc.proto, tc.port, st.Slug, st.Detail, st.Fidelity)
 		}
 	}
 	r, _, _ := run(t, env, "10.88.4.5", "10.88.9.5", 22, map[string]string{"from-zone": "lab", "router": "default"})

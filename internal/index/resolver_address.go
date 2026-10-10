@@ -36,9 +36,11 @@ func newAddressResolver(objs []resolve.Object, rules *rulesIndex) *addressResolv
 		if v == "" || prefixesOf(v) != nil {
 			continue
 		}
-		if w, ok := parseWildcard(o); o.Wildcard && ok {
-			r.wildcards = append(r.wildcards, w)
-			continue
+		if o.Wildcard {
+			if w, ok := parseWildcard(o); ok {
+				r.wildcards = append(r.wildcards, w)
+				continue
+			}
 		}
 		// What is left is an FQDN, or a wildcard this build cannot read. The
 		// firewall resolves an FQDN at runtime, so the configuration holds no

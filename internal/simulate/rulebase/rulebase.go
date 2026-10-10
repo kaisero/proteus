@@ -6,6 +6,7 @@ package rulebase
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"net/netip"
 	"slices"
 	"strings"
@@ -155,13 +156,11 @@ type PBFMatch struct {
 	// Rule is the first rule that could take the flow; Found says whether there is one.
 	Rule  resolve.PBFRule
 	Found bool
-	// Sure says Rule matches the flow. It is false when Rule only may match: it
-	// names an application or a user, which are not evaluated, or a service the
-	// answer cannot judge on this flow. Doubts say which.
-	Sure   bool
-	Doubts []reason.Reason
 	// Note says what the rule would do; the zero reason for no-pbf, which leaves
-	// the packet to routing.
+	// the packet to routing only on a sure match. When a forward or discard rule
+	// only may match, because it names an application or a user, which are not
+	// evaluated, or a service the answer cannot judge on this flow, the note ends
+	// with ", if it matches: " and why.
 	Note reason.Reason
 	// Passed are the no-pbf rules before Rule that only may match. Only a sure
 	// no-pbf match ends the scan, so the scan went on past them.
@@ -219,15 +218,17 @@ func (v Vsys) PBF(src, dst netip.Addr, proto string, port uint16, in simulate.Po
 	m := PBFMatch{Unresolved: un}
 	svc := v.pbfServices(rules, proto, port)
 	m.Unresolved = append(m.Unresolved, svc.unresolved...)
+	defaults := pbfDefaults(v.Config)
 	for i, r := range rules {
 		if r.Disabled || !s.Contains(uint32(i)) || !d.Contains(uint32(i)) || !FromFits(r, in) {
 			continue
 		}
-		doubts, fits := svc.judge(i, r)
+		fields := withDefaults(r.Fields, defaults)
+		doubts, fits := svc.judge(i, fields["service"])
 		if !fits {
 			continue
 		}
-		doubts = append(doubts, notEvaluated(r)...)
+		doubts = append(doubts, notEvaluated(fields)...)
 		if r.ActionKind == resolve.PBFNoPBF && len(doubts) > 0 {
 			m.Passed = append(m.Passed, PBFPassed{Rule: r.Name, Doubts: doubts})
 			continue
@@ -250,20 +251,53 @@ func (v Vsys) PBF(src, dst netip.Addr, proto string, port uint16, in simulate.Po
 			}
 			m.Note = reason.New("path.pbf", note)
 		}
-		m.Rule, m.Found, m.Sure, m.Doubts = r, true, len(doubts) == 0, doubts
+		m.Rule, m.Found = r, true
 		return m
 	}
 	return m
 }
 
+// pbfFields are the PBF rule fields the check reads.
+var pbfFields = []string{"service", "application", "source-user"}
+
+// pbfDefaults reads, from the schema digest, the member a PBF rule field holds when
+// the configuration leaves it out (R1). The 11.2.0 digest gives "any" for all
+// three, at /config/devices/entry/vsys/entry/rulebase/pbf/rules/entry/<field>/member.
+func pbfDefaults(cfg *config.Config) map[string]string {
+	entry := cfg.Digest() // the config element
+	for _, seg := range []string{"devices", "entry", "vsys", "entry", "rulebase", "pbf", "rules", "entry"} {
+		entry = entry.Child(seg)
+	}
+	out := map[string]string{}
+	for _, f := range pbfFields {
+		if d := entry.Child(f).Child("member"); d != nil && d.Default != "" {
+			out[f] = d.Default
+		}
+	}
+	return out
+}
+
+// withDefaults is a rule's fields with each field it leaves out at its schema
+// default. A field without a default stays absent.
+func withDefaults(fields map[string][]string, defaults map[string]string) map[string][]string {
+	out := make(map[string][]string, len(fields)+len(defaults))
+	maps.Copy(out, fields)
+	for f, d := range defaults {
+		if len(out[f]) == 0 {
+			out[f] = []string{d}
+		}
+	}
+	return out
+}
+
 // notEvaluated is why a rule only may match for the dimensions a PBF check does not
 // evaluate: the application and the source user (todo item 22).
-func notEvaluated(r resolve.PBFRule) []reason.Reason {
+func notEvaluated(fields map[string][]string) []reason.Reason {
 	var out []reason.Reason
-	if names(r.Fields["application"]) {
+	if names(fields["application"]) {
 		out = append(out, reason.New("doubt.application", "the rule names an application, which is not evaluated"))
 	}
-	if names(r.Fields["source-user"]) {
+	if names(fields["source-user"]) {
 		out = append(out, reason.New("doubt.not-evaluated.user", "the rule names a source user, which is not evaluated"))
 	}
 	return out
@@ -305,9 +339,9 @@ func (v Vsys) pbfServices(rules []resolve.PBFRule, proto string, port uint16) pb
 	return out
 }
 
-// judge says whether rule i's service can carry the flow, and if only perhaps, why.
-func (m pbfServiceMatch) judge(i int, r resolve.PBFRule) ([]reason.Reason, bool) {
-	values := r.Fields["service"]
+// judge says whether rule i's service values can carry the flow, and if only
+// perhaps, why. No values means the schema gave no default to fall back on.
+func (m pbfServiceMatch) judge(i int, values []string) ([]reason.Reason, bool) {
 	switch {
 	case len(values) == 0:
 		return []reason.Reason{reason.New("doubt.service-absent", "the rule names no service")}, true
