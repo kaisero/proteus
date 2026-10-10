@@ -103,7 +103,7 @@ func TestEvictionFrees(t *testing.T) {
 	t.Parallel()
 	l := newCacheLab(t, 0)
 	// Room for the digest and the larger of the two snapshots, not both.
-	one := configFactor * max(fileBytes(l.fw01.Path(store.ConfigDoc)), fileBytes(l.fw02.Path(store.ConfigDoc)))
+	one := configBytes(max(fileBytes(l.fw01.Path(store.ConfigDoc)), fileBytes(l.fw02.Path(store.ConfigDoc))))
 	l.cache.max = digestBytes + one
 	ref := func(sn store.Snapshot) weak.Pointer[config.Config] {
 		ld, err := l.cache.bind(context.Background()).Config(sn)

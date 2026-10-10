@@ -18,15 +18,27 @@ import (
 	"github.com/okaiser/proteus/internal/store"
 )
 
-// The size estimates of the cache (spec §12 C18): a snapshot's configuration
-// with its edge list and three rulebase indexes per vsys retains about 28
-// times the configuration file's bytes (BenchmarkCacheRetention: 27.2 on the
-// multi-vsys fixture, three vsys in 2.4 KB), and the schema digest of each
-// PAN-OS version about 9 MB once per process. A large file retains less per
-// byte, so the factor errs toward dropping a snapshot early.
+// The size estimates of the cache (spec §12 C18).
+//
+// A snapshot's configuration with its edges and the security, NAT and PBF
+// index of every vsys retains a fixed part plus a part per byte of its file
+// (configBytes). BenchmarkCacheRetention measures both on two generated
+// shapes at two sizes each, about 4 and 8 MB, and fails when this estimate
+// falls short of any of them. Measured on an Apple M3 Pro:
+//
+//   - one vsys with a tree of 2,000 nested address groups: 29.3 MB fixed
+//     (the group tree's closure, which does not grow with the file) and
+//     12.81 bytes per file byte;
+//   - four vsys with three levels of nested groups and NAT and PBF rules:
+//     0.35 MB fixed and 12.74 bytes per file byte.
+//
+// Each part takes the larger shape's value, rounded up: the fixed part to a
+// multiple of 4 MiB, the part per byte to a whole number. The digest of each
+// PAN-OS version takes about 9 MB once per process.
 const (
-	configFactor = 28
-	digestBytes  = 9 << 20
+	configFixedBytes = 32 << 20
+	configPerByte    = 13
+	digestBytes      = 9 << 20
 	// opFactor sizes a snapshot's operational tables by their files' bytes.
 	// It is an estimate, not a measurement: the parsed tables keep less text
 	// than the XML they come from.
@@ -35,6 +47,10 @@ const (
 	// item. An estimate.
 	failedBytes = 1 << 10
 )
+
+// configBytes estimates what a loaded configuration of a file's size retains
+// with its indexes.
+func configBytes(fileBytes int64) int64 { return configFixedBytes + configPerByte*fileBytes }
 
 // itemKey names a cached item: a kind and a snapshot.
 type itemKey struct {
@@ -202,7 +218,7 @@ func (c *Cache) config(ctx context.Context, sn store.Snapshot) (*configEntry, er
 			return nil, err
 		}
 		e := &configEntry{cfg: cfg, rep: rep, set: index.NewSet(cfg), built: map[indexKey]*index.Index{}}
-		c.put(k, e, configFactor*fileBytes(path), cfg.DigestVersion())
+		c.put(k, e, configBytes(fileBytes(path)), cfg.DigestVersion())
 		return e, nil
 	})
 	if err != nil {
