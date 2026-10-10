@@ -521,6 +521,32 @@ func TestSnapshotDiffHidesSecrets(t *testing.T) {
 	}
 }
 
+// A value the schema does not describe never reaches the diff's output: it
+// may be a secret a newer release added.
+func TestSnapshotDiffHidesUndescribedValues(t *testing.T) {
+	t.Parallel()
+	c := newCLI(t)
+	d := lab(t)
+	d.Config = read(t, "../../testdata/drift/before.xml")
+	c.inventory(inventoryFor(d.Start(t)))
+	c.want(0, "fetch", "fw01")
+	d.Config = read(t, "../../testdata/drift/undescribed.xml")
+	c.want(0, "fetch", "fw01")
+	text := c.want(0, "snapshot", "diff", "--vsys", "vsys1")
+	if want := "new-secret: changed (not described by the schema; values not shown)"; !strings.Contains(text, want) {
+		t.Errorf("missing %q in:\n%s", want, text)
+	}
+	for _, format := range []string{"text", "json", "yaml"} {
+		if out := c.want(0, "snapshot", "diff", "--vsys", "vsys1", "--output", format); strings.Contains(out, "s3cr3t") {
+			t.Errorf("%s output shows the value:\n%s", format, out)
+		}
+	}
+	out, errOut, _ := c.run("lookup", "ldap-corp", "--file", "../../testdata/drift/undescribed.xml", "--output", "json")
+	if strings.Contains(out+errOut, "s3cr3t") {
+		t.Errorf("lookup shows the value:\n%s", out)
+	}
+}
+
 func TestSnapshotDiff(t *testing.T) {
 	t.Parallel()
 	c := newCLI(t)

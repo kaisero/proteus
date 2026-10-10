@@ -331,9 +331,13 @@ func changeDetail(c drift.Change) string {
 
 // fieldLine is one changed setting of a changed entry, on its own line below
 // it: negate-destination: no -> yes. An absent side reads (unset). A secret
-// changed on both sides reads "changed (secret, not shown)"; its value is
-// never printed.
+// changed on both sides reads "changed (secret, not shown)", and a setting
+// the schema does not describe "changed (not described by the schema; values
+// not shown)"; neither value is ever printed.
 func fieldLine(f drift.FieldChange) string {
+	if f.Undescribed {
+		return f.Path + ": changed (not described by the schema; values not shown)"
+	}
 	if f.Secret && f.Old != "" && f.New != "" {
 		return f.Path + ": changed (secret, not shown)"
 	}

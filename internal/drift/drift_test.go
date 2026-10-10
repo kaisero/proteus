@@ -229,42 +229,106 @@ func TestComparePassesOverPredefined(t *testing.T) {
 }
 
 // An element the digest does not describe is compared whole, so its change
-// shows; an empty element is set, which differs from absent.
+// shows, but none of its values does: nothing says it holds no secret.
 func TestCompareKeepsWhatTheDigestDoesNotDescribe(t *testing.T) {
 	t.Parallel()
 	tmpl := `<config version="11.2.0"><shared><future-list><entry name="a"><x>%s</x><y/></entry><item>1</item><item>2</item></future-list></shared></config>`
-	before := loadXML(t, fmt.Sprintf(tmpl, "1"))
-	after := loadXML(t, fmt.Sprintf(tmpl, "2"))
+	before := loadXML(t, fmt.Sprintf(tmpl, "v1"))
+	after := loadXML(t, fmt.Sprintf(tmpl, "v2"))
 	shared := config.Scope{Sort: config.ScopeShared}
-	want := []Change{{Op: Changed, Kind: "future-list", Fields: []FieldChange{{Path: "a/x", Old: "1", New: "2"}}}}
+	want := []Change{{Op: Changed, Kind: "future-list", Fields: []FieldChange{{Path: "a/x", Undescribed: true}}}}
 	if got := Compare(before, after, shared); !reflect.DeepEqual(got, want) {
 		t.Errorf("got  %+v\nwant %+v", got, want)
 	}
-	gone := loadXML(t, `<config version="11.2.0"><shared><future-list><entry name="a"><x>1</x></entry><item>2</item><item>1</item></future-list></shared></config>`)
+	gone := loadXML(t, `<config version="11.2.0"><shared><future-list><entry name="a"><x>v1</x></entry><item>2</item><item>1</item></future-list></shared></config>`)
 	want = []Change{{Op: Changed, Kind: "future-list", Fields: []FieldChange{
-		{Path: "a/y", Old: Set},
-		{Path: "item", Old: "1, 2", New: "2, 1"},
+		{Path: "a/y", Undescribed: true},
+		{Path: "item", Undescribed: true},
 	}}}
-	if got := Compare(before, gone, shared); !reflect.DeepEqual(got, want) {
+	got := Compare(before, gone, shared)
+	if !reflect.DeepEqual(got, want) {
 		t.Errorf("got  %+v\nwant %+v", got, want)
+	}
+	empty := loadXML(t, `<config version="11.2.0"><shared/></config>`)
+	got = append(got, Compare(before, empty, shared)...)
+	got = append(got, Compare(empty, after, shared)...)
+	assertAbsent(t, got, "v1", "v2")
+}
+
+// An unknown child of a known entry, as a newer release may add, is compared
+// but never shown, in the field and in the entry's short line.
+func TestCompareHidesAnUndescribedChild(t *testing.T) {
+	t.Parallel()
+	before, after := pair(t, "before.xml", "undescribed.xml")
+	want := []Change{{Op: Changed, Kind: "ldap", Name: "ldap-corp", Fields: []FieldChange{{Path: "new-secret", Undescribed: true}}}}
+	got := Compare(before, after, vsys1)
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("got  %+v\nwant %+v", got, want)
+	}
+	empty := loadXML(t, `<config version="11.2.0"><shared/><devices><entry name="localhost.localdomain"><vsys><entry name="vsys1"/></vsys></entry></devices></config>`)
+	got = append(got, Compare(after, empty, vsys1)...)
+	got = append(got, Compare(empty, after, vsys1)...)
+	assertAbsent(t, got, "s3cr3t")
+}
+
+// assertAbsent fails when a value shows anywhere in the changes' JSON.
+func assertAbsent(t *testing.T, changes []Change, values ...string) {
+	t.Helper()
+	b, err := json.Marshal(changes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, v := range values {
+		if strings.Contains(string(b), v) {
+			t.Errorf("%s shows in %s", v, b)
+		}
 	}
 }
 
-// Attributes other than bookkeeping are settings, on an element and on a
-// member; an element the digest does not place in a list still counts.
+// The order of a nested entry list is configuration: swapping two servers
+// is one change. Adding one is not a reorder as well.
+func TestCompareReportsANestedReorder(t *testing.T) {
+	t.Parallel()
+	before, after := pair(t, "before.xml", "servers.xml")
+	want := []Change{{Op: Changed, Kind: "ldap", Name: "ldap-corp", Fields: []FieldChange{
+		{Path: "server order", Old: "ldap1, ldap2", New: "ldap2, ldap1"},
+	}}}
+	if got := Compare(before, after, vsys1); !reflect.DeepEqual(got, want) {
+		t.Errorf("got  %+v\nwant %+v", got, want)
+	}
+	tmpl := `<config version="11.2.0"><shared/><devices><entry name="localhost.localdomain"><vsys><entry name="vsys1">
+<profiles><virus><entry name="av"><decoder>%s</decoder></entry></virus></profiles></entry></vsys></entry></devices></config>`
+	two := loadXML(t, fmt.Sprintf(tmpl, `<entry name="http"/><entry name="smtp"/>`))
+	three := loadXML(t, fmt.Sprintf(tmpl, `<entry name="http"/><entry name="ftp"/><entry name="smtp"/>`))
+	one := loadXML(t, fmt.Sprintf(tmpl, `<entry name="smtp"/>`))
+	want = []Change{{Op: Changed, Kind: "virus", Name: "av", Fields: []FieldChange{{Path: "decoder/ftp", New: Set}}}}
+	if got := Compare(two, three, vsys1); !reflect.DeepEqual(got, want) {
+		t.Errorf("an added entry: got  %+v\nwant %+v", got, want)
+	}
+	want = []Change{{Op: Changed, Kind: "virus", Name: "av", Fields: []FieldChange{{Path: "decoder/http", Old: Set}}}}
+	if got := Compare(two, one, vsys1); !reflect.DeepEqual(got, want) {
+		t.Errorf("a removed entry: got  %+v\nwant %+v", got, want)
+	}
+}
+
+// An attribute the schema declares is a setting like any other; one it does
+// not declare, on an element or a member, and an unknown child are compared
+// but not shown.
 func TestCompareReadsAttributes(t *testing.T) {
 	t.Parallel()
 	tmpl := `<config version="11.2.0"><shared/><devices><entry name="localhost.localdomain"><vsys><entry name="vsys1">
+<application-status><entry name="web-browsing" status="%s"/></application-status>
 <address-group><entry name="g"><static><member %s>a</member><member>b</member></static></entry></address-group>
 <profiles><virus><entry name="av"><decoder><entry name="http"><action>alert</action></entry><stray>%s</stray></decoder><mlav-engine-filebased-enabled %s/></entry></virus></profiles>
 </entry></vsys></entry></devices></config>`
-	before := loadXML(t, fmt.Sprintf(tmpl, `uuid="1"`, "1", `mode="a"`))
-	after := loadXML(t, fmt.Sprintf(tmpl, `loc="x"`, "2", `mode="b"`))
+	before := loadXML(t, fmt.Sprintf(tmpl, "disabled", `uuid="1"`, "1", `mode="a"`))
+	after := loadXML(t, fmt.Sprintf(tmpl, "enabled", `loc="x"`, "2", `mode="b"`))
 	want := []Change{
-		{Op: Changed, Kind: "address-group", Name: "g", Fields: []FieldChange{{Path: "static", Old: "a, b", New: "a [loc=x], b"}}},
+		{Op: Changed, Kind: "address-group", Name: "g", Fields: []FieldChange{{Path: "static", Undescribed: true}}},
+		{Op: Changed, Kind: "application-status", Name: "web-browsing", Fields: []FieldChange{{Path: "@status", Old: "disabled", New: "enabled"}}},
 		{Op: Changed, Kind: "virus", Name: "av", Fields: []FieldChange{
-			{Path: "decoder/stray", Old: "1", New: "2"},
-			{Path: "mlav-engine-filebased-enabled/@mode", Old: "a", New: "b"},
+			{Path: "decoder/stray", Undescribed: true},
+			{Path: "mlav-engine-filebased-enabled/@mode", Undescribed: true},
 		}},
 	}
 	if got := Compare(before, after, vsys1); !reflect.DeepEqual(got, want) {
@@ -274,6 +338,24 @@ func TestCompareReadsAttributes(t *testing.T) {
 	for _, sc := range []config.Scope{{Sort: config.ScopeConfig}, {Sort: config.ScopePredefined}} {
 		if got := Compare(before, after, sc); len(got) != 0 {
 			t.Errorf("%s: got %+v", sc, got)
+		}
+	}
+}
+
+// Two pushed rules of one name, before and after the firewall's own, sort by
+// their container, so the output does not depend on map order.
+func TestCompareSortsByContainer(t *testing.T) {
+	t.Parallel()
+	before := loadXML(t, `<config version="11.2.0"><shared/></config>`)
+	after := loadXML(t, `<config version="11.2.0"><shared>
+<post-rulebase><security><rules><entry name="r"><action>deny</action></entry></rules></security></post-rulebase>
+<pre-rulebase><security><rules><entry name="r"><action>allow</action></entry></rules></security></pre-rulebase>
+</shared></config>`)
+	shared := config.Scope{Sort: config.ScopeShared}
+	for range 20 {
+		got := Compare(before, after, shared)
+		if len(got) != 2 || got[0].New != "deny" || got[1].New != "allow" {
+			t.Fatalf("got %+v; want post-rulebase before pre-rulebase", got)
 		}
 	}
 }
@@ -333,13 +415,38 @@ func TestCompareShowsWhereASecretIsSet(t *testing.T) {
 	}
 }
 
-// The guard on short lines: a secret the line holds is replaced.
-func TestRedactHidesASecretInALine(t *testing.T) {
+// The guard on short lines: a hidden value the line holds as a whole token is
+// replaced; the same text inside another token is not.
+func TestRedactHidesAValueInALine(t *testing.T) {
 	t.Parallel()
 	var f form
-	f.putSecret("password", "s3cret")
-	f.put("fqdn", "host.example.com")
-	if got := redact("host.example.com s3cret", f); got != "host.example.com "+Hidden {
-		t.Errorf("got %q", got)
+	f.put("password", "s3cret", secret)
+	f.put("future", "1", undescribed)
+	f.put("fqdn", "host.example.com", visible)
+	line := "host.example.com s3cret 10.88.0.1,1 tags=1"
+	want := "host.example.com " + Hidden + " 10.88.0.1," + NotShown + " tags=" + NotShown
+	if got := redact(line, f); got != want {
+		t.Errorf("got  %q\nwant %q", got, want)
+	}
+	if got := replaceToken("a", "", "x"); got != "a" {
+		t.Errorf("an empty value: got %q", got)
+	}
+}
+
+// An empty secret is still a secret, present or absent alike in both
+// directions.
+func TestCompareHidesAnEmptySecret(t *testing.T) {
+	t.Parallel()
+	tmpl := `<config version="11.2.0"><shared/><devices><entry name="localhost.localdomain"><vsys><entry name="vsys1">
+<certificate><entry name="c"><common-name>c.example.com</common-name>%s</entry></certificate></entry></vsys></entry></devices></config>`
+	absent := loadXML(t, fmt.Sprintf(tmpl, ""))
+	empty := loadXML(t, fmt.Sprintf(tmpl, "<private-key/>"))
+	want := []Change{{Op: Changed, Kind: "certificate", Name: "c", Fields: []FieldChange{{Path: "private-key", New: Hidden, Secret: true}}}}
+	if got := Compare(absent, empty, vsys1); !reflect.DeepEqual(got, want) {
+		t.Errorf("got  %+v\nwant %+v", got, want)
+	}
+	want[0].Fields[0].Old, want[0].Fields[0].New = Hidden, ""
+	if got := Compare(empty, absent, vsys1); !reflect.DeepEqual(got, want) {
+		t.Errorf("got  %+v\nwant %+v", got, want)
 	}
 }

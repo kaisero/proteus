@@ -45,6 +45,11 @@ type FieldChange struct {
 	// Secret marks a setting whose value is never shown: Old and New read
 	// (secret) where it is present.
 	Secret bool `json:"secret,omitempty" jsonschema:"true for a key, password or other secret: its values read (secret) and are never shown"`
+	// Undescribed marks a setting the schema digest does not describe: an
+	// element or attribute it does not know, such as one from a newer PAN-OS
+	// release. It is compared, but Old and New stay empty, because nothing
+	// says whether it holds a secret.
+	Undescribed bool `json:"undescribed,omitempty" jsonschema:"true for a setting the schema does not describe: it changed, but its values are never shown, as it may hold a secret"`
 }
 
 // Set is the value of an element that is present but holds nothing, such as
@@ -56,6 +61,14 @@ const Set = "(set)"
 // encrypt="yes", or a hand-modelled one such as a password hash
 // (schema.IsSecret). A secret is compared, but its value is never shown.
 const Hidden = "(secret)"
+
+// NotShown stands in for a value the schema does not describe, in an added or
+// removed entry's short line.
+const NotShown = "(not shown)"
+
+// OrderSuffix ends the path of a nested entry list's order field: server
+// order is the order of a server profile's servers.
+const OrderSuffix = " order"
 
 // ignoredAttrs are the attributes PAN-OS writes for its own bookkeeping. They
 // say which element it is or who changed it and when, not what it does, so a
@@ -93,26 +106,37 @@ var pushedRulebases = map[string]bool{"pre-rulebase": true, "post-rulebase": tru
 // every rule below it as changed.
 func Compare(before, after *config.Config, sc config.Scope) []Change {
 	a, b := entries(before, sc), entries(after, sc)
-	var out []Change
+	type keyed struct {
+		k key
+		c Change
+	}
+	var all []keyed
 	for k, old := range a {
 		nu, ok := b[k]
 		switch {
 		case !ok:
-			out = append(out, Change{Op: Removed, Kind: k.kind, Name: k.name, Old: old.line})
+			all = append(all, keyed{k, Change{Op: Removed, Kind: k.kind, Name: k.name, Old: old.line}})
 		default:
 			if fs := diffFields(old.form, nu.form); len(fs) > 0 {
-				out = append(out, Change{Op: Changed, Kind: k.kind, Name: k.name, Fields: fs})
+				all = append(all, keyed{k, Change{Op: Changed, Kind: k.kind, Name: k.name, Fields: fs}})
 			}
 		}
 	}
 	for k, nu := range b {
 		if _, ok := a[k]; !ok {
-			out = append(out, Change{Op: Added, Kind: k.kind, Name: k.name, New: nu.line})
+			all = append(all, keyed{k, Change{Op: Added, Kind: k.kind, Name: k.name, New: nu.line}})
 		}
 	}
-	slices.SortFunc(out, func(a, b Change) int {
-		return cmp.Or(cmp.Compare(a.Kind, b.Kind), cmp.Compare(a.Name, b.Name), cmp.Compare(a.Op, b.Op))
+	// The container breaks a tie of kind and name, such as a pushed pre-rule
+	// and post-rule of one name, so the order does not depend on map order.
+	slices.SortFunc(all, func(x, y keyed) int {
+		return cmp.Or(cmp.Compare(x.k.kind, y.k.kind), cmp.Compare(x.k.name, y.k.name),
+			cmp.Compare(x.k.container, y.k.container), cmp.Compare(x.c.Op, y.c.Op))
 	})
+	var out []Change
+	for _, kc := range all {
+		out = append(out, kc.c)
+	}
 	return out
 }
 
@@ -247,15 +271,56 @@ func (w walker) add(container, kind, name string, el *config.Element, n *schema.
 	w.out[k] = entry{form: f, line: redact(line, f)}
 }
 
-// redact hides any secret of the entry that its short line holds. The short
-// lines read fields no schema marks secret, so this is a second guard.
+// redact hides any value of the entry that must not show and that its short
+// line holds: a secret, or a value the schema does not describe. The short
+// lines read described fields only, so this is a second guard.
+//
+// A value is replaced only where it stands as a whole token of the line,
+// bounded by the line's ends, a space, a comma or an equals sign, which is how
+// a short line joins the values it shows. A plain substring replace would
+// also hit a short value inside an unrelated one, such as 1 in 10.88.0.1.
 func redact(line string, f form) string {
-	for p := range f.secret {
-		if v := f.values[p]; v != "" {
-			line = strings.ReplaceAll(line, v, Hidden)
+	for _, p := range f.paths {
+		h := f.hidden[p]
+		if h == visible {
+			continue
 		}
+		mark := Hidden
+		if h == undescribed {
+			mark = NotShown
+		}
+		line = replaceToken(line, f.values[p], mark)
 	}
 	return line
+}
+
+// isBoundary reports whether a byte ends a token of a short line.
+func isBoundary(b byte) bool { return b == ' ' || b == ',' || b == '=' }
+
+// replaceToken replaces each whole-token occurrence of v in line.
+func replaceToken(line, v, mark string) string {
+	if v == "" {
+		return line
+	}
+	var b strings.Builder
+	for i := 0; i < len(line); {
+		j := strings.Index(line[i:], v)
+		if j < 0 {
+			b.WriteString(line[i:])
+			break
+		}
+		start, end := i+j, i+j+len(v)
+		whole := (start == 0 || isBoundary(line[start-1])) && (end == len(line) || isBoundary(line[end]))
+		if whole {
+			b.WriteString(line[i:start])
+			b.WriteString(mark)
+			i = end
+			continue
+		}
+		b.WriteString(line[i : start+1])
+		i = start + 1
+	}
+	return b.String()
 }
 
 // objectLines is each object's short line, as resolve reads it: its value and
@@ -291,8 +356,11 @@ func ruleLine(el *config.Element, n *schema.Node) string {
 		}
 	}
 	slices.Sort(fields)
-	s := el.Child("action").TextOr("")
-	if el.Child("disabled").TextOr("") == "yes" {
+	s := ""
+	if step(n, "action") != nil {
+		s = el.Child("action").TextOr("")
+	}
+	if step(n, "disabled") != nil && el.Child("disabled").TextOr("") == "yes" {
 		s += " disabled"
 	}
 	return strings.TrimSpace(s + " " + strings.Join(fields, " "))
@@ -303,21 +371,26 @@ func ruleLine(el *config.Element, n *schema.Node) string {
 type form struct {
 	paths  []string
 	values map[string]string
-	secret map[string]bool // paths whose value is never shown
+	hidden map[string]hiding   // paths whose value is never shown, and why
+	orders map[string][]string // an order path's entry names, in document order
 }
 
-// putSecret records a secret: its value is compared, never shown.
-func (f *form) putSecret(path, value string) {
-	if f.secret == nil {
-		f.secret = map[string]bool{}
-	}
-	f.secret[path] = true
-	f.put(path, value)
-}
+// hiding says why a value is never shown.
+type hiding int
 
-func (f *form) put(path, value string) {
+const (
+	visible     hiding = iota
+	secret             // schema.IsSecret
+	undescribed        // the digest does not describe it
+)
+
+func (f *form) put(path, value string, h hiding) {
 	if f.values == nil {
 		f.values = map[string]string{}
+		f.hidden = map[string]hiding{}
+	}
+	if h != visible {
+		f.hidden[path] = max(f.hidden[path], h)
 	}
 	if prev, ok := f.values[path]; ok {
 		// Repeated siblings the digest does not describe: kept in document
@@ -329,21 +402,42 @@ func (f *form) put(path, value string) {
 	f.values[path] = value
 }
 
+// putOrder records the order of a nested entry list's entries.
+func (f *form) putOrder(path string, names []string, h hiding) {
+	if f.orders == nil {
+		f.orders = map[string][]string{}
+	}
+	p := strings.TrimSpace(path + OrderSuffix) // "order" for a list at the top
+	f.orders[p] = names
+	f.put(p, strings.Join(names, ", "), h)
+}
+
 // canonical reduces an entry to its form. A member list (the digest says
 // which, AGENTS.md R4) is one value, its members sorted, so a reorder is no
-// change. A nested entry is named by its name, as an instance path is.
+// change. A nested entry is named by its name, as an instance path is, and
+// its list's order is one more setting: the order of a server profile's
+// servers is configuration. A secret is compared but marked, and so is a
+// value the digest does not describe: an element it does not know, or an
+// attribute it does not declare.
 func canonical(el *config.Element, n *schema.Node) form {
 	var f form
 	var walk func(el *config.Element, n *schema.Node, path string)
 	walk = func(el *config.Element, n *schema.Node, path string) {
+		h := visible
+		if n == nil {
+			h = undescribed
+		}
 		if n != nil && n.IsMemberList() {
-			if m := members(el); m != "" {
-				f.put(path, m)
+			if m, plain := members(el); m != "" {
+				if !plain {
+					h = undescribed
+				}
+				f.put(path, m, h)
 			}
 			return
 		}
 		if schema.IsSecret(n) {
-			f.putSecret(path, el.Text)
+			f.put(path, cmp.Or(el.Text, Set), secret)
 			return
 		}
 		isEntry := el.Name == "entry" && (n != nil && n.Parent != nil && n.Parent.Kind == schema.KindArray || n == nil && el.Attr("name") != "")
@@ -351,42 +445,60 @@ func canonical(el *config.Element, n *schema.Node) form {
 			if ignoredAttrs[a.Name.Local] || isEntry && a.Name.Local == "name" {
 				continue
 			}
-			f.put(join(path, "@"+a.Name.Local), a.Value)
+			ah := undescribed
+			if declaresAttr(n, a.Name.Local) {
+				ah = visible
+			}
+			f.put(join(path, "@"+a.Name.Local), a.Value, ah)
 		}
 		if path != "" && (el.Text != "" || len(el.Children) == 0) {
-			v := el.Text
-			if v == "" {
-				v = Set
-			}
-			f.put(path, v)
+			f.put(path, cmp.Or(el.Text, Set), h)
 		}
+		var names []string
 		for _, c := range el.Children {
 			seg := c.Name
 			if c.Name == "entry" && c.Attr("name") != "" && (n == nil || n.Kind == schema.KindArray) {
 				seg = c.Attr("name")
+				names = append(names, seg)
 			}
 			walk(c, step(n, c.Name), join(path, seg))
+		}
+		if len(names) > 1 {
+			f.putOrder(path, names, h)
 		}
 	}
 	walk(el, n, "")
 	return f
 }
 
+// declaresAttr reports whether the schema declares an attribute of the node.
+func declaresAttr(n *schema.Node, name string) bool {
+	for _, c := range schema.PathFields(n) {
+		if c.Kind == schema.KindAttrReq && c.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
 // members is a member list's value: its members sorted and once each. A
-// member's own attributes, other than bookkeeping, stay with it.
-func members(el *config.Element) string {
+// member's own attributes, other than bookkeeping, stay with it; the schema
+// declares none, so plain is false when one has any.
+func members(el *config.Element) (value string, plain bool) {
 	var out []string
+	plain = true
 	for _, c := range el.ChildrenNamed("member") {
 		v := c.Text
 		for _, a := range c.Attrs {
 			if !ignoredAttrs[a.Name.Local] {
 				v += " [" + a.Name.Local + "=" + a.Value + "]"
+				plain = false
 			}
 		}
 		out = append(out, v)
 	}
 	slices.Sort(out)
-	return strings.Join(slices.Compact(out), ", ")
+	return strings.Join(slices.Compact(out), ", "), plain
 }
 
 func join(path, seg string) string {
@@ -399,25 +511,54 @@ func join(path, seg string) string {
 // diffFields lists the settings that differ: those of the old form in its
 // order, then those only the new form has, in its order.
 //
-// A secret's values are replaced by Hidden where present.
+// A secret's values are replaced by Hidden where present; a value the digest
+// does not describe is left empty on both sides. A nested list's order counts
+// only for the entries both sides hold, so an added or removed entry shows as
+// itself, not as a reorder too.
 func diffFields(old, nu form) []FieldChange {
 	var out []FieldChange
 	field := func(p string) FieldChange {
 		fc := FieldChange{Path: p, Old: old.values[p], New: nu.values[p]}
-		if old.secret[p] || nu.secret[p] {
+		switch max(old.hidden[p], nu.hidden[p]) {
+		case secret:
 			fc.Secret = true
 			fc.Old, fc.New = hide(old, p), hide(nu, p)
+		case undescribed:
+			fc.Undescribed = true
+			fc.Old, fc.New = "", ""
 		}
 		return fc
 	}
 	for _, p := range old.paths {
+		if names, ok := old.orders[p]; ok {
+			if !sameOrder(names, nu.orders[p]) {
+				out = append(out, field(p))
+			}
+			continue
+		}
 		if o, n := old.values[p], nu.values[p]; o != n {
 			out = append(out, field(p))
 		}
 	}
 	for _, p := range nu.paths {
-		if _, ok := old.values[p]; !ok {
+		if _, ok := old.values[p]; !ok && nu.orders[p] == nil {
 			out = append(out, field(p))
+		}
+	}
+	return out
+}
+
+// sameOrder reports whether the names both lists hold come in the same order.
+func sameOrder(a, b []string) bool {
+	return slices.Equal(common(a, b), common(b, a))
+}
+
+// common keeps the names of a that b also holds, in a's order.
+func common(a, b []string) []string {
+	var out []string
+	for _, n := range a {
+		if slices.Contains(b, n) {
+			out = append(out, n)
 		}
 	}
 	return out

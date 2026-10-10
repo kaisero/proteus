@@ -1,5 +1,10 @@
 package schema
 
+import (
+	"strings"
+	"sync"
+)
+
 // HandModel records a config node the schema does not describe, so it must be
 // modelled by hand. See AGENTS.md R8.
 type HandModel struct {
@@ -59,24 +64,60 @@ var handModelled = []HandModel{
 	// is phash in the schema, without encrypt="yes".
 	{Path: "/config/shared/local-user-database/user/entry/phash", Reason: phashReason, Owner: "internal/drift", Secret: true},
 	{Path: "/config/devices/entry/vsys/entry/local-user-database/user/entry/phash", Reason: phashReason, Owner: "internal/drift", Secret: true},
-	{Path: "/config/mgt-config/users/entry/phash", Reason: phashReason, Owner: "internal/drift", Secret: true},
+	// No package reads administrators today; IsSecret holds the mark so that a
+	// future reader hides the hash too.
+	{Path: "/config/mgt-config/users/entry/phash", Reason: phashReason + "; no package reads administrators yet, " +
+		"and IsSecret marks it for any that will", Owner: "internal/schema", Secret: true},
 }
 
-// secretPaths are the hand-modelled secrets, by schema path.
-var secretPaths = func() map[string]bool {
-	out := map[string]bool{}
+// secretPaths are the hand-modelled secrets, by schema path, and
+// secretNames the last segment of each, so a tree is searched without
+// building the path of every node.
+var secretPaths, secretNames = func() (map[string]bool, map[string]bool) {
+	paths, names := map[string]bool{}, map[string]bool{}
 	for _, h := range handModelled {
 		if h.Secret {
-			out[h.Path] = true
+			paths[h.Path] = true
+			names[h.Path[strings.LastIndex(h.Path, "/")+1:]] = true
 		}
 	}
-	return out
+	return paths, names
 }()
+
+// handSecrets holds, per schema tree (keyed by its root), the nodes the
+// hand-modelled secret paths name. It is built once per tree, on first use.
+var handSecrets sync.Map // *Node -> map[*Node]bool
 
 // IsSecret reports whether a node's value must never be shown: the schema
 // marks it encrypt="yes", or it is registered above as a secret.
 func IsSecret(n *Node) bool {
-	return n != nil && (n.Encrypted || secretPaths[n.Path()])
+	if n == nil {
+		return false
+	}
+	if n.Encrypted {
+		return true
+	}
+	root := n
+	for root.Parent != nil {
+		root = root.Parent
+	}
+	set, ok := handSecrets.Load(root)
+	if !ok {
+		set, _ = handSecrets.LoadOrStore(root, secretNodes(root))
+	}
+	return set.(map[*Node]bool)[n]
+}
+
+// secretNodes finds the nodes of a tree that the hand-modelled secret paths
+// name.
+func secretNodes(root *Node) map[*Node]bool {
+	out := map[*Node]bool{}
+	root.Walk(func(n *Node) {
+		if secretNames[n.Name] && secretPaths[n.Path()] {
+			out[n] = true
+		}
+	})
+	return out
 }
 
 // phashReason is why a phash node is registered as a secret.

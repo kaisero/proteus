@@ -37,6 +37,10 @@
               <entry name="ldap-corp">
                 <bind-dn>cn=reader,dc=example,dc=com</bind-dn>
                 <bind-password>-AQ==DUMMYBINDBEFORE000</bind-password>
+                <server>
+                  <entry name="ldap1"><address>10.88.5.1</address></entry>
+                  <entry name="ldap2"><address>10.88.5.2</address></entry>
+                </server>
               </entry>
             </ldap>
           </server-profile>

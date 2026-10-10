@@ -79,8 +79,11 @@ What it compares:
   the others). Shared compares shared only, with the rules pushed from Panorama;
   a vsys compares that vsys only.
 - The whole entry: every setting, with its text and attributes. A list of members
-  is a set, so a reorder is no change. The attributes PAN-OS writes for its own
-  bookkeeping (`uuid`, `admin`, `time`, `dirtyId`) are not compared.
+  is a set, so a reorder is no change. A list of named entries inside an entry,
+  such as a server profile's servers, keeps its order: a reorder shows as one
+  line, `server order: ldap1, ldap2 -> ldap2, ldap1`. The attributes PAN-OS
+  writes for its own bookkeeping (`uuid`, `admin`, `time`, `dirtyId`) are not
+  compared.
 - Not the device's predefined services: they are not configuration.
 
 How it shows a change:
@@ -103,6 +106,13 @@ password hash. A change in one reads `private-key: changed (secret, not shown)`,
 and JSON and YAML give `(secret)` for its old and new values, with
 `"secret": true`. Where a secret is set on one side only, that side reads
 `(secret)` and the other is empty.
+
+A value the schema does not describe never shows either: an element or an
+attribute that the schema proteus reads the configuration with does not know, as a
+newer release can add. It may hold a secret. Its change still shows, as
+`<path>: changed (not described by the schema; values not shown)`; JSON and
+YAML give empty `old` and `new` with `"undescribed": true`. An added or removed
+entry's short line leaves such values out.
 
 ## Old snapshots
 

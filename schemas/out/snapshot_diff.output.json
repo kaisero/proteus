@@ -460,6 +460,10 @@
                               "secret": {
                                 "type": "boolean",
                                 "description": "true for a key, password or other secret: its values read (secret) and are never shown"
+                              },
+                              "undescribed": {
+                                "type": "boolean",
+                                "description": "true for a setting the schema does not describe: it changed, but its values are never shown, as it may hold a secret"
                               }
                             },
                             "required": [

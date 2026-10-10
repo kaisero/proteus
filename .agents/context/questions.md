@@ -53,10 +53,13 @@ to their entry's form. The shared `pre-rulebase` and `post-rulebase` are read wi
 a vsys rulebase's node (hand-modelled, R8). An element the digest does not
 describe is compared whole, as one entry named by its path. Each entry becomes a
 canonical form: setting paths with text and attributes in document order; a
-member list (from the digest, R4) is one value with its members sorted; a secret
-is compared but never shown; `uuid`,
+member list (from the digest, R4) is one value with its members sorted; a
+nested entry list adds an order field (`<path> order`, names in document order;
+only the names both sides hold count); a secret or an undescribed value is
+compared but never shown; `uuid`,
 `admin`, `time` and `dirtyId` are ignored (`ignoredAttrs`). A changed entry
-carries `Fields` (`path`, `old`, `new`); an added or removed one a short line in
+carries `Fields` (`path`, `old`, `new`, `secret`, `undescribed`); an added or
+removed one a short line in
 `New` or `Old`: the object's value and tags as `resolve` reads them, or a rule's
 action and member lists. Position is not compared. Predefined services are never
 read.
@@ -155,6 +158,14 @@ func Compare(before, after *config.Config, sc config.Scope) []Change
   `(secret)` (`drift.Hidden`) and `FieldChange.Secret` is set; the text line is
   `<path>: changed (secret, not shown)`. A short line passes `redact` as a second
   guard (`drift.TestCompareHidesSecrets`).
+- **An undescribed value never shows.** An element the digest does not describe
+  (a whole one under the scope, or an unknown child of a known entry), an
+  attribute it does not declare (only `name`, `id` and `status` are declared) and
+  a member list whose members carry attributes are compared by raw value, but
+  `FieldChange.Undescribed` is set and `old`/`new` stay empty; the text line is
+  `<path>: changed (not described by the schema; values not shown)`. The lab's
+  12.2.3 configuration is read with the 11.2 digest, so this is common
+  (`drift.TestCompareHidesAnUndescribedChild`).
 - **R12:** `search`, `card` and `drift` import none of `fetch`, `store`, `estate`.
 
 ## See also
