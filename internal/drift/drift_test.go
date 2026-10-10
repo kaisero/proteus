@@ -1,6 +1,7 @@
 package drift
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -188,10 +189,13 @@ func TestCompareReadsEveryKind(t *testing.T) {
 		"removed address net-inside 10.88.1.0/24",
 		"removed address srv-web 10.88.2.10",
 		"removed address-group g-inside net-inside, srv-web",
+		"removed certificate cert-web ",
 		"removed external-list edl-block ",
+		"removed ldap ldap-corp ",
 		"removed nat rule dnat-web destination=198.18.0.10 from=untrust source=any to=untrust",
 		"removed pbf rule pbf-out destination=any service=any source=any",
 		"removed security rule inside-out allow application=any destination=10.88.9.0/24 from=trust service=application-default source=net-inside,srv-web to=untrust",
+		"removed user user1 ",
 		"removed virus av-strict ",
 		"removed zone trust ",
 		"removed zone untrust ",
@@ -271,5 +275,71 @@ func TestCompareReadsAttributes(t *testing.T) {
 		if got := Compare(before, after, sc); len(got) != 0 {
 			t.Errorf("%s: got %+v", sc, got)
 		}
+	}
+}
+
+// A secret is compared, but its value never shows: not in the field, not in
+// an added or removed entry's line, not in JSON.
+func TestCompareHidesSecrets(t *testing.T) {
+	t.Parallel()
+	raw := []string{"DUMMYKEYBEFORE0000", "DUMMYKEYAFTER00000", "DUMMYBINDBEFORE000", "DUMMYBINDAFTER0000", "DUMMYHASHBEFORE0000", "DUMMYHASHAFTER00000"}
+	hidden := func(path string) []FieldChange {
+		return []FieldChange{{Path: path, Old: Hidden, New: Hidden, Secret: true}}
+	}
+	empty := loadXML(t, `<config version="11.2.0"><shared/><devices><entry name="localhost.localdomain"><vsys><entry name="vsys1"/></vsys></entry></devices></config>`)
+	for _, tc := range []struct {
+		after      string
+		kind, name string
+		want       []FieldChange
+	}{
+		{"cert.xml", "certificate", "cert-web", hidden("private-key")},
+		{"ldap.xml", "ldap", "ldap-corp", hidden("bind-password")},
+		{"phash.xml", "user", "user1", hidden("phash")},
+	} {
+		before, after := pair(t, "before.xml", tc.after)
+		got := Compare(before, after, vsys1)
+		want := []Change{{Op: Changed, Kind: tc.kind, Name: tc.name, Fields: tc.want}}
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("%s: got  %+v\nwant %+v", tc.after, got, want)
+		}
+		got = append(got, Compare(before, empty, vsys1)...)
+		got = append(got, Compare(empty, after, vsys1)...)
+		b, err := json.Marshal(got)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, v := range raw {
+			if strings.Contains(string(b), v) {
+				t.Errorf("%s: %s shows in %s", tc.after, v, b)
+			}
+		}
+	}
+}
+
+// A secret set where there was none shows (secret) on the side that holds it.
+func TestCompareShowsWhereASecretIsSet(t *testing.T) {
+	t.Parallel()
+	tmpl := `<config version="11.2.0"><shared/><devices><entry name="localhost.localdomain"><vsys><entry name="vsys1">
+<certificate><entry name="c"><common-name>c.example.com</common-name>%s</entry></certificate></entry></vsys></entry></devices></config>`
+	before := loadXML(t, fmt.Sprintf(tmpl, ""))
+	after := loadXML(t, fmt.Sprintf(tmpl, "<private-key>-AQ==DUMMY</private-key>"))
+	want := []Change{{Op: Changed, Kind: "certificate", Name: "c", Fields: []FieldChange{{Path: "private-key", New: Hidden, Secret: true}}}}
+	if got := Compare(before, after, vsys1); !reflect.DeepEqual(got, want) {
+		t.Errorf("got  %+v\nwant %+v", got, want)
+	}
+	want[0].Fields[0].Old, want[0].Fields[0].New = Hidden, ""
+	if got := Compare(after, before, vsys1); !reflect.DeepEqual(got, want) {
+		t.Errorf("got  %+v\nwant %+v", got, want)
+	}
+}
+
+// The guard on short lines: a secret the line holds is replaced.
+func TestRedactHidesASecretInALine(t *testing.T) {
+	t.Parallel()
+	var f form
+	f.putSecret("password", "s3cret")
+	f.put("fqdn", "host.example.com")
+	if got := redact("host.example.com s3cret", f); got != "host.example.com "+Hidden {
+		t.Errorf("got %q", got)
 	}
 }

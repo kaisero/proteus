@@ -97,8 +97,12 @@ By default it compares the snapshot before `latest` with `latest`. `--from` and
 `--to` take a snapshot id, an RFC 3339 time or a date. A rule that only moved is
 not a change.
 
-The diff shows each value as the configuration stores it. A changed certificate,
-local user or server profile can show its encrypted or hashed secret.
+A secret never shows: a key, a password or a password hash, such as a
+certificate's private key, a server profile's password or a local user's
+password hash. A change in one reads `private-key: changed (secret, not shown)`,
+and JSON and YAML give `(secret)` for its old and new values, with
+`"secret": true`. Where a secret is set on one side only, that side reads
+`(secret)` and the other is empty.
 
 ## Old snapshots
 

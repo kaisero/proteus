@@ -42,12 +42,20 @@ type FieldChange struct {
 	Path string `json:"path" jsonschema:"the setting's path below the entry, such as negate-destination or destination-translation/translated-address; an attribute's last segment starts with @"`
 	Old  string `json:"old" jsonschema:"the value before: empty when the setting was absent, (set) for an element present without a value; a member list's members are sorted"`
 	New  string `json:"new" jsonschema:"the value after: empty when the setting is absent, (set) for an element present without a value; a member list's members are sorted"`
+	// Secret marks a setting whose value is never shown: Old and New read
+	// (secret) where it is present.
+	Secret bool `json:"secret,omitempty" jsonschema:"true for a key, password or other secret: its values read (secret) and are never shown"`
 }
 
 // Set is the value of an element that is present but holds nothing, such as
 // a choice like <type><ssl-forward-proxy/></type>. It differs from an absent
 // element, whose value is empty.
 const Set = "(set)"
+
+// Hidden stands in for the value of a secret: a setting the schema marks
+// encrypt="yes", or a hand-modelled one such as a password hash
+// (schema.IsSecret). A secret is compared, but its value is never shown.
+const Hidden = "(secret)"
 
 // ignoredAttrs are the attributes PAN-OS writes for its own bookkeeping. They
 // say which element it is or who changed it and when, not what it does, so a
@@ -235,7 +243,19 @@ func (w walker) add(container, kind, name string, el *config.Element, n *schema.
 	if !ok && strings.HasSuffix(kind, " rule") {
 		line = ruleLine(el, n)
 	}
-	w.out[k] = entry{form: canonical(el, n), line: line}
+	f := canonical(el, n)
+	w.out[k] = entry{form: f, line: redact(line, f)}
+}
+
+// redact hides any secret of the entry that its short line holds. The short
+// lines read fields no schema marks secret, so this is a second guard.
+func redact(line string, f form) string {
+	for p := range f.secret {
+		if v := f.values[p]; v != "" {
+			line = strings.ReplaceAll(line, v, Hidden)
+		}
+	}
+	return line
 }
 
 // objectLines is each object's short line, as resolve reads it: its value and
@@ -283,6 +303,16 @@ func ruleLine(el *config.Element, n *schema.Node) string {
 type form struct {
 	paths  []string
 	values map[string]string
+	secret map[string]bool // paths whose value is never shown
+}
+
+// putSecret records a secret: its value is compared, never shown.
+func (f *form) putSecret(path, value string) {
+	if f.secret == nil {
+		f.secret = map[string]bool{}
+	}
+	f.secret[path] = true
+	f.put(path, value)
 }
 
 func (f *form) put(path, value string) {
@@ -310,6 +340,10 @@ func canonical(el *config.Element, n *schema.Node) form {
 			if m := members(el); m != "" {
 				f.put(path, m)
 			}
+			return
+		}
+		if schema.IsSecret(n) {
+			f.putSecret(path, el.Text)
 			return
 		}
 		isEntry := el.Name == "entry" && (n != nil && n.Parent != nil && n.Parent.Kind == schema.KindArray || n == nil && el.Attr("name") != "")
@@ -364,17 +398,35 @@ func join(path, seg string) string {
 
 // diffFields lists the settings that differ: those of the old form in its
 // order, then those only the new form has, in its order.
+//
+// A secret's values are replaced by Hidden where present.
 func diffFields(old, nu form) []FieldChange {
 	var out []FieldChange
+	field := func(p string) FieldChange {
+		fc := FieldChange{Path: p, Old: old.values[p], New: nu.values[p]}
+		if old.secret[p] || nu.secret[p] {
+			fc.Secret = true
+			fc.Old, fc.New = hide(old, p), hide(nu, p)
+		}
+		return fc
+	}
 	for _, p := range old.paths {
 		if o, n := old.values[p], nu.values[p]; o != n {
-			out = append(out, FieldChange{Path: p, Old: o, New: n})
+			out = append(out, field(p))
 		}
 	}
 	for _, p := range nu.paths {
 		if _, ok := old.values[p]; !ok {
-			out = append(out, FieldChange{Path: p, New: nu.values[p]})
+			out = append(out, field(p))
 		}
 	}
 	return out
+}
+
+// hide is a secret's shown value: Hidden where the form holds it, else empty.
+func hide(f form, path string) string {
+	if _, ok := f.values[path]; ok {
+		return Hidden
+	}
+	return ""
 }

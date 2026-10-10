@@ -26,6 +26,27 @@
               <type><ip><recurring><hourly/></recurring><url>https://lists.example.com/block.txt</url></ip></type>
             </entry>
           </external-list>
+          <certificate>
+            <entry name="cert-web">
+              <common-name>web.example.com</common-name>
+              <private-key>-AQ==DUMMYKEYBEFORE0000</private-key>
+            </entry>
+          </certificate>
+          <server-profile>
+            <ldap>
+              <entry name="ldap-corp">
+                <bind-dn>cn=reader,dc=example,dc=com</bind-dn>
+                <bind-password>-AQ==DUMMYBINDBEFORE000</bind-password>
+              </entry>
+            </ldap>
+          </server-profile>
+          <local-user-database>
+            <user>
+              <entry name="user1">
+                <phash>$5$dummysalt$DUMMYHASHBEFORE0000</phash>
+              </entry>
+            </user>
+          </local-user-database>
           <profiles>
             <virus>
               <entry name="av-strict">

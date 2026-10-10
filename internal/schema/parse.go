@@ -139,6 +139,8 @@ func newNode(kind Kind, t xml.StartElement) *Node {
 			n.SubType = a.Value
 		case "memberof":
 			n.memberOfTarget = a.Value
+		case "encrypt":
+			n.Encrypted = a.Value == "yes"
 		}
 	}
 	return n

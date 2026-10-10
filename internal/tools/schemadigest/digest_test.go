@@ -78,6 +78,27 @@ func TestDigestRefusesASchemaWithNoReferences(t *testing.T) {
 	}
 }
 
+// A schema with references but no encrypted element means the parser is
+// dropping encrypt="yes". The tool must refuse to write that digest.
+func TestDigestRefusesASchemaWithNoSecrets(t *testing.T) {
+	t.Parallel()
+	dir, out := t.TempDir(), t.TempDir()
+	doc := `<sequence name="config"><array name="thing"><sequence name="entry">` +
+		`<attr-req name="name" type="string"/><array name="tag"><element name="member" type="string">` +
+		`<validate><memberof type="tag" memberof="#config/shared/tag/entry/@name"/></validate>` +
+		`</element></array></sequence></array></sequence>`
+	if err := os.WriteFile(filepath.Join(dir, "schema.xml"), []byte(doc), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	err := runDigest(dir, out, "11.2.0")
+	if err == nil || !strings.Contains(err.Error(), "encrypted") {
+		t.Fatalf("want a no-secrets error, got %v", err)
+	}
+	if entries, _ := os.ReadDir(out); len(entries) != 0 {
+		t.Errorf("a refused digest must not be written, found %d files", len(entries))
+	}
+}
+
 func TestDigestReportsAParseError(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()

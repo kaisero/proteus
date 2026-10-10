@@ -261,3 +261,35 @@ func TestWalkPathsOnAConfigWithNoKnownArrays(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// The walk emits only reference leaves, and no secret is one: a key or a
+// password never reaches search or an index as a value.
+func TestNoSecretIsAReference(t *testing.T) {
+	t.Parallel()
+	cfg, _, err := Load("../../testdata/drift/before.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	secrets := 0
+	cfg.Digest().Walk(func(n *schema.Node) {
+		if schema.IsSecret(n) {
+			secrets++
+			if len(n.MemberOf) > 0 {
+				t.Errorf("%s is a secret and a reference", n.Path())
+			}
+		}
+	})
+	if secrets == 0 {
+		t.Fatal("the digest marks no secret")
+	}
+	if err := cfg.WalkPaths(func(e Event) bool {
+		for _, v := range e.Values {
+			if strings.Contains(v, "DUMMY") {
+				t.Errorf("%s %s emits a secret", e.EntryPath, e.Field)
+			}
+		}
+		return true
+	}); err != nil {
+		t.Fatal(err)
+	}
+}

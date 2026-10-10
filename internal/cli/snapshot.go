@@ -330,8 +330,13 @@ func changeDetail(c drift.Change) string {
 }
 
 // fieldLine is one changed setting of a changed entry, on its own line below
-// it: negate-destination: no -> yes. An absent side reads (unset).
+// it: negate-destination: no -> yes. An absent side reads (unset). A secret
+// changed on both sides reads "changed (secret, not shown)"; its value is
+// never printed.
 func fieldLine(f drift.FieldChange) string {
+	if f.Secret && f.Old != "" && f.New != "" {
+		return f.Path + ": changed (secret, not shown)"
+	}
 	side := func(v string) string {
 		if v == "" {
 			return "(unset)"

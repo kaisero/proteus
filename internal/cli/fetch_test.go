@@ -471,6 +471,56 @@ func TestSettingsPrecedence(t *testing.T) {
 	}
 }
 
+// A secret's value never reaches the diff's output, in any format.
+func TestSnapshotDiffHidesSecrets(t *testing.T) {
+	t.Parallel()
+	c := newCLI(t)
+	d := lab(t)
+	d.Config = read(t, "../../testdata/drift/before.xml")
+	c.inventory(inventoryFor(d.Start(t)))
+	c.want(0, "fetch", "fw01")
+	d.Config = read(t, "../../testdata/drift/secrets.xml")
+	c.want(0, "fetch", "fw01")
+	raw := []string{"DUMMYKEYBEFORE0000", "DUMMYKEYAFTER00000", "DUMMYBINDBEFORE000", "DUMMYBINDAFTER0000", "DUMMYHASHBEFORE0000", "DUMMYHASHAFTER00000"}
+	text := c.want(0, "snapshot", "diff", "--vsys", "vsys1")
+	for _, want := range []string{
+		"private-key: changed (secret, not shown)", "bind-password: changed (secret, not shown)", "phash: changed (secret, not shown)",
+	} {
+		if !strings.Contains(text, want) {
+			t.Errorf("missing %q in:\n%s", want, text)
+		}
+	}
+	for _, format := range []string{"text", "json", "yaml"} {
+		out := c.want(0, "snapshot", "diff", "--vsys", "vsys1", "--output", format)
+		for _, v := range raw {
+			if strings.Contains(out, v) {
+				t.Errorf("%s output shows %s:\n%s", format, v, out)
+			}
+		}
+		if format != "text" && !strings.Contains(out, "(secret)") {
+			t.Errorf("%s output must mark the secrets:\n%s", format, out)
+		}
+	}
+	// Lookup and search read no secret either.
+	file := "../../testdata/drift/before.xml"
+	for _, args := range [][]string{
+		{"lookup", "cert-web", "--file", file, "--output", "json"},
+		{"lookup", "ldap-corp", "--file", file, "--output", "json"},
+		{"search", "--contains", "AQ==", "--file", file, "--output", "json"},
+		{"search", "--contains", "$5$", "--file", file, "--output", "json"},
+	} {
+		out, errOut, code := c.run(args...)
+		if code != 0 && code != 1 {
+			t.Errorf("%v: exit %d: %s", args, code, errOut)
+		}
+		for _, v := range raw {
+			if strings.Contains(out+errOut, v) {
+				t.Errorf("%v shows %s:\n%s", args, v, out)
+			}
+		}
+	}
+}
+
 func TestSnapshotDiff(t *testing.T) {
 	t.Parallel()
 	c := newCLI(t)

@@ -6,6 +6,9 @@ type HandModel struct {
 	Path   string // the config xpath
 	Reason string // why the schema does not describe it
 	Owner  string // the Go package that models it
+	// Secret marks a node whose value is never shown, like one the schema marks
+	// encrypt="yes" (Node.Encrypted). See IsSecret.
+	Secret bool
 }
 
 // handModelled is the complete list. Adding an entry is a deliberate act: every
@@ -52,7 +55,32 @@ var handModelled = []HandModel{
 			"each entry has the shape of a configured service (as observed on fw02, PAN-OS 12.2.3, L4)",
 		Owner: "internal/resolve",
 	},
+	// The password hashes of local users and of administrators. Their element
+	// is phash in the schema, without encrypt="yes".
+	{Path: "/config/shared/local-user-database/user/entry/phash", Reason: phashReason, Owner: "internal/drift", Secret: true},
+	{Path: "/config/devices/entry/vsys/entry/local-user-database/user/entry/phash", Reason: phashReason, Owner: "internal/drift", Secret: true},
+	{Path: "/config/mgt-config/users/entry/phash", Reason: phashReason, Owner: "internal/drift", Secret: true},
 }
+
+// secretPaths are the hand-modelled secrets, by schema path.
+var secretPaths = func() map[string]bool {
+	out := map[string]bool{}
+	for _, h := range handModelled {
+		if h.Secret {
+			out[h.Path] = true
+		}
+	}
+	return out
+}()
+
+// IsSecret reports whether a node's value must never be shown: the schema
+// marks it encrypt="yes", or it is registered above as a secret.
+func IsSecret(n *Node) bool {
+	return n != nil && (n.Encrypted || secretPaths[n.Path()])
+}
+
+// phashReason is why a phash node is registered as a secret.
+const phashReason = "a password hash; the schema does not mark it encrypted"
 
 // HandModelled returns the registered hand-modelled nodes.
 func HandModelled() []HandModel {

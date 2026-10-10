@@ -160,6 +160,10 @@
                       "new": {
                         "type": "string",
                         "description": "the value after: empty when the setting is absent, (set) for an element present without a value; a member list's members are sorted"
+                      },
+                      "secret": {
+                        "type": "boolean",
+                        "description": "true for a key, password or other secret: its values read (secret) and are never shown"
                       }
                     },
                     "required": [

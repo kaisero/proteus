@@ -53,7 +53,8 @@ to their entry's form. The shared `pre-rulebase` and `post-rulebase` are read wi
 a vsys rulebase's node (hand-modelled, R8). An element the digest does not
 describe is compared whole, as one entry named by its path. Each entry becomes a
 canonical form: setting paths with text and attributes in document order; a
-member list (from the digest, R4) is one value with its members sorted; `uuid`,
+member list (from the digest, R4) is one value with its members sorted; a secret
+is compared but never shown; `uuid`,
 `admin`, `time` and `dirtyId` are ignored (`ignoredAttrs`). A changed entry
 carries `Fields` (`path`, `old`, `new`); an added or removed one a short line in
 `New` or `Old`: the object's value and tags as `resolve` reads them, or a rule's
@@ -149,9 +150,11 @@ func Compare(before, after *config.Config, sc config.Scope) []Change
   exits 2 and asks for `--kind` (`card.TestFindInfersTheKind`).
 - **"Predefined" means only "not in the configuration".** No table of PAN-OS
   predefined values exists (spec §14 open item 6).
-- **A diff shows values as the configuration holds them.** Every entry of the
-  scope is compared, so a changed certificate, user or server profile shows its
-  stored (encrypted or hashed) value; the digest does not mark secret fields.
+- **A secret never shows.** A setting `schema.IsSecret` marks (the schema's
+  `encrypt="yes"`, or the hand-modelled `phash`) is compared, but its values read
+  `(secret)` (`drift.Hidden`) and `FieldChange.Secret` is set; the text line is
+  `<path>: changed (secret, not shown)`. A short line passes `redact` as a second
+  guard (`drift.TestCompareHidesSecrets`).
 - **R12:** `search`, `card` and `drift` import none of `fetch`, `store`, `estate`.
 
 ## See also

@@ -47,6 +47,9 @@ type Node struct {
 	Help     string `json:"h,omitempty"`
 	Regex    string `json:"rx,omitempty"`
 	SubType  string `json:"st,omitempty"`
+	// Encrypted is set where the schema marks the element encrypt="yes": a key,
+	// password or secret the device stores encrypted. Its value is never shown.
+	Encrypted bool `json:"enc,omitempty"`
 
 	EnumValues []string `json:"ev,omitempty"` // permitted values, when Type is enum
 	MemberOf   []string `json:"mo,omitempty"` // reference targets declared here
