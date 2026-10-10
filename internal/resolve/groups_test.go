@@ -1,6 +1,7 @@
 package resolve
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/okaiser/proteus/internal/config"
@@ -120,5 +121,34 @@ func TestStaticGroupResolvesToItsMembers(t *testing.T) {
 	}
 	if got.Filter != "" {
 		t.Errorf("a static group has no filter, got %q", got.Filter)
+	}
+}
+
+// A dynamic group is known by its dynamic element, not by the first character of
+// its filter. As observed on fw02, PAN-OS 12.2.3, a filter may start with "("
+// (L1); read as a member list it held one fake member and no address.
+func TestDynamicGroupWithAParenthesisedFilter(t *testing.T) {
+	t.Parallel()
+	cfg := loadT(t, "../../testdata/config/firewall-dynamic-filter.xml")
+	sc := config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}
+	got, err := GroupInScope(cfg, sc, "dag-paren")
+	if err != nil {
+		t.Fatalf("GroupInScope: %v", err)
+	}
+	if got.Filter != "('t-a' or 't-b')" || len(got.Static) != 0 || got.FilterError != "" {
+		t.Errorf("got %+v, want the filter and no static member", got)
+	}
+	if strings.Join(got.ByTag, ",") != "h-a,h-b" {
+		t.Errorf("ByTag = %v, want [h-a h-b]", got.ByTag)
+	}
+	for _, o := range ObjectsInScope(cfg, sc, "address-group") {
+		if !o.Dynamic {
+			t.Errorf("%s: Dynamic = false", o.Name)
+		}
+	}
+	for _, o := range ObjectsInScope(cfg, sc, "address") {
+		if o.Dynamic {
+			t.Errorf("address %s: Dynamic = true", o.Name)
+		}
 	}
 }

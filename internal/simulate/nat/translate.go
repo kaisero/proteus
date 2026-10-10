@@ -170,13 +170,13 @@ func (t translator) values(name string, r *Rule, hostOnly bool) []string {
 				}
 				return []string{o.Value} // an FQDN
 			}
+			if o.Dynamic {
+				t.unresolved(r.Name, reason.New("doubt.dynamic-group",
+					fmt.Sprintf("rule %s uses dynamic group %s, whose members are known at runtime", r.Name, name)))
+				return nil
+			}
 			var out []string
 			for m := range strings.SplitSeq(o.Value, ", ") {
-				if strings.Contains(m, "'") { // a dynamic group's filter
-					t.unresolved(r.Name, reason.New("doubt.dynamic-group",
-						fmt.Sprintf("rule %s uses dynamic group %s, whose members are known at runtime", r.Name, name)))
-					return nil
-				}
 				out = append(out, t.values(m, r, hostOnly)...)
 			}
 			return out

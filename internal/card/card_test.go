@@ -225,3 +225,13 @@ func TestAddressValue(t *testing.T) {
 		t.Error("plural")
 	}
 }
+
+// A dynamic group whose filter starts with a parenthesis shows its filter, not
+// the filter text as a fake member (L1).
+func TestDynamicGroupWithAParenthesisedFilter(t *testing.T) {
+	t.Parallel()
+	d := one(t, "firewall-dynamic-filter.xml", "dag-paren")
+	if got := row(d, "members", "").Text; got != "dynamic, filter ('t-a' or 't-b')" {
+		t.Errorf("members = %q, sections %+v", got, d.Sections)
+	}
+}

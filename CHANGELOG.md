@@ -298,6 +298,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A dynamic group whose filter starts with a parenthesis now counts as dynamic.**
+  A filter such as `('web' or 'db')` was read as one member name, so no address
+  reached the group and the rules using it were skipped.
 - **A custom URL category entry now covers the paths below its host.** An entry
   such as `shop.example.com` matched only that exact URL, so `shop.example.com/cart`
   reached no category and the rules using it were missed.

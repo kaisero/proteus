@@ -53,7 +53,7 @@ func newClosureIndex(in *Interner, groups, addrs []resolve.Object, others ...[]r
 	}
 	for _, g := range groups {
 		gid := in.ID(g.Name)
-		if strings.HasPrefix(g.Value, "'") {
+		if g.Dynamic {
 			filter, err := resolve.ParseTagFilter(g.Value)
 			if err != nil {
 				c.unparsed = append(c.unparsed, UnparsedFilter{

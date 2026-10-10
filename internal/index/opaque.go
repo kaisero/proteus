@@ -72,7 +72,7 @@ func newOpaqueIndex(rules []resolve.Rule, objs opaqueObjects) *opaqueIndex {
 	var classify func(v string, onPath map[string]bool) reason.Reason
 	classify = func(v string, onPath map[string]bool) reason.Reason {
 		if g, ok := group[v]; ok {
-			if strings.HasPrefix(g.Value, "'") {
+			if g.Dynamic {
 				return reason.New("doubt.dynamic-group", fmt.Sprintf("%s (%s)", opaqueRuntime, v))
 			}
 			if onPath[v] {

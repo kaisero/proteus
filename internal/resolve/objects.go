@@ -19,6 +19,9 @@ type Object struct {
 	Tags         []string
 	Description  string
 	ShadowedFrom *config.Scope // the scope whose definition this one replaced
+	// Dynamic is set for an address group with a dynamic element. Its Value is
+	// then the tag filter, not a member list.
+	Dynamic bool
 }
 
 // Objects returns the objects of one kind visible to the target, with a
@@ -122,6 +125,10 @@ func readObjects(root *config.Element, sc config.Scope, kind string, within []st
 				Value:   objectValue(e),
 				Subtype: objectSubtype(e),
 				Tags:    e.Child("tag").Members(),
+				// The element says a group is dynamic, not its filter text. As
+				// observed on fw02, PAN-OS 12.2.3: a filter may start with "(";
+				// "not" is refused (L1, L1b).
+				Dynamic: kind == "address-group" && e.Child("dynamic") != nil,
 
 				Description: e.Child("description").TextOr(""),
 			})

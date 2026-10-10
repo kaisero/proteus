@@ -54,9 +54,9 @@ func resolveGroup(cfg *config.Config, chain []config.Scope, name string) (Member
 	}
 
 	out := Members{Note: runtimeNote}
-	// A dynamic group's value is its tag filter, which PAN-OS quotes. A static
-	// group's value is its member list.
-	if !strings.HasPrefix(target.Value, "'") {
+	// A dynamic group's value is its tag filter. A static group's value is its
+	// member list.
+	if !target.Dynamic {
 		out.Static = strings.Split(target.Value, ", ")
 		return out, nil
 	}

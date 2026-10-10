@@ -2,8 +2,11 @@ package index
 
 import (
 	"maps"
+	"net/netip"
 	"strings"
 	"testing"
+
+	"github.com/RoaringBitmap/roaring/v2"
 )
 
 // A rule naming an external list, a region or a dynamic group, directly or
@@ -51,5 +54,51 @@ func TestOpaque(t *testing.T) {
 	clear(why)
 	if again, _ := v.Opaque(Source); again.GetCardinality() != uint64(len(want)) {
 		t.Error("Opaque returned the index's own bitmap")
+	}
+}
+
+// A dynamic group whose filter starts with a parenthesis is a dynamic group like
+// any other (L1): its tagged addresses reach its rule, and the rule carries the
+// dynamic-group doubt. Read as a static group, it reached no address.
+func TestDynamicGroupWithAParenthesisedFilter(t *testing.T) {
+	t.Parallel()
+	idx := indexOf(t, "../../testdata/config/firewall-dynamic-filter.xml", "vsys1")
+	rules := idx.Rules()
+	names := func(b *roaring.Bitmap) map[string]bool {
+		out := map[string]bool{}
+		for it := b.Iterator(); it.HasNext(); {
+			out[rules[it.Next()].Name] = true
+		}
+		return out
+	}
+	// As observed on fw02, PAN-OS 12.2.3 (L1): 10.88.1.1 and 10.88.1.2 hit the
+	// rule, 10.88.1.3 does not.
+	for _, tc := range []struct {
+		addr string
+		hit  bool
+	}{{"10.88.1.1", true}, {"10.88.1.2", true}, {"10.88.1.3", false}} {
+		if got := names(idx.CandidatesFor(Source, netip.MustParseAddr(tc.addr))); got["from-dag"] != tc.hit {
+			t.Errorf("%s: from-dag in %v, want %v", tc.addr, keys(got), tc.hit)
+		}
+	}
+	v := idx.With(Providers{})
+	for _, member := range []string{"h-a", "h-b"} {
+		b, _ := v.Candidates(Source, member)
+		if !names(b)["from-dag"] {
+			t.Errorf("Candidates(Source, %s) = %v, want from-dag", member, keys(names(b)))
+		}
+	}
+	b, why := v.Opaque(Source)
+	got := names(b)
+	if len(got) != 1 || !got["from-dag"] {
+		t.Fatalf("opaque rules = %v, want [from-dag]", keys(got))
+	}
+	for _, rs := range why {
+		if len(rs) != 1 || rs[0].Code != "doubt.dynamic-group" || !strings.Contains(rs[0].Text, "(dag-paren)") {
+			t.Errorf("reasons = %v", rs)
+		}
+	}
+	if len(idx.UnparsedFilters()) != 0 {
+		t.Errorf("unparsed filters: %v", idx.UnparsedFilters())
 	}
 }
