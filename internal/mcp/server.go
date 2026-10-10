@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"runtime/debug"
+	"sync"
 	"testing"
 	"time"
 
@@ -439,9 +440,14 @@ type outcome struct {
 // the log. A slow call's log so keeps what came late.
 func (m middleware) bounded(ctx context.Context, next sdk.MethodHandler, method string, req sdk.Request, c *Call, log *runlog.Logger) (res sdk.Result, handed chan struct{}, err error) {
 	work, cancel := context.WithTimeout(ctx, m.lim.timeout)
-	done := make(chan outcome)
-	left := make(chan struct{})
+	done := make(chan outcome, 1)
 	handed = make(chan struct{})
+	// late is set when the caller timed out and left. Under mu, either the
+	// work hands its outcome over or the caller leaves, never both.
+	var (
+		mu   sync.Mutex
+		late bool
+	)
 	o := outcome{call: *c}
 	go func() {
 		defer m.lim.leave()
@@ -456,19 +462,20 @@ func (m middleware) bounded(ctx context.Context, next sdk.MethodHandler, method 
 			}()
 			o.res, o.err = m.handle(work, next, method, req, &o.call)
 		}()
-		// done is unbuffered: either the caller takes the outcome, or it
-		// timed out and closed left, never both.
-		select {
-		case done <- o:
-		case <-left:
-			<-handed
-			m.lateLog(log, &o.call, o.call.Time)
-			if o.panicked {
-				// Nobody waits to panic on. Only a strict server, in a test
-				// binary, gets here: it crashes the test binary on purpose,
-				// so the bug is not lost with the caller that timed out.
-				panic(o.panic)
-			}
+		mu.Lock()
+		if !late {
+			done <- o
+			mu.Unlock()
+			return
+		}
+		mu.Unlock()
+		<-handed
+		m.lateLog(log, &o.call, o.call.Time)
+		if o.panicked {
+			// Nobody waits to panic on. Only a strict server, in a test
+			// binary, gets here: it crashes the test binary on purpose, so
+			// the bug is not lost with the caller that timed out.
+			panic(o.panic)
 		}
 	}()
 	take := func(o outcome) (sdk.Result, chan struct{}, error) {
@@ -483,12 +490,15 @@ func (m middleware) bounded(ctx context.Context, next sdk.MethodHandler, method 
 		return take(o)
 	case <-work.Done():
 	}
+	mu.Lock()
 	select {
 	case o := <-done:
+		mu.Unlock()
 		return take(o) // it answered at the deadline
 	default:
 	}
-	close(left)
+	late = true
+	mu.Unlock()
 	return refused(c, work.Err()), handed, nil
 }
 
