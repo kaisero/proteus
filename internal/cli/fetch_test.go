@@ -824,6 +824,18 @@ func TestSearchModeFlags(t *testing.T) {
 	}
 }
 
+// A misspelt --kind is a usage error that lists the kinds, not an empty answer.
+func TestSearchRefusesAnUnknownKind(t *testing.T) {
+	t.Parallel()
+	c := newCLI(t)
+	out, errOut, code := c.run("search", "web", "--kind", "addr", "--file", "../../testdata/config/firewall-lab.xml")
+	if code != 2 || out != "" || !strings.Contains(errOut, `--kind "addr": want one of `) ||
+		!strings.Contains(errOut, "address, address-group") {
+		t.Errorf("exit %d\nstdout:\n%s\nstderr:\n%s", code, out, errOut)
+	}
+	c.want(0, "search", "web", "--kind", "address-group", "--file", "../../testdata/config/firewall-lab.xml")
+}
+
 // A fan-out cancelled while one device hangs returns at once with the other
 // device stored, and TestMain's leak check proves no goroutine is left behind.
 func TestACancelledFanOutEndsPromptly(t *testing.T) {

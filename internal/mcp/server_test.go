@@ -710,6 +710,28 @@ func TestServe(t *testing.T) {
 	<-done
 }
 
+// search refuses an unknown kind in the tool's words, with the kinds it knows.
+func TestSearchRefusesAnUnknownKind(t *testing.T) {
+	t.Parallel()
+	cs, rec := serve(t, labEnv(t, snap{pathlab.FW01, fixture("firewall-nat.xml")}), true)
+	res, err := cs.CallTool(context.Background(), &sdk.CallToolParams{
+		Name: "search", Arguments: map[string]any{"value": pathlab.Destination, "kind": "addr"},
+	})
+	if err != nil || !res.IsError {
+		t.Fatalf("%v %+v", err, res)
+	}
+	got, _ := plain(t, res.StructuredContent).(map[string]any)
+	e, _ := got["error"].(map[string]any)
+	msg, _ := e["text"].(string)
+	if e["code"] != "call.usage" || !strings.HasPrefix(msg, `kind "addr": want one of `) ||
+		!strings.Contains(msg, "address, address-group") || strings.Contains(msg, "--") {
+		t.Errorf("error %v", e)
+	}
+	if c := rec.last(t); c.Status != StatusUsage || c.Code != "call.usage" {
+		t.Errorf("audit %+v", c)
+	}
+}
+
 // text is a result's first text content.
 func text(res *sdk.CallToolResult) string {
 	if len(res.Content) == 0 {

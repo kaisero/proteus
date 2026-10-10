@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/okaiser/proteus/internal/estate"
@@ -75,6 +77,30 @@ func (sel Selection) validateFile() *UsageError {
 	return nil
 }
 
+// checkKinds refuses a kind that no selected configuration can hold, before
+// any target runs: a misspelt kind would find nothing and read as an answer.
+// The kinds a configuration can hold come from its schema digest; with several
+// targets, a kind is valid when any of them knows it.
+func (in SearchInput) checkKinds(ts []estate.Target) *UsageError {
+	if len(in.Kinds) == 0 || len(ts) == 0 {
+		return nil
+	}
+	known := map[string]bool{}
+	for _, t := range ts {
+		for _, k := range resolve.ObjectKinds(t.Config) {
+			known[k] = true
+		}
+	}
+	for _, k := range in.Kinds {
+		if !known[k] {
+			list := strings.Join(slices.Sorted(maps.Keys(known)), ", ")
+			return usage(fmt.Sprintf("--kind %q: want one of %s", k, list),
+				fmt.Sprintf("kind %q: want one of %s", k, list))
+		}
+	}
+	return nil
+}
+
 // query is the search query the input asks.
 func (in SearchInput) query() search.Query {
 	q := search.Query{Term: in.Term, Kinds: in.Kinds, Fields: in.Fields, Direct: in.Direct, Mode: searchModes[in.Mode]}
@@ -136,6 +162,9 @@ func Search(ctx context.Context, env Env, in SearchInput) (Envelope[SearchInput,
 	ts, holes, err := Targets(ctx, env, in.Selection)
 	if err != nil {
 		return none, err
+	}
+	if u := in.checkKinds(ts); u != nil {
+		return none, u
 	}
 	users, err := env.users()
 	if err != nil {

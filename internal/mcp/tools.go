@@ -58,7 +58,7 @@ type natArgs struct {
 
 type searchArgs struct {
 	Value  string   `json:"value" jsonschema:"the value or name to search for: an address, a prefix, a port or a name"`
-	Kind   string   `json:"kind,omitempty" jsonschema:"an object kind to search; left out, every kind"`
+	Kind   string   `json:"kind,omitempty" jsonschema:"an object kind to search, such as address or service; left out, every kind"`
 	Device []string `json:"device,omitempty" jsonschema:"the devices to search; left out, every device"`
 	Label  []string `json:"label,omitempty" jsonschema:"select devices by label, key=value"`
 	Vsys   string   `json:"vsys,omitempty" jsonschema:"the vsys to search; left out, every vsys"`

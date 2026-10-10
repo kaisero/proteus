@@ -298,6 +298,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`search` now refuses a kind it does not know.** `--kind adress` (or `kind` in the
+  MCP tool) exits 2 and lists the kinds the configuration can hold. Before, a
+  misspelt kind found nothing, which read like an answer.
 - **`simulate policy --file` now checks the first address of a host name.** It
   matched every address the name resolved to, so a rule for the second address
   could answer, unlike path mode. A note now names the other addresses.

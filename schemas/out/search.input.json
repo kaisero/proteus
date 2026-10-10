@@ -7,7 +7,7 @@
     },
     "kind": {
       "type": "string",
-      "description": "an object kind to search; left out, every kind"
+      "description": "an object kind to search, such as address or service; left out, every kind"
     },
     "device": {
       "type": [

@@ -3,6 +3,7 @@ package query
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 
@@ -91,6 +92,31 @@ func TestSearchInputRules(t *testing.T) {
 	} {
 		_, err := Search(context.Background(), Env{}, tc.in)
 		usageOK(t, err, tc.want)
+	}
+}
+
+// An unknown kind is one usage error before any target runs, with the kinds the
+// configurations know, sorted; a kind any selected configuration knows passes.
+func TestSearchRefusesAnUnknownKind(t *testing.T) {
+	t.Parallel()
+	file := Selection{File: fixture("firewall-lab.xml")}
+	_, err := Search(context.Background(), Env{}, SearchInput{Term: "web", Kinds: []string{"addr"}, Selection: file})
+	usageOK(t, err, `--kind "addr": want one of `)
+	u, _ := errors.AsType[*UsageError](err)
+	list := strings.TrimPrefix(u.Text, `--kind "addr": want one of `)
+	kinds := strings.Split(list, ", ")
+	if !slices.IsSorted(kinds) || !slices.Contains(kinds, "address") || !slices.Contains(kinds, "service") {
+		t.Errorf("kinds %q", list)
+	}
+	if u.ToolText != `kind "addr": want one of `+list {
+		t.Errorf("tool text %q", u.ToolText)
+	}
+	// The store has two targets on fw01 and a hole on fw02: still one error.
+	_, err = Search(context.Background(), labStore(t), SearchInput{Term: "web", Kinds: []string{"address", "addr"}})
+	usageOK(t, err, `--kind "addr"`)
+	e, err := Search(context.Background(), labStore(t), SearchInput{Term: "198.18.10.100", Kinds: []string{"address"}})
+	if err != nil || len(e.Results) == 0 {
+		t.Fatalf("a known kind: %v %+v", err, e.Summary)
 	}
 }
 
