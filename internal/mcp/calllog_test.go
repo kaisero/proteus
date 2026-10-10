@@ -159,3 +159,65 @@ func TestABusyCallHasNoRunLog(t *testing.T) {
 		t.Errorf("run logs %v", entries)
 	}
 }
+
+// A call that timed out keeps its run log open for its work: the caller's
+// lines come first, then what the work logged late, that it returned, and a
+// late panic's stack. The log is closed when the work frees the slot.
+func TestALateCallKeepsItsRunLog(t *testing.T) {
+	t.Parallel()
+	req := &sdk.CallToolRequest{Params: &sdk.CallToolParamsRaw{Name: "search", Arguments: json.RawMessage(`{"value":"x"}`)}}
+	for _, tc := range []struct {
+		name  string
+		panic bool
+		want  []string
+	}{
+		{"returns", false, []string{"status timeout call.timeout", "late line", "work returned after"}},
+		{"panics", true, []string{"status timeout call.timeout", "late line", "work returned after", "panic: late bug", "goroutine"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			dir, rec := t.TempDir(), &recorder{}
+			m := middleware{
+				audit: rec, now: time.Now, logs: &runlog.Options{Dir: dir, Keep: 10, Level: runlog.Info},
+				lim: newLimiter(1, 0, time.Millisecond, 30*time.Millisecond),
+			}
+			release := make(chan struct{})
+			slow := func(ctx context.Context, _ string, _ sdk.Request) (sdk.Result, error) {
+				<-ctx.Done()
+				<-release
+				logOf(ctx).Infof(runlog.TagRun, "late line")
+				if tc.panic {
+					panic("late bug")
+				}
+				callOf(ctx).set(func(c *Call) { c.Status = StatusOK })
+				return &sdk.CallToolResult{}, nil
+			}
+			res, err := m.receive(slow)(context.Background(), "tools/call", req)
+			if r, _ := res.(*sdk.CallToolResult); err != nil || r == nil || !strings.HasPrefix(text(r), "call.timeout") {
+				t.Fatalf("%v %+v", err, res)
+			}
+			if c := rec.last(t); c.Status != StatusTimeout {
+				t.Errorf("audit %+v", c)
+			}
+			close(release)
+			// The work closes the log before it frees the slot.
+			eventually(t, "the slot is free", func() bool { return len(m.lim.slots) == 0 })
+			entries, err := os.ReadDir(dir)
+			if err != nil || len(entries) != 1 {
+				t.Fatalf("run logs %v, %v", entries, err)
+			}
+			b, err := os.ReadFile(filepath.Join(dir, entries[0].Name()))
+			if err != nil {
+				t.Fatal(err)
+			}
+			rest := string(b)
+			for _, w := range tc.want {
+				_, after, ok := strings.Cut(rest, w)
+				if !ok {
+					t.Fatalf("no %q in order in:\n%s", w, b)
+				}
+				rest = after
+			}
+		})
+	}
+}

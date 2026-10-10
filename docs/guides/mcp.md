@@ -299,8 +299,11 @@ never reaches the audit or a log.
 **Run logs.** A call that ends `internal` or `timeout` writes its own run log in
 `log_dir`, named `mcp-<tool>-<time>-<seq>.log`. It holds the input, the snapshot
 each device resolved to, what each stage kept, and at the end the status, the code
-and the duration. A panic's stack goes there too. Any other call keeps its log in
-memory and drops it: its answer explains itself in its reasons and codes. With
+and the duration. A panic's stack goes there too. The work of a call that timed
+out goes on until it returns; its log stays open for it and then also holds what
+the work logged late, when it returned, and the stack of a later panic. Any other
+call keeps its log in memory and drops it: its answer explains itself in its
+reasons and codes. With
 `--log-level debug` (or `log_level: debug`) every call writes its run log. The
 newest `log_keep` logs stay. The server process also writes one CLI run log in the
 CLI's log directory, with its start, settings, the refusal counts and its exit. A

@@ -304,6 +304,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The run log of an MCP call that timed out now keeps what came late.** It
+  records what the work did after the timeout, when it returned, and the stack
+  of a panic. Before, the log closed at the timeout, so a later panic was lost.
 - **A broad MCP answer now writes a short audit line.** The `verdict` keeps the
   summary line and the first 20 result lines, and `verdict_count` holds the full
   count. Before, a search with thousands of findings wrote all of them into one

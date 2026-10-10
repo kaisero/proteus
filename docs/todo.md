@@ -63,7 +63,7 @@ Every item names its **component** (the package or area it changes) and one **ta
 | 44 | qa | mcp | Generate the `proteus://limits` resource from `docs/limits.md` |
 | 45 | qa | mcp | The caller's address behind a trusted proxy |
 | 46 | test | mcp | Run the model check through Portkey |
-| 47 | qa | mcp | Keep the stack of a panic after a timeout |
+| 47 | done | mcp | ~~Keep the stack of a panic after a timeout~~ (the call's run log keeps the late work) |
 | 48 | perf | mcp, query, search, drift | Let the timeout stop a load, a search and a diff |
 | 49 | perf | mcp, search | Cache the zone document for `search` |
 | 50 | feature | mcp | Ask the user for needs and choices with elicitation |
@@ -437,9 +437,10 @@ Source for each, unless it says otherwise: spec `docs/specs/2026-10-09-mcp-serve
 
 ### 47. Keep the stack of a panic after a timeout
 
-- **Tag:** qa · **Component:** mcp · **Source:** implementation of the MCP server
-- When a call's work panics after the call timed out, the late record is discarded
-  and the call log is closed, so the stack is lost. Write it to the server's log.
+- **Tag:** done · **Component:** mcp · **Source:** implementation of the MCP server
+- Done: a call that times out leaves its run log to its work. When the work
+  returns, the log gets what the work logged late, the time it returned and the
+  stack of a panic, and then closes.
 
 ### 48. Let the timeout stop a load, a search and a diff
 
