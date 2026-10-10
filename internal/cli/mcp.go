@@ -51,7 +51,9 @@ itself; there is no flag for it.`,
 	f.String("listen", "", "host:port for --http (default 127.0.0.1:8765)")
 	f.String("token-file", "", "the file that holds the bearer token")
 	f.StringSlice("allowed-host", nil, "a Host header value --http answers (repeatable; none accepts any Host)")
-	f.String("audit-log", "", "the audit file, one JSON line per call (required with --http)")
+	f.String("audit-log", "", "the audit file, one JSON line per call, or - for standard output with --http (required with --http)")
+	f.Int("audit-max-mb", 0, "the audit file's size in MB before it rotates (default 100)")
+	f.Int("audit-keep", 0, "rotated audit files kept (default 10)")
 	f.Int("max-concurrent", 0, "calls answered at once (default 4)")
 	f.Int("max-queue", 0, "calls waiting for a slot (default 16)")
 	f.String("max-wait", "", "how long a call waits for a slot (default 10s)")
@@ -126,6 +128,8 @@ var mcpKeys = []mcpKey{
 	text("identity_header", "", func(m *inventory.MCP) *string { return &m.IdentityHeader }),
 	list("audit_claims", "", func(m *inventory.MCP) *[]string { return &m.AuditClaims }),
 	text("audit_log", "audit-log", func(m *inventory.MCP) *string { return &m.AuditLog }),
+	number("audit_max_mb", "audit-max-mb", func(m *inventory.MCP) *int { return &m.AuditMaxMB }),
+	number("audit_keep", "audit-keep", func(m *inventory.MCP) *int { return &m.AuditKeep }),
 	text("log_dir", "", func(m *inventory.MCP) *string { return &m.LogDir }),
 	number("log_keep", "", func(m *inventory.MCP) *int { return &m.LogKeep }),
 	number("max_concurrent", "max-concurrent", func(m *inventory.MCP) *int { return &m.MaxConcurrent }),
@@ -143,6 +147,7 @@ func mcpDefaults(logDir string) inventory.MCP {
 	l := mcp.DefaultLimits
 	return inventory.MCP{
 		Listen: "127.0.0.1:8765", IdentityHeader: "X-User-Claims", AuditClaims: []string{"sub"},
+		AuditMaxMB: mcp.DefaultAuditMaxMB, AuditKeep: mcp.DefaultAuditKeep,
 		LogDir: filepath.Join(logDir, "mcp"), LogKeep: 200,
 		MaxConcurrent: l.MaxConcurrent, MaxQueue: l.MaxQueue, MaxWait: l.MaxWait.String(),
 		CallTimeout: l.CallTimeout.String(), MaxLoads: l.MaxLoads, MaxCache: l.MaxCacheMB,
@@ -248,6 +253,11 @@ func (a *app) runMCP(c *cobra.Command, useHTTP bool) error {
 	if err != nil {
 		return err
 	}
+	// Over stdio, standard output carries MCP: audit lines there would break
+	// the protocol.
+	if m.AuditLog == "-" && !useHTTP {
+		return usageErr("audit_log - writes to standard output, which carries MCP over stdio: give a file, or use --http")
+	}
 	// Only --http reads the token: a token_file the export names must not
 	// stop a stdio server, which needs none.
 	var token string
@@ -292,7 +302,7 @@ func (a *app) runMCP(c *cobra.Command, useHTTP bool) error {
 		Logs:   &runlog.Options{Dir: m.LogDir, Keep: m.LogKeep, Level: a.logLevel, Now: a.now},
 	}
 	if m.AuditLog != "" {
-		audit, err := mcp.OpenAudit(m.AuditLog)
+		audit, err := a.openAudit(m)
 		if err != nil {
 			return err
 		}
@@ -318,6 +328,16 @@ func (a *app) runMCP(c *cobra.Command, useHTTP bool) error {
 	a.log.Infof(runlog.TagRun, "mcp: serving http://%s, %s", ln.Addr(), check)
 	fmt.Fprintf(a.stderr, "proteus mcp: serving http://%s (%s)\n", ln.Addr(), check)
 	return mcp.ServeHTTP(ctx, o, mcp.HTTPOptions{Token: token, AllowedHosts: m.AllowedHosts}, ln)
+}
+
+// openAudit opens the audit of m: standard output for -, else the file,
+// rotated by audit_max_mb and audit_keep. With --http nothing else writes to
+// standard output: the start line goes to standard error.
+func (a *app) openAudit(m inventory.MCP) (*mcp.AuditLog, error) {
+	if m.AuditLog == "-" {
+		return mcp.AuditTo(a.stdout), nil
+	}
+	return mcp.OpenAudit(m.AuditLog, mcp.Rotation{MaxBytes: int64(m.AuditMaxMB) << 20, Keep: m.AuditKeep, Now: a.now})
 }
 
 // quiet is a stdio server's end: the client closing its input is a normal

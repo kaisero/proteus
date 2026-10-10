@@ -66,7 +66,8 @@ or the audit is not reliable.
 
 - proteus does no authorisation. Portkey decides which users and workspaces can
   use the server.
-- The audit file holds addresses and identities. Treat it as sensitive.
+- The audit lines hold addresses and identities. Treat the container's log, or
+  the audit file, as sensitive.
 - Behind the proxy, the audit `remote` of a refused request is the proxy's
   address, so the limit of 10 refusal lines per address counts every client as
   one. proteus does not read `X-Forwarded-For`, and it must not trust it.
@@ -94,6 +95,6 @@ curl -s -o /dev/null -w '%{http_code}\n' https://proteus.example.org/healthz    
 curl -s -o /dev/null -w '%{http_code}\n' -X POST https://proteus.example.org/mcp  # 401
 ```
 
-Then call a tool from a Portkey client. The audit line in the `mcp-logs` volume
-(`/var/log/proteus/mcp-audit.jsonl`) shows `"identity_source":"header"` and the
-user's `sub`.
+Then call a tool from a Portkey client. The audit line in the container's log
+(`docker compose logs proteus-mcp`; the sample sets `audit_log: -`) shows
+`"identity_source":"header"` and the user's `sub`.

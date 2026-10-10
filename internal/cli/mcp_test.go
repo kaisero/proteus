@@ -239,17 +239,17 @@ func TestMCPSettingPrecedence(t *testing.T) {
 	}, time.Now)
 	a.logDir = "/state/proteus/log" // the root hook resolves it
 	cmd := a.mcpCmd()
-	if err := cmd.ParseFlags([]string{"--max-wait", "4s", "--allowed-host", "a.example.org", "--allowed-host", "b.example.org"}); err != nil {
+	if err := cmd.ParseFlags([]string{"--max-wait", "4s", "--allowed-host", "a.example.org", "--allowed-host", "b.example.org", "--audit-keep", "4"}); err != nil {
 		t.Fatal(err)
 	}
-	file := &inventory.MCP{MaxQueue: 5, MaxConcurrent: 3, MaxWait: "2s", IdentityHeader: "X-User-Claims", LogKeep: 9}
+	file := &inventory.MCP{MaxQueue: 5, MaxConcurrent: 3, MaxWait: "2s", IdentityHeader: "X-User-Claims", LogKeep: 9, AuditKeep: 3}
 	m, err := a.mcpSettings(cmd, file)
 	if err != nil {
 		t.Fatal(err)
 	}
 	want := inventory.MCP{
 		Listen: "127.0.0.1:8765", AllowedHosts: []string{"a.example.org", "b.example.org"}, IdentityHeader: "X-User-Claims",
-		AuditClaims: []string{"sub", "email"}, LogDir: "/state/proteus/log/mcp", LogKeep: 9,
+		AuditClaims: []string{"sub", "email"}, AuditMaxMB: 100, AuditKeep: 4, LogDir: "/state/proteus/log/mcp", LogKeep: 9,
 		MaxConcurrent: 3, MaxQueue: 7, MaxWait: "4s", CallTimeout: "1m0s", MaxLoads: 2, MaxCache: 2048,
 	}
 	if b, w := mustJSON(t, m), mustJSON(t, want); b != w {
@@ -522,6 +522,43 @@ func freePort(t *testing.T) string {
 	}
 	defer ln.Close()
 	return ln.Addr().String()
+}
+
+// audit_log - writes the audit lines to standard output with --http, and
+// nothing else goes there; over stdio, where standard output carries MCP,
+// it does not start (spec 2026-10-10 F3).
+func TestMCPAuditToStandardOutput(t *testing.T) {
+	t.Parallel()
+	c := mcpLab(t, "  audit_log: '-'\n")
+	var errOut bytes.Buffer
+	if code := c.serveMCP(context.Background(), strings.NewReader(""), io.Discard, &errOut); code != 2 ||
+		!strings.Contains(errOut.String(), "standard output") {
+		t.Errorf("stdio: exit %d\n%s", code, errOut.String())
+	}
+	c.env["PROTEUS_MCP_TOKEN"] = mcpTokenValue
+	c.env["PROTEUS_MCP_LISTEN"] = freePort(t)
+	out := &syncBuffer{}
+	ctx, cancel := context.WithCancelCause(context.Background())
+	url, _, done := c.startHTTP(ctx, t, out, "--http")
+	req, _ := http.NewRequest(http.MethodPost, url, strings.NewReader(
+		`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"search","arguments":{"value":"198.18.10.100"}}}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
+	req.Header.Set("Authorization", "Bearer "+mcpTokenValue)
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = io.Copy(io.Discard, res.Body)
+	_ = res.Body.Close()
+	cancel(signalCause{syscall.SIGTERM})
+	if code := <-done; code != 143 {
+		t.Errorf("exit %d", code)
+	}
+	lines := strings.Split(strings.TrimSuffix(out.String(), "\n"), "\n")
+	if len(lines) != 1 || !strings.Contains(lines[0], `"tool":"search"`) || !strings.Contains(lines[0], `"status":"ok"`) {
+		t.Errorf("standard output:\n%s", out.String())
+	}
 }
 
 // An audit file that cannot open stops the start.

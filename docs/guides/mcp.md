@@ -233,7 +233,9 @@ its variable and its flag, and for the token rules.
 | `allowed_hosts` | none | the Host values that `--http` accepts; none accepts every Host. Recommended when the proxy forwards a fixed host name |
 | `identity_header` | `X-User-Claims` | the header with the caller's claims, a JSON object |
 | `audit_claims` | `[sub]` | the claims that each audit line records |
-| `audit_log` | none | the audit file; required for `--http` |
+| `audit_log` | none | the audit file, or `-` for standard output (`--http` only); required for `--http` |
+| `audit_max_mb` | `100` | the audit file's size in MB before it rotates |
+| `audit_keep` | `10` | the rotated audit files kept |
 | `log_dir` | `mcp` under the CLI's log directory | the run logs of the calls |
 | `log_keep` | `200` | the call logs kept |
 | `max_concurrent` | `4` | calls answered at once |
@@ -250,7 +252,10 @@ devices.
 ## Audit and run logs
 
 **The audit.** The server appends one JSON line per call to `audit_log`, mode
-0600:
+0600. Before a line would take the file past `audit_max_mb`, the server renames it
+to `<audit_log>.<UTC time>` and starts a new file; it keeps the newest `audit_keep`
+renamed files. With `audit_log: -` the lines go to standard output, and the
+container platform collects and keeps them (`--http` only):
 
 ```json
 {"time":"2026-10-10T08:00:00Z","auth":"token","identity_source":"header","identity":{"sub":"alice"},"tool":"simulate_policy","input":{"source":"198.18.1.10","destination":"198.18.10.100","port":443},"verdict":["allowed"],"codes":[],"snapshots":["fw01@2026-10-10T07-00-00Z","fw02@2026-10-10T07-00-00Z"],"duration_ms":120,"status":"ok"}

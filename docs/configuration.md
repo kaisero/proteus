@@ -89,7 +89,9 @@ mcp:
   allowed_hosts: [proteus.example.org]   # optional: Host header values --http accepts
   identity_header: X-User-Claims         # the header with the caller's claims
   audit_claims: [sub]                    # the claims each audit line records
-  audit_log: /var/log/proteus/mcp-audit.jsonl
+  audit_log: /var/log/proteus/mcp-audit.jsonl   # or - for standard output (--http only)
+  audit_max_mb: 100                      # the audit file's size before it rotates
+  audit_keep: 10                         # rotated audit files kept
   log_dir: ~/.local/state/proteus/log/mcp  # run logs of the calls: mcp under the CLI's log directory
   log_keep: 200
   max_concurrent: 4                      # calls answered at once
@@ -131,6 +133,8 @@ with credentials, and not the export's `store` or `log_dir`.
 | `identity_header` | `PROTEUS_MCP_IDENTITY_HEADER` | |
 | `audit_claims` | `PROTEUS_MCP_AUDIT_CLAIMS` (comma-separated) | |
 | `audit_log` | `PROTEUS_MCP_AUDIT_LOG` | `--audit-log` |
+| `audit_max_mb` | `PROTEUS_MCP_AUDIT_MAX_MB` | `--audit-max-mb` |
+| `audit_keep` | `PROTEUS_MCP_AUDIT_KEEP` | `--audit-keep` |
 | `log_dir` | `PROTEUS_MCP_LOG_DIR` | |
 | `log_keep` | `PROTEUS_MCP_LOG_KEEP` | |
 | `max_concurrent` | `PROTEUS_MCP_MAX_CONCURRENT` | `--max-concurrent` |
@@ -153,7 +157,14 @@ the claims of `identity_header` (`auth: token`, `identity_source: header`), or t
 identity `unknown` when the header is missing or is not a JSON object
 (`identity_source: none`). A JSON object with none of the `audit_claims` gives the
 identity `unknown` with `identity_source: header`. proteus makes an existing audit
-file mode 0600. The [MCP guide](guides/mcp.md#audit-and-run-logs) lists the fields
+file mode 0600.
+
+Before a line would take the audit file past `audit_max_mb`, proteus renames the
+file to `<audit_log>.<UTC time>` and starts a new one, mode 0600. It keeps the
+newest `audit_keep` renamed files and removes the older ones. `audit_log: -` writes
+the lines to standard output instead, for a container platform that collects and
+keeps them; nothing else goes to standard output with `--http`. Over stdio,
+standard output carries MCP, so the server refuses `-` (exit 2). The [MCP guide](guides/mcp.md#audit-and-run-logs) lists the fields
 of an audit line.
 
 The `--max-age`, `--log-level` and `--store` settings apply to the server too;

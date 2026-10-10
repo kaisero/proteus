@@ -33,6 +33,8 @@ mcp:
   identity_header: X-User-Claims
   audit_claims: [sub]
   audit_log: /var/log/proteus/mcp-audit.jsonl
+  audit_max_mb: 50
+  audit_keep: 5
   log_dir: /var/log/proteus/mcp
   log_keep: 200
   max_concurrent: 4
@@ -53,12 +55,12 @@ func TestParseReadsTheMCPSection(t *testing.T) {
 	want := MCP{
 		Listen: "127.0.0.1:8765", TokenFile: "/run/secrets/proteus-mcp-token", AllowedHosts: []string{"proteus.example.org"},
 		IdentityHeader: "X-User-Claims", AuditClaims: []string{"sub"}, AuditLog: "/var/log/proteus/mcp-audit.jsonl",
-		LogDir: "/var/log/proteus/mcp", LogKeep: 200, MaxConcurrent: 4, MaxQueue: 16, MaxWait: "10s",
+		AuditMaxMB: 50, AuditKeep: 5, LogDir: "/var/log/proteus/mcp", LogKeep: 200, MaxConcurrent: 4, MaxQueue: 16, MaxWait: "10s",
 		CallTimeout: "60s", MaxLoads: 2, MaxCache: 2048,
 	}
 	if m := inv.MCP; m == nil || m.Listen != want.Listen || m.TokenFile != want.TokenFile ||
 		!slices.Equal(m.AllowedHosts, want.AllowedHosts) || m.IdentityHeader != want.IdentityHeader ||
-		!slices.Equal(m.AuditClaims, want.AuditClaims) || m.AuditLog != want.AuditLog || m.LogDir != want.LogDir ||
+		!slices.Equal(m.AuditClaims, want.AuditClaims) || m.AuditLog != want.AuditLog || m.AuditMaxMB != want.AuditMaxMB || m.AuditKeep != want.AuditKeep || m.LogDir != want.LogDir ||
 		m.LogKeep != want.LogKeep || m.MaxConcurrent != want.MaxConcurrent || m.MaxQueue != want.MaxQueue ||
 		m.MaxWait != want.MaxWait || m.CallTimeout != want.CallTimeout || m.MaxLoads != want.MaxLoads || m.MaxCache != want.MaxCache {
 		t.Errorf("mcp = %+v", inv.MCP)
@@ -77,6 +79,8 @@ func TestParseRejectsABadMCPSection(t *testing.T) {
 		{"unknown key", "token: abc"},
 		{"negative", "max_queue: -1"},
 		{"negative cache", "max_cache: -5"},
+		{"negative audit size", "audit_max_mb: -1"},
+		{"negative audit keep", "audit_keep: -1"},
 		{"bad wait", "max_wait: soon"},
 		{"zero timeout", "call_timeout: 0s"},
 		{"no port", "listen: 127.0.0.1"},

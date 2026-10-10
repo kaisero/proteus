@@ -644,7 +644,7 @@ func TestTheAuditLog(t *testing.T) {
 	if err := os.Chmod(path, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	a, err := OpenAudit(path)
+	a, err := OpenAudit(path, Rotation{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -701,7 +701,7 @@ func TestTheAuditLog(t *testing.T) {
 	}
 	a.OnError = nil
 	a.Audit(Call{}) // dropped without a handler
-	if _, err := OpenAudit(filepath.Join(t.TempDir(), "no", "such", "dir", "audit.jsonl")); err == nil {
+	if _, err := OpenAudit(filepath.Join(t.TempDir(), "no", "such", "dir", "audit.jsonl"), Rotation{}); err == nil {
 		t.Error("opened an audit file in a missing directory")
 	}
 }

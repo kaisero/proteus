@@ -1,10 +1,17 @@
 package mcp
 
 import (
+	"cmp"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
+	"io/fs"
 	"net/http"
 	"os"
+	"path/filepath"
+	"slices"
+	"strings"
 	"sync"
 	"time"
 	"unicode/utf8"
@@ -97,28 +104,89 @@ func cut(s string, n int) string {
 	return s[:n]
 }
 
-// AuditLog writes each call as one JSON line to a file opened append-only,
-// mode 0600 (spec §4.9). The file holds addresses and identities: treat it
-// as sensitive. It is safe for concurrent use.
+// AuditLog writes each call as one JSON line (spec §4.9): to a file opened
+// append-only, mode 0600, which it rotates by size and count (spec 2026-10-10
+// F3), or to a stream such as standard output, which the container platform
+// collects. The file holds addresses and identities: treat it as sensitive.
+// It is safe for concurrent use. One process writes a file: two servers that
+// share one would each rotate it.
 type AuditLog struct {
+	// mu covers every write and rotation, so a line is never split across
+	// two files, nor two lines interleaved.
 	mu sync.Mutex
-	f  *os.File
-	// OnError receives a line that could not be written; nil drops it.
+	w  io.Writer // the file, or the stream
+	// The file's state; f is nil for a stream, and after a rotation whose
+	// new file did not open (the next line tries again).
+	f      *os.File
+	path   string
+	size   int64 // bytes in f
+	rot    Rotation
+	closed bool
+	// openFile opens the file; nil is os.OpenFile. A test makes it fail.
+	openFile func(string, int, os.FileMode) (*os.File, error)
+	// OnError receives a line that could not be written, or a rotation that
+	// failed; nil drops it.
 	OnError func(error)
 }
 
+// Rotation bounds the audit file: before a line would take it past MaxBytes,
+// it is renamed to <name>.<UTC time> and a new file starts; the newest Keep
+// renamed files stay. A zero field takes its default.
+type Rotation struct {
+	MaxBytes int64
+	Keep     int
+	// Now names the renamed files; nil uses time.Now.
+	Now func() time.Time
+}
+
+// The defaults of audit_max_mb and audit_keep (spec 2026-10-10 F3).
+const (
+	DefaultAuditMaxMB = 100
+	DefaultAuditKeep  = 10
+)
+
+// rotatedLayout is a renamed file's suffix: UTC, sortable as text.
+const rotatedLayout = "2006-01-02T15-04-05.000000000Z"
+
 // OpenAudit opens the audit file at path for appending, creating it with
-// mode 0600. An existing file others could read is made 0600 too.
-func OpenAudit(path string) (*AuditLog, error) {
-	f, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o600)
+// mode 0600, rotated as r says. An existing file others could read is made
+// 0600 too.
+func OpenAudit(path string, r Rotation) (*AuditLog, error) {
+	r.MaxBytes = cmp.Or(r.MaxBytes, DefaultAuditMaxMB<<20)
+	r.Keep = cmp.Or(r.Keep, DefaultAuditKeep)
+	if r.Now == nil {
+		r.Now = time.Now
+	}
+	a := &AuditLog{path: path, rot: r}
+	if err := a.open(); err != nil {
+		return nil, fmt.Errorf("audit log: %w", err)
+	}
+	return a, nil
+}
+
+// AuditTo writes the audit lines to w, unrotated. Close does not close w.
+func AuditTo(w io.Writer) *AuditLog { return &AuditLog{w: w} }
+
+// open opens the file at a.path for appending, mode 0600, and takes its size.
+func (a *AuditLog) open() error {
+	open := a.openFile
+	if open == nil {
+		open = os.OpenFile
+	}
+	f, err := open(a.path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o600)
 	if err != nil {
-		return nil, fmt.Errorf("audit log: %w", err)
+		return err
 	}
-	if err := f.Chmod(0o600); err != nil {
+	fi, err := f.Stat()
+	if err == nil {
+		err = f.Chmod(0o600)
+	}
+	if err != nil {
 		_ = f.Close()
-		return nil, fmt.Errorf("audit log: %w", err)
+		return err
 	}
-	return &AuditLog{f: f}, nil
+	a.f, a.w, a.size = f, f, fi.Size()
+	return nil
 }
 
 // auditLine is one line of the audit file (spec §4.9).
@@ -168,23 +236,122 @@ func lineOf(c Call) auditLine {
 	return l
 }
 
-// Audit writes c as one line. One write per line keeps lines whole between
-// writers that share the file.
+// Audit writes c as one line. One write per line, under the lock that also
+// covers the rotation, keeps lines whole between the calls that share the
+// log.
 func (a *AuditLog) Audit(c Call) {
 	b, err := json.Marshal(lineOf(c))
-	if err == nil {
-		a.mu.Lock()
-		_, err = a.f.Write(append(b, '\n'))
-		a.mu.Unlock()
+	if err != nil {
+		a.fail(err)
+		return
 	}
-	if err != nil && a.OnError != nil {
+	b = append(b, '\n')
+	a.mu.Lock()
+	err = a.write(b)
+	a.mu.Unlock()
+	if err != nil {
+		a.fail(err)
+	}
+}
+
+// fail hands err to OnError, if set.
+func (a *AuditLog) fail(err error) {
+	if a.OnError != nil {
 		a.OnError(fmt.Errorf("audit log: %w", err))
 	}
 }
 
-// Close closes the file.
+// write writes line, rotating the file first when the line would take it
+// past its limit. A failed rotation keeps writing to the file it has; a file
+// that did not open loses the line. It returns what failed, one error per
+// line; a.mu is held.
+func (a *AuditLog) write(line []byte) error {
+	var rotated error
+	switch {
+	case a.path == "" || a.closed:
+	case a.f == nil:
+		// The new file did not open at a rotation: try again.
+		if err := a.open(); err != nil {
+			return err
+		}
+	case a.size > 0 && a.size+int64(len(line)) > a.rot.MaxBytes:
+		// A line longer than the limit still goes to a new file whole.
+		rotated = a.rotate()
+	}
+	if a.w == nil {
+		return cmp.Or(rotated, os.ErrClosed)
+	}
+	n, err := a.w.Write(line)
+	a.size += int64(n)
+	return errors.Join(rotated, err)
+}
+
+// rotate renames the file to <name>.<UTC time>, opens a new one, and removes
+// the oldest renamed files past Keep. When the rename fails the file stays
+// as it is. a.mu is held.
+func (a *AuditLog) rotate() error {
+	to := a.rotatedName()
+	f := a.f
+	a.f, a.w = nil, nil
+	closed := f.Close()
+	renamed := os.Rename(a.path, to)
+	// Open the file at a.path again: a new one after the rename, or the same
+	// one when the rename failed. When this fails the next line tries again.
+	if err := a.open(); err != nil {
+		return errors.Join(closed, renamed, err)
+	}
+	if renamed != nil {
+		return errors.Join(closed, renamed)
+	}
+	return errors.Join(closed, a.prune())
+}
+
+// rotatedName is a free name for the file rotated now: <name>.<UTC time>.
+// Two rotations in one clock tick get names a nanosecond apart, still in
+// order.
+func (a *AuditLog) rotatedName() string {
+	t := a.rot.Now().UTC()
+	for {
+		name := a.path + "." + t.Format(rotatedLayout)
+		if _, err := os.Lstat(name); errors.Is(err, fs.ErrNotExist) {
+			return name
+		}
+		t = t.Add(time.Nanosecond)
+	}
+}
+
+// prune removes the oldest rotated files past Keep. Only names of the form
+// <name>.<UTC time> count: other files beside the audit stay.
+func (a *AuditLog) prune() error {
+	dir, base := filepath.Split(a.path)
+	entries, err := os.ReadDir(cmp.Or(dir, "."))
+	if err != nil {
+		return err
+	}
+	var rotated []string
+	for _, e := range entries {
+		stamp, ok := strings.CutPrefix(e.Name(), base+".")
+		if _, perr := time.Parse(rotatedLayout, stamp); ok && perr == nil && e.Type().IsRegular() {
+			rotated = append(rotated, e.Name())
+		}
+	}
+	slices.Sort(rotated) // the time in each name sorts as text
+	var errs []error
+	for _, name := range rotated[:max(0, len(rotated)-a.rot.Keep)] {
+		errs = append(errs, os.Remove(filepath.Join(dir, name)))
+	}
+	return errors.Join(errs...)
+}
+
+// Close closes the file; a stream stays open. A line after Close fails.
 func (a *AuditLog) Close() error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	return a.f.Close()
+	a.closed = true
+	f := a.f
+	a.f, a.w = nil, nil
+	if f == nil {
+		return nil
+	}
+	return f.Close()
 }

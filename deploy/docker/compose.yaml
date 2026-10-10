@@ -72,7 +72,11 @@ services:
       PROTEUS_MCP_ALLOWED_HOSTS: proteus.example.org
       PROTEUS_MCP_IDENTITY_HEADER: X-User-Claims
       PROTEUS_MCP_AUDIT_CLAIMS: sub
-      PROTEUS_MCP_AUDIT_LOG: /var/log/proteus/mcp-audit.jsonl
+      # The audit lines go to standard output: the container platform's log
+      # collects and keeps them. For a file instead, name it on the mcp-logs
+      # volume; it rotates at PROTEUS_MCP_AUDIT_MAX_MB (100) and keeps
+      # PROTEUS_MCP_AUDIT_KEEP (10) old files.
+      PROTEUS_MCP_AUDIT_LOG: "-"
       PROTEUS_MCP_LOG_DIR: /var/log/proteus/mcp
     secrets:
       - proteus-mcp-token
@@ -111,7 +115,7 @@ secrets:
 volumes:
   store:
   fetch-logs:
-  mcp-logs:                           # the audit file and the call logs: sensitive
+  mcp-logs:                           # the call logs: sensitive
   caddy-data:
   caddy-config:
 

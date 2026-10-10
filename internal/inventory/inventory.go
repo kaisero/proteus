@@ -55,7 +55,9 @@ type MCP struct {
 	AllowedHosts   []string `yaml:"allowed_hosts,omitempty"`   // Host header values --http accepts
 	IdentityHeader string   `yaml:"identity_header,omitempty"` // the header with the caller's claims
 	AuditClaims    []string `yaml:"audit_claims,omitempty"`    // the claims the audit line records
-	AuditLog       string   `yaml:"audit_log,omitempty"`       // the audit file, one JSON line per call
+	AuditLog       string   `yaml:"audit_log,omitempty"`       // the audit file, one JSON line per call; - for standard output
+	AuditMaxMB     int      `yaml:"audit_max_mb,omitempty"`    // the audit file's size before it rotates, in MB
+	AuditKeep      int      `yaml:"audit_keep,omitempty"`      // rotated audit files kept
 	LogDir         string   `yaml:"log_dir,omitempty"`         // run logs of the calls, apart from the CLI's
 	LogKeep        int      `yaml:"log_keep,omitempty"`        // run logs kept
 	MaxConcurrent  int      `yaml:"max_concurrent,omitempty"`  // calls answered at once
@@ -201,6 +203,8 @@ func (m *MCP) Validate() error {
 		key string
 		v   int
 	}{
+		{"audit_max_mb", m.AuditMaxMB},
+		{"audit_keep", m.AuditKeep},
 		{"log_keep", m.LogKeep},
 		{"max_concurrent", m.MaxConcurrent},
 		{"max_queue", m.MaxQueue},
