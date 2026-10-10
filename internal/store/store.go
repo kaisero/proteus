@@ -119,8 +119,16 @@ func (s *Store) Write(meta Meta, docs map[string][]byte, keep int) (Snapshot, er
 	if _, err := os.Stat(final); err == nil {
 		return Snapshot{}, fmt.Errorf("store: snapshot %s@%s already exists", meta.Device, id)
 	}
+	if err := os.MkdirAll(devDir, 0o700); err != nil {
+		return Snapshot{}, fmt.Errorf("store: %w", err)
+	}
+	// Mkdir, not MkdirAll: a second writer of the same id fails here at once, and
+	// only the writer that created the temporary directory removes it.
 	tmp := filepath.Join(devDir, "."+id+".partial")
-	if err := os.MkdirAll(tmp, 0o700); err != nil {
+	if err := os.Mkdir(tmp, 0o700); err != nil {
+		if errors.Is(err, fs.ErrExist) {
+			return Snapshot{}, fmt.Errorf("store: snapshot %s@%s is being written by another fetch", meta.Device, id)
+		}
 		return Snapshot{}, fmt.Errorf("store: %w", err)
 	}
 	defer func() { _ = os.RemoveAll(tmp) }()

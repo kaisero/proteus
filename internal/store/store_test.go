@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -238,6 +239,86 @@ func TestWriteRefusesADuplicateID(t *testing.T) {
 	}
 	if _, err := s.Write(Meta{Device: "fw01"}, docs(t, false), 20); err == nil {
 		t.Error("two snapshots in one second must not overwrite each other")
+	}
+}
+
+// A second writer of an id whose temporary directory exists fails at once, and
+// leaves the first writer's directory as it is.
+func TestWriteRefusesASecondWriter(t *testing.T) {
+	t.Parallel()
+	s := open(t)
+	tmp := filepath.Join(s.root, "fw01", ".2026-09-28T10-00-00Z.partial")
+	if err := os.MkdirAll(tmp, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	half := filepath.Join(tmp, "config.xml")
+	if err := os.WriteFile(half, []byte("<config"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, err := s.Write(Meta{Device: "fw01"}, docs(t, false), 20)
+	if err == nil || !strings.Contains(err.Error(), "fw01@2026-09-28T10-00-00Z is being written by another fetch") {
+		t.Errorf("second writer: %v", err)
+	}
+	if _, err := os.Stat(half); err != nil {
+		t.Errorf("the second writer removed the first writer's files: %v", err)
+	}
+	if ids, _ := s.List("fw01"); len(ids) != 0 {
+		t.Errorf("the second writer stored %v", ids)
+	}
+}
+
+// A directory Write cannot make is an error of its own, not a second writer.
+func TestWriteCannotMakeItsDirectories(t *testing.T) {
+	t.Parallel()
+	s := open(t)
+	if err := os.WriteFile(filepath.Join(s.root, "fw01"), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Write(Meta{Device: "fw01"}, docs(t, false), 20); err == nil || strings.Contains(err.Error(), "another fetch") {
+		t.Errorf("a file in the device directory's place: %v", err)
+	}
+	dev := filepath.Join(s.root, "fw02")
+	if err := os.Mkdir(dev, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Write(Meta{Device: "fw02"}, docs(t, false), 20); err == nil || strings.Contains(err.Error(), "another fetch") {
+		t.Errorf("a device directory without write permission: %v", err)
+	}
+}
+
+// Writers of one id that race each other: one stores the snapshot whole, every
+// other fails, and no temporary directory is left.
+func TestConcurrentWritersOfOneID(t *testing.T) {
+	t.Parallel()
+	s, err := Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	s = s.WithClock(func() time.Time { return time.Date(2026, 9, 28, 10, 0, 0, 0, time.UTC) })
+	errs := make([]error, 8)
+	var wg sync.WaitGroup
+	for i := range errs {
+		wg.Go(func() { _, errs[i] = s.Write(Meta{Device: "fw01"}, docs(t, false), 20) })
+	}
+	wg.Wait()
+	stored := 0
+	for _, err := range errs {
+		if err == nil {
+			stored++
+		}
+	}
+	if stored != 1 {
+		t.Errorf("%d writers stored the snapshot, want 1: %v", stored, errs)
+	}
+	got, err := s.Latest("fw01")
+	if err != nil || !got.Has(ConfigDoc) || len(got.Meta.Documents) != 1 {
+		t.Errorf("the stored snapshot: %+v, %v", got, err)
+	}
+	entries, _ := os.ReadDir(filepath.Join(s.root, "fw01"))
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), ".") {
+			t.Errorf("a temporary entry was left behind: %s", e.Name())
+		}
 	}
 }
 

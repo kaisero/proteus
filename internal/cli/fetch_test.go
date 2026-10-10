@@ -382,6 +382,26 @@ func TestParallelFetchKeepsOrder(t *testing.T) {
 	}
 }
 
+// A device named twice is fetched once: two fetches in one second would write the
+// same snapshot, and one of them would fail.
+func TestFetchNamesADeviceOnce(t *testing.T) {
+	t.Parallel()
+	c := newCLI(t)
+	c.inventory(inventoryFor(lab(t).Start(t), lab(t).Start(t)))
+	out := c.want(0, "fetch", "fw02", "fw01", "fw02", "fw01")
+	if n := strings.Count(out, "stored fw01@"); n != 1 {
+		t.Errorf("fw01 stored %d times:\n%s", n, out)
+	}
+	if i2, i1 := strings.Index(out, "stored fw02@"), strings.Index(out, "stored fw01@"); i2 < 0 || i2 > i1 {
+		t.Errorf("reports out of order:\n%s", out)
+	}
+	var env struct{ Results []struct{ Device string } }
+	if err := json.Unmarshal([]byte(c.want(0, "fetch", "fw01", "fw01", "--output", "json")), &env); err != nil ||
+		len(env.Results) != 1 || env.Results[0].Device != "fw01" {
+		t.Errorf("fetch fw01 fw01 json: %v %+v", err, env)
+	}
+}
+
 func TestSearchAcrossTheEstate(t *testing.T) {
 	t.Parallel()
 	c := newCLI(t)

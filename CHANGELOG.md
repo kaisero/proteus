@@ -304,6 +304,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A device named twice in `fetch` is fetched once.** Before, both fetches
+  ran together and wrote the same snapshot, so one failed and the run exited 3.
+  Two runs that store one device in the same second now fail the second one at
+  once, and it no longer removes the first one's files.
 - **A run of failed fetches no longer removes the last good snapshots.**
   `snapshot_keep` now keeps the newest N snapshots with a configuration and the
   newest N without one. Before, it counted both together, so N failed exports in
