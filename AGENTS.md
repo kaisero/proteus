@@ -105,7 +105,9 @@ Check: review.
 ## R10 — Indexes are keyed by scope
 
 No index spans scopes, and no lookup resolves a name without one. A scope is
-`shared` or `vsys:<name>`, and a vsys inherits shared.
+`shared` or `vsys:<name>`, and a vsys inherits shared. Below shared, every scope
+sees the device's predefined services; a shared or vsys service of the same name
+hides them.
 
 A global index merges sibling scopes. First observed on a lab device: one shared
 dynamic address group resolved to `10.124.0.0/16` in one scope and
