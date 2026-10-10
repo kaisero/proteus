@@ -133,7 +133,8 @@ simulate nat <src> <dst> --device <fw>      the NAT rule and the translated pack
 - **Settings**, rising precedence default < inventory `defaults:` < `PROTEUS_*` <
   flag: inventory path, store root, `max_snapshot_age`, output, color, and the run log's
   `log_level`, `log_dir`, `log_keep` (plus `--verbose`). `PROTEUS_USERS` names a user
-  snapshot; a stored forwarding table supplies zones.
+  snapshot, read per command run, and once at start by `proteus mcp` (a bad file
+  exits 2); a stored forwarding table supplies zones.
 - **Run log:** one file per run under `log_dir`, `<time> [<LEVEL>] [<TAG>] <msg>`,
   tags `RUN`, `API`, `SNAP`, `FIND`, `STEP`; secrets redacted; the path is printed
   when a run exits non-zero. Help, completion and a bare group write no log and

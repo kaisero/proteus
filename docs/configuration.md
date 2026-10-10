@@ -209,6 +209,8 @@ A configuration does not say which directory groups a user belongs to.
 ```
 
 `taken_at` is required. An answer that uses an old user snapshot carries a note.
+Each command reads the file when it runs. `proteus mcp` reads it once at start
+and stops with exit 2 when it cannot; a changed file needs a server restart.
 
 ## Files proteus writes
 

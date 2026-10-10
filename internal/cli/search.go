@@ -134,7 +134,8 @@ func (s searchAnswer) Text(t *textOut) error {
 }
 
 // userSnapshot reads PROTEUS_USERS, the user-to-group mapping a configuration does
-// not hold. None set is no mapping.
+// not hold. None set is no mapping. An error names the variable and the file.
+// A command reads it on each run; the MCP server reads it once at start.
 func (a *app) userSnapshot() (index.UserDirectory, error) {
 	path := a.getenv("PROTEUS_USERS")
 	if path == "" {
@@ -142,12 +143,13 @@ func (a *app) userSnapshot() (index.UserDirectory, error) {
 	}
 	f, err := os.Open(path)
 	if err != nil {
+		// The error names the file.
 		return nil, fmt.Errorf("PROTEUS_USERS: %w", err)
 	}
 	defer func() { _ = f.Close() }()
 	snap, err := index.LoadUserSnapshot(f)
 	if err != nil {
-		return nil, fmt.Errorf("PROTEUS_USERS: %w", err)
+		return nil, fmt.Errorf("PROTEUS_USERS: %s: %w", path, err)
 	}
 	return snap, nil
 }

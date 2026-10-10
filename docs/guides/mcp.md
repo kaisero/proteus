@@ -41,6 +41,10 @@ inventory export that `fetch` writes (see
 inventory with credentials. A change of devices needs a new fetch and a server
 restart.
 
+The server reads the [user snapshot](../configuration.md#the-user-snapshot) that
+`PROTEUS_USERS` names once, at start. Every call answers from that copy, so a
+changed file needs a server restart.
+
 The server checks its setup before it answers. A failed check stops it:
 
 | Check | Exit |
@@ -49,6 +53,7 @@ The server checks its setup before it answers. A failed check stops it:
 | The export holds a credential, cannot be parsed, or has no device | 2 |
 | `--http` without a token, with a token shorter than 32 bytes, or without `audit_log` | 2 |
 | `audit_log: -` over stdio, where standard output carries MCP | 2 |
+| The `PROTEUS_USERS` file is missing, cannot be read, or is not a valid user snapshot | 2 |
 | The export cannot be read, the store cannot be opened, the address cannot be listened on, or the audit file cannot be opened | 1 |
 
 Over HTTP the server prints `proteus mcp: serving http://<address> (Host check on: <hosts>)`
