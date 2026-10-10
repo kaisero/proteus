@@ -305,6 +305,13 @@ func (d snapshotDiffAnswer) Text(t *textOut) error {
 			case drift.Changed:
 				op.style = t.pal.warn
 			}
+			if c.Op == drift.Changed {
+				tb.row(op, plain(c.Kind), plain(c.Name))
+				for _, f := range c.Fields {
+					tb.row(plain("  " + fieldLine(f)))
+				}
+				continue
+			}
 			tb.row(op, plain(c.Kind), plain(c.Name), plain(changeDetail(c)))
 		}
 		_ = tb.write(t, "    ", 1)
@@ -313,16 +320,25 @@ func (d snapshotDiffAnswer) Text(t *textOut) error {
 	return t.err
 }
 
-// changeDetail is a diff row's last column: the new value, the old one for a
-// removal, or both for a change.
+// changeDetail is an added or removed row's last column: the new entry's short
+// line, or the old one's for a removal.
 func changeDetail(c drift.Change) string {
-	switch c.Op {
-	case drift.Removed:
+	if c.Op == drift.Removed {
 		return c.Old
-	case drift.Changed:
-		return c.Old + " -> " + c.New
 	}
 	return c.New
+}
+
+// fieldLine is one changed setting of a changed entry, on its own line below
+// it: negate-destination: no -> yes. An absent side reads (unset).
+func fieldLine(f drift.FieldChange) string {
+	side := func(v string) string {
+		if v == "" {
+			return "(unset)"
+		}
+		return v
+	}
+	return f.Path + ": " + side(f.Old) + " -> " + side(f.New)
 }
 
 // firstDevice is the device entry a firewall configuration's vsys sit under.

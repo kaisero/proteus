@@ -484,7 +484,7 @@ func TestSnapshotDiff(t *testing.T) {
 	c.want(0, "fetch", "fw01")
 	out := c.want(0, "snapshot", "diff")
 	for _, want := range []string{
-		"changed address       net-home   198.18.1.0/24 -> 198.18.2.0/24",
+		"changed address       net-home\n      ip-netmask: 198.18.1.0/24 -> 198.18.2.0/24\n",
 		"added   security rule new-rule", "vsys:vsys2 no changes",
 	} {
 		if !strings.Contains(out, want) {

@@ -57,18 +57,48 @@ fw01   2026-09-22T08-00-00Z -> 2026-09-28T08-00-00Z
   shared     no changes
     fw01/shared: 0 added, 0 removed, 0 changed
   vsys:vsys1
-    fw01/vsys:vsys1: 1 added, 1 removed, 2 changed
-    changed  address              net-home                 198.18.1.0/24 -> 198.18.2.0/24
-    removed  address              net-labor                198.18.0.0/15
-    changed  security rule        dc-to-home               allow application=ssl destination=net-home source=g-servers -> allow disabled application=ssl destination=net-home source=g-servers
-    added    security rule        new-rule                 allow application=dns destination=any source=net-home
+    fw01/vsys:vsys1: 1 added, 1 removed, 3 changed
+    changed address       net-home
+      ip-netmask: 198.18.1.0/24 -> 198.18.2.0/24
+    removed address       net-labor 198.18.0.0/15
+    changed nat rule      dnat-web
+      destination-translation/translated-address: srv-web -> 10.88.2.11
+    changed security rule dc-to-home
+      disabled: (unset) -> yes
+      negate-destination: (unset) -> yes
+    added   security rule new-rule  allow application=dns destination=any source=net-home
   vsys:vsys2 no changes
     fw01/vsys:vsys2: 0 added, 0 removed, 0 changed
 ```
 
+What it compares:
+
+- Every entry the scope defines: objects of every kind (addresses, services,
+  external lists, zones, schedules, profiles, profile groups, log settings and
+  the rest), and the rules of every rulebase (security, NAT, PBF, decryption and
+  the others). Shared compares shared only, with the rules pushed from Panorama;
+  a vsys compares that vsys only.
+- The whole entry: every setting, with its text and attributes. A list of members
+  is a set, so a reorder is no change. The attributes PAN-OS writes for its own
+  bookkeeping (`uuid`, `admin`, `time`, `dirtyId`) are not compared.
+- Not the device's predefined services: they are not configuration.
+
+How it shows a change:
+
+- A changed entry lists each setting that differs on its own line,
+  `path: old -> new`. A setting present on one side only reads `(unset)` on the
+  other. An element that is present but holds no value reads `(set)`.
+- An added or removed entry shows a short line: an object's value, or a rule's
+  action and lists.
+- In JSON and YAML, a changed entry has `fields`, each with `path`, `old` and
+  `new`; an absent side is empty. An added or removed entry has `new` or `old`.
+
 By default it compares the snapshot before `latest` with `latest`. `--from` and
 `--to` take a snapshot id, an RFC 3339 time or a date. A rule that only moved is
 not a change.
+
+The diff shows each value as the configuration stores it. A changed certificate,
+local user or server profile can show its encrypted or hashed secret.
 
 ## Old snapshots
 

@@ -122,19 +122,54 @@
               "type": "object",
               "properties": {
                 "op": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "added, removed or changed"
                 },
                 "kind": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "the object's container name, such as address or zone, or the rulebase and rule, such as security rule"
                 },
                 "name": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "the object's or rule's name"
                 },
                 "old": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "a removed entry in one line"
                 },
                 "new": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "an added entry in one line"
+                },
+                "fields": {
+                  "type": [
+                    "null",
+                    "array"
+                  ],
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "path": {
+                        "type": "string",
+                        "description": "the setting's path below the entry, such as negate-destination or destination-translation/translated-address; an attribute's last segment starts with @"
+                      },
+                      "old": {
+                        "type": "string",
+                        "description": "the value before: empty when the setting was absent, (set) for an element present without a value; a member list's members are sorted"
+                      },
+                      "new": {
+                        "type": "string",
+                        "description": "the value after: empty when the setting is absent, (set) for an element present without a value; a member list's members are sorted"
+                      }
+                    },
+                    "required": [
+                      "path",
+                      "old",
+                      "new"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "description": "the settings of a changed entry that differ"
                 }
               },
               "required": [

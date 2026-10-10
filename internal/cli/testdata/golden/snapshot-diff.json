@@ -31,8 +31,13 @@
           "op": "changed",
           "kind": "address",
           "name": "net-home",
-          "old": "198.18.1.0/24",
-          "new": "198.18.2.0/24"
+          "fields": [
+            {
+              "path": "ip-netmask",
+              "old": "198.18.1.0/24",
+              "new": "198.18.2.0/24"
+            }
+          ]
         },
         {
           "op": "removed",
@@ -44,8 +49,13 @@
           "op": "changed",
           "kind": "security rule",
           "name": "dc-to-home",
-          "old": "allow application=ssl destination=net-home source=g-servers",
-          "new": "allow disabled application=ssl destination=net-home source=g-servers"
+          "fields": [
+            {
+              "path": "disabled",
+              "old": "",
+              "new": "yes"
+            }
+          ]
         },
         {
           "op": "added",

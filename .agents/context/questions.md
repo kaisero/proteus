@@ -45,9 +45,20 @@ and lists at five items; JSON carries the whole card.
 
 ### drift
 
-`Compare(before, after, scope)` renders every object of `ObjectKinds` defined in
-the scope itself, and every security and NAT rule, to one line each, and reports
-what was added, removed or changed. Position is not compared.
+`Compare(before, after, scope)` walks the scope's element (shared, or one vsys)
+with the schema digest and takes every entry of every entry list it meets as one
+entry to compare: objects of every kind, profiles, zones and schedules included,
+and the rules of every rulebase. It stops at an entry list; nested entries belong
+to their entry's form. The shared `pre-rulebase` and `post-rulebase` are read with
+a vsys rulebase's node (hand-modelled, R8). An element the digest does not
+describe is compared whole, as one entry named by its path. Each entry becomes a
+canonical form: setting paths with text and attributes in document order; a
+member list (from the digest, R4) is one value with its members sorted; `uuid`,
+`admin`, `time` and `dirtyId` are ignored (`ignoredAttrs`). A changed entry
+carries `Fields` (`path`, `old`, `new`); an added or removed one a short line in
+`New` or `Old`: the object's value and tags as `resolve` reads them, or a rule's
+action and member lists. Position is not compared. Predefined services are never
+read.
 
 ## Build / run pointers
 
@@ -117,6 +128,7 @@ func Rule(cfg *config.Config, idx *index.Index, r resolve.Rule, rules int) Card
 <!-- GENERATED:api ./internal/drift -->
 ```go
 type Change struct{ ... }
+type FieldChange struct{ ... }
 type Op string
 
 func Compare(before, after *config.Config, sc config.Scope) []Change
@@ -137,6 +149,9 @@ func Compare(before, after *config.Config, sc config.Scope) []Change
   exits 2 and asks for `--kind` (`card.TestFindInfersTheKind`).
 - **"Predefined" means only "not in the configuration".** No table of PAN-OS
   predefined values exists (spec §14 open item 6).
+- **A diff shows values as the configuration holds them.** Every entry of the
+  scope is compared, so a changed certificate, user or server profile shows its
+  stored (encrypted or hashed) value; the digest does not mark secret fields.
 - **R12:** `search`, `card` and `drift` import none of `fetch`, `store`, `estate`.
 
 ## See also

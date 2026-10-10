@@ -298,6 +298,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`snapshot diff` now reports every changed setting of objects and rules.** A
+  changed entry lists each setting that differs, such as
+  `negate-destination: (unset) -> yes`, and every object kind and rulebase is
+  compared. Before, it compared addresses and other objects by one value and only
+  security and NAT rules by their lists, so it missed negation, NAT translations,
+  profiles, zones and the PBF and other rulebases.
 - **A zone the vsys does not define is now refused.** `--from-zone` and `--to-zone`
   of `simulate policy --file`, and `--from-zone` of `simulate nat`, exit 2 with the
   vsys's zones listed. Before, a typo in a zone name could still let an intrazone
