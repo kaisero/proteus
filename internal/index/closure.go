@@ -327,16 +327,6 @@ func (i *Index) GroupsHolding(kind, name string, direct bool) []Group {
 	return out
 }
 
-// GroupsOf returns every group holding the named object, directly or through
-// nesting, in any group family.
-func (i *Index) GroupsOf(name string) []string {
-	id, known := i.in.Lookup(name)
-	if !known {
-		return nil
-	}
-	return i.holders(i.families, id)
-}
-
 // groupsReaching returns the groups of the field's families holding a name.
 func (i *Index) groupsReaching(f Field, name string) []string {
 	id, known := i.in.Lookup(name)
@@ -366,41 +356,4 @@ func (c *closureIndex) directGroups(id uint32, in *Interner) []string {
 	}
 	slices.Sort(out)
 	return out
-}
-
-// DirectGroupsOf returns the groups that name a member directly, not through
-// another group, in any group family. It answers "which group do I edit", which
-// the transitive list of GroupsOf hides.
-func (i *Index) DirectGroupsOf(name string) []string {
-	id, known := i.in.Lookup(name)
-	if !known {
-		return nil
-	}
-	var out []string
-	for _, fam := range i.families {
-		out = append(out, fam.closure.directGroups(id, i.in)...)
-	}
-	slices.Sort(out)
-	return slices.Compact(out)
-}
-
-// MembersOf returns the transitive members of a group, of every group kind that
-// has a group of that name.
-func (i *Index) MembersOf(group string) []string {
-	id, known := i.in.Lookup(group)
-	if !known {
-		return nil
-	}
-	b := roaring.New()
-	found := false
-	for _, fam := range i.families {
-		if m, ok := fam.closure.forward[id]; ok {
-			b.Or(m)
-			found = true
-		}
-	}
-	if !found {
-		return nil
-	}
-	return i.names(b)
 }

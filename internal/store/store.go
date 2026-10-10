@@ -330,7 +330,11 @@ func leftover(name string) bool {
 // holdsConfig reports whether a snapshot can be read and holds a configuration.
 func (s *Store) holdsConfig(device, id string) bool {
 	sn, err := s.Get(device, id)
-	return err == nil && sn.Has(ConfigDoc)
+	if err != nil {
+		return false
+	}
+	_, err = sn.ConfigPath()
+	return err == nil
 }
 
 // List returns a device's snapshot ids, newest first.

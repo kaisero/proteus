@@ -296,6 +296,7 @@ func (t *Topology) Place(src netip.Addr) (Placement, error)
 func (t *Topology) Routers(node string) []string
 func (t *Topology) Start(node, router string, src netip.Addr) (simulate.Port, netip.Prefix, bool, error)
 func NewTopology(devs []simulate.DeviceData) *Topology
+func UnknownNextHopType(node string, m simulate.Match) (reason.Reason, bool)
 ```
 <!-- /GENERATED:api -->
 
@@ -350,7 +351,6 @@ func (l *Logger) Persist() error
 func (l *Logger) Warnf(tag Tag, format string, args ...any)
 func (lv Level) String() string
 func Buffered(o Options) *Logger
-func Discard() *Logger
 func Open(o Options) (*Logger, error)
 func ParseLevel(s string) (Level, error)
 ```

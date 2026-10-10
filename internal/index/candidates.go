@@ -2,7 +2,6 @@ package index
 
 import (
 	"fmt"
-	"net/netip"
 
 	"github.com/RoaringBitmap/roaring/v2"
 
@@ -91,26 +90,6 @@ func (v *View) Candidates(f Field, value string) (*roaring.Bitmap, Report) {
 				f, i.scope, f))))
 	}
 	return out, rep
-}
-
-// CandidatesFor returns every rule whose field could match an address.
-func (i *Index) CandidatesFor(f Field, addr netip.Addr) *roaring.Bitmap {
-	b, _ := i.Candidates(f, addr.String())
-	return b
-}
-
-// CandidatesForPrefix returns every rule whose field could match any address in a
-// prefix. A literal in the field matches when the two overlap.
-func (i *Index) CandidatesForPrefix(f Field, p netip.Prefix) *roaring.Bitmap {
-	b, _ := i.Candidates(f, p.String())
-	return b
-}
-
-// CandidatesForName returns every rule whose field could match a named object or
-// group: the name itself, any group holding it, and a field of "any".
-func (i *Index) CandidatesForName(f Field, name string) *roaring.Bitmap {
-	b, _ := i.Candidates(f, name)
-	return b
 }
 
 func dedupeHits(in []Hit) []Hit {

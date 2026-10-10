@@ -29,12 +29,12 @@ func TestClosureRepresentation(t *testing.T) {
 
 	cand, _ := idx.Candidates(Source, "10.1.1.1")
 	sets := map[string]*roaring.Bitmap{
-		"Candidates":        cand,
-		"CandidatesFor":     idx.CandidatesFor(Source, netip.MustParseAddr("10.1.1.2")),
-		"CandidatesForName": idx.CandidatesForName(Source, "h-1"),
-		"RulesWith":         idx.RulesWith(Source, outer),
-		"RulesReaching":     idx.RulesReaching(Source, "h-2"),
-		"RulesWithAny":      idx.RulesWithAny(Destination),
+		"Candidates":               cand,
+		"Candidates of an address": candidates(idx, Source, "10.1.1.2"),
+		"Candidates of a name":     candidates(idx, Source, "h-1"),
+		"RulesWith":                idx.RulesWith(Source, outer),
+		"RulesReaching":            idx.RulesReaching(Source, "h-2"),
+		"RulesWithAny":             idx.RulesWithAny(Destination),
 	}
 	for name, b := range sets {
 		if b == nil || !b.Equals(allowOuter) {
@@ -117,7 +117,7 @@ func TestScopedResolution(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", tc.scope, err)
 		}
-		if got := idx.MembersOf("corp-location"); !slices.Equal(got, tc.members) {
+		if got := membersOf(idx, "corp-location"); !slices.Equal(got, tc.members) {
 			t.Errorf("%s: corp-location holds %v, want %v", tc.scope, got, tc.members)
 		}
 		if tc.holds.IsValid() && !groupCovers(idx, tc.holds, "corp-location") {
@@ -134,10 +134,10 @@ func TestScopedResolution(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !ruleNames(idx, idx.CandidatesFor(Source, vienna))["Corp DC Access"] {
+	if !ruleNames(idx, candidates(idx, Source, vienna.String()))["Corp DC Access"] {
 		t.Error("vsys1: Corp DC Access must be a candidate for the Vienna network")
 	}
-	if ruleNames(idx, idx.CandidatesFor(Source, graz))["Corp DC Access"] {
+	if ruleNames(idx, candidates(idx, Source, graz.String()))["Corp DC Access"] {
 		t.Error("vsys1: Corp DC Access must not match the Graz network, which vsys2 tags")
 	}
 }
@@ -145,7 +145,7 @@ func TestScopedResolution(t *testing.T) {
 // groupCovers reports whether a group holds an object that contains addr.
 func groupCovers(idx *Index, addr netip.Addr, group string) bool {
 	for _, m := range idx.Containing(addr) {
-		if slices.Contains(idx.GroupsOf(m.Name), group) {
+		if slices.Contains(groupsOf(idx, m.Name), group) {
 			return true
 		}
 	}

@@ -24,13 +24,3 @@ type Result struct {
 	// was not followed.
 	Notes []reason.Reason
 }
-
-// OK reports whether a document arrived.
-func (r Result) OK(name string) bool {
-	for _, o := range r.Outcomes {
-		if o.Name == name {
-			return o.Err == nil
-		}
-	}
-	return false
-}

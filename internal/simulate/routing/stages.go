@@ -186,9 +186,6 @@ func (s *state) unavailable() *simulate.UnavailableError {
 	return u
 }
 
-// Next-hop types the lookup knows (spec §17.2, verified on fw01 and fw02).
-var knownNextHopTypes = map[string]bool{"": true, "0": true, resolve.NextHopLocal: true}
-
 // lookup is the longest-prefix match in the hop's router (spec §17 R3, R4, R7).
 func lookup(_ context.Context, s *state) (simulate.Outcome, error) {
 	h := s.hop()
@@ -203,9 +200,7 @@ func lookup(_ context.Context, s *state) (simulate.Outcome, error) {
 		Fidelity: simulate.Exact,
 		Detail:   fmt.Sprintf("%s in router %s: %s via %s on %s", s.dst, s.router, m.Destination, first.NextHop, first.Interface),
 	}
-	if !knownNextHopTypes[first.NextHopType] {
-		why := reason.New("path.next-hop-type",
-			fmt.Sprintf("route %s on %s has next-hop type %s, which is not read yet", m.Destination, h.Device, first.NextHopType))
+	if why, unknown := topology.UnknownNextHopType(h.Device, m); unknown {
 		out.Unresolved = append(out.Unresolved, index.NewUnresolved(m.Destination.String(), "", why))
 		out.Fidelity = simulate.UnderMatch(why)
 		s.end(Unresolved, why.Code, "stopped on "+h.Device+": "+why.Text)

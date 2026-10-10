@@ -29,7 +29,7 @@ func TestWildcardMatchesByMask(t *testing.T) {
 			rule string
 		}{{Source, "from-wc"}, {Destination, "to-g-wc"}} {
 			got := false
-			for it := idx.CandidatesFor(side.f, a).Iterator(); it.HasNext(); {
+			for it := candidates(idx, side.f, a.String()).Iterator(); it.HasNext(); {
 				if rules[it.Next()].Name == side.rule {
 					got = true
 				}

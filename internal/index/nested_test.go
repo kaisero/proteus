@@ -34,7 +34,7 @@ func TestNestedChainFromValueToRule(t *testing.T) {
 	var groups []string
 	for _, o := range objs {
 		ids = append(ids, in.ID(o))
-		for _, g := range idx.GroupsOf(o) {
+		for _, g := range groupsOf(idx, o) {
 			groups = append(groups, g)
 			ids = append(ids, in.ID(g))
 		}

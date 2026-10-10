@@ -78,8 +78,7 @@ there, so there is no second copy to keep in step. When the directory was
 gitignored, a pristine checkout did not compile at all.
 
 Both the decoded digest and the reference table are cached process-wide per schema.
-Before that caching, `Load` cost 41.8 ms and `Walk` 15.2 ms; after, 0.12 ms and
-0.011 ms.
+Before that caching, `Load` cost 41.8 ms; after, 0.12 ms.
 
 ### Schema questions
 
@@ -91,12 +90,8 @@ Before that caching, `Load` cost 41.8 ms and `Walk` 15.2 ms; after, 0.12 ms and
   profile live under `profiles/`.
 - **`WalkPaths(fn)`** — every reference value in the file, scoped, each located by
   its path below the entry that holds it (`profile-setting/group`, `log-setting`),
-  with the candidate kinds the schema allows for that leaf alone. This is the walk
-  to use.
-- **`Walk(fn)`** — the older walk, kept for callers that have not moved. It sees
-  only `entry/<field>/member`, which is 397 of the firewall schema's 1,991
-  reference leaves, and reports a field's candidates merged across everything
-  below it.
+  with the candidate kinds the schema allows for that leaf alone. It is the only
+  walk.
 
 ### Ambiguous kind names
 
@@ -127,7 +122,6 @@ that might hit an ambiguous kind uses `KindContainers` and chooses, then reads w
 type Config struct{ ... }
 type Element struct{ ... }
 type Event struct{ ... }
-type EventKind int
 type Report struct{ ... }
 type Scope struct{ ... }
 type ScopeSort int
@@ -146,7 +140,6 @@ func (c *Config) Root() *Element
 func (c *Config) SchemaNode(el *Element) *schema.Node
 func (c *Config) Version() string
 func (c *Config) VersionGap() string
-func (c *Config) Walk(fn func(Event) bool) error
 func (c *Config) WalkPaths(fn func(Event) bool) error
 func (e *Element) Attr(name string) string
 func (e *Element) Child(name string) *Element

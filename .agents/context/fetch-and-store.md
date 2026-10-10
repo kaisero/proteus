@@ -144,7 +144,6 @@ func (c *Client) ExportConfig(ctx context.Context) ([]byte, error)
 func (c *Client) Keygen(ctx context.Context, user, password string) error
 func (c *Client) Op(ctx context.Context, cmd string) ([]byte, error)
 func (e *APIError) Error() string
-func (r Result) OK(name string) bool
 func NewClient(t inventory.Target, log *runlog.Logger) *Client
 func NewState(t inventory.Target, docs []Document, opts ActiveOptions, log *runlog.Logger) State
 func OpDocument(name string, cmds ...string) Document
@@ -168,7 +167,6 @@ func (s *Store) Resolve(ref string) (Snapshot, error)
 func (s *Store) WithClock(now func() time.Time) *Store
 func (s *Store) Write(meta Meta, docs map[string][]byte, keep int) (Snapshot, error)
 func (sn Snapshot) ConfigPath() (string, error)
-func (sn Snapshot) Has(doc string) bool
 func (sn Snapshot) Path(doc string) string
 func (sn Snapshot) Zones() (*index.ZoneSnapshot, error)
 func At(root string) *Store

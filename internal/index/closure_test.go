@@ -5,6 +5,8 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/RoaringBitmap/roaring/v2"
+
 	"github.com/okaiser/proteus/internal/config"
 	"github.com/okaiser/proteus/internal/resolve"
 )
@@ -28,11 +30,41 @@ func nestedIndex(t *testing.T) *Index {
 	return indexOf(t, "../../testdata/config/firewall-nested-groups.xml", "vsys1")
 }
 
-func TestGroupsOfIsTransitive(t *testing.T) {
+// groupsOf names the groups holding an address object, at any depth.
+func groupsOf(idx *Index, name string) []string {
+	var out []string
+	for _, g := range idx.GroupsHolding("address", name, false) {
+		out = append(out, g.Name)
+	}
+	return out
+}
+
+// membersOf is a group's transitive members, read from the forward closure of
+// every group kind that has a group of that name.
+func membersOf(idx *Index, group string) []string {
+	id, known := idx.in.Lookup(group)
+	if !known {
+		return nil
+	}
+	b := roaring.New()
+	found := false
+	for _, fam := range idx.families {
+		if m, ok := fam.closure.forward[id]; ok {
+			b.Or(m)
+			found = true
+		}
+	}
+	if !found {
+		return nil
+	}
+	return idx.names(b)
+}
+
+func TestGroupsHoldingIsTransitive(t *testing.T) {
 	t.Parallel()
 	idx := nestedIndex(t)
 	got := map[string]bool{}
-	for _, g := range idx.GroupsOf("h-1") {
+	for _, g := range groupsOf(idx, "h-1") {
 		got[g] = true
 	}
 	for _, want := range []string{"g-inner", "g-middle", "g-outer"} {
@@ -42,16 +74,16 @@ func TestGroupsOfIsTransitive(t *testing.T) {
 	}
 }
 
-func TestMembersOfIsTransitive(t *testing.T) {
+func TestForwardClosureIsTransitive(t *testing.T) {
 	t.Parallel()
 	idx := nestedIndex(t)
 	got := map[string]bool{}
-	for _, m := range idx.MembersOf("g-outer") {
+	for _, m := range membersOf(idx, "g-outer") {
 		got[m] = true
 	}
 	for _, want := range []string{"g-middle", "g-inner", "h-1", "h-2"} {
 		if !got[want] {
-			t.Errorf("%s missing from MembersOf(g-outer) = %v", want, got)
+			t.Errorf("%s missing from the members of g-outer: %v", want, got)
 		}
 	}
 }
@@ -64,13 +96,13 @@ func TestMembersOfIsTransitive(t *testing.T) {
 func TestClosureSurvivesACycle(t *testing.T) {
 	t.Parallel()
 	idx := indexOf(t, "../../testdata/config/firewall-cyclic-groups.xml", "vsys1")
-	if got := slices.Sorted(slices.Values(idx.GroupsOf("h-1"))); !slices.Equal(got, []string{"g-inner", "g-middle", "g-outer"}) {
-		t.Errorf("GroupsOf(h-1) = %v, want the three groups of the cycle", got)
+	if got := groupsOf(idx, "h-1"); !slices.Equal(got, []string{"g-inner", "g-middle", "g-outer"}) {
+		t.Errorf("groups of h-1 = %v, want the three groups of the cycle", got)
 	}
 	for _, g := range []string{"g-inner", "g-middle", "g-outer"} {
-		members := idx.MembersOf(g)
+		members := membersOf(idx, g)
 		if !slices.Contains(members, "h-1") || slices.Contains(members, g) {
-			t.Errorf("MembersOf(%s) = %v: want h-1, and not the group itself", g, members)
+			t.Errorf("members of %s = %v: want h-1, and not the group itself", g, members)
 		}
 	}
 	b, _ := idx.Candidates(Source, "10.1.1.1")
@@ -92,7 +124,7 @@ func TestDynamicGroupExtendsTheChain(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got := idx.GroupsOf("corp-location-vienna")
+	got := groupsOf(idx, "corp-location-vienna")
 	var found bool
 	for _, g := range got {
 		if g == "corp-location" {
@@ -102,9 +134,9 @@ func TestDynamicGroupExtendsTheChain(t *testing.T) {
 	if !found {
 		t.Errorf("corp-location-vienna carries the tag, so it is in corp-location; got %v", got)
 	}
-	if members := idx.MembersOf("corp-location"); len(members) != 1 ||
+	if members := membersOf(idx, "corp-location"); len(members) != 1 ||
 		members[0] != "corp-location-vienna" {
-		t.Errorf("MembersOf(corp-location) = %v, want [corp-location-vienna]", members)
+		t.Errorf("members of corp-location = %v, want [corp-location-vienna]", members)
 	}
 }
 
@@ -113,10 +145,10 @@ func TestDynamicGroupExtendsTheChain(t *testing.T) {
 func TestDynamicClosureIsScopeBound(t *testing.T) {
 	t.Parallel()
 	graz := indexOf(t, "../../testdata/config/firewall-multivsys.xml", "vsys2")
-	if got := graz.MembersOf("corp-location"); len(got) != 1 || got[0] != "corp-location-graz" {
+	if got := membersOf(graz, "corp-location"); len(got) != 1 || got[0] != "corp-location-graz" {
 		t.Errorf("in vsys2 the group holds %v, want [corp-location-graz]", got)
 	}
-	if got := graz.GroupsOf("corp-location-vienna"); len(got) != 0 {
+	if got := groupsOf(graz, "corp-location-vienna"); len(got) != 0 {
 		t.Errorf("the Vienna object is invisible here, got groups %v", got)
 	}
 }
@@ -140,16 +172,16 @@ func TestUnparsedFiltersAreReported(t *testing.T) {
 }
 
 // Direct groups answer "which group do I edit": only the one naming the member.
-func TestDirectGroupsOf(t *testing.T) {
+func TestGroupsHoldingDirect(t *testing.T) {
 	t.Parallel()
 	idx := nestedIndex(t)
-	if got := idx.DirectGroupsOf("h-1"); len(got) != 1 || got[0] != "g-inner" {
-		t.Errorf("DirectGroupsOf(h-1) = %v, want [g-inner]", got)
+	if got := idx.GroupsHolding("address", "h-1", true); !slices.Equal(got, []Group{{"address-group", "g-inner"}}) {
+		t.Errorf("direct groups of h-1 = %v, want [g-inner]", got)
 	}
-	if got := idx.DirectGroupsOf("g-inner"); len(got) != 1 || got[0] != "g-middle" {
-		t.Errorf("DirectGroupsOf(g-inner) = %v, want [g-middle]", got)
+	if got := idx.GroupsHolding("address-group", "g-inner", true); !slices.Equal(got, []Group{{"address-group", "g-middle"}}) {
+		t.Errorf("direct groups of g-inner = %v, want [g-middle]", got)
 	}
-	if got := idx.DirectGroupsOf("unknown"); got != nil {
+	if got := idx.GroupsHolding("address", "unknown", true); got != nil {
 		t.Errorf("an unknown name has no groups, got %v", got)
 	}
 }
@@ -158,17 +190,6 @@ func TestPrefixesOfIsExported(t *testing.T) {
 	t.Parallel()
 	if got := PrefixesOf("10.0.0.0/8"); len(got) != 1 {
 		t.Errorf("PrefixesOf = %v", got)
-	}
-}
-
-// A name the index never saw, and a name that is not a group, have no members.
-func TestMembersOfANonGroupIsEmpty(t *testing.T) {
-	t.Parallel()
-	idx := indexOf(t, "../../testdata/config/firewall-nested-groups.xml", "vsys1")
-	for _, name := range []string{"no-such-group", "h-1"} {
-		if got := idx.MembersOf(name); got != nil {
-			t.Errorf("MembersOf(%q) = %v, want nil", name, got)
-		}
 	}
 }
 
@@ -210,22 +231,23 @@ func TestEachGroupKindHasItsOwnClosure(t *testing.T) {
 			t.Errorf("Candidates(%s, %s) has %s: %v, want %v", tc.f, tc.value, tc.rule, got, tc.want)
 		}
 	}
-	if got := slices.Sorted(slices.Values(idx.MembersOf("webgrp"))); !slices.Equal(got, []string{"h-api", "svc-web"}) {
-		t.Errorf("MembersOf(webgrp) = %v, want both kinds' members", got)
+	if got := slices.Sorted(slices.Values(membersOf(idx, "webgrp"))); !slices.Equal(got, []string{"h-api", "svc-web"}) {
+		t.Errorf("members of webgrp = %v, want both kinds' members", got)
 	}
-	if got := idx.DirectGroupsOf("svc-web"); !slices.Equal(got, []string{"webgrp"}) {
-		t.Errorf("DirectGroupsOf(svc-web) = %v", got)
+	// holders unions the families it is given: dual is an address, a service
+	// and an application member.
+	holders := func(name string) []string {
+		id, _ := idx.in.Lookup(name)
+		return idx.holders(idx.families, id)
 	}
-	// GroupsOf asks every family: dual is an address, a service and an
-	// application member.
-	if got := slices.Sorted(slices.Values(idx.GroupsOf("dual"))); !slices.Equal(got, []string{"g-dual-addr", "g-dual-app", "g-dual-svc"}) {
-		t.Errorf("GroupsOf(dual) = %v", got)
+	if got := slices.Sorted(slices.Values(holders("dual"))); !slices.Equal(got, []string{"g-dual-addr", "g-dual-app", "g-dual-svc"}) {
+		t.Errorf("holders of dual = %v", got)
 	}
-	if got := idx.GroupsOf("webgrp"); got == nil || len(got) != 0 {
-		t.Errorf("GroupsOf(webgrp) = %#v, want empty", got)
+	if got := holders("webgrp"); got == nil || len(got) != 0 {
+		t.Errorf("holders of webgrp = %#v, want empty", got)
 	}
-	if got := idx.MembersOf("svc-web"); got != nil {
-		t.Errorf("MembersOf(svc-web) = %v, want none", got)
+	if got := membersOf(idx, "svc-web"); got != nil {
+		t.Errorf("members of svc-web = %v, want none", got)
 	}
 }
 
@@ -269,7 +291,7 @@ func TestAGroupKindWithoutMemberKindsHoldsEveryKind(t *testing.T) {
 func TestDynamicGroupIsEmptyWhereNothingIsTagged(t *testing.T) {
 	t.Parallel()
 	idx := indexOf(t, "../../testdata/config/firewall-multivsys.xml", "vsys3")
-	if got := idx.MembersOf("corp-location"); len(got) != 0 {
+	if got := membersOf(idx, "corp-location"); len(got) != 0 {
 		t.Errorf("vsys3 resolved corp-location to %v, want nothing", got)
 	}
 }
@@ -284,8 +306,8 @@ func TestBooleanFilterSelectsItsMembers(t *testing.T) {
 		"g-not": {"h-a"},
 		"g-bad": nil,
 	} {
-		if got := idx.MembersOf(group); !slices.Equal(got, want) {
-			t.Errorf("MembersOf(%s) = %v, want %v", group, got, want)
+		if got := membersOf(idx, group); !slices.Equal(got, want) {
+			t.Errorf("members of %s = %v, want %v", group, got, want)
 		}
 	}
 }
@@ -295,8 +317,8 @@ func TestBooleanFilterSelectsItsMembers(t *testing.T) {
 func TestParenthesisedFilterSelectsItsMembers(t *testing.T) {
 	t.Parallel()
 	idx := indexOf(t, "../../testdata/config/firewall-dynamic-filter.xml", "vsys1")
-	if got := slices.Sorted(slices.Values(idx.MembersOf("dag-paren"))); !slices.Equal(got, []string{"h-a", "h-b"}) {
-		t.Errorf("MembersOf(dag-paren) = %v, want [h-a h-b]", got)
+	if got := slices.Sorted(slices.Values(membersOf(idx, "dag-paren"))); !slices.Equal(got, []string{"h-a", "h-b"}) {
+		t.Errorf("members of dag-paren = %v, want [h-a h-b]", got)
 	}
 }
 

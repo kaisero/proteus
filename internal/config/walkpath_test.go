@@ -34,27 +34,6 @@ func testConfigs(t testing.TB) []string {
 	return g
 }
 
-// WalkPaths must lose nothing Walk found. Walk sees one shape and WalkPaths sees
-// every shape, so the old edge set is a subset of the new one — with the trailing
-// "/member" trimmed, which is the only naming difference between them.
-func TestWalkPathsLosesNothingWalkFound(t *testing.T) {
-	t.Parallel()
-	for _, p := range testConfigs(t) {
-		c, _, err := Load(p)
-		if err != nil {
-			continue // a fixture for an unsupported version
-		}
-		old := edgesFrom(t, c, c.Walk)
-		got := edgesFrom(t, c, c.WalkPaths)
-		for e := range old {
-			if !got[e] {
-				t.Errorf("%s: WalkPaths lost %s %s=%s",
-					filepath.Base(p), e.entry, e.field, e.value)
-			}
-		}
-	}
-}
-
 // A second implementation of the same question, sharing no code with the trie:
 // index every reference leaf by its full schema path, then emit wherever a
 // value-bearing element's SchemaPath is one of them. Any disagreement means the

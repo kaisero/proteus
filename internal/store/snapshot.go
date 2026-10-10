@@ -22,12 +22,6 @@ type Snapshot struct {
 // Path returns where a document of this snapshot is stored.
 func (sn Snapshot) Path(doc string) string { return filepath.Join(sn.Dir, doc+".xml") }
 
-// Has reports whether a document arrived in this snapshot.
-func (sn Snapshot) Has(doc string) bool {
-	_, err := os.Stat(sn.Path(doc))
-	return err == nil
-}
-
 // ConfigPath returns where this snapshot's configuration is stored, or an error
 // that matches ErrNoConfig when the configuration did not arrive.
 // A configuration that is there but cannot be read gives one that matches

@@ -40,6 +40,16 @@ func fullDevice(t *testing.T) *fakepanos.Device {
 	return d
 }
 
+// arrived reports whether a document's outcome is recorded without an error.
+func arrived(r Result, name string) bool {
+	for _, o := range r.Outcomes {
+		if o.Name == name {
+			return o.Err == nil
+		}
+	}
+	return false
+}
+
 func TestRunFetchesEveryDocument(t *testing.T) {
 	t.Parallel()
 	d := fullDevice(t)
@@ -48,14 +58,14 @@ func TestRunFetchesEveryDocument(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, doc := range Documents {
-		if !res.OK(doc.Name) || len(res.Docs[doc.Name]) == 0 {
+		if !arrived(res, doc.Name) || len(res.Docs[doc.Name]) == 0 {
 			t.Errorf("%s did not arrive: %+v", doc.Name, res.Outcomes)
 		}
 	}
 	if res.System.Serial != "007900000000001" {
 		t.Errorf("system info not parsed: %+v", res.System)
 	}
-	if res.OK("never-asked") {
+	if arrived(res, "never-asked") {
 		t.Error("a document never asked for is not OK")
 	}
 }
@@ -69,10 +79,10 @@ func TestRunContinuesPastAFailedDocument(t *testing.T) {
 	if err != nil {
 		t.Fatalf("one failed document must not fail the run: %v", err)
 	}
-	if res.OK("interfaces") {
+	if arrived(res, "interfaces") {
 		t.Error("interfaces must be recorded as failed")
 	}
-	if !res.OK("config") || !res.OK("fib") {
+	if !arrived(res, "config") || !arrived(res, "fib") {
 		t.Errorf("the other documents must still arrive: %+v", res.Outcomes)
 	}
 }
@@ -168,7 +178,7 @@ func TestACancelledRunEndsPromptly(t *testing.T) {
 	if elapsed := time.Since(start); elapsed > 10*time.Second {
 		t.Fatalf("the run took %s after its context ended", elapsed)
 	}
-	if err == nil && res.OK(RunningConfig.Name) {
+	if err == nil && arrived(res, RunningConfig.Name) {
 		t.Error("the stalled export cannot have succeeded")
 	}
 }
@@ -246,7 +256,7 @@ func TestARefusedPredefinedDocumentIsANote(t *testing.T) {
 					t.Errorf("outcome %+v: a refused optional document is not a document outcome", o)
 				}
 			}
-			if _, ok := s.Result.Docs[Predefined.Name]; ok || s.Result.OK(Predefined.Name) {
+			if _, ok := s.Result.Docs[Predefined.Name]; ok || arrived(s.Result, Predefined.Name) {
 				t.Error("a refused document did not arrive")
 			}
 			b, err := os.ReadFile(l.Path())

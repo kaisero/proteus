@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"maps"
 	"math/rand/v2"
-	"net/netip"
 	"slices"
 	"strings"
 	"testing"
@@ -82,7 +81,7 @@ func TestDynamicGroupWithAParenthesisedFilter(t *testing.T) {
 		addr string
 		hit  bool
 	}{{"10.88.1.1", true}, {"10.88.1.2", true}, {"10.88.1.3", false}} {
-		if got := names(idx.CandidatesFor(Source, netip.MustParseAddr(tc.addr))); got["from-dag"] != tc.hit {
+		if got := names(candidates(idx, Source, tc.addr)); got["from-dag"] != tc.hit {
 			t.Errorf("%s: from-dag in %v, want %v", tc.addr, keys(got), tc.hit)
 		}
 	}

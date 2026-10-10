@@ -72,8 +72,8 @@ func TestWriteThenLatest(t *testing.T) {
 	if len(got.Meta.Documents) != 1 || got.Meta.Documents[0].File != "config.xml" {
 		t.Errorf("documents = %+v", got.Meta.Documents)
 	}
-	if !got.Has(ConfigDoc) || got.Has(FIBDoc) {
-		t.Error("Has must reflect what arrived")
+	if !onDisk(got, ConfigDoc) || onDisk(got, FIBDoc) {
+		t.Error("the files must reflect what arrived")
 	}
 }
 
@@ -352,7 +352,7 @@ func TestConcurrentWritersOfOneID(t *testing.T) {
 		t.Errorf("%d writers stored the snapshot, want 1: %v", stored, errs)
 	}
 	got, err := s.Latest("fw01")
-	if err != nil || !got.Has(ConfigDoc) || len(got.Meta.Documents) != 1 {
+	if err != nil || !onDisk(got, ConfigDoc) || len(got.Meta.Documents) != 1 {
 		t.Errorf("the stored snapshot: %+v, %v", got, err)
 	}
 	entries, _ := os.ReadDir(filepath.Join(s.root, "fw01"))
@@ -396,7 +396,7 @@ func TestASecondWriterAfterTheRename(t *testing.T) {
 		t.Errorf("second writer: %v", err)
 	}
 	got, err := a.Latest("fw01")
-	if err != nil || got.ID != first.ID || !got.Has(ConfigDoc) || len(got.Meta.Documents) != 1 {
+	if err != nil || got.ID != first.ID || !onDisk(got, ConfigDoc) || len(got.Meta.Documents) != 1 {
 		t.Errorf("the first writer's snapshot: %+v, %v", got, err)
 	}
 	entries, _ := os.ReadDir(filepath.Join(a.root, "fw01"))
@@ -699,4 +699,10 @@ func TestAtCreatesNothingUntilAWrite(t *testing.T) {
 	if fi, err := os.Stat(root); err != nil || fi.Mode().Perm() != 0o700 {
 		t.Errorf("the write's root: %v %v", fi, err)
 	}
+}
+
+// onDisk reports whether a document of a snapshot is on disk.
+func onDisk(sn Snapshot, doc string) bool {
+	_, err := os.Stat(sn.Path(doc))
+	return err == nil
 }

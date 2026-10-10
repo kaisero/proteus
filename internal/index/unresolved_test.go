@@ -3,7 +3,6 @@ package index
 import (
 	"encoding/json"
 	"fmt"
-	"net/netip"
 	"strings"
 	"sync"
 	"testing"
@@ -132,8 +131,8 @@ func TestQueriesDoNotInternNewNames(t *testing.T) {
 	before := idx.Interner().Len()
 
 	idx.Candidates(Source, "not-a-real-object")
-	idx.CandidatesForName(Source, "also-not-real")
-	idx.CandidatesFor(Source, netip.MustParseAddr("10.9.9.9"))
+	idx.Candidates(Source, "also-not-real")
+	idx.Candidates(Source, "10.9.9.9")
 
 	if after := idx.Interner().Len(); after != before {
 		t.Errorf("interner grew from %d to %d names during lookups", before, after)
@@ -142,7 +141,7 @@ func TestQueriesDoNotInternNewNames(t *testing.T) {
 
 // The race the interning caused, exercised through the path that interned.
 //
-// CandidatesForName took an arbitrary name straight to Interner.ID, which writes
+// A lookup by name once took the name straight to Interner.ID, which writes
 // an unlocked map and appends a slice. An index is cached and shared, so two
 // callers asking about unknown names concurrently corrupted it. Under -race this
 // test fails on the old code.
@@ -155,7 +154,7 @@ func TestConcurrentUnknownNameLookupsAreSafe(t *testing.T) {
 		wg.Add(1)
 		go func(n int) {
 			defer wg.Done()
-			idx.CandidatesForName(Source, fmt.Sprintf("unknown-%d", n))
+			idx.Candidates(Source, fmt.Sprintf("unknown-%d", n))
 		}(i)
 	}
 	wg.Wait()

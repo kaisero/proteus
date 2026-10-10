@@ -47,7 +47,7 @@ func TestRunLogsOnlyForFailedCalls(t *testing.T) {
 			Env: env, Audit: rec, Logs: &runlog.Options{Dir: dir, Keep: 10, Level: level},
 			Limits: Limits{CallTimeout: timeout},
 		}
-		s, err := newServer(o, false)
+		s, _, err := build(o, false)
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -99,12 +99,12 @@ func (r *recorder) last(t *testing.T) Call {
 }
 
 // serve runs a server over env through in-memory transports and returns the
-// client's session and the audit. strict is New's: a panic fails the test.
+// client's session and the audit. strict is build's: a panic fails the test.
 func serve(t *testing.T, env query.Env, strict bool) (*sdk.ClientSession, *recorder) {
 	t.Helper()
 	ctx := context.Background()
 	rec := &recorder{}
-	s, err := newServer(Options{Env: env, Audit: rec, Version: "test"}, strict)
+	s, _, err := build(Options{Env: env, Audit: rec, Version: "test"}, strict)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -121,7 +121,7 @@ func serve(t *testing.T, env query.Env, strict bool) (*sdk.ClientSession, *recor
 	return cs, rec
 }
 
-// connect serves env as New does in a test binary.
+// connect serves env as Serve does in a test binary.
 func connect(t *testing.T, env query.Env) *sdk.ClientSession {
 	t.Helper()
 	cs, _ := serve(t, env, true)
@@ -684,14 +684,11 @@ func TestTheMiddleware(t *testing.T) {
 	callOf(ctx).set(func(*Call) { t.Error("set ran without a record") })
 }
 
-// New refuses an inventory without a device; Serve answers over a transport
+// Serve refuses an inventory without a device, and answers over a transport
 // until its context ends.
 func TestServe(t *testing.T) {
 	t.Parallel()
-	if _, err := New(Options{}); err == nil {
-		t.Error("New without an inventory")
-	}
-	if err := Serve(context.Background(), Options{}, Stdio()); err == nil {
+	if err := Serve(context.Background(), Options{}, &sdk.StdioTransport{}); err == nil {
 		t.Error("Serve without an inventory")
 	}
 	env := labEnv(t)
@@ -901,7 +898,7 @@ func TestTheVerdictIsCut(t *testing.T) {
 		t.Fatal(err)
 	}
 	var out bytes.Buffer
-	s, err := newServer(Options{Env: labEnv(t, snap{"fw01", broad}), Audit: AuditTo(&out), Version: "test"}, true)
+	s, _, err := build(Options{Env: labEnv(t, snap{"fw01", broad}), Audit: AuditTo(&out), Version: "test"}, true)
 	if err != nil {
 		t.Fatal(err)
 	}

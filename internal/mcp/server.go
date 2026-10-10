@@ -150,21 +150,11 @@ const instructions = "Report each result's verdict together with its fidelity le
 	"When a note says a snapshot is stale, state the snapshot's age. " +
 	"On the error call.choice, ask the user to pick one of the options and call again with it."
 
-// New is the MCP server: the six tools, the resources and the instructions,
-// with the receiving middleware that audits and recovers every call.
-func New(o Options) (*sdk.Server, error) {
-	return newServer(o, testing.Testing())
-}
-
-// newServer is New. strict re-panics a recovered panic, as a test binary
-// does: there an unregistered reason code or a bug fails the test instead of
-// hiding as call.internal.
-func newServer(o Options, strict bool) (*sdk.Server, error) {
-	s, _, err := build(o, strict)
-	return s, err
-}
-
-// build is newServer, with the limiter that Serve stops.
+// build is the MCP server: the six tools, the resources and the instructions,
+// with the receiving middleware that audits and recovers every call. It also
+// returns the limiter that Serve stops. strict re-panics a recovered panic, as
+// a test binary does: there an unregistered reason code or a bug fails the
+// test instead of hiding as call.internal.
 func build(o Options, strict bool) (*sdk.Server, *limiter, error) {
 	if o.Env.Inventory == nil || len(o.Env.Inventory.Devices) == 0 {
 		return nil, nil, errors.New("mcp: the inventory has no device")
@@ -225,9 +215,6 @@ func Serve(ctx context.Context, o Options, t sdk.Transport) error {
 // answerGrace is how long Serve waits, after the last call returned, for its
 // answer to be written before it closes the session.
 const answerGrace = 100 * time.Millisecond
-
-// Stdio is the transport over standard input and output.
-func Stdio() sdk.Transport { return &sdk.StdioTransport{} }
 
 // Streams is the stdio transport over r and w, one JSON-RPC message per
 // line. Serve does not close them.

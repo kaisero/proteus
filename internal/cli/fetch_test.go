@@ -204,7 +204,7 @@ func TestFetchStoresThePredefinedServices(t *testing.T) {
 		t.Fatal(err)
 	}
 	sn, err := st.Resolve("fw01")
-	if err != nil || !sn.Has(fetch.Predefined.Name) {
+	if _, statErr := os.Stat(sn.Path(fetch.Predefined.Name)); err != nil || statErr != nil {
 		t.Fatalf("predefined.xml not stored: %v", err)
 	}
 	cfg, _, err := config.Load(sn.Path(store.ConfigDoc))
@@ -247,7 +247,7 @@ func TestFetchWithoutThePredefinedServicesIsComplete(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if sn.Has(fetch.Predefined.Name) || len(sn.Meta.Documents) != 6 || len(sn.Meta.Notes) != 1 {
+	if _, statErr := os.Stat(sn.Path(fetch.Predefined.Name)); statErr == nil || len(sn.Meta.Documents) != 6 || len(sn.Meta.Notes) != 1 {
 		t.Errorf("meta = %+v", sn.Meta)
 	}
 }

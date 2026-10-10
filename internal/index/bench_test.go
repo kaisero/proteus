@@ -31,10 +31,10 @@ func BenchmarkContaining(b *testing.B) {
 	}
 }
 
-func BenchmarkGroupsOf(b *testing.B) {
+func BenchmarkGroupsHolding(b *testing.B) {
 	idx := indexOfB(b, "../../testdata/config/firewall-nested-groups.xml", "vsys1")
 	for b.Loop() {
-		_ = idx.GroupsOf("h-1")
+		_ = idx.GroupsHolding("address", "h-1", false)
 	}
 }
 
