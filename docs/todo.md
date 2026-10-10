@@ -70,6 +70,9 @@ Every item names its **component** (the package or area it changes) and one **ta
 | 51 | feature | mcp | Publish OAuth resource metadata if Portkey is dropped |
 | 52 | bug | simulate/routing, simulate/nat | NAT in the first vsys of an inter-vsys path sees the wrong egress zone |
 | 53 | qa | simulate/securitypolicy | A doubted NAT rule's own post-NAT zone is not a derived destination zone |
+| 54 | bug | simulate/routing | A hairpin through another firewall is reported as a loop |
+| 55 | qa | config, query | Undescribed elements of a configuration read with its own digest reach no answer |
+| 56 | qa | config, archtest | The read-only check sees setter names only, not writable exported fields |
 
 ---
 
@@ -497,3 +500,30 @@ Source for each: the code audit of 2026-10-10 and the cleanup plan
 - Only the fan-out kind reaches this: path mode gives the zones, and a NAT doubt
   leaves its hop undecided. Fix: translate each doubted rule too, and add its
   post-NAT zone.
+
+### 54. A hairpin through another firewall is reported as a loop
+
+- **Tag:** bug · **Component:** simulate/routing · **Source:** audit finding 13
+- The loop check keys on device, vsys and router. A path fw02 → fw01 → fw02, where
+  fw01 translates the destination to a host behind fw02, repeats that key and ends as
+  "loop", undecided, although the device delivers the packet.
+- The fix adds the current destination to the key; a real loop still repeats it. Do
+  it only after a check on fw01 and fw02 together (fw01 did not answer on 2026-10-10
+  and 2026-10-11): build the path with a DNAT on fw01 and confirm with the device
+  probes that the packet arrives.
+
+### 55. Undescribed elements of a configuration read with its own digest reach no answer
+
+- **Tag:** qa · **Component:** config, query · **Source:** cleanup plan T31 (R3)
+- `config.Load` counts the elements the digest does not describe, and the
+  `gap.version` note names the count. Without a version gap (a patch release read
+  with the digest of its own version) the count reaches no answer. A separate
+  `gap.undescribed` note would show it, but it marks the answer unresolved (exit 3).
+  Decide whether that is wanted.
+
+### 56. The read-only check sees setter names only, not writable exported fields
+
+- **Tag:** qa · **Component:** config, archtest · **Source:** cleanup plan T31 (R2)
+- `TestPublicAPIIsReadOnly` fails on an exported setter name. `config.Element` has
+  exported fields that a caller can still write. Make them read through methods, or
+  extend the check to exported, writable fields of model types.
