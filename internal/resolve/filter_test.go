@@ -115,7 +115,7 @@ func TestTagFilterTags(t *testing.T) {
 
 func TestTagFilterRejectsGarbage(t *testing.T) {
 	t.Parallel()
-	for _, bad := range []string{"", "and", "'a' and", "'a' 'b'", "('a'", "'a')", "$unquoted"} {
+	for _, bad := range []string{"", "and", "'a' and", "'a' 'b'", "('a'", "'a')", "$unquoted", "'a", "'a' or", "not", "('a' or"} {
 		if _, err := ParseTagFilter(bad); err == nil {
 			t.Errorf("ParseTagFilter(%q) must fail", bad)
 		}

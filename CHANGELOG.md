@@ -304,6 +304,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Long group cycles and large group trees no longer stall a question.** Each
+  group's members and doubts are worked out once per index build, and groups
+  that hold each other are joined first. Before, one cycle of 5,000 address
+  groups took 29 s to index and one of 2,000 took 11 s; now both take under
+  70 ms (`BenchmarkIndexBuildGroupCycle`). The `lookup` card of a rule whose
+  group tree holds 364 groups took 310 ms and 1.2 GB; now 9 ms and 32 MB
+  (`BenchmarkRuleCardNestedGroups`).
 - **The sample containers stop cleanly, and the proxy log keeps no identity
   claims.** `docker compose down` now lets proteus-mcp finish its running calls,
   and proteus-fetch stops its fetch at once and exits 143. The server's whole

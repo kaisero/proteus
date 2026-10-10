@@ -54,7 +54,7 @@ Repo map:
 - `internal/config/` — `load.go` (Load, Panorama refusal, digest cache), `tree.go` (element tree),
   `walk.go` (reference walk, `FieldKinds`, `KindContainers`), `embed.go`,
   `schemadigest/` (embedded digests).
-- `internal/resolve/` — `target.go`, `rules.go`, `objects.go`, `groups.go`,
+- `internal/resolve/` — `target.go`, `rules.go`, `objects.go`,
   `filter.go` (tag filters), `urlpattern.go`, `profiles.go`, `zones.go`.
 - `internal/index/` — `index.go` (build + cache), `candidates.go` (the driver),
   `resolver*.go` (one file per value space), `closure.go`, `cidr.go`, `rules.go`,

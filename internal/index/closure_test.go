@@ -1,6 +1,7 @@
 package index
 
 import (
+	"fmt"
 	"slices"
 	"testing"
 
@@ -260,5 +261,89 @@ func TestAGroupKindWithoutMemberKindsHoldsEveryKind(t *testing.T) {
 	want := []Group{{"address-group", "g-dual-addr"}, {"application-group", "g-dual-app"}, {"service-group", "g-dual-svc"}}
 	if got := idx.GroupsHolding("address", "dual", true); !slices.Equal(got, want) {
 		t.Errorf("GroupsHolding(address, dual) = %v, want %v", got, want)
+	}
+}
+
+// A vsys with no tagged objects of its own resolves the shared dynamic group to
+// nothing, which is the honest answer rather than the sibling's members.
+func TestDynamicGroupIsEmptyWhereNothingIsTagged(t *testing.T) {
+	t.Parallel()
+	idx := indexOf(t, "../../testdata/config/firewall-multivsys.xml", "vsys3")
+	if got := idx.MembersOf("corp-location"); len(got) != 0 {
+		t.Errorf("vsys3 resolved corp-location to %v, want nothing", got)
+	}
+}
+
+// A boolean filter selects by every tag it names, and a filter this build cannot
+// read selects nothing rather than a guess.
+func TestBooleanFilterSelectsItsMembers(t *testing.T) {
+	t.Parallel()
+	idx := indexOf(t, "../../testdata/config/firewall-badfilter.xml", "vsys1")
+	for group, want := range map[string][]string{
+		"g-and": {"h-both"},
+		"g-not": {"h-a"},
+		"g-bad": nil,
+	} {
+		if got := idx.MembersOf(group); !slices.Equal(got, want) {
+			t.Errorf("MembersOf(%s) = %v, want %v", group, got, want)
+		}
+	}
+}
+
+// A dynamic group whose filter starts with a parenthesis selects its tagged
+// addresses (L1).
+func TestParenthesisedFilterSelectsItsMembers(t *testing.T) {
+	t.Parallel()
+	idx := indexOf(t, "../../testdata/config/firewall-dynamic-filter.xml", "vsys1")
+	if got := slices.Sorted(slices.Values(idx.MembersOf("dag-paren"))); !slices.Equal(got, []string{"h-a", "h-b"}) {
+		t.Errorf("MembersOf(dag-paren) = %v, want [h-a h-b]", got)
+	}
+}
+
+// Groups that hold each other share their members, each without itself, and a
+// group holding a cycle holds all of it. A long cycle builds in one pass and
+// costs no call depth.
+func TestClosureOfComponents(t *testing.T) {
+	t.Parallel()
+	static := func(name, members string) resolve.Object {
+		return resolve.Object{Name: name, Kind: addressGroups, Value: members}
+	}
+	in := NewInterner()
+	c := newClosureIndex(in, []resolve.Object{
+		static("a", "b"), static("b", "c, h-1"), static("c", "a, d"), static("d", "h-2"),
+		static("e", "a"), static("s", "s, h-3"), static("empty", ""),
+	}, nil)
+	names := func(g string) []string {
+		b := c.forward[in.ID(g)]
+		var out []string
+		for it := b.Iterator(); it.HasNext(); {
+			out = append(out, in.Name(it.Next()))
+		}
+		slices.Sort(out)
+		return out
+	}
+	for g, want := range map[string][]string{
+		"a": {"b", "c", "d", "h-1", "h-2"},
+		"b": {"a", "c", "d", "h-1", "h-2"},
+		"c": {"a", "b", "d", "h-1", "h-2"},
+		"d": {"h-2"},
+		"e": {"a", "b", "c", "d", "h-1", "h-2"},
+		"s": {"h-3"},
+	} {
+		if got := names(g); !slices.Equal(got, want) {
+			t.Errorf("members of %s = %v, want %v", g, got, want)
+		}
+	}
+
+	const n = 5000
+	groups := make([]resolve.Object, n)
+	for i := range n {
+		groups[i] = static(fmt.Sprintf("c-%d", i), fmt.Sprintf("c-%d, h-%d", (i+1)%n, i))
+	}
+	long := newClosureIndex(NewInterner(), groups, nil)
+	for g, b := range long.forward {
+		if got := b.GetCardinality(); got != 2*n-1 || b.Contains(g) {
+			t.Fatalf("a group of the long cycle holds %d members, want %d without itself", got, 2*n-1)
+		}
 	}
 }

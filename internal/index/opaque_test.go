@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"github.com/RoaringBitmap/roaring/v2"
+
+	"github.com/okaiser/proteus/internal/resolve"
 )
 
 // A rule naming an external list, a region or a dynamic group, directly or
@@ -100,5 +102,62 @@ func TestDynamicGroupWithAParenthesisedFilter(t *testing.T) {
 	}
 	if len(idx.UnparsedFilters()) != 0 {
 		t.Errorf("unparsed filters: %v", idx.UnparsedFilters())
+	}
+}
+
+// classifierOf builds a classifier over static groups written as name -> members,
+// and the dynamic group dag.
+func classifierOf(groups map[string]string) *classifier {
+	c := &classifier{
+		addr: map[string]bool{"h": true}, list: map[string]bool{}, region: map[string]bool{},
+		group: map[string]resolve.Object{"dag": {Name: "dag", Kind: "address-group", Value: "'t'", Dynamic: true}},
+		via:   map[string]string{}, depth: map[string]int{},
+	}
+	for name, members := range groups {
+		c.group[name] = resolve.Object{Name: name, Kind: "address-group", Value: members}
+	}
+	return c
+}
+
+// Every group gets one answer, whatever group a rule names first: a cycle of
+// static groups that holds a dynamic group is opaque in every group of it, and a
+// cycle that holds none is opaque in none, with every group of it answered once.
+func TestClassifyAnswersEachGroupOnce(t *testing.T) {
+	t.Parallel()
+	groups := map[string]string{
+		"a": "b", "b": "c, h", "c": "a, dag", // a cycle reaching dag
+		"x": "y, h", "y": "z", "z": "x, h", // a cycle reaching nothing opaque
+		"top": "x, a",
+		"s":   "s, h", // a group holding itself
+	}
+	want := map[string]string{
+		"a":   "dag, in group c, in group b, in group a",
+		"b":   "dag, in group c, in group b",
+		"c":   "dag, in group c",
+		"top": "dag, in group c, in group b, in group a, in group top",
+		"x":   "", "y": "", "z": "", "s": "", "h": "",
+		"dag": "dag",
+	}
+	for _, order := range [][]string{
+		{"a", "b", "c", "x", "y", "z", "top", "s", "h", "dag"},
+		{"top", "c", "b", "a", "z", "y", "x", "s", "dag", "h"},
+		{"y", "b", "x", "s", "top", "z", "a", "h", "c", "dag"},
+	} {
+		c := classifierOf(groups)
+		for _, v := range order {
+			got := c.classify(v)
+			text := strings.TrimSuffix(strings.TrimPrefix(got.Text, opaqueRuntime+" ("), ")")
+			if text != want[v] {
+				t.Errorf("order %v: classify(%s) = %q, want %q", order, v, got.Text, want[v])
+			}
+		}
+		for _, g := range []string{"a", "b", "c", "x", "y", "z", "top", "s"} {
+			if _, done := c.via[g]; !done {
+				t.Errorf("order %v: %s has no stored answer", order, g)
+			}
+		}
+		if len(c.depth) != 0 || len(c.pending) != 0 {
+			t.Errorf("order %v: walk left state: depth %v, pending %v", order, c.depth, c.pending)
+		}
 	}
 }

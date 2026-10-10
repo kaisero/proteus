@@ -2,6 +2,7 @@ package index
 
 import (
 	"fmt"
+	"math"
 	"regexp"
 	"slices"
 	"strings"
@@ -26,7 +27,7 @@ const (
 // None of the three can be matched from a configuration. An external list is
 // fetched by the device, a region is the device's geolocation database, and a
 // dynamic group also holds members registered at runtime through User-ID or VM
-// monitoring (resolve.Members.Note). An address lookup reaches a rule naming one
+// monitoring, which are not in a configuration file. An address lookup reaches a rule naming one
 // only through "any", or, for a dynamic group, through the members the
 // configuration tags; without this record such a rule silently vanishes.
 type opaqueIndex struct {
@@ -50,53 +51,25 @@ type opaqueObjects struct {
 }
 
 func newOpaqueIndex(rules []resolve.Rule, objs opaqueObjects) *opaqueIndex {
-	addr := map[string]bool{}
+	c := &classifier{
+		addr:   map[string]bool{},
+		list:   map[string]bool{},
+		region: map[string]bool{},
+		group:  map[string]resolve.Object{},
+		via:    map[string]string{},
+		depth:  map[string]int{},
+	}
 	for _, o := range objs.addrs {
-		addr[o.Name] = true
+		c.addr[o.Name] = true
 	}
-	list := map[string]bool{}
 	for _, o := range objs.lists {
-		list[o.Name] = true
+		c.list[o.Name] = true
 	}
-	region := map[string]bool{}
 	for _, o := range objs.regions {
-		region[o.Name] = true
+		c.region[o.Name] = true
 	}
-	group := map[string]resolve.Object{}
 	for _, g := range objs.groups {
-		group[g.Name] = g
-	}
-
-	// classify classifies one value, following static groups; a cycle stops. The
-	// zero reason means the value is not opaque.
-	var classify func(v string, onPath map[string]bool) reason.Reason
-	classify = func(v string, onPath map[string]bool) reason.Reason {
-		if g, ok := group[v]; ok {
-			if g.Dynamic {
-				return reason.New("doubt.dynamic-group", fmt.Sprintf("%s (%s)", opaqueRuntime, v))
-			}
-			if onPath[v] {
-				return reason.Reason{}
-			}
-			onPath[v] = true
-			defer delete(onPath, v)
-			for m := range strings.SplitSeq(g.Value, ", ") {
-				if r := classify(strings.TrimSpace(m), onPath); r.Text != "" {
-					r.Text = strings.TrimSuffix(r.Text, ")") + ", in group " + v + ")"
-					return r
-				}
-			}
-			return reason.Reason{}
-		}
-		switch {
-		case v == "any" || addr[v] || len(prefixesOf(v)) > 0:
-			return reason.Reason{}
-		case list[v] || strings.HasPrefix(v, predefinedListPrefix):
-			return reason.New("doubt.edl", fmt.Sprintf("%s (%s)", opaqueExternalList, v))
-		case region[v] || predefinedRegion.MatchString(v):
-			return reason.New("doubt.region", fmt.Sprintf("%s (%s)", opaqueRegion, v))
-		}
-		return reason.Reason{}
+		c.group[g.Name] = g
 	}
 
 	o := &opaqueIndex{rules: map[Field]*roaring.Bitmap{}, reasons: map[Field]map[uint32][]reason.Reason{}}
@@ -105,8 +78,8 @@ func newOpaqueIndex(rules []resolve.Rule, objs opaqueObjects) *opaqueIndex {
 		for pos, r := range rules {
 			var rs []reason.Reason
 			for _, v := range r.Fields[f.String()] {
-				if c := classify(v, map[string]bool{}); c.Text != "" {
-					rs = append(rs, c)
+				if why := c.classify(v); why.Text != "" {
+					rs = append(rs, why)
 				}
 			}
 			if len(rs) > 0 {
@@ -119,6 +92,121 @@ func newOpaqueIndex(rules []resolve.Rule, objs opaqueObjects) *opaqueIndex {
 		o.rules[f], o.reasons[f] = b, why
 	}
 	return o
+}
+
+// classifier decides whether a value is opaque, following static groups. Each
+// static group is walked once per index build: via remembers the answer.
+type classifier struct {
+	addr, list, region map[string]bool
+	group              map[string]resolve.Object
+
+	// via holds, for each static group walked, the member through which it is
+	// opaque, or "" when it is not.
+	via map[string]string
+	// depth holds the static groups on the walk, by their depth on it.
+	depth map[string]int
+	// pending holds the groups found not opaque only because the walk was cut
+	// at a group above them; their answer waits for that group's.
+	pending []string
+}
+
+// onNoCycle is the depth walk returns when it cut no cycle.
+const onNoCycle = math.MaxInt
+
+// classify returns why a value is opaque: the zero reason when it is not. A value
+// reached through static groups names them, innermost first.
+func (c *classifier) classify(v string) reason.Reason {
+	if found, _ := c.walk(v); found == "" {
+		return reason.Reason{}
+	}
+	var chain []string
+	for {
+		if g, ok := c.group[v]; !ok || g.Dynamic {
+			break
+		}
+		chain = append(chain, v)
+		v = c.via[v]
+	}
+	r := c.leaf(v)
+	text := strings.TrimSuffix(r.Text, ")")
+	for _, g := range slices.Backward(chain) {
+		text += ", in group " + g
+	}
+	r.Text = text + ")"
+	return r
+}
+
+// walk returns v when the value is opaque and "" when it is not, and the least
+// depth of a group on the walk that a cycle led back to, onNoCycle when none.
+func (c *classifier) walk(v string) (string, int) {
+	g, isGroup := c.group[v]
+	if !isGroup || g.Dynamic {
+		if c.leaf(v).Text != "" {
+			return v, onNoCycle
+		}
+		return "", onNoCycle
+	}
+	if m, done := c.via[v]; done {
+		if m == "" {
+			return "", onNoCycle
+		}
+		return v, onNoCycle
+	}
+	if d, on := c.depth[v]; on {
+		return "", d // a cycle: stop rather than recurse
+	}
+	d := len(c.depth)
+	c.depth[v] = d
+	mark := len(c.pending)
+	cut := onNoCycle
+	via := ""
+	for m := range strings.SplitSeq(g.Value, ", ") {
+		m = strings.TrimSpace(m)
+		found, at := c.walk(m)
+		cut = min(cut, at)
+		if found != "" {
+			via = m
+			break
+		}
+	}
+	delete(c.depth, v)
+	switch {
+	case via != "":
+		c.via[v] = via
+		// The groups pending below v reach v, so they are opaque too; they
+		// are walked again when a rule names them.
+		c.pending = c.pending[:mark]
+		return v, onNoCycle
+	case cut >= d:
+		// The walk from v saw everything v reaches and found nothing, and the
+		// groups pending below v reach only what v reaches.
+		for _, p := range c.pending[mark:] {
+			c.via[p] = ""
+		}
+		c.pending = c.pending[:mark]
+		c.via[v] = ""
+		return "", onNoCycle
+	default:
+		c.pending = append(c.pending, v)
+		return "", cut
+	}
+}
+
+// leaf classifies a value that is no static group: a dynamic group, an external
+// list, a region, or an address, which is not opaque.
+func (c *classifier) leaf(v string) reason.Reason {
+	if g, ok := c.group[v]; ok && g.Dynamic {
+		return reason.New("doubt.dynamic-group", fmt.Sprintf("%s (%s)", opaqueRuntime, v))
+	}
+	switch {
+	case v == "any" || c.addr[v] || len(prefixesOf(v)) > 0:
+		return reason.Reason{}
+	case c.list[v] || strings.HasPrefix(v, predefinedListPrefix):
+		return reason.New("doubt.edl", fmt.Sprintf("%s (%s)", opaqueExternalList, v))
+	case c.region[v] || predefinedRegion.MatchString(v):
+		return reason.New("doubt.region", fmt.Sprintf("%s (%s)", opaqueRegion, v))
+	}
+	return reason.Reason{}
 }
 
 // Opaque returns the rules whose field names an external list, a region or a

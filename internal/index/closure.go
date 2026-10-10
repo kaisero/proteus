@@ -81,61 +81,108 @@ func newClosureIndex(in *Interner, groups, addrs []resolve.Object) *closureIndex
 			c.direct[gid] = append(c.direct[gid], in.ID(m))
 		}
 	}
-	cut := false
-	for gid := range c.direct {
-		c.expand(gid, map[uint32]bool{}, &cut)
-	}
-	if cut {
-		c.settle()
-	}
+	c.settle()
 	return c
 }
 
-// expand builds one group's transitive membership, guarding against a cycle. A
-// cycle stops the walk and sets cut: the groups on it then miss members, and
-// which ones depends on the group the walk started from.
-func (c *closureIndex) expand(g uint32, onPath map[uint32]bool, cut *bool) *roaring.Bitmap {
-	if b, done := c.forward[g]; done {
-		return b
-	}
-	if onPath[g] {
-		*cut = true
-		return roaring.New() // a cycle: stop rather than recurse
-	}
-	onPath[g] = true
-	b := roaring.New()
-	for _, m := range c.direct[g] {
-		b.Add(m)
-		if _, isGroup := c.direct[m]; isGroup {
-			b.Or(c.expand(m, onPath, cut))
-		}
-	}
-	delete(onPath, g)
-	c.forward[g] = b
-	return b
-}
-
-// settle completes the membership after a cycle was cut: it ORs each group's
-// direct members' sets into its own until no set grows, so every group on a
-// cycle holds what any of them holds, whatever group the walk started from. A
-// group on a cycle reaches itself; that is no membership, so it is dropped.
+// settle builds every group's transitive membership in one pass. Groups may form
+// a cycle, which the configuration allows: the groups of a strongly connected
+// component hold each other, so they share one set, built once. The components
+// come from components in an order where a component follows every component it
+// holds, so the sets a group's members need are always complete. A group on a
+// cycle reaches itself; that is no membership, so it is dropped.
+//
+// Measured on 20,000 addresses and 5,000 rules beside one cycle of 5,000 groups
+// (BenchmarkIndexBuildGroupCycle): the build took 29 s while it ORed the
+// members' sets until none grew; with one pass over the components it takes
+// 69 ms.
 func (c *closureIndex) settle() {
-	for grew := true; grew; {
-		grew = false
-		for g, members := range c.direct {
-			b := c.forward[g]
-			before := b.GetCardinality()
-			for _, m := range members {
-				if mb, isGroup := c.forward[m]; isGroup {
+	for _, comp := range c.components() {
+		b := roaring.New()
+		for _, g := range comp {
+			for _, m := range c.direct[g] {
+				b.Add(m)
+				// A member of this component has no set yet; its members are
+				// the component's own, added by this loop.
+				if mb, done := c.forward[m]; done {
 					b.Or(mb)
 				}
 			}
-			grew = grew || b.GetCardinality() != before
+		}
+		for _, g := range comp {
+			if !b.Contains(g) {
+				c.forward[g] = b // a group on no cycle: the set is its own
+				continue
+			}
+			own := b.Clone()
+			own.Remove(g)
+			c.forward[g] = own
 		}
 	}
-	for g, b := range c.forward {
-		b.Remove(g)
+}
+
+// components returns the groups' strongly connected components, by Tarjan's
+// algorithm, each after every component its groups hold. The walk keeps its own
+// stack rather than recursing, so a long chain of groups costs no call depth.
+func (c *closureIndex) components() [][]uint32 {
+	type frame struct {
+		g    uint32
+		next int // the next direct member to visit
 	}
+	order := map[uint32]int{} // visit order
+	low := map[uint32]int{}   // lowest visit order the group reaches on the stack
+	onStack := map[uint32]bool{}
+	var stack []uint32
+	var out [][]uint32
+	visit := func(g uint32) frame {
+		order[g], low[g] = len(order), len(order)
+		stack = append(stack, g)
+		onStack[g] = true
+		return frame{g: g}
+	}
+	for _, root := range slices.Sorted(maps.Keys(c.direct)) {
+		if _, seen := order[root]; seen {
+			continue
+		}
+		walk := []frame{visit(root)}
+		for len(walk) > 0 {
+			f := &walk[len(walk)-1]
+			if members := c.direct[f.g]; f.next < len(members) {
+				m := members[f.next]
+				f.next++
+				if _, isGroup := c.direct[m]; !isGroup {
+					continue
+				}
+				if _, seen := order[m]; !seen {
+					walk = append(walk, visit(m))
+				} else if onStack[m] {
+					low[f.g] = min(low[f.g], order[m])
+				}
+				continue
+			}
+			g := f.g
+			walk = walk[:len(walk)-1]
+			if len(walk) > 0 {
+				p := walk[len(walk)-1].g
+				low[p] = min(low[p], low[g])
+			}
+			if low[g] != order[g] {
+				continue
+			}
+			var comp []uint32
+			for {
+				top := stack[len(stack)-1]
+				stack = stack[:len(stack)-1]
+				onStack[top] = false
+				comp = append(comp, top)
+				if top == g {
+					break
+				}
+			}
+			out = append(out, comp)
+		}
+	}
+	return out
 }
 
 // ancestors returns the groups holding a member, computing them on first ask.

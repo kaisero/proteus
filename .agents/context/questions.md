@@ -38,7 +38,8 @@ lists), groups (`GroupsHolding` per kind a name was found as, one level up with
 the scope: a security rule (`idx.Rules()`) or an object of any kind
 `resolve.ObjectKinds` lists. `Rule` lays a rule out in the rule editor's sections;
 `Object` gives a value, members, profiles and the groups of its kind holding it
-(`GroupsHolding` with direct). Every `Item` carries its value and children to full depth; a
+(`GroupsHolding` with direct). A group's members come from the builder's object
+cache, read once per kind; a dynamic group shows its filter as written. Every `Item` carries its value and children to full depth; a
 name no object defines is `Literal` (an address or prefix) or `Predefined` (in
 source, destination, service, category). The command cuts trees at three levels
 and lists at five items; JSON carries the whole card.

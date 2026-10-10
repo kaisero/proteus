@@ -130,16 +130,16 @@ func (b *builder) objectItem(o resolve.Object, seen map[string]bool) Item {
 	case "address":
 		it.Value = addressValue(o.Value)
 	case "address-group":
-		m, err := resolve.GroupInScope(b.cfg, b.sc, o.Name)
-		switch {
-		case err != nil:
-			it.Value = err.Error()
-		case m.Filter != "":
-			it.Value = "dynamic, filter " + m.Filter
-		default:
-			for _, n := range m.Static {
-				it.Children = append(it.Children, b.item("source", n, seen))
+		// A dynamic group's value is its tag filter, a static group's its
+		// member list. The card shows the filter as written.
+		if o.Dynamic {
+			if o.Value != "" {
+				it.Value = "dynamic, filter " + o.Value
 			}
+			break
+		}
+		for _, n := range splitList(o.Value) {
+			it.Children = append(it.Children, b.item("source", n, seen))
 		}
 	case "service":
 		it.Value = o.Value

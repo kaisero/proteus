@@ -56,7 +56,10 @@ incomplete one:
 2. the field names a group holding such an object, at any depth, static membership
    or tag filter alike — the closure. Each group kind (address, service,
    application group) has its own closure, and a field asks only the group kinds
-   the schema lets it name: an address group and a service group may share a name
+   the schema lets it name: an address group and a service group may share a name.
+   The closure is built in one pass: groups that hold each other (a cycle) are
+   joined into one component first, and the components are built in the order
+   they hold each other (`settle`, `components` in `closure.go`)
 3. the field holds a matching value directly — `literalRules`
 4. the field is `any` — `RulesWithAny`
 

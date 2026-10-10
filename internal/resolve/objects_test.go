@@ -346,3 +346,38 @@ func TestPredefinedServicesSitBelowShared(t *testing.T) {
 		t.Errorf("no predefined.xml: %s", serviceList(got))
 	}
 }
+
+// A dynamic group is known by its dynamic element, not by the first character of
+// its filter. As observed on fw02, PAN-OS 12.2.3, a filter may start with "("
+// (L1); read as a member list it held one fake member and no address.
+func TestDynamicGroupIsKnownByItsElement(t *testing.T) {
+	t.Parallel()
+	cfg := loadT(t, "../../testdata/config/firewall-dynamic-filter.xml")
+	sc := config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}
+	groups := ObjectsInScope(cfg, sc, "address-group")
+	if len(groups) == 0 {
+		t.Fatal("no address group")
+	}
+	for _, o := range groups {
+		if !o.Dynamic {
+			t.Errorf("%s: Dynamic = false", o.Name)
+		}
+		if o.Name == "dag-paren" && o.Value != "('t-a' or 't-b')" {
+			t.Errorf("dag-paren: Value = %q, want its filter", o.Value)
+		}
+	}
+	for _, o := range ObjectsInScope(cfg, sc, "address") {
+		if o.Dynamic {
+			t.Errorf("address %s: Dynamic = true", o.Name)
+		}
+	}
+	static := false
+	for _, o := range ObjectsInScope(fwLab(t), sc, "address-group") {
+		if o.Name == "g-servers" {
+			static = !o.Dynamic && o.Value == "dc01"
+		}
+	}
+	if !static {
+		t.Error("g-servers: want a static group holding dc01")
+	}
+}
