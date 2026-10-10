@@ -298,6 +298,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Groups that hold each other now give the same answer on every run.** When
+  address groups formed a cycle, which groups held an address depended on the order
+  the index was built in, so a rule on one of them was found on some runs and
+  missed on others.
 - **`search` now refuses a kind it does not know.** `--kind adress` (or `kind` in the
   MCP tool) exits 2 and lists the kinds the configuration can hold. Before, a
   misspelt kind found nothing, which read like an answer.

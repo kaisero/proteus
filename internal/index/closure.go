@@ -88,18 +88,25 @@ func newClosureIndex(in *Interner, groups, addrs []resolve.Object, others ...[]r
 			}
 		}
 	}
+	cut := false
 	for gid := range c.direct {
-		c.expand(gid, map[uint32]bool{})
+		c.expand(gid, map[uint32]bool{}, &cut)
+	}
+	if cut {
+		c.settle()
 	}
 	return c
 }
 
-// expand builds one group's transitive membership, guarding against a cycle.
-func (c *closureIndex) expand(g uint32, onPath map[uint32]bool) *roaring.Bitmap {
+// expand builds one group's transitive membership, guarding against a cycle. A
+// cycle stops the walk and sets cut: the groups on it then miss members, and
+// which ones depends on the group the walk started from.
+func (c *closureIndex) expand(g uint32, onPath map[uint32]bool, cut *bool) *roaring.Bitmap {
 	if b, done := c.forward[g]; done {
 		return b
 	}
 	if onPath[g] {
+		*cut = true
 		return roaring.New() // a cycle: stop rather than recurse
 	}
 	onPath[g] = true
@@ -107,12 +114,35 @@ func (c *closureIndex) expand(g uint32, onPath map[uint32]bool) *roaring.Bitmap 
 	for _, m := range c.direct[g] {
 		b.Add(m)
 		if _, isGroup := c.direct[m]; isGroup {
-			b.Or(c.expand(m, onPath))
+			b.Or(c.expand(m, onPath, cut))
 		}
 	}
 	delete(onPath, g)
 	c.forward[g] = b
 	return b
+}
+
+// settle completes the membership after a cycle was cut: it ORs each group's
+// direct members' sets into its own until no set grows, so every group on a
+// cycle holds what any of them holds, whatever group the walk started from. A
+// group on a cycle reaches itself; that is no membership, so it is dropped.
+func (c *closureIndex) settle() {
+	for grew := true; grew; {
+		grew = false
+		for g, members := range c.direct {
+			b := c.forward[g]
+			before := b.GetCardinality()
+			for _, m := range members {
+				if mb, isGroup := c.forward[m]; isGroup {
+					b.Or(mb)
+				}
+			}
+			grew = grew || b.GetCardinality() != before
+		}
+	}
+	for g, b := range c.forward {
+		b.Remove(g)
+	}
 }
 
 // ancestors returns the groups holding a member, computing them on first ask.

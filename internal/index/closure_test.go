@@ -1,6 +1,7 @@
 package index
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/okaiser/proteus/internal/config"
@@ -54,12 +55,26 @@ func TestMembersOfIsTransitive(t *testing.T) {
 	}
 }
 
-// A cycle must not hang or overflow. The membership is still reported.
+// A cycle must not hang or overflow, and the answer must not depend on the group
+// the build starts from: g-inner holds h-1 and g-outer, g-outer holds g-middle,
+// g-middle holds g-inner. Every group of the cycle holds h-1, so the rule on
+// g-outer is a candidate for 10.1.1.1 on every build. Map order picks the start;
+// run with -count to try many.
 func TestClosureSurvivesACycle(t *testing.T) {
 	t.Parallel()
 	idx := indexOf(t, "../../testdata/config/firewall-cyclic-groups.xml", "vsys1")
-	if got := idx.GroupsOf("h-1"); len(got) == 0 {
-		t.Error("a cyclic group definition still has members")
+	if got := slices.Sorted(slices.Values(idx.GroupsOf("h-1"))); !slices.Equal(got, []string{"g-inner", "g-middle", "g-outer"}) {
+		t.Errorf("GroupsOf(h-1) = %v, want the three groups of the cycle", got)
+	}
+	for _, g := range []string{"g-inner", "g-middle", "g-outer"} {
+		members := idx.MembersOf(g)
+		if !slices.Contains(members, "h-1") || slices.Contains(members, g) {
+			t.Errorf("MembersOf(%s) = %v: want h-1, and not the group itself", g, members)
+		}
+	}
+	b, _ := idx.Candidates(Source, "10.1.1.1")
+	if !ruleNames(idx, b)["allow-outer"] {
+		t.Error("allow-outer is missing for 10.1.1.1")
 	}
 }
 
