@@ -68,9 +68,11 @@ or the audit is not reliable.
   use the server.
 - The audit lines hold addresses and identities. Treat the container's log, or
   the audit file, as sensitive.
-- Behind the proxy, the audit `remote` of a refused request is the proxy's
-  address, so the limit of 10 refusal lines per address counts every client as
-  one. proteus does not read `X-Forwarded-For`, and it must not trust it.
+- proteus does not audit a refused request (401 or 403). Its process log counts
+  them by status once a minute. Portkey's logs hold the refused attempts at the
+  gateway, and Caddy's logs the requests that bypass it. Behind the proxy every
+  request has the proxy's address; proteus does not read `X-Forwarded-For`, and
+  it must not trust it.
 - Rotate the token in the secret file and in Portkey together, then restart
   `proteus-mcp`.
 

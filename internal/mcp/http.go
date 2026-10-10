@@ -5,14 +5,19 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"errors"
+	"fmt"
+	"maps"
 	"net"
 	"net/http"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/okaiser/proteus/internal/runlog"
 )
 
 // HTTPOptions configure the Streamable HTTP server (spec §4.4).
@@ -40,10 +45,10 @@ const (
 // ServeHTTP answers MCP calls over Streamable HTTP on ln, in plain text
 // behind a reverse proxy that terminates TLS, until ctx ends (spec §4.4).
 // Every request but /healthz must carry the token (401) and, when allowed
-// hosts are set, name one of them (403); refusals are audited, rate-limited
-// per address. When ctx ends
-// (SIGTERM), new calls answer call.busy, the running calls get up to the
-// call timeout to answer, the server shuts down, and ServeHTTP returns.
+// hosts are set, name one of them (403). Refusals are not audited: the
+// process log counts them by status once a minute. When ctx ends (SIGTERM),
+// new calls answer call.busy, the running calls get up to the call timeout
+// to answer, the server shuts down, and ServeHTTP returns.
 func ServeHTTP(ctx context.Context, o Options, h HTTPOptions, ln net.Listener) error {
 	if h.Token == "" {
 		_ = ln.Close()
@@ -58,7 +63,8 @@ func ServeHTTP(ctx context.Context, o Options, h HTTPOptions, ln net.Listener) e
 	ref := srv.Handler.(*guard).refusals
 	served := make(chan error, 1)
 	go func() { served <- srv.Serve(ln) }()
-	tick := time.NewTicker(refusalWindow / 2)
+	// The ticker checks often; flush writes once a minute has passed.
+	tick := time.NewTicker(refusalWindow / 6)
 	defer tick.Stop()
 	for stopping := false; !stopping; {
 		select {
@@ -109,7 +115,7 @@ func newHTTPServer(s *sdk.Server, o Options, h HTTPOptions, lim *limiter) *http.
 	g := &guard{
 		next: sdkHandler, digest: sha256.Sum256([]byte(h.Token)),
 		hosts:    map[string]bool{},
-		refusals: &refusals{audit: o.Audit, now: now, by: map[string]*refusalCount{}},
+		refusals: &refusals{log: o.Log, now: now, by: map[int]int{}},
 	}
 	for _, host := range h.AllowedHosts {
 		g.hosts[strings.ToLower(host)] = true
@@ -142,12 +148,12 @@ func (g *guard) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if len(g.hosts) > 0 && !g.hosts[hostOf(r.Host)] {
-		g.refusals.refuse(remoteOf(r), http.StatusForbidden)
+		g.refusals.refuse(http.StatusForbidden)
 		http.Error(w, "host not allowed", http.StatusForbidden)
 		return
 	}
 	if !g.authorised(r.Header.Get("Authorization")) {
-		g.refusals.refuse(remoteOf(r), http.StatusUnauthorized)
+		g.refusals.refuse(http.StatusUnauthorized)
 		w.Header().Set("WWW-Authenticate", "Bearer")
 		http.Error(w, "unauthorised", http.StatusUnauthorized)
 		return
@@ -175,119 +181,48 @@ func hostOf(host string) string {
 	return strings.ToLower(strings.TrimSuffix(strings.TrimPrefix(host, "["), "]"))
 }
 
-// remoteOf is the client's address without its port: behind the proxy, the
-// proxy's.
-func remoteOf(r *http.Request) string {
-	if h, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
-		return h
-	}
-	return r.RemoteAddr
-}
+// refusalWindow is how often, at most, the process log counts the refused
+// requests (spec 2026-10-10 F5).
+const refusalWindow = time.Minute
 
-// The audit bound for refused requests (spec §4.9): at most refusalLimit
-// lines per address in each refusalWindow; a summary line counts the rest.
-const (
-	refusalLimit  = 10
-	refusalWindow = time.Minute
-	// maxRefusers bounds the addresses counted apart; the refusals of any
-	// further address count under "other".
-	maxRefusers = 4096
-)
-
-// refusals audits refused requests, rate-limited per address.
+// refusals counts refused requests by HTTP status. They are not audited one
+// by one: behind the proxy every request has the proxy's address, the
+// gateway logs its users and the proxy logs direct scans. A count shows a
+// token or Host fault (spec 2026-10-10 F5).
 type refusals struct {
-	audit Auditor
-	now   func() time.Time
+	log *runlog.Logger
+	now func() time.Time
 
-	mu sync.Mutex
-	by map[string]*refusalCount
+	mu    sync.Mutex
+	start time.Time   // the first refusal not yet logged
+	by    map[int]int // HTTP status -> refusals
 }
 
-// refusalCount is one address's refusals in its current window.
-type refusalCount struct {
-	start    time.Time
-	audited  int
-	dropped  int
-	lastCode int
-}
-
-// refuse audits a refused request from remote with its HTTP status, unless
-// the address passed its limit in this window.
-func (r *refusals) refuse(remote string, code int) {
-	if r.audit == nil {
-		return
-	}
-	now := r.now()
-	var summary *Call
+// refuse counts a refused request with its HTTP status.
+func (r *refusals) refuse(code int) {
 	r.mu.Lock()
-	n := r.by[remote]
-	if n == nil && len(r.by) >= maxRefusers {
-		remote = "other"
-		n = r.by[remote]
+	defer r.mu.Unlock()
+	if len(r.by) == 0 {
+		r.start = r.now()
 	}
-	if n != nil && now.Sub(n.start) >= refusalWindow {
-		// This address's window is over: its summary, then a new window. The
-		// ticker ends the windows of the addresses that went quiet.
-		summary = n.summary(remote, now)
-		n = nil
-		delete(r.by, remote)
-	}
-	if n == nil {
-		n = &refusalCount{start: now}
-		r.by[remote] = n
-	}
-	n.lastCode = code
-	audit := n.audited < refusalLimit
-	if audit {
-		n.audited++
-	} else {
-		n.dropped++
-	}
-	r.mu.Unlock()
-	if summary != nil {
-		r.audit.Audit(*summary)
-	}
-	if !audit {
-		return
-	}
-	r.audit.Audit(Call{
-		Time: now, Identity: Identity{Auth: AuthToken, Source: SourceNone}, Remote: remote,
-		Status: StatusUnauthorised, HTTPStatus: code,
-	})
+	r.by[code]++
 }
 
-// flush ends the windows that are over, all of them when all is set, and
-// writes a summary line for each address that had refusals not audited.
+// flush writes one warn line with the counts by status, once a minute has
+// passed since the first refusal it counts, or at once when all is set; then
+// it counts from zero. Without a refusal it writes nothing.
 func (r *refusals) flush(all bool) {
-	if r.audit == nil {
+	r.mu.Lock()
+	if len(r.by) == 0 || !all && r.now().Sub(r.start) < refusalWindow {
+		r.mu.Unlock()
 		return
 	}
-	now := r.now()
-	var lines []Call
-	r.mu.Lock()
-	for remote, n := range r.by {
-		if !all && now.Sub(n.start) < refusalWindow {
-			continue
-		}
-		delete(r.by, remote)
-		if c := n.summary(remote, now); c != nil {
-			lines = append(lines, *c)
-		}
+	codes := slices.Sorted(maps.Keys(r.by))
+	parts := make([]string, 0, len(codes))
+	for _, code := range codes {
+		parts = append(parts, fmt.Sprintf("%d ×%d", code, r.by[code]))
 	}
+	clear(r.by)
 	r.mu.Unlock()
-	for _, c := range lines {
-		r.audit.Audit(c)
-	}
-}
-
-// summary is the line that counts the refusals of remote not audited in
-// this window; nil when there were none.
-func (n *refusalCount) summary(remote string, now time.Time) *Call {
-	if n.dropped == 0 {
-		return nil
-	}
-	return &Call{
-		Time: now, Identity: Identity{Auth: AuthToken, Source: SourceNone}, Remote: remote,
-		Status: StatusUnauthorised, HTTPStatus: n.lastCode, Refused: n.dropped,
-	}
+	r.log.Warnf(runlog.TagRun, "mcp: refused in the last minute: %s", strings.Join(parts, ", "))
 }

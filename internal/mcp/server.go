@@ -35,10 +35,14 @@ type Options struct {
 	// Identify gives a call's identity from its HTTP header (nil over
 	// stdio): HeaderIdentity or StdioIdentity. Nil records none.
 	Identify func(http.Header) Identity
-	// Logs opens a run log per tool call, named mcp-<tool>-<time>-<seq>.log
-	// in Logs.Dir, Logs.Keep kept (spec §4.9). Command is set per call. Nil
-	// writes no run log.
+	// Logs is the run log of each tool call, named mcp-<tool>-<time>-<seq>.log
+	// in Logs.Dir, Logs.Keep kept (spec §4.9). Command is set per call. The
+	// file is written only for a call that ends internal or timeout, or for
+	// every call at Logs.Level debug (spec 2026-10-10 F4). Nil writes none.
 	Logs *runlog.Options
+	// Log is the server process's own log: the counts of refused HTTP
+	// requests go there. Nil writes nothing.
+	Log *runlog.Logger
 }
 
 // Limits bound what the server does at once and keeps (spec §4.2, §4.7).
@@ -110,12 +114,6 @@ type Call struct {
 	Stack []byte
 	// Identity is who the call claims to come from.
 	Identity Identity
-	// Remote, HTTPStatus and Refused describe a request the HTTP server
-	// refused: the client's address, 401 or 403, and on a summary line the
-	// refusals of that address not audited one by one.
-	Remote     string
-	HTTPStatus int
-	Refused    int
 }
 
 // Auditor records tool calls. Audit runs once per call, after the answer,
@@ -320,26 +318,37 @@ func logOf(ctx context.Context) *runlog.Logger {
 const maxLogTool = 64
 
 // openLog opens the run log of call c and records its input; nil when the
-// server writes none or the log does not open.
+// server writes none or the log does not open. At debug the file opens now;
+// else the log holds its lines in memory until closeLog keeps them.
 func (m middleware) openLog(c *Call) *runlog.Logger {
 	if m.logs == nil {
 		return nil
 	}
 	o := *m.logs
 	o.Command = "mcp-" + cut(c.Tool, maxLogTool)
-	l, err := runlog.Open(o)
-	if err != nil {
-		return nil
+	var l *runlog.Logger
+	if o.Level >= runlog.Debug {
+		var err error
+		if l, err = runlog.Open(o); err != nil {
+			return nil
+		}
+	} else {
+		l = runlog.Buffered(o)
 	}
 	l.Infof(runlog.TagRun, "call %s: %s", c.Tool, c.Input)
 	return l
 }
 
 // closeLog records how call c ended in its run log, a panic's stack
-// included, and closes the log.
+// included, and closes the log. A buffered log is written only when the call
+// ended internal or timeout: a fault or a slow call keeps its detail, and an
+// answer explains itself in its reasons and codes (spec 2026-10-10 F4).
 func closeLog(l *runlog.Logger, c *Call) {
 	if l == nil {
 		return
+	}
+	if c.Status == StatusInternal || c.Status == StatusTimeout {
+		_ = l.Persist() // a log that does not open leaves the call without one
 	}
 	if c.Err != "" {
 		l.Warnf(runlog.TagRun, "%s", c.Err)

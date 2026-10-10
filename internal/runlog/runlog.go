@@ -92,7 +92,17 @@ type Logger struct {
 	secrets []string
 	path    string
 	now     func() time.Time
+	// A buffered log holds its lines here until Persist creates its file;
+	// pending keeps what Persist needs. Both are nil once it did, or closed.
+	buf     []byte
+	dropped int
+	pending *Options
+	base    string
 }
+
+// maxBuffer bounds a buffered log in memory; past it, lines are counted, not
+// kept.
+const maxBuffer = 4 << 20
 
 // maxTries bounds the names Open tries before it gives up.
 const maxTries = 999
@@ -126,14 +136,66 @@ func Open(o Options) (*Logger, error) {
 		return nil, fmt.Errorf("runlog: %w", err)
 	}
 	l := &Logger{file: f, echo: o.Echo, level: o.Level, path: path, now: now}
-	keep := o.Keep
+	l.rotate(o.Dir, o.Keep) // nobody else holds l yet
+	return l, nil
+}
+
+// rotate keeps the newest keep files in dir, 20 when keep is not positive,
+// and logs a failure. l.mu is held, or nobody else holds l.
+func (l *Logger) rotate(dir string, keep int) {
 	if keep <= 0 {
 		keep = 20
 	}
-	if err := rotate(o.Dir, keep); err != nil {
-		l.Warnf(TagRun, "log rotation failed: %v", err)
+	if err := rotate(dir, keep); err != nil {
+		l.line(Warn, TagRun, fmt.Sprintf("log rotation failed: %v", err))
 	}
-	return l, nil
+}
+
+// Buffered is a run log that keeps its lines in memory: Persist writes them
+// to the file Open would have created, named for the time Buffered was
+// called; Close without Persist drops them. The server keeps a call's log
+// only when the call failed (spec 2026-10-10 F4). Nothing touches o.Dir
+// before Persist.
+func Buffered(o Options) *Logger {
+	if o.Now == nil {
+		o.Now = time.Now
+	}
+	return &Logger{
+		echo: o.Echo, level: o.Level, now: o.Now, buf: []byte{}, pending: &o,
+		base: fileSafe(o.Command) + "-" + o.Now().UTC().Format("20060102T150405.000Z"),
+	}
+}
+
+// Persist creates a buffered log's file, writes the lines it holds, and
+// writes every later line there; the oldest files beyond Keep go. It does
+// nothing for a log that has its file. A log that was closed, or whose file
+// does not open, writes nothing more.
+func (l *Logger) Persist() error {
+	if l == nil {
+		return nil
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	o := l.pending
+	if o == nil {
+		return nil
+	}
+	buf, dropped := l.buf, l.dropped
+	l.pending, l.buf = nil, nil
+	if err := os.MkdirAll(o.Dir, 0o700); err != nil {
+		return fmt.Errorf("runlog: %w", err)
+	}
+	f, path, err := create(o.Dir, l.base, seqs.Add)
+	if err != nil {
+		return fmt.Errorf("runlog: %w", err)
+	}
+	l.file, l.path = f, path
+	_, _ = f.Write(buf)
+	if dropped > 0 {
+		l.line(Warn, TagRun, fmt.Sprintf("%d lines past %d MiB were not kept in memory", dropped, maxBuffer>>20))
+	}
+	l.rotate(o.Dir, o.Keep)
+	return nil
 }
 
 // Discard returns a logger that writes nothing.
@@ -144,6 +206,8 @@ func (l *Logger) Path() string {
 	if l == nil {
 		return ""
 	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
 	return l.path
 }
 
@@ -183,25 +247,38 @@ func (l *Logger) write(lv Level, tag Tag, format string, args []any) {
 	msg := fmt.Sprintf(format, args...)
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	l.line(lv, tag, msg)
+}
+
+// line writes one line, its secrets redacted, to the file or the buffer and
+// the echo. l.mu is held.
+func (l *Logger) line(lv Level, tag Tag, msg string) {
 	for _, s := range l.secrets {
 		msg = strings.ReplaceAll(msg, s, redactMarker)
 	}
 	line := fmt.Sprintf("%s [%s] [%s] %s\n", l.now().UTC().Format(time.RFC3339Nano), lv, tag, msg)
-	if l.file != nil {
+	switch {
+	case l.file != nil:
 		_, _ = io.WriteString(l.file, line)
+	case l.buf != nil && len(l.buf)+len(line) <= maxBuffer:
+		l.buf = append(l.buf, line...)
+	case l.buf != nil:
+		l.dropped++
 	}
 	if l.echo != nil {
 		_, _ = io.WriteString(l.echo, line)
 	}
 }
 
-// Close closes the file.
+// Close closes the file. A buffered log that was not persisted drops its
+// lines.
 func (l *Logger) Close() error {
 	if l == nil {
 		return nil
 	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	l.buf, l.pending = nil, nil
 	if l.file == nil {
 		return nil
 	}

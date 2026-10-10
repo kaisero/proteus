@@ -297,7 +297,7 @@ func (a *app) runMCP(c *cobra.Command, useHTTP bool) error {
 			Store: st, Inventory: export, Now: a.now, MaxAge: maxAge,
 			Resolve: a.lookup, CanonicalName: a.canonical, Users: a.userSnapshot,
 		},
-		Version: a.version, Now: a.now,
+		Version: a.version, Now: a.now, Log: a.log,
 		Limits: limitsOf(m),
 		Logs:   &runlog.Options{Dir: m.LogDir, Keep: m.LogKeep, Level: a.logLevel, Now: a.now},
 	}
@@ -310,7 +310,7 @@ func (a *app) runMCP(c *cobra.Command, useHTTP bool) error {
 		audit.OnError = func(err error) { fmt.Fprintf(a.stderr, "proteus: warning: %v\n", err) }
 		o.Audit = audit
 	}
-	a.log.Infof(runlog.TagRun, "mcp: %d devices, calls logged in %s", len(export.Devices), m.LogDir)
+	a.log.Infof(runlog.TagRun, "mcp: %d devices, run logs of internal and timed-out calls (every call at debug) in %s", len(export.Devices), m.LogDir)
 	ctx := c.Context()
 	if !useHTTP {
 		o.Identify = mcp.StdioIdentity(osUser(a.getenv))

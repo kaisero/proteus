@@ -168,7 +168,9 @@ standard output carries MCP, so the server refuses `-` (exit 2). The [MCP guide]
 of an audit line.
 
 The `--max-age`, `--log-level` and `--store` settings apply to the server too;
-`max_snapshot_age` comes from the export's `defaults:`.
+`max_snapshot_age` comes from the export's `defaults:`. The server writes a call's
+run log in `log_dir` only when the call ends `internal` or `timeout`; at
+`--log-level debug` it writes one for every call.
 
 ## Settings
 

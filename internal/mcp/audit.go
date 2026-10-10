@@ -32,10 +32,6 @@ const (
 	SourceOS = "os"
 )
 
-// StatusUnauthorised is a request the HTTP server refused before any call:
-// a Host it does not serve, or no or a wrong token (spec §4.4, §4.9).
-const StatusUnauthorised = "unauthorised"
-
 // Identity is who a call claims to come from.
 type Identity struct {
 	Auth   string // AuthToken or AuthStdio
@@ -195,7 +191,6 @@ type auditLine struct {
 	Auth           string          `json:"auth"`
 	IdentitySource string          `json:"identity_source"`
 	Identity       any             `json:"identity"`
-	Remote         string          `json:"remote,omitempty"`
 	Tool           string          `json:"tool"`
 	Input          json.RawMessage `json:"input"`
 	Verdict        []string        `json:"verdict"`
@@ -204,18 +199,15 @@ type auditLine struct {
 	DurationMS     int64           `json:"duration_ms"`
 	Status         string          `json:"status"`
 	Code           reason.Code     `json:"code,omitempty"`
-	HTTPStatus     int             `json:"http_status,omitempty"`
-	Refused        int             `json:"refused,omitempty"`
 }
 
 // lineOf is c as an audit line. Lists are never null.
 func lineOf(c Call) auditLine {
 	l := auditLine{
 		Time: c.Time.UTC(), Auth: c.Identity.Auth, IdentitySource: c.Identity.Source, Identity: "unknown",
-		Remote: c.Remote, Tool: c.Tool, Input: c.Input,
+		Tool: c.Tool, Input: c.Input,
 		Verdict: c.Answers, Codes: c.Codes, Snapshots: c.Snapshots,
 		DurationMS: c.Duration.Milliseconds(), Status: c.Status, Code: c.Code,
-		HTTPStatus: c.HTTPStatus, Refused: c.Refused,
 	}
 	if c.Identity.Claims != nil {
 		l.Identity = c.Identity.Claims
@@ -241,14 +233,11 @@ func lineOf(c Call) auditLine {
 // log.
 func (a *AuditLog) Audit(c Call) {
 	b, err := json.Marshal(lineOf(c))
-	if err != nil {
-		a.fail(err)
-		return
+	if err == nil {
+		a.mu.Lock()
+		err = a.write(append(b, '\n'))
+		a.mu.Unlock()
 	}
-	b = append(b, '\n')
-	a.mu.Lock()
-	err = a.write(b)
-	a.mu.Unlock()
 	if err != nil {
 		a.fail(err)
 	}

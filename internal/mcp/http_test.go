@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/json"
@@ -24,6 +25,7 @@ import (
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/okaiser/proteus/internal/reason"
+	"github.com/okaiser/proteus/internal/runlog"
 	"github.com/okaiser/proteus/internal/simulate/pathlab"
 )
 
@@ -128,10 +130,16 @@ func TestServeHTTPAnswersACall(t *testing.T) {
 }
 
 // The Host check comes first (403), then the token (401); /healthz needs
-// neither. Every refusal is audited.
+// neither. No refusal is audited; the process log counts them.
 func TestTheGuard(t *testing.T) {
 	t.Parallel()
-	url, rec, _ := httpLab(t, Options{})
+	var procLog bytes.Buffer
+	log, err := runlog.Open(runlog.Options{Dir: t.TempDir(), Command: "mcp", Level: runlog.Info, Echo: &syncWriter{w: &procLog}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = log.Close() })
+	url, rec, stop := httpLab(t, Options{Log: log})
 	post := func(host, auth string) (int, string) {
 		t.Helper()
 		req, err := http.NewRequest(http.MethodPost, url, strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`))
@@ -175,17 +183,10 @@ func TestTheGuard(t *testing.T) {
 		}
 	}
 	rec.mu.Lock()
-	var codes []int
-	for _, c := range rec.calls {
-		if c.Status != StatusUnauthorised || c.Remote != "127.0.0.1" || c.Identity.Auth != AuthToken {
-			t.Errorf("refusal audited as %+v", c)
-		}
-		codes = append(codes, c.HTTPStatus)
+	if len(rec.calls) != 0 {
+		t.Errorf("audited %+v", rec.calls)
 	}
 	rec.mu.Unlock()
-	if want := []int{403, 403, 401, 401, 401, 401, 401}; !slices.Equal(codes, want) {
-		t.Errorf("audited %v, want %v", codes, want)
-	}
 
 	// /healthz: no Host check, no token, 200 and no body.
 	req, _ := http.NewRequest(http.MethodGet, url+"healthz", nil)
@@ -199,6 +200,25 @@ func TestTheGuard(t *testing.T) {
 	if res.StatusCode != http.StatusOK || len(body) != 0 {
 		t.Errorf("healthz: %d %q", res.StatusCode, body)
 	}
+	// Stopping writes the counts it has to the process log.
+	if err := stop(); !errors.Is(err, context.Canceled) {
+		t.Errorf("ServeHTTP returned %v", err)
+	}
+	if got := procLog.String(); !strings.Contains(got, "[WARN] [RUN] mcp: refused in the last minute: 401 ×5, 403 ×2\n") {
+		t.Errorf("process log:\n%s", got)
+	}
+}
+
+// syncWriter serialises writes to w and its reads.
+type syncWriter struct {
+	mu sync.Mutex
+	w  *bytes.Buffer
+}
+
+func (s *syncWriter) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.w.Write(p)
 }
 
 // The token check compares digests in constant time. Not parallel: it
@@ -474,94 +494,62 @@ func (c *readCount) Read(b []byte) (int, error) {
 	return c.Conn.Read(b)
 }
 
-// Refusals are audited at most 10 per minute per address; a summary line
-// counts the rest when the window ends.
-func TestRefusalsAreRateLimited(t *testing.T) {
+// Refusals are not audited: the process log gets one warn line with the
+// counts by status once a minute has passed since the first, and then counts
+// from zero (spec 2026-10-10 F5).
+func TestRefusalsAreCounted(t *testing.T) {
 	t.Parallel()
 	now := time.Date(2026, 10, 10, 9, 0, 0, 0, time.UTC)
-	rec := &recorder{}
-	r := &refusals{audit: rec, now: func() time.Time { return now }, by: map[string]*refusalCount{}}
-	for range 15 {
-		r.refuse("198.18.0.1", http.StatusUnauthorized)
+	clock := func() time.Time { return now }
+	log, err := runlog.Open(runlog.Options{Dir: t.TempDir(), Command: "mcp", Level: runlog.Info, Now: clock})
+	if err != nil {
+		t.Fatal(err)
 	}
-	r.refuse("198.18.0.2", http.StatusForbidden)
-	count := func() (lines, summaries, refused int) {
-		rec.mu.Lock()
-		defer rec.mu.Unlock()
-		for _, c := range rec.calls {
-			lines++
-			if c.Refused > 0 {
-				summaries++
-				refused += c.Refused
+	t.Cleanup(func() { _ = log.Close() })
+	lines := func() []string {
+		b, err := os.ReadFile(log.Path())
+		if err != nil {
+			t.Fatal(err)
+		}
+		var out []string
+		for l := range strings.Lines(string(b)) {
+			if _, line, ok := strings.Cut(l, " "); ok && strings.Contains(l, "refused") {
+				out = append(out, strings.TrimSpace(line)) // without the time
 			}
 		}
-		return
+		return out
 	}
-	if l, s, _ := count(); l != 11 || s != 0 {
-		t.Fatalf("%d lines, %d summaries; want 11 and 0", l, s)
+	r := &refusals{log: log, now: clock, by: map[int]int{}}
+	r.flush(false) // nothing refused: no line
+	for range 3 {
+		r.refuse(http.StatusUnauthorized)
 	}
+	now = now.Add(30 * time.Second)
+	r.refuse(http.StatusForbidden)
 	r.flush(false)
-	if l, _, _ := count(); l != 11 {
-		t.Fatalf("a flush inside the window wrote %d lines", l-11)
+	if got := lines(); len(got) != 0 {
+		t.Fatalf("a line inside the minute: %v", got)
 	}
-	now = now.Add(refusalWindow)
+	now = now.Add(30 * time.Second)
 	r.flush(false)
-	if l, s, n := count(); l != 12 || s != 1 || n != 5 {
-		t.Fatalf("after the window: %d lines, %d summaries of %d", l, s, n)
+	r.flush(false) // counted from zero: no second line
+	want := []string{"[WARN] [RUN] mcp: refused in the last minute: 401 ×3, 403 ×1"}
+	if got := lines(); !slices.Equal(got, want) {
+		t.Fatalf("lines %q, want %q", got, want)
 	}
-	sum := rec.last(t)
-	if sum.Remote != "198.18.0.1" || sum.HTTPStatus != http.StatusUnauthorized || sum.Status != StatusUnauthorised {
-		t.Errorf("summary %+v", sum)
-	}
-	// A new window audits again.
-	r.refuse("198.18.0.1", http.StatusUnauthorized)
-	if l, _, _ := count(); l != 13 {
-		t.Errorf("the new window audits: %d lines", l)
-	}
-	// Past maxRefusers addresses, the rest count as one.
-	for i := range maxRefusers + 3 {
-		r.refuse(fmt.Sprintf("198.19.%d.%d", i/256, i%256), http.StatusUnauthorized)
-	}
-	r.mu.Lock()
-	n, other := len(r.by), r.by["other"]
-	r.mu.Unlock()
-	if n > maxRefusers+1 || other == nil {
-		t.Errorf("%d addresses kept, other %+v", n, other)
-	}
+	// The next minute starts at the next refusal; a final flush writes what
+	// it has at once.
+	now = now.Add(time.Hour)
+	r.refuse(http.StatusUnauthorized)
 	r.flush(true)
-	r.mu.Lock()
-	if len(r.by) != 0 {
-		t.Errorf("a final flush keeps %d", len(r.by))
+	want = append(want, "[WARN] [RUN] mcp: refused in the last minute: 401 ×1")
+	if got := lines(); !slices.Equal(got, want) {
+		t.Errorf("lines %q, want %q", got, want)
 	}
-	r.mu.Unlock()
-	// A refusal past its address's window writes that address's summary
-	// first; another address's window waits for the ticker's flush.
-	rec2 := &recorder{}
-	r2 := &refusals{audit: rec2, now: func() time.Time { return now }, by: map[string]*refusalCount{}}
-	for range refusalLimit + 2 {
-		r2.refuse("198.18.0.1", http.StatusUnauthorized)
-		r2.refuse("198.18.0.2", http.StatusForbidden)
-	}
-	now = now.Add(refusalWindow)
-	r2.refuse("198.18.0.1", http.StatusUnauthorized)
-	rec2.mu.Lock()
-	got := rec2.calls[2*refusalLimit:]
-	rec2.mu.Unlock()
-	if len(got) != 2 || got[0].Remote != "198.18.0.1" || got[0].Refused != 2 || got[1].Refused != 0 {
-		t.Errorf("after the window: %+v", got)
-	}
-	r2.mu.Lock()
-	if n := r2.by["198.18.0.2"]; n == nil || n.dropped != 2 {
-		t.Errorf("the other address's window: %+v", n)
-	}
-	r2.mu.Unlock()
-	// Without an audit, nothing is counted.
-	quiet := &refusals{now: time.Now, by: map[string]*refusalCount{}}
-	quiet.refuse("198.18.0.1", http.StatusUnauthorized)
+	// Without a process log the counts go nowhere.
+	quiet := &refusals{now: clock, by: map[int]int{}}
+	quiet.refuse(http.StatusUnauthorized)
 	quiet.flush(true)
-	if len(quiet.by) != 0 {
-		t.Error("counted without an audit")
-	}
 }
 
 func TestHostOf(t *testing.T) {
@@ -573,11 +561,6 @@ func TestHostOf(t *testing.T) {
 		if got := hostOf(in); got != want {
 			t.Errorf("hostOf(%q) = %q, want %q", in, got, want)
 		}
-	}
-	r := httptest.NewRequest(http.MethodGet, "/", nil)
-	r.RemoteAddr = "pipe"
-	if remoteOf(r) != "pipe" {
-		t.Errorf("remoteOf without a port: %q", remoteOf(r))
 	}
 }
 
@@ -654,7 +637,7 @@ func TestTheAuditLog(t *testing.T) {
 		Answers: []string{"found"}, Codes: []reason.Code{"note.stale"}, Snapshots: []string{"fw01@1"},
 		Duration: 1500 * time.Millisecond, Identity: Identity{Auth: AuthToken, Source: SourceHeader, Claims: map[string]string{"sub": "alice"}},
 	})
-	a.Audit(Call{Time: when, Status: StatusUnauthorised, Remote: "198.18.0.1", HTTPStatus: 401, Identity: Identity{Auth: AuthToken, Source: SourceNone}})
+	a.Audit(Call{Time: when, Tool: "search", Status: StatusBusy, Code: "call.busy", Identity: Identity{Auth: AuthToken, Source: SourceNone}})
 	a.Audit(Call{Time: when, Tool: "lookup", Input: json.RawMessage(`{broken`), Status: StatusUsage, Code: "call.usage"})
 	var wg sync.WaitGroup
 	for i := range 50 {
@@ -683,8 +666,8 @@ func TestTheAuditLog(t *testing.T) {
 	if lines[1] != want {
 		t.Errorf("line\n%s\nwant\n%s", lines[1], want)
 	}
-	want = `{"time":"2026-10-10T08:00:00Z","auth":"token","identity_source":"none","identity":"unknown","remote":"198.18.0.1","tool":"",` +
-		`"input":null,"verdict":[],"codes":[],"snapshots":[],"duration_ms":0,"status":"unauthorised","http_status":401}`
+	want = `{"time":"2026-10-10T08:00:00Z","auth":"token","identity_source":"none","identity":"unknown","tool":"search",` +
+		`"input":null,"verdict":[],"codes":[],"snapshots":[],"duration_ms":0,"status":"busy","code":"call.busy"}`
 	if lines[2] != want {
 		t.Errorf("line\n%s\nwant\n%s", lines[2], want)
 	}

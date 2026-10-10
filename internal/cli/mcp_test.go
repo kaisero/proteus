@@ -360,8 +360,8 @@ func TestMCPStdioIgnoresTheToken(t *testing.T) {
 }
 
 // proteus mcp over stdio: a client initialises, lists the tools and calls
-// one; the call is audited as stdio and gets its own run log. The client's
-// end of input ends the server with exit 0.
+// one; the call is audited as stdio and, at --log-level debug, gets its own
+// run log. The client's end of input ends the server with exit 0.
 func TestMCPOverStdio(t *testing.T) {
 	t.Parallel()
 	c := mcpLab(t, "")
@@ -370,7 +370,7 @@ func TestMCPOverStdio(t *testing.T) {
 	in, client := io.Pipe()
 	out := &syncBuffer{}
 	done := make(chan int, 1)
-	go func() { done <- c.serveMCP(context.Background(), in, out, io.Discard) }()
+	go func() { done <- c.serveMCP(context.Background(), in, out, io.Discard, "--log-level", "debug") }()
 	send := func(line string) {
 		t.Helper()
 		if _, err := io.WriteString(client, line+"\n"); err != nil {
@@ -431,9 +431,9 @@ func TestMCPOverStdio(t *testing.T) {
 }
 
 // proteus mcp --http: a client with the token gets an answer, one without
-// gets 401; SIGTERM ends the server with exit 143, SIGINT with 130. The
-// defaults read the identity from X-User-Claims and write each call's run log
-// to mcp under the CLI's log directory.
+// gets 401, which the process log counts and the audit does not; SIGTERM
+// ends the server with exit 143, SIGINT with 130. The defaults read the
+// identity from X-User-Claims and write no run log for an answered call.
 func TestMCPOverHTTP(t *testing.T) {
 	t.Parallel()
 	for _, sig := range []struct {
@@ -500,15 +500,17 @@ func TestMCPOverHTTP(t *testing.T) {
 				t.Errorf("audit %s", l)
 			}
 		}
-		if !slices.Equal(statuses, []string{"unauthorised", "ok"}) {
+		if !slices.Equal(statuses, []string{"ok"}) {
 			t.Errorf("audited %v", statuses)
 		}
 		if fi, err := os.Stat(auditPath); err != nil || fi.Mode().Perm() != 0o600 {
 			t.Errorf("audit mode %v %v", fi, err)
 		}
-		logs, _ := os.ReadDir(filepath.Join(c.env["PROTEUS_LOG_DIR"], "mcp"))
-		if len(logs) != 1 || !strings.HasPrefix(logs[0].Name(), "mcp-search-") {
+		if logs, _ := os.ReadDir(filepath.Join(c.env["PROTEUS_LOG_DIR"], "mcp")); len(logs) != 0 {
 			t.Errorf("call logs %v", logs)
+		}
+		if l := c.logFile(); !strings.Contains(l, "[WARN] [RUN] mcp: refused in the last minute: 401 ×1") {
+			t.Errorf("command log:\n%s", l)
 		}
 	}
 }

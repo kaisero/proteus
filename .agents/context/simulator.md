@@ -323,8 +323,10 @@ func (l *Logger) Enabled(lv Level) bool
 func (l *Logger) Errorf(tag Tag, format string, args ...any)
 func (l *Logger) Infof(tag Tag, format string, args ...any)
 func (l *Logger) Path() string
+func (l *Logger) Persist() error
 func (l *Logger) Warnf(tag Tag, format string, args ...any)
 func (lv Level) String() string
+func Buffered(o Options) *Logger
 func Discard() *Logger
 func Open(o Options) (*Logger, error)
 func ParseLevel(s string) (Level, error)

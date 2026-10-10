@@ -7,31 +7,43 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/okaiser/proteus/internal/query"
 	"github.com/okaiser/proteus/internal/runlog"
 	"github.com/okaiser/proteus/internal/simulate/pathlab"
 )
 
-// Each tool call gets its own run log, mcp-<tool>-<time>-<seq>.log, with its
-// input, what the query logged, and how it ended; a panic's stack goes there
-// (spec §4.9, §4.10).
-func TestEachCallHasItsRunLog(t *testing.T) {
+// A call's run log, mcp-<tool>-<time>-<seq>.log, holds its input, what the
+// query logged, and how it ended. It is written only for a call that ends
+// internal (with the panic's stack) or timeout, or for every call at debug
+// (spec §4.9, §4.10; spec 2026-10-10 F4).
+func TestRunLogsOnlyForFailedCalls(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	dir := t.TempDir()
 	env := labEnv(t, snap{pathlab.FW01, pathlab.ConfigFile(pathlab.FW01)}, snap{pathlab.FW02, pathlab.ConfigFile(pathlab.FW02)})
-	broken := env
-	broken.Resolve = func(context.Context, string) ([]netip.Addr, error) { panic("resolver bug") }
-	logs := &runlog.Options{Dir: dir, Keep: 10, Level: runlog.Info}
-	run := func(o Options, args map[string]any) {
+	panicking := env
+	panicking.Resolve = func(context.Context, string) ([]netip.Addr, error) { panic("resolver bug") }
+	slow := env
+	slow.Resolve = func(ctx context.Context, _ string) ([]netip.Addr, error) {
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}
+	ok := map[string]any{"source": pathlab.Source, "destination": pathlab.Destination}
+	byName := map[string]any{"destination": "host.example.test", "device": "fw01"}
+	// run makes one call at level and returns the run logs it left in a
+	// directory of its own, and the audited status.
+	run := func(level runlog.Level, env query.Env, args map[string]any) ([]string, string) {
 		t.Helper()
-		o.Logs = logs
+		dir, rec := t.TempDir(), &recorder{}
+		o := Options{
+			Env: env, Audit: rec, Logs: &runlog.Options{Dir: dir, Keep: 10, Level: level},
+			Limits: Limits{CallTimeout: 200 * time.Millisecond},
+		}
 		s, err := newServer(o, false)
 		if err != nil {
 			t.Fatal(err)
@@ -50,51 +62,66 @@ func TestEachCallHasItsRunLog(t *testing.T) {
 		}
 		_ = cs.Close()
 		_ = ss.Wait()
-	}
-	run(Options{Env: env}, map[string]any{"source": pathlab.Source, "destination": pathlab.Destination})
-	run(Options{Env: broken}, map[string]any{"destination": "host.example.test", "device": "fw01"})
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var names []string
-	for _, e := range entries {
-		names = append(names, e.Name())
-	}
-	slices.Sort(names)
-	name := regexp.MustCompile(`^mcp-simulate_routing-\d{8}T\d{6}\.\d{3}Z-\d{3,}\.log$`)
-	if len(names) != 2 || !name.MatchString(names[0]) || !name.MatchString(names[1]) {
-		t.Fatalf("run logs %v", names)
-	}
-	var texts []string
-	for _, n := range names {
-		b, err := os.ReadFile(filepath.Join(dir, n))
+		entries, err := os.ReadDir(dir)
 		if err != nil {
 			t.Fatal(err)
 		}
-		texts = append(texts, string(b))
+		name := regexp.MustCompile(`^mcp-simulate_routing-\d{8}T\d{6}\.\d{3}Z-\d{3,}\.log$`)
+		var texts []string
+		for _, e := range entries {
+			if !name.MatchString(e.Name()) {
+				t.Errorf("run log name %s", e.Name())
+			}
+			b, err := os.ReadFile(filepath.Join(dir, e.Name()))
+			if err != nil {
+				t.Fatal(err)
+			}
+			texts = append(texts, string(b))
+		}
+		return texts, rec.last(t).Status
 	}
-	ok := slices.IndexFunc(texts, func(s string) bool { return strings.Contains(s, "status ok") })
-	bad := slices.IndexFunc(texts, func(s string) bool { return strings.Contains(s, "status internal call.internal") })
-	if ok < 0 || bad < 0 || ok == bad {
-		t.Fatalf("logs:\n%s", strings.Join(texts, "\n---\n"))
+	if logs, status := run(runlog.Info, env, ok); status != StatusOK || len(logs) != 0 {
+		t.Errorf("an answered call: %s, logs %q", status, logs)
 	}
-	if !strings.Contains(texts[ok], `call simulate_routing: {"destination":"`+pathlab.Destination) || !strings.Contains(texts[ok], "[SNAP]") {
-		t.Errorf("the answered call's log:\n%s", texts[ok])
+	logs, status := run(runlog.Info, panicking, byName)
+	if status != StatusInternal || len(logs) != 1 || !strings.Contains(logs[0], "panic: resolver bug") ||
+		!strings.Contains(logs[0], "goroutine") || !strings.Contains(logs[0], "status internal call.internal") ||
+		!strings.Contains(logs[0], `call simulate_routing: {"destination":"host.example.test"`) {
+		t.Errorf("a panicking call: %s, logs:\n%s", status, strings.Join(logs, "\n---\n"))
 	}
-	if !strings.Contains(texts[bad], "panic: resolver bug") || !strings.Contains(texts[bad], "goroutine") {
-		t.Errorf("the failed call's log:\n%s", texts[bad])
+	logs, status = run(runlog.Info, slow, byName)
+	if status != StatusTimeout || len(logs) != 1 || !strings.Contains(logs[0], "status timeout call.timeout") ||
+		!strings.Contains(logs[0], "call simulate_routing:") {
+		t.Errorf("a timed-out call: %s, logs:\n%s", status, strings.Join(logs, "\n---\n"))
+	}
+	logs, status = run(runlog.Debug, env, ok)
+	if status != StatusOK || len(logs) != 1 || !strings.Contains(logs[0], "status ok") ||
+		!strings.Contains(logs[0], `call simulate_routing: {"destination":"`+pathlab.Destination) || !strings.Contains(logs[0], "[SNAP]") {
+		t.Errorf("an answered call at debug: %s, logs:\n%s", status, strings.Join(logs, "\n---\n"))
 	}
 	// A run log that cannot open leaves the call without one.
-	file := filepath.Join(dir, "file")
+	file := filepath.Join(t.TempDir(), "file")
 	if err := os.WriteFile(file, nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	m := middleware{logs: &runlog.Options{Dir: filepath.Join(file, "sub")}}
+	m := middleware{logs: &runlog.Options{Dir: filepath.Join(file, "sub"), Level: runlog.Debug}}
 	if l := m.openLog(&Call{Tool: "search"}); l != nil {
 		t.Errorf("opened %s", l.Path())
 	}
+	m.logs.Level = runlog.Info
+	l := m.openLog(&Call{Tool: "search"})
+	closeLog(l, &Call{Status: StatusInternal})
+	if l.Path() != "" {
+		t.Errorf("persisted %s", l.Path())
+	}
 	closeLog(nil, &Call{})
+	// The error the SDK returned goes into the log it keeps.
+	m.logs.Dir = t.TempDir()
+	l = m.openLog(&Call{Tool: "lookup"})
+	closeLog(l, &Call{Status: StatusInternal, Code: "call.internal", Err: "output fails its schema"})
+	if b, err := os.ReadFile(l.Path()); err != nil || !strings.Contains(string(b), "[WARN] [RUN] output fails its schema") {
+		t.Errorf("log %q: %v", b, err)
+	}
 }
 
 // A call refused before it runs (busy) is audited but writes no run log.

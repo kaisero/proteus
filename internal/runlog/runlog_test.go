@@ -330,3 +330,102 @@ func TestConcurrentRotationsSucceed(t *testing.T) {
 		t.Errorf("left %v", entries)
 	}
 }
+
+// A buffered log writes no file until Persist; then its file holds the
+// lines from before and after, named for the time it was buffered, and the
+// oldest files past Keep go. Close without Persist drops the lines.
+func TestABufferedLogPersistsOnDemand(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	now := clock()
+	var echo bytes.Buffer
+	dropped := Buffered(Options{Dir: dir, Command: "mcp-search", Level: Info, Now: now})
+	dropped.AddSecret("hunter2")
+	dropped.Infof(TagRun, "kept in memory only")
+	if err := dropped.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := dropped.Persist(); err != nil || dropped.Path() != "" {
+		t.Errorf("persisted after Close: %q %v", dropped.Path(), err)
+	}
+	if entries, _ := os.ReadDir(dir); len(entries) != 0 {
+		t.Fatalf("files %v", entries)
+	}
+	for range 3 {
+		l := open(t, Options{Dir: dir, Command: "old", Now: now})
+		_ = l.Close()
+	}
+	l := Buffered(Options{Dir: dir, Command: "mcp-search", Level: Info, Keep: 2, Now: now, Echo: &echo})
+	l.AddSecret("hunter2")
+	l.Infof(TagRun, "before hunter2")
+	l.Debugf(TagRun, "hidden")
+	if l.Path() != "" {
+		t.Errorf("a path before Persist: %s", l.Path())
+	}
+	if err := l.Persist(); err != nil {
+		t.Fatal(err)
+	}
+	if err := l.Persist(); err != nil {
+		t.Errorf("a second Persist: %v", err)
+	}
+	l.Infof(TagRun, "after")
+	if err := l.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(filepath.Base(l.Path()), "mcp-search-20260929T100006.000Z-") {
+		t.Errorf("path %s", l.Path())
+	}
+	got := content(t, l)
+	if !strings.Contains(got, "before ***") || !strings.Contains(got, "after") || strings.Contains(got, "hidden") || strings.Contains(got, "hunter2") {
+		t.Errorf("log:\n%s", got)
+	}
+	if !strings.Contains(echo.String(), "before ***") {
+		t.Errorf("echo:\n%s", echo.String())
+	}
+	if entries, _ := os.ReadDir(dir); len(entries) != 2 {
+		t.Errorf("files %v", entries)
+	}
+}
+
+// A buffered log keeps at most maxBuffer bytes in memory and says how many
+// lines it did not keep; a directory that cannot be made fails Persist.
+func TestABufferedLogIsBounded(t *testing.T) {
+	t.Parallel()
+	l := Buffered(Options{Dir: t.TempDir(), Command: "big", Level: Info})
+	long := strings.Repeat("x", 1<<20)
+	for range 5 {
+		l.Infof(TagFind, "%s", long)
+	}
+	if err := l.Persist(); err != nil {
+		t.Fatal(err)
+	}
+	_ = l.Close()
+	got := content(t, l)
+	if len(got) > maxBuffer+200 || !strings.Contains(got, "2 lines past 4 MiB were not kept in memory") {
+		t.Errorf("%d bytes; tail %q", len(got), got[len(got)-100:])
+	}
+	file := filepath.Join(t.TempDir(), "file")
+	if err := os.WriteFile(file, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := Buffered(Options{Dir: filepath.Join(file, "sub")}).Persist(); err == nil {
+		t.Error("persisted under a file")
+	}
+	if err := Buffered(Options{Dir: file}).Persist(); err == nil {
+		t.Error("persisted into a file")
+	}
+	if os.Getuid() != 0 {
+		ro := t.TempDir()
+		if err := os.Chmod(ro, 0o500); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = os.Chmod(ro, 0o700) })
+		if err := Buffered(Options{Dir: ro}).Persist(); err == nil {
+			t.Error("persisted into a read-only directory")
+		}
+	}
+	var nilLog *Logger
+	if nilLog.Persist() != nil {
+		t.Error("a nil log")
+	}
+}

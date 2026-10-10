@@ -12,6 +12,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Let an AI agent ask proteus questions.** `proteus mcp` serves simulate,
   search, lookup and snapshot diff as MCP tools, over stdio or token-protected
   HTTP behind a TLS proxy, with an audit line per call and a container sample.
+- **The MCP server marks its tools read-only and keeps its logs lean.** Gateways
+  and clients see that every tool only reads; the audit file rotates by size or
+  goes to standard output, and a call keeps its own run log only when it fails,
+  times out, or runs at `--log-level debug`.
 - **Fetch can write the inventory without credentials for the server.** With
   `export_inventory: true`, every fetch writes a credential-free copy into the
   store; a run that stored its snapshots but could not write the copy exits 3.

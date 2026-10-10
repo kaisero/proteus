@@ -271,24 +271,27 @@ container platform collects and keeps them (`--http` only):
 | `codes` | the reason codes of the holes, unresolved entries and notes |
 | `snapshots` | the snapshots that the answer read, as `<member>@<snapshot id>`: for an HA pair the member whose snapshot answered, for a single device the device |
 | `duration_ms` | the time the call took |
-| `status` | `ok`, `usage`, `choice`, `busy`, `timeout`, `internal` or `unauthorised` |
+| `status` | `ok`, `usage`, `choice`, `busy`, `timeout` or `internal` |
 | `code` | the `call.*` code of a failed call |
 
-A refused HTTP request (401 or 403) also gets a line, with `remote` and
-`http_status`. The server writes at most 10 such lines per remote address per
-minute; a summary line with `refused: <n>` counts the rest. Behind a proxy,
-`remote` is the proxy's address.
+The audit holds only the calls that reached the server. A refused HTTP request
+(401 or 403) gets no audit line. While requests are refused, the server process's
+run log gets one warning per minute with the counts by status, such as
+`mcp: refused in the last minute: 401 ×3, 403 ×1`. A count shows a wrong token or
+Host; the gateway's and the proxy's logs show who sent the requests.
 
 The audit file holds addresses and identities. Treat it as sensitive. The token
 never reaches the audit or a log.
 
-**Run logs.** Each call writes its own run log in `log_dir`, named
-`mcp-<tool>-<time>-<seq>.log`. It holds the input, the snapshot each device
-resolved to, what each stage kept, and at the end the status, the code and the
-duration. A panic's stack goes there too. The newest `log_keep` logs stay. The
-server process also writes one CLI run log in the CLI's log directory, with its
-start, settings and exit. A call that the server refuses as busy gets an audit
-line and no run log.
+**Run logs.** A call that ends `internal` or `timeout` writes its own run log in
+`log_dir`, named `mcp-<tool>-<time>-<seq>.log`. It holds the input, the snapshot
+each device resolved to, what each stage kept, and at the end the status, the code
+and the duration. A panic's stack goes there too. Any other call keeps its log in
+memory and drops it: its answer explains itself in its reasons and codes. With
+`--log-level debug` (or `log_level: debug`) every call writes its run log. The
+newest `log_keep` logs stay. The server process also writes one CLI run log in the
+CLI's log directory, with its start, settings, the refusal counts and its exit. A
+call that the server refuses as busy gets an audit line and no run log.
 
 ## Limits
 
