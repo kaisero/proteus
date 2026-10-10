@@ -101,7 +101,8 @@ How it shows a change:
   `new`; an absent side is empty. An added or removed entry has `new` or `old`.
 
 By default it compares the snapshot before `latest` with `latest`. `--from` and
-`--to` take a snapshot id, an RFC 3339 time or a date. A rule that only moved is
+`--to` take a snapshot id, an RFC 3339 time or a date. A value that is none of
+these is a usage error (exit 2) that names the flag. A rule that only moved is
 not a change.
 
 `--limit N` keeps the first N results, in the order above, over all devices

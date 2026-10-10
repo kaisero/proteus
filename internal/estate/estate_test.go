@@ -195,8 +195,8 @@ func TestParseAt(t *testing.T) {
 			t.Errorf("ParseAt(%s) = %v, %v; want %v", in, got, err, want)
 		}
 	}
-	if _, err := ParseAt("tuesday"); err == nil {
-		t.Error("garbage must be an error")
+	if _, err := ParseAt("tuesday"); err == nil || !strings.HasPrefix(err.Error(), `"tuesday": want a snapshot id`) {
+		t.Errorf("garbage must be an error that names the value: %v", err)
 	}
 }
 

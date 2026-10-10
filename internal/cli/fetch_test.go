@@ -582,7 +582,12 @@ func TestSnapshotDiff(t *testing.T) {
 	c.want(2, "snapshot", "diff", "--file", "x.xml")
 	c.want(0, "snapshot", "diff", "--from", "2026-09-28T10:00:30Z", "--to", "2026-09-28T23:00:00Z")
 	c.want(3, "snapshot", "diff", "--from", "2026-01-01")
-	c.want(3, "snapshot", "diff", "--to", "garbage")
+	// A time that does not read is a usage error that names its flag.
+	for _, flag := range []string{"--from", "--to"} {
+		if _, errOut, code := c.run("snapshot", "diff", flag, "garbage"); code != exitUsage || !strings.Contains(errOut, flag+` "garbage": want a snapshot id`) {
+			t.Errorf("%s garbage: exit %d, stderr %q", flag, code, errOut)
+		}
+	}
 }
 
 func TestSimulatePolicy(t *testing.T) {

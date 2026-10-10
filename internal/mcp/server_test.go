@@ -843,3 +843,28 @@ func TestResultLimit(t *testing.T) {
 		}
 	}
 }
+
+// snapshot_diff reads from and to as at is read: a value that does not read is
+// call.usage in the tool's words, naming the input.
+func TestSnapshotDiffRefusesABadTime(t *testing.T) {
+	t.Parallel()
+	cs, rec := serve(t, labEnv(t, snap{"fw01", fixture("firewall-lab.xml")}, snap{"fw01", fixture("firewall-lab-changed.xml")}), true)
+	for _, name := range []string{"from", "to"} {
+		res, err := cs.CallTool(context.Background(), &sdk.CallToolParams{
+			Name: "snapshot_diff", Arguments: map[string]any{"device": "fw01", name: "tuesday"},
+		})
+		if err != nil || !res.IsError {
+			t.Fatalf("%s: %v %+v", name, err, res)
+		}
+		want := toolError{
+			Code: "call.usage", Text: name + ` "tuesday": want a snapshot id, an RFC 3339 time, or a date like 2026-09-23`,
+			Options: []string{}, Needs: []query.Need{},
+		}
+		if got, _ := plain(t, res.StructuredContent).(map[string]any); !reflect.DeepEqual(got["error"], plain(t, want)) {
+			t.Errorf("%s: %v", name, got)
+		}
+		if c := rec.last(t); c.Status != StatusUsage || c.Code != "call.usage" {
+			t.Errorf("%s: audit %+v", name, c)
+		}
+	}
+}

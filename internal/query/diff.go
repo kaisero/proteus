@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"time"
 
 	"github.com/okaiser/proteus/internal/config"
 	"github.com/okaiser/proteus/internal/drift"
@@ -27,7 +28,8 @@ type DiffInput struct {
 }
 
 // Validate holds the diff's input rules: the store's devices only, picked by
-// From and To rather than one time, and no limit below zero.
+// From and To rather than one time, each read as at is, and no limit below
+// zero.
 func (in DiffInput) Validate() *UsageError {
 	for _, f := range []struct {
 		given bool
@@ -38,7 +40,19 @@ func (in DiffInput) Validate() *UsageError {
 				f.flag+": snapshot diff compares stored snapshots; pick them with from and to")
 		}
 	}
+	if _, _, u := in.times(); u != nil {
+		return u
+	}
 	return in.checkLimit()
+}
+
+// times reads From and To; the zero time is none.
+func (in DiffInput) times() (from, to time.Time, u *UsageError) {
+	if from, u = parseTime("from", in.From); u != nil {
+		return from, to, u
+	}
+	to, u = parseTime("to", in.To)
+	return from, to, u
 }
 
 // DiffResult is what changed in one scope of one device.
@@ -70,6 +84,7 @@ func SnapshotDiff(ctx context.Context, env Env, in DiffInput) (Envelope[DiffInpu
 	if env.Store == nil {
 		return none, errNoStore
 	}
+	from, to, _ := in.times() // Validate has read them
 	e := envelope[DiffInput, DiffResult]("snapshot diff", in)
 	e.Results, e.Summary = []DiffResult{}, &Summary{}
 	compared := 0
@@ -77,7 +92,7 @@ func SnapshotDiff(ctx context.Context, env Env, in DiffInput) (Envelope[DiffInpu
 		if err := ctx.Err(); err != nil {
 			return none, err
 		}
-		older, newer, err := pair(env.Store, d, in.From, in.To)
+		older, newer, err := pair(env.Store, d, from, to)
 		if err != nil {
 			e.Holes = append(e.Holes, estate.NewHole(d, "", reason.New(estate.GapOf(err), err.Error())))
 			continue
@@ -117,28 +132,21 @@ func SnapshotDiff(ctx context.Context, env Env, in DiffInput) (Envelope[DiffInpu
 	return e, nil
 }
 
-// pair picks the two snapshots of a device to compare.
-func pair(st *store.Store, device, from, to string) (store.Snapshot, store.Snapshot, error) {
+// pair picks the two snapshots of a device to compare. A zero to is the
+// latest; a zero from is the snapshot before the newer one.
+func pair(st *store.Store, device string, from, to time.Time) (store.Snapshot, store.Snapshot, error) {
 	var newer store.Snapshot
 	var err error
-	if to == "" {
+	if to.IsZero() {
 		newer, err = st.Latest(device)
 	} else {
-		t, perr := estate.ParseAt(to)
-		if perr != nil {
-			return newer, newer, perr
-		}
-		newer, err = st.AtOrBefore(device, t)
+		newer, err = st.AtOrBefore(device, to)
 	}
 	if err != nil {
 		return newer, newer, err
 	}
-	if from != "" {
-		t, perr := estate.ParseAt(from)
-		if perr != nil {
-			return newer, newer, perr
-		}
-		older, err := st.AtOrBefore(device, t)
+	if !from.IsZero() {
+		older, err := st.AtOrBefore(device, from)
 		return older, newer, err
 	}
 	older, err := st.AtOrBefore(device, newer.Meta.TakenAt.Add(-1))

@@ -302,6 +302,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A bad `--from` or `--to` in `snapshot diff` is now a usage error.** It exits
+  2 and names the flag, as a bad `--at` does; the MCP tool names `from` or `to`.
+  Before, every device became a hole that blamed `--at`, and the command exited 3.
 - **`snapshot diff` now reports every changed setting of objects and rules.** A
   changed entry lists each setting that differs, such as
   `negate-destination: (unset) -> yes`, and secrets show only that they changed.

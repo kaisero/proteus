@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/okaiser/proteus/internal/config"
 	"github.com/okaiser/proteus/internal/estate"
@@ -36,16 +37,22 @@ type Selection struct {
 
 // parseAt reads a point in time, or the zero time for none.
 func parseAt(at string) (estate.When, *UsageError) {
-	var when estate.When
-	if at == "" {
-		return when, nil
+	t, u := parseTime("at", at)
+	return estate.When{At: t}, u
+}
+
+// parseTime reads a point in time given in the input name, or the zero time
+// for none. A value that does not read is a usage error that names the input:
+// --at "x": want ... on the command line, at "x": want ... for a tool.
+func parseTime(name, value string) (time.Time, *UsageError) {
+	if value == "" {
+		return time.Time{}, nil
 	}
-	var err error
-	if when.At, err = estate.ParseAt(at); err != nil {
-		// The text names the flag: --at "x": want ...
-		return when, usageOf(err, err.Error(), strings.TrimPrefix(err.Error(), "--"))
+	t, err := estate.ParseAt(value)
+	if err != nil {
+		return t, usageOf(err, "--"+name+" "+err.Error(), name+" "+err.Error())
 	}
-	return when, nil
+	return t, nil
 }
 
 // Targets opens what a question runs against: one file, or the selected devices'

@@ -51,7 +51,7 @@ func TestSnapshotDiff(t *testing.T) {
 	}
 }
 
-// From and To pick the snapshots; one that does not read is a hole.
+// From and To pick the snapshots; one before any snapshot is a hole.
 func TestSnapshotDiffFromAndTo(t *testing.T) {
 	t.Parallel()
 	env := diffLab(t)
@@ -59,11 +59,6 @@ func TestSnapshotDiffFromAndTo(t *testing.T) {
 	e, err := SnapshotDiff(context.Background(), env, DiffInput{Selection: fw01, From: "2026-09-28T10:00:00Z", To: "2026-09-28T10:00:30Z"})
 	if err != nil || len(e.Results) == 0 || e.Results[0].From != e.Results[0].To {
 		t.Errorf("same snapshot: %+v %v", e.Results, err)
-	}
-	for _, in := range []DiffInput{{Selection: fw01, To: "tuesday"}, {Selection: fw01, From: "tuesday"}} {
-		if e, err := SnapshotDiff(context.Background(), env, in); err != nil || len(e.Holes) != 1 || !strings.Contains(e.Holes[0].Reason, `"tuesday"`) {
-			t.Errorf("%+v: %+v %v", in, e.Holes, err)
-		}
 	}
 	if e, err := SnapshotDiff(context.Background(), env, DiffInput{Selection: fw01, To: "2020-01-01"}); err != nil || len(e.Holes) != 1 || e.Holes[0].Code != "gap.snapshot-missing" {
 		t.Errorf("before any: %+v %v", e.Holes, err)
@@ -94,9 +89,20 @@ func TestSnapshotDiffInputRules(t *testing.T) {
 		{DiffInput{Selection: Selection{At: "2026-01-01"}}, "--at: snapshot diff"},
 		{DiffInput{Selection: Selection{Fresh: true}}, "--fresh: snapshot diff"},
 		{DiffInput{Selection: Selection{Device: []string{"fw09"}}}, `no device named "fw09"`},
+		// From and To read as at does; a bad one names its own input.
+		{DiffInput{To: "tuesday"}, `--to "tuesday": want a snapshot id, an RFC 3339 time, or a date`},
+		{DiffInput{From: "tuesday", To: "2026-09-28"}, `--from "tuesday": want a snapshot id`},
 	} {
 		_, err := SnapshotDiff(context.Background(), diffLab(t), tc.in)
 		usageOK(t, err, tc.want)
+	}
+	// The tool's words name the input without the dashes.
+	u := DiffInput{From: "tuesday"}.Validate()
+	if u == nil || u.ToolText != `from "tuesday": want a snapshot id, an RFC 3339 time, or a date like 2026-09-23` {
+		t.Errorf("tool text: %+v", u)
+	}
+	if u := (DiffInput{From: "2026-09-27", To: "2026-09-28T10-00-00Z"}).Validate(); u != nil {
+		t.Errorf("good times refused: %v", u)
 	}
 	if _, err := SnapshotDiff(context.Background(), Env{}, DiffInput{}); !errors.Is(err, errNoInventory) {
 		t.Errorf("no inventory: %v", err)

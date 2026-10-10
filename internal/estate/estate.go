@@ -259,8 +259,9 @@ func StaleNote(id string, age, limit time.Duration) string {
 	return fmt.Sprintf("snapshot %s is %s old, past the %s limit", id, age.Round(time.Minute), limit)
 }
 
-// ParseAt reads a --at time: a snapshot id (2026-09-28T07-15-37Z), an RFC 3339 time,
-// or a date, which means the end of that day in UTC.
+// ParseAt reads a point in time, as --at, --from and --to take it: a snapshot id
+// (2026-09-28T07-15-37Z), an RFC 3339 time, or a date, which means the end of
+// that day in UTC. Its error names the value; the caller names the input.
 func ParseAt(s string) (time.Time, error) {
 	if t, err := time.Parse("2006-01-02T15-04-05Z", s); err == nil {
 		return t, nil
@@ -271,5 +272,5 @@ func ParseAt(s string) (time.Time, error) {
 	if t, err := time.Parse("2006-01-02", s); err == nil {
 		return t.Add(24*time.Hour - time.Second), nil
 	}
-	return time.Time{}, fmt.Errorf("--at %q: want a snapshot id, an RFC 3339 time, or a date like 2026-09-23", s)
+	return time.Time{}, fmt.Errorf("%q: want a snapshot id, an RFC 3339 time, or a date like 2026-09-23", s)
 }
