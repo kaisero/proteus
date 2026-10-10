@@ -39,6 +39,9 @@ const idLayout = "2006-01-02T15-04-05Z"
 type Store struct {
 	root string
 	now  func() time.Time
+	// step, when set, runs at the named points of Write, so a test can put a
+	// second writer between them.
+	step func(name string)
 }
 
 // Open returns the store at root, creating it private to its owner.
@@ -117,9 +120,16 @@ func (s *Store) Write(meta Meta, docs map[string][]byte, keep int) (Snapshot, er
 	id := meta.TakenAt.Format(idLayout)
 	devDir := filepath.Join(s.root, meta.Device)
 	final := filepath.Join(devDir, id)
-	if _, err := os.Stat(final); err == nil {
-		return Snapshot{}, fmt.Errorf("store: snapshot %s@%s already exists", meta.Device, id)
+	exists := func() error {
+		if _, err := os.Stat(final); err == nil {
+			return fmt.Errorf("store: snapshot %s@%s already exists", meta.Device, id)
+		}
+		return nil
 	}
+	if err := exists(); err != nil {
+		return Snapshot{}, err
+	}
+	s.at("checked")
 	if err := os.MkdirAll(devDir, 0o700); err != nil {
 		return Snapshot{}, fmt.Errorf("store: %w", err)
 	}
@@ -132,7 +142,19 @@ func (s *Store) Write(meta Meta, docs map[string][]byte, keep int) (Snapshot, er
 		}
 		return Snapshot{}, fmt.Errorf("store: %w", err)
 	}
-	defer func() { _ = os.RemoveAll(tmp) }()
+	// After the rename the path tmp is free, and another writer may make it again:
+	// remove it only while it is still this writer's.
+	renamed := false
+	defer func() {
+		if !renamed {
+			_ = os.RemoveAll(tmp)
+		}
+	}()
+	// A writer that renamed between the check above and the Mkdir has stored this
+	// id already.
+	if err := exists(); err != nil {
+		return Snapshot{}, err
+	}
 
 	names := make([]string, 0, len(docs))
 	for n := range docs {
@@ -156,20 +178,36 @@ func (s *Store) Write(meta Meta, docs map[string][]byte, keep int) (Snapshot, er
 	if err := os.Rename(tmp, final); err != nil {
 		return Snapshot{}, fmt.Errorf("store: %w", err)
 	}
+	renamed = true
+	s.at("renamed")
+	// The renames live in the directories: sync them, so a crash cannot lose a
+	// snapshot that Write reported stored. The snapshot's rename reaches the disk
+	// before latest names it.
+	notSynced := func(err error) error {
+		return fmt.Errorf("store: %s@%s is stored but not synced: %w", meta.Device, id, err)
+	}
+	if err := cmp.Or(syncDir(final), syncDir(devDir)); err != nil {
+		return Snapshot{}, notSynced(err)
+	}
 	if _, ok := docs[ConfigDoc]; ok {
 		if err := pointLatest(devDir, id); err != nil {
 			return Snapshot{}, err
 		}
-	}
-	// The renames live in the directories: sync them, so a crash cannot lose a
-	// snapshot that Write reported stored.
-	if err := cmp.Or(syncDir(final), syncDir(devDir)); err != nil {
-		return Snapshot{}, fmt.Errorf("store: %w", err)
+		if err := syncDir(devDir); err != nil {
+			return Snapshot{}, notSynced(err)
+		}
 	}
 	if err := s.prune(meta.Device, keep); err != nil {
 		return Snapshot{}, err
 	}
 	return Snapshot{Device: meta.Device, ID: id, Dir: final, Meta: meta}, nil
+}
+
+// at runs the test step of that name, if any.
+func (s *Store) at(name string) {
+	if s.step != nil {
+		s.step(name)
+	}
 }
 
 // writeFile writes a file and syncs it, so its data reaches the disk before the
@@ -225,13 +263,14 @@ func pointLatest(devDir, id string) error {
 // It counts the snapshots with a configuration and those without apart and keeps the
 // newest keep of each, so a run of failed fetches cannot remove the last snapshots
 // that can be analysed. A snapshot whose meta.json cannot be read counts as one
-// without a configuration.
+// without a configuration. It also removes what a crashed write left behind.
 func (s *Store) prune(device string, keep int) error {
 	keep = max(keep, 1)
 	ids, err := s.List(device)
 	if err != nil {
 		return err
 	}
+	removeLeftovers(filepath.Join(s.root, device), time.Now())
 	latest, _ := os.Readlink(filepath.Join(s.root, device, "latest"))
 	kept := map[bool]int{}   // by whether the snapshot holds a configuration
 	for _, id := range ids { // newest first
@@ -245,6 +284,32 @@ func (s *Store) prune(device string, keep int) error {
 		}
 	}
 	return nil
+}
+
+// leftoverAge is how old a temporary entry must be before prune takes it for one a
+// crashed write left. A live write lasts seconds, and it goes on past the second
+// its id names, so the id alone cannot tell.
+const leftoverAge = time.Hour
+
+// removeLeftovers removes the temporary entries of a device directory, a
+// snapshot's .<id>.partial and latest's .latest-<id>, whose modification time is
+// older than leftoverAge. The time is the file system's, so it is compared with
+// the wall clock, not the store's. A failure leaves the entry for the next prune:
+// it must not fail the write that just stored a snapshot.
+func removeLeftovers(devDir string, now time.Time) {
+	entries, err := os.ReadDir(devDir)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		n := e.Name()
+		if !strings.HasPrefix(n, ".latest-") && (!strings.HasPrefix(n, ".") || !strings.HasSuffix(n, ".partial")) {
+			continue
+		}
+		if fi, err := e.Info(); err == nil && now.Sub(fi.ModTime()) > leftoverAge {
+			_ = os.RemoveAll(filepath.Join(devDir, n))
+		}
+	}
 }
 
 // holdsConfig reports whether a snapshot can be read and holds a configuration.

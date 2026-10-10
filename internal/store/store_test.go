@@ -363,6 +363,127 @@ func TestConcurrentWritersOfOneID(t *testing.T) {
 	}
 }
 
+// fixed returns a store whose clock stands at one second, so every write takes
+// one id.
+func fixed(t *testing.T) *Store {
+	t.Helper()
+	s, err := Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return s.WithClock(func() time.Time { return time.Date(2026, 9, 28, 10, 0, 0, 0, time.UTC) })
+}
+
+// A writer that passed the first check while another renamed the same id into
+// place makes the temporary directory anew. It then finds the snapshot stored and
+// fails with the clear error, and the first writer's snapshot stays whole.
+func TestASecondWriterAfterTheRename(t *testing.T) {
+	t.Parallel()
+	a := fixed(t)
+	var first Snapshot
+	var firstErr error
+	b := *a
+	b.step = func(name string) {
+		if name == "checked" {
+			first, firstErr = a.Write(Meta{Device: "fw01"}, docs(t, false), 20)
+		}
+	}
+	_, err := b.Write(Meta{Device: "fw01"}, docs(t, false), 20)
+	if firstErr != nil {
+		t.Fatal(firstErr)
+	}
+	if err == nil || err.Error() != "store: snapshot fw01@2026-09-28T10-00-00Z already exists" {
+		t.Errorf("second writer: %v", err)
+	}
+	got, err := a.Latest("fw01")
+	if err != nil || got.ID != first.ID || !got.Has(ConfigDoc) || len(got.Meta.Documents) != 1 {
+		t.Errorf("the first writer's snapshot: %+v, %v", got, err)
+	}
+	entries, _ := os.ReadDir(filepath.Join(a.root, "fw01"))
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), ".") {
+			t.Errorf("a temporary entry was left behind: %s", e.Name())
+		}
+	}
+}
+
+// After its rename the first writer no longer owns the path of its temporary
+// directory: a second writer that makes it again keeps it.
+func TestTheFirstWriterLeavesTheNextOnesDirectory(t *testing.T) {
+	t.Parallel()
+	s := fixed(t)
+	next := filepath.Join(s.root, "fw01", ".2026-09-28T10-00-00Z.partial", "config.xml")
+	s.step = func(name string) {
+		if name != "renamed" {
+			return
+		}
+		if err := os.Mkdir(filepath.Dir(next), 0o700); err != nil {
+			t.Error(err)
+		}
+		if err := os.WriteFile(next, []byte("<config"), 0o600); err != nil {
+			t.Error(err)
+		}
+	}
+	if _, err := s.Write(Meta{Device: "fw01"}, docs(t, false), 20); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(next); err != nil {
+		t.Errorf("the first writer removed the next writer's files: %v", err)
+	}
+}
+
+// A sync that fails after the rename names the snapshot that is in place.
+func TestAFailedSyncNamesTheStoredSnapshot(t *testing.T) {
+	t.Parallel()
+	s := fixed(t)
+	s.step = func(name string) {
+		if name == "renamed" {
+			_ = os.RemoveAll(filepath.Join(s.root, "fw01", "2026-09-28T10-00-00Z"))
+		}
+	}
+	_, err := s.Write(Meta{Device: "fw01"}, docs(t, false), 20)
+	if err == nil || !strings.HasPrefix(err.Error(), "store: fw01@2026-09-28T10-00-00Z is stored but not synced: ") {
+		t.Errorf("a failed sync: %v", err)
+	}
+}
+
+// Prune removes what a crashed write left, once it is an hour old by the file
+// system's clock, and never a fresh one: a live write may still own it.
+func TestPruneRemovesOldLeftovers(t *testing.T) {
+	t.Parallel()
+	s := open(t)
+	dev := filepath.Join(s.root, "fw01")
+	oldPartial := filepath.Join(dev, ".2026-09-01T00-00-00Z.partial")
+	oldLink := filepath.Join(dev, ".latest-2026-09-01T00-00-00Z")
+	fresh := filepath.Join(dev, ".2026-09-28T09-59-59Z.partial")
+	for _, d := range []string{oldPartial, fresh} {
+		if err := os.MkdirAll(d, 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(oldLink, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	other := filepath.Join(dev, ".keep")
+	if err := os.WriteFile(other, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	long := time.Now().Add(-2 * time.Hour)
+	for _, p := range []string{oldPartial, oldLink, other} {
+		if err := os.Chtimes(p, long, long); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := s.Write(Meta{Device: "fw01"}, docs(t, false), 20); err != nil {
+		t.Fatal(err)
+	}
+	for p, want := range map[string]bool{oldPartial: false, oldLink: false, fresh: true, other: true} {
+		if _, err := os.Stat(p); (err == nil) != want {
+			t.Errorf("%s: kept %v, want %v", filepath.Base(p), err == nil, want)
+		}
+	}
+}
+
 func TestResolveAndGet(t *testing.T) {
 	t.Parallel()
 	s := open(t)
