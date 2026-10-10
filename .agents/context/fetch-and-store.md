@@ -106,7 +106,9 @@ configuration; `Snapshot.ConfigPath`), `ErrUnreadable` (a stored file is there b
 cannot be read or parsed). `Latest` and `AtOrBefore` on a device whose snapshots
 all lack a configuration match both `ErrNoSnapshot` and `ErrNoConfig`; test
 `ErrNoConfig` first. The message text stays as it was. An absent zone document
-matches `fs.ErrNotExist`, not `ErrUnreadable`.
+matches `fs.ErrNotExist`, not `ErrUnreadable`. `Get` of a snapshot directory
+without `meta.json` matches `ErrUnreadable` (damaged), not `ErrNoSnapshot`;
+`snapshot list` shows it as a `gap.load-failed` hole and lists the rest.
 
 ## Build / run pointers
 

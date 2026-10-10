@@ -304,6 +304,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`snapshot list` shows the good snapshots when one is damaged.** A snapshot
+  whose `meta.json` is missing or unreadable becomes a hole, and the list goes
+  on. Before, one such snapshot stopped the command with an error and no list.
 - **A device named twice in `fetch` is fetched once.** Before, both fetches
   ran together and wrote the same snapshot, so one failed and the run exited 3.
   Two runs that store one device in the same second now fail the second one at

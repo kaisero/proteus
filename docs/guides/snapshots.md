@@ -31,7 +31,8 @@ $ proteus snapshot list fw01
 * 2026-09-29T06-29-08Z  PAN-OS 11.2.5   4 documents, 0 failed
 ```
 
-The list is newest first. `*` marks `latest`.
+The list is newest first. `*` marks `latest`. A snapshot whose `meta.json` is
+missing or unreadable shows as a hole below the list, and the command exits 3.
 
 ## Show
 

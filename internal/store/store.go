@@ -302,6 +302,11 @@ func (s *Store) Get(device, id string) (Snapshot, error) {
 	dir := filepath.Join(s.root, device, id)
 	b, err := os.ReadFile(filepath.Join(dir, "meta.json"))
 	if err != nil {
+		if _, serr := os.Stat(dir); serr == nil {
+			// The snapshot is there but its meta.json is not readable: Write renames a
+			// snapshot into place whole, so it is damaged, not missing.
+			return Snapshot{}, mark(ErrUnreadable, fmt.Errorf("store: %s@%s: meta.json: %w", device, id, err))
+		}
 		return Snapshot{}, missingOr(ErrNoSnapshot, fmt.Errorf("store: no snapshot %s@%s", device, id), err)
 	}
 	var m Meta

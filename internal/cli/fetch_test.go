@@ -370,6 +370,71 @@ func TestHousekeeping(t *testing.T) {
 	}
 }
 
+// A damaged snapshot becomes a hole in snapshot list, and the good ones still show.
+func TestSnapshotListGoesOnPastADamagedSnapshot(t *testing.T) {
+	t.Parallel()
+	c := newCLI(t)
+	c.inventory(inventoryFor(lab(t).Start(t)))
+	for range 3 {
+		c.want(0, "fetch", "fw01")
+	}
+	type listed struct {
+		Results []struct {
+			ID     string
+			Latest bool
+		}
+		Holes []struct{ Device, Code, Text string }
+	}
+	var before listed
+	if err := json.Unmarshal([]byte(c.want(0, "snapshot", "list", "fw01", "--output", "json")), &before); err != nil || len(before.Results) != 3 {
+		t.Fatalf("snapshot list json: %v %+v", err, before)
+	}
+	damaged := before.Results[1].ID
+	if err := os.Remove(filepath.Join(c.env["PROTEUS_STORE"], "fw01", damaged, "meta.json")); err != nil {
+		t.Fatal(err)
+	}
+	out := c.want(3, "snapshot", "list", "fw01")
+	for _, want := range []string{
+		"* " + before.Results[0].ID, "  " + before.Results[2].ID,
+		"hole: fw01: store: fw01@" + damaged + ": meta.json: ",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q in:\n%s", want, out)
+		}
+	}
+	var after listed
+	if err := json.Unmarshal([]byte(c.want(3, "snapshot", "list", "fw01", "--output", "json")), &after); err != nil {
+		t.Fatal(err)
+	}
+	if len(after.Results) != 2 || after.Results[0].ID != before.Results[0].ID || !after.Results[0].Latest ||
+		after.Results[1].ID != before.Results[2].ID {
+		t.Errorf("results = %+v", after.Results)
+	}
+	if len(after.Holes) != 1 || after.Holes[0].Device != "fw01" || after.Holes[0].Code != "gap.load-failed" ||
+		!strings.Contains(after.Holes[0].Text, damaged) {
+		t.Errorf("holes = %+v", after.Holes)
+	}
+}
+
+// A snapshot pruned between List and Get no longer exists: it is left out, with
+// no hole.
+func TestSnapshotRowsSkipAPrunedSnapshot(t *testing.T) {
+	t.Parallel()
+	st, err := store.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	st = st.WithClock(func() time.Time { return time.Date(2026, 9, 28, 10, 0, 0, 0, time.UTC) })
+	sn, err := st.Write(store.Meta{Device: "fw01"}, map[string][]byte{store.ConfigDoc: []byte("<config/>")}, 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows, holes := snapshotRows(st, "fw01", []string{"2026-09-28T11-00-00Z", sn.ID})
+	if len(rows) != 1 || rows[0].ID != sn.ID || !rows[0].Latest || len(holes) != 0 {
+		t.Errorf("rows = %+v, holes = %+v", rows, holes)
+	}
+}
+
 // Parallel fetch stores every device and reports them in the order named.
 func TestParallelFetchKeepsOrder(t *testing.T) {
 	t.Parallel()

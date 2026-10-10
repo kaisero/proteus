@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/spf13/cobra"
@@ -77,11 +78,25 @@ func (a *app) runSnapshotList(_ context.Context, o snapshotListOptions) (answer,
 		ans.holes = []estate.Hole{estate.NewHole(o.device, "", reason.New(estate.GapOf(err), err.Error()))}
 		return ans, nil
 	}
-	latest, _ := st.Latest(o.device)
+	ans.rows, ans.holes = snapshotRows(st, o.device, ids)
+	return ans, nil
+}
+
+// snapshotRows reads the listed snapshots of a device. A damaged snapshot becomes a
+// hole and the list goes on; one pruned since it was listed no longer exists and is
+// left out.
+func snapshotRows(st *store.Store, device string, ids []string) ([]snapshotRow, []estate.Hole) {
+	rows := []snapshotRow{}
+	var holes []estate.Hole
+	latest, _ := st.Latest(device)
 	for _, id := range ids {
-		sn, err := st.Get(o.device, id)
-		if err != nil {
-			return nil, err
+		sn, err := st.Get(device, id)
+		switch {
+		case errors.Is(err, store.ErrNoSnapshot):
+			continue
+		case err != nil:
+			holes = append(holes, estate.NewHole(device, "", reason.New(estate.GapOf(err), err.Error())))
+			continue
 		}
 		r := snapshotRow{ID: id, Latest: id == latest.ID, SWVersion: sn.Meta.SWVersion, Documents: len(sn.Meta.Documents)}
 		for _, d := range sn.Meta.Documents {
@@ -89,9 +104,9 @@ func (a *app) runSnapshotList(_ context.Context, o snapshotListOptions) (answer,
 				r.Failed++
 			}
 		}
-		ans.rows = append(ans.rows, r)
+		rows = append(rows, r)
 	}
-	return ans, nil
+	return rows, holes
 }
 
 func (l snapshotListAnswer) Command() string        { return "snapshot list" }

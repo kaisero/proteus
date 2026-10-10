@@ -396,6 +396,29 @@ func TestGetRejectsACorruptMeta(t *testing.T) {
 	}
 }
 
+// A snapshot whose meta.json is gone is damaged, not missing: Write renames a
+// snapshot into place whole. A snapshot that is gone altogether is missing.
+func TestGetTellsADamagedSnapshotFromAMissingOne(t *testing.T) {
+	t.Parallel()
+	s := open(t)
+	damaged, _ := s.Write(Meta{Device: "fw01"}, docs(t, false), 20)
+	gone, _ := s.Write(Meta{Device: "fw01"}, docs(t, false), 20)
+	if err := os.Remove(filepath.Join(damaged.Dir, "meta.json")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.RemoveAll(gone.Dir); err != nil {
+		t.Fatal(err)
+	}
+	_, err := s.Get("fw01", damaged.ID)
+	if !errors.Is(err, ErrUnreadable) || errors.Is(err, ErrNoSnapshot) ||
+		!strings.HasPrefix(err.Error(), "store: fw01@"+damaged.ID+": meta.json: ") {
+		t.Errorf("Get of a snapshot without meta.json: %v", err)
+	}
+	if _, err := s.Get("fw01", gone.ID); !errors.Is(err, ErrNoSnapshot) || errors.Is(err, ErrUnreadable) {
+		t.Errorf("Get of a removed snapshot: %v", err)
+	}
+}
+
 func TestZonesFromAStoredSnapshot(t *testing.T) {
 	t.Parallel()
 	s := open(t)
