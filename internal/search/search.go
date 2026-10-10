@@ -103,8 +103,7 @@ type searcher struct {
 	// names maps an object or group found to the kinds it was found as. A name
 	// can have several: a tag and an address group, an address group and a
 	// service group.
-	names  map[string]map[string]bool
-	byName map[string][]string
+	names map[string]map[string]bool
 }
 
 // foundAs records a name as found with a kind.
@@ -123,19 +122,15 @@ func (s *searcher) namesFound() []string {
 	return slices.Sorted(maps.Keys(s.names))
 }
 
-// kindsByName maps every object name visible in the scope to its kinds, once.
+// kindsByName maps every object name visible in the scope to its kinds.
 func (s *searcher) kindsByName() map[string][]string {
-	if s.byName != nil {
-		return s.byName
-	}
-	s.byName = map[string][]string{}
+	out := map[string][]string{}
 	for _, k := range resolve.ObjectKinds(s.cfg) {
-		objs := resolve.ObjectsInScope(s.cfg, s.sc, k)
-		for _, o := range objs {
-			s.byName[o.Name] = append(s.byName[o.Name], k)
+		for _, o := range resolve.ObjectsInScope(s.cfg, s.sc, k) {
+			out[o.Name] = append(out[o.Name], k)
 		}
 	}
-	return s.byName
+	return out
 }
 
 func (s *searcher) kindAllowed(kind string) bool {

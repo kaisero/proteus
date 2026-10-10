@@ -390,8 +390,15 @@ func TestANameWithSeveralKinds(t *testing.T) {
 			t.Errorf("%s: a kind named without need:\n%s", tc.term, dump(got))
 		}
 	}
+	// A kind filter keeps the tag and drops the group of the same name, with its
+	// references.
+	got := run(t, fixture, "vsys1", Query{Term: "web", Kinds: []string{"tag"}})
+	if !has(got, "object tag web") || has(got, "object address-group") || has(got, "reference security rule to-web") ||
+		!has(got, "reference security rule by-tag tag web") {
+		t.Errorf("kind tag:\n%s", dump(got))
+	}
 	// Direct asks one level up, by kind too.
-	got := run(t, fixture, "vsys1", Query{Term: "tcp/8443", Direct: true})
+	got = run(t, fixture, "vsys1", Query{Term: "tcp/8443", Direct: true})
 	if !has(got, "group service-group webgrp  holds svc-web") || has(got, "group address-group") {
 		t.Errorf("direct:\n%s", dump(got))
 	}

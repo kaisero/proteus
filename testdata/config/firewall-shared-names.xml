@@ -25,6 +25,9 @@
             <entry name="webgrp"><members><member>svc-web</member></members></entry>
             <entry name="g-dual-svc"><members><member>dual</member></members></entry>
           </service-group>
+          <application-group>
+            <entry name="g-dual-app"><members><member>dual</member></members></entry>
+          </application-group>
           <rulebase><security><rules>
             <entry name="by-tag">
               <source><member>any</member></source>

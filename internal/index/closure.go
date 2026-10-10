@@ -180,16 +180,40 @@ func memberKinds(cfg *config.Config, group string) []string {
 
 // fieldFamilies picks, for each rule field, the group families whose groups the
 // field can name, as the schema declares. reach asks only those.
-func fieldFamilies(kinds map[string][]string, fams []groupFamily) map[Field][]*groupFamily {
+func fieldFamilies(kinds map[string][]string, fams []*groupFamily) map[Field][]*groupFamily {
 	out := map[Field][]*groupFamily{}
 	for n, name := range fieldNames {
-		for j := range fams {
-			if slices.Contains(kinds[name], fams[j].kind) {
-				out[Field(n)] = append(out[Field(n)], &fams[j])
+		for _, fam := range fams {
+			if slices.Contains(kinds[name], fam.kind) {
+				out[Field(n)] = append(out[Field(n)], fam)
 			}
 		}
 	}
 	return out
+}
+
+// holders returns the groups of the families that hold an id, in id order. The
+// closures' bitmaps are memoised and shared, so a union works on a copy, made
+// only when a second family holds the id too.
+func (i *Index) holders(fams []*groupFamily, id uint32) []string {
+	var b *roaring.Bitmap
+	copied := false
+	for _, fam := range fams {
+		a := fam.closure.ancestors(id)
+		switch {
+		case a.IsEmpty():
+		case b == nil:
+			b = a
+		case !copied:
+			b, copied = roaring.Or(b, a), true
+		default:
+			b.Or(a)
+		}
+	}
+	if b == nil {
+		return []string{}
+	}
+	return i.names(b)
 }
 
 // names turns a bitmap of ids into names, in id order.
@@ -242,11 +266,7 @@ func (i *Index) GroupsOf(name string) []string {
 	if !known {
 		return nil
 	}
-	b := roaring.New()
-	for _, fam := range i.families {
-		b.Or(fam.closure.ancestors(id))
-	}
-	return i.names(b)
+	return i.holders(i.families, id)
 }
 
 // groupsReaching returns the groups of the field's families holding a name.
@@ -255,11 +275,7 @@ func (i *Index) groupsReaching(f Field, name string) []string {
 	if !known {
 		return nil
 	}
-	b := roaring.New()
-	for _, fam := range i.fieldFamilies[f] {
-		b.Or(fam.closure.ancestors(id))
-	}
-	return i.names(b)
+	return i.holders(i.fieldFamilies[f], id)
 }
 
 // UnparsedFilters returns the dynamic groups whose filters could not be read.

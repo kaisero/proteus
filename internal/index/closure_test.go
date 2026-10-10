@@ -215,6 +215,14 @@ func TestEachGroupKindHasItsOwnClosure(t *testing.T) {
 	if got := idx.DirectGroupsOf("svc-web"); !slices.Equal(got, []string{"webgrp"}) {
 		t.Errorf("DirectGroupsOf(svc-web) = %v", got)
 	}
+	// GroupsOf asks every family: dual is an address, a service and an
+	// application member.
+	if got := slices.Sorted(slices.Values(idx.GroupsOf("dual"))); !slices.Equal(got, []string{"g-dual-addr", "g-dual-app", "g-dual-svc"}) {
+		t.Errorf("GroupsOf(dual) = %v", got)
+	}
+	if got := idx.GroupsOf("webgrp"); got == nil || len(got) != 0 {
+		t.Errorf("GroupsOf(webgrp) = %#v, want empty", got)
+	}
 	if got := idx.MembersOf("svc-web"); got != nil {
 		t.Errorf("MembersOf(svc-web) = %v, want none", got)
 	}

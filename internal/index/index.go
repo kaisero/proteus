@@ -15,7 +15,7 @@ type Index struct {
 	in    *Interner
 	// families holds one membership closure per group kind, by kind: an
 	// address group and a service group may share a name.
-	families      []groupFamily
+	families      []*groupFamily
 	fieldFamilies map[Field][]*groupFamily
 	refs          *refsIndex
 	rules         *rulesIndex
@@ -135,13 +135,13 @@ func build(cfg *config.Config, edges edgeList, sc config.Scope, rb resolve.Ruleb
 	profs := resolve.URLFilteringProfilesInScope(cfg, sc)
 	pgroups := resolve.ProfileGroupsInScope(cfg, sc)
 
-	families := []groupFamily{
+	families := []*groupFamily{
 		{kind: addressGroups, closure: newClosureIndex(in, groups, addrs)},
 		{kind: "application-group", closure: newClosureIndex(in, appGroups, nil)},
 		{kind: "service-group", closure: newClosureIndex(in, svcGroups, nil)},
 	}
-	for j := range families {
-		families[j].members = memberKinds(cfg, families[j].kind)
+	for _, fam := range families {
+		fam.members = memberKinds(cfg, fam.kind)
 	}
 	fieldKinds := cfg.FieldKinds("rulebase/" + rb.String() + "/rules")
 
