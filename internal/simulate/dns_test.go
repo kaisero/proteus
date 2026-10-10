@@ -35,3 +35,26 @@ func TestDNSNotes(t *testing.T) {
 		t.Errorf("an address has no DNS note: %v", got)
 	}
 }
+
+// Each endpoint keeps its first address and its name; the flow given is not
+// changed.
+func TestFirstAddresses(t *testing.T) {
+	t.Parallel()
+	a, b := netip.MustParseAddr("198.18.0.2"), netip.MustParseAddr("198.18.0.3")
+	f := Flow{
+		Source:      Addr(netip.MustParseAddr("198.18.0.1")),
+		Destination: Endpoint{Name: "dst.example", Addrs: []netip.Addr{a, b}, Resolved: true},
+	}
+	got := f.FirstAddresses()
+	if d := got.Destination; d.Name != "dst.example" || len(d.Addrs) != 1 || d.Addrs[0] != a || !d.Resolved {
+		t.Errorf("destination %+v", d)
+	}
+	if len(got.Source.Addrs) != 1 || len(f.Destination.Addrs) != 2 {
+		t.Errorf("source %+v, the flow given %+v", got.Source, f.Destination)
+	}
+	// Appending to the cut endpoint does not write into the flow given.
+	_ = append(got.Destination.Addrs, netip.MustParseAddr("198.18.0.9"))
+	if f.Destination.Addrs[1] != b {
+		t.Errorf("the flow given changed: %v", f.Destination.Addrs)
+	}
+}

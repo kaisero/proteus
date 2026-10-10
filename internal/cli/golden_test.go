@@ -271,14 +271,21 @@ var fqdnGoldens = []struct {
 }{
 	{"simulate-policy-fqdn-only", "198.51.100.7"},
 	{"simulate-policy-fqdn-and-address", "203.0.113.10"},
+	// The first address is checked; the note names the second (D1b).
+	{"simulate-policy-fqdn-two-addresses", "198.51.100.7 203.0.113.10"},
 }
 
-// fqdnCLI is a harness whose resolver answers www.example.com with addr, and
-// web.cdn.example.net as its canonical name.
+// fqdnCLI is a harness whose resolver answers www.example.com with the
+// addresses in addr, separated by spaces, and web.cdn.example.net as its
+// canonical name.
 func fqdnCLI(t *testing.T, addr string) *cli {
 	c := newCLI(t)
 	c.lookup = func(context.Context, string) ([]netip.Addr, error) {
-		return []netip.Addr{netip.MustParseAddr(addr)}, nil
+		var out []netip.Addr
+		for a := range strings.FieldsSeq(addr) {
+			out = append(out, netip.MustParseAddr(a))
+		}
+		return out, nil
 	}
 	c.canonical = func(context.Context, string) (string, error) { return "web.cdn.example.net.", nil }
 	return c

@@ -58,7 +58,9 @@ simulate nat <src> <dst> --device <fw>      the NAT rule and the translated pack
   `--all-devices` are not registered. An FQDN traces its first IPv4 address; with
   `--no-dns` or no address, exit 2. The loader opens the snapshot each routing hop
   used (HA: the active member). **`--file`**: one configuration, `--vsys`, zones
-  given (both) or derived, no NAT; `--device`, `--label`, `--at`, `--router` exit 2.
+  given (both) or derived, no NAT, the first address of an FQDN checked with a
+  `dns.other-addresses` note for the rest; `--device`, `--label`, `--at`,
+  `--router` exit 2.
   Its text ends with `first match: <rule> (<action>)` or `first certain match:` and
   `undecided:`. Both modes share one JSON security block (`securityJSON`).
   `scripts/device-probe.sh <config> <vsys>` reads the `--file` text;

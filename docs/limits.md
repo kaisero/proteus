@@ -94,8 +94,8 @@ hop's firewall the same question with `test security-policy-match`. On fw02,
 
 - **Only the first IPv4 address is checked.** A source or destination given as a
   host name is resolved with this machine's DNS. proteus checks the first IPv4
-  address in the answer; IPv6 is not simulated. `simulate routing` and
-  `simulate nat` name the other addresses in a note.
+  address in the answer; IPv6 is not simulated. `simulate policy`,
+  `simulate routing` and `simulate nat` name the other addresses in a note.
 - **The canonical name is this machine's view.** A note gives the name's
   canonical name as this machine's resolver reports it. Resolvers differ: one
   reports the first name of a CNAME chain, another the last.

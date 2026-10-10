@@ -176,6 +176,7 @@ func (f Fidelity) SkippedReasons() Reasons
 func (f Fidelity) String() string
 func (f Fidelity) UnderMatchGroups() []Reasons
 func (f Fidelity) UnderMatchReasons() Reasons
+func (f Flow) FirstAddresses() Flow
 func (m Match) First() resolve.FIBRoute
 func (m Missing) Why() reason.Reason
 func (p Port) Link() netip.Prefix

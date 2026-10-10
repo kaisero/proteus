@@ -33,3 +33,17 @@ func DNSNotes(f Flow, traced bool) Reasons {
 	}
 	return out
 }
+
+// FirstAddresses is the flow with each endpoint cut to its first address, and
+// the FQDN's name kept for matching FQDN objects. A simulation that follows one
+// address uses the first, which a resolved name has IPv4 when it has one (spec
+// 2026-10-07 §3.3, D1b); DNSNotes names the others. The flow itself is not
+// changed.
+func (f Flow) FirstAddresses() Flow {
+	for _, ep := range []*Endpoint{&f.Source, &f.Destination} {
+		if len(ep.Addrs) > 1 {
+			ep.Addrs = ep.Addrs[:1:1]
+		}
+	}
+	return f
+}

@@ -332,7 +332,8 @@ func TestPolicyFileNotesAVersionGap(t *testing.T) {
 }
 
 // The resolver's first IPv4 address goes in front, the rest keep their order,
-// and an alias's canonical name becomes a note (C2, C3).
+// and an alias's canonical name becomes a note (C2, C3). File mode checks that
+// first address and names the others.
 func TestEndpointOrdersAndNamesTheAlias(t *testing.T) {
 	t.Parallel()
 	env := Env{
@@ -367,8 +368,38 @@ func TestEndpointOrdersAndNamesTheAlias(t *testing.T) {
 	for _, n := range e.Notes {
 		codes = append(codes, string(n.Code))
 	}
-	if err != nil || !slices.Contains(codes, "dns.canonical-name") || slices.Contains(codes, "dns.other-addresses") {
+	// File mode checks the first address, as path mode does (D1b), and names
+	// the others in a note.
+	if err != nil || !slices.Equal(codes, []string{"dns.canonical-name", "dns.other-addresses"}) ||
+		e.Notes[1].Note != "app.example.test resolved to 4 addresses; traced 10.1.0.5, not 2001:db8::1, 2001:db8::2, 10.1.0.6" {
 		t.Errorf("file notes: %+v %v", e.Notes, err)
+	}
+	if len(e.Results) != 1 || fmt.Sprint(e.Results[0].Run.Input.Flow.Destination.Addrs) != "[10.1.0.5]" ||
+		len(e.Input.Simulated.Destination.Addrs) != 4 {
+		t.Errorf("checked %+v, simulated %+v", e.Results, e.Input.Simulated.Destination)
+	}
+}
+
+// A source host name is cut to its first address too: from inside only, the
+// derived zones are one on each side and inter-inside decides; the note names
+// the other address (D1b).
+func TestFileModeChecksTheFirstSourceAddress(t *testing.T) {
+	t.Parallel()
+	env := Env{Resolve: resolver(map[string][]string{"two.example.test": {"10.1.0.5", "10.3.0.5"}})}
+	e, err := PolicyFile(context.Background(), env, PolicyFileInput{
+		Flow:      FlowInput{Source: "two.example.test", Destination: "10.2.0.5", Protocol: "tcp", Port: "443"},
+		Selection: Selection{File: fixture("firewall-ruletype.xml"), Vsys: []string{"vsys1"}},
+	})
+	if err != nil || len(e.Results) != 1 {
+		t.Fatalf("%+v %v", e, err)
+	}
+	r := e.Results[0]
+	if fmt.Sprint(r.Run.Input.Flow.Source.Addrs) != "[10.1.0.5]" || r.Verdict != "stop" || r.Answer != "first match: inter-inside (deny)" {
+		t.Errorf("checked %v: %s, %s", r.Run.Input.Flow.Source.Addrs, r.Verdict, r.Answer)
+	}
+	if len(e.Notes) != 1 || e.Notes[0].Code != "dns.other-addresses" ||
+		e.Notes[0].Note != "two.example.test resolved to 2 addresses; traced 10.1.0.5, not 10.3.0.5" {
+		t.Errorf("notes %+v", e.Notes)
 	}
 }
 

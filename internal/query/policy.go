@@ -210,7 +210,9 @@ func PolicyFile(ctx context.Context, env Env, in PolicyFileInput) (Envelope[Poli
 		return none, err
 	}
 	env.Log.Infof(runlog.TagStep, "%s %s -> %s on %s/%s", securitypolicy.Kind, flow.Source, flow.Destination, t.Device, t.Vsys)
-	run, err := securitypolicy.Simulation{}.Run(ctx, sim, simulate.Input{Flow: flow, Device: t.Device, Vsys: t.Vsys})
+	// The first address of each endpoint is checked, as path mode checks it
+	// (spec 2026-10-07 D1b); a note names the others.
+	run, err := securitypolicy.Simulation{}.Run(ctx, sim, simulate.Input{Flow: flow.FirstAddresses(), Device: t.Device, Vsys: t.Vsys})
 	if err != nil {
 		return none, err
 	}
@@ -224,8 +226,7 @@ func PolicyFile(ctx context.Context, env Env, in PolicyFileInput) (Envelope[Poli
 	for _, n := range t.Notes {
 		e.Notes = append(e.Notes, NoteOf(t.Device, t.Vsys, n))
 	}
-	// Every address is matched, so only an alias is worth a note.
-	for _, n := range simulate.DNSNotes(flow, false) {
+	for _, n := range simulate.DNSNotes(flow, true) {
 		e.Notes = append(e.Notes, NoteOf(t.Device, t.Vsys, n))
 	}
 	e.Unresolved = dedupeUnresolved(runUnresolved(run, t.Device, t.Vsys, true))

@@ -484,15 +484,15 @@ func TestTheSecurityCheck(t *testing.T) {
 	}
 }
 
-// Each endpoint keeps the address routing traced, and its FQDN name.
-func TestTrimKeepsTheTracedAddress(t *testing.T) {
+// Each endpoint keeps the address routing traced, the first, and its FQDN name.
+func TestTheCheckKeepsTheTracedAddress(t *testing.T) {
 	t.Parallel()
 	a, b := netip.MustParseAddr("198.18.10.100"), netip.MustParseAddr("203.0.113.9")
 	f := simulate.Flow{
 		Source:      simulate.Addr(netip.MustParseAddr(pathlab.Source)),
 		Destination: simulate.Endpoint{Name: "srv.example.com", Addrs: []netip.Addr{a, b}, Resolved: true},
 	}
-	got := trim(f)
+	got := f.FirstAddresses()
 	if d := got.Destination; d.Name != "srv.example.com" || !slices.Equal(d.Addrs, []netip.Addr{a}) || !d.Resolved {
 		t.Errorf("destination %+v", d)
 	}

@@ -283,7 +283,8 @@ A check runs named stages. Each stage removes candidate rules and declares its
 
 `--url` matches custom URL categories. A rule that names a PAN-DB category stays a
 candidate, in doubt. An FQDN resolves with this machine's DNS. The name matches
-FQDN objects, and each address matches everything else.
+FQDN objects, and the first address matches everything else, as in path mode. A
+note names the other addresses.
 
 ## Flags that path mode refuses
 

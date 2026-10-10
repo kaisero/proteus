@@ -45,7 +45,7 @@ func (Security) Evaluate(ctx context.Context, env *simulate.Env, h routing.Hop, 
 		out.Verdict, out.Reason, out.Fidelity = Undecided, simulate.Reasons{miss.Why()}, simulate.UnderMatch(miss.Why())
 		return out, &simulate.UnavailableError{Missing: []simulate.Missing{*miss}}
 	}
-	run, err := securitypolicy.Simulation{}.Run(ctx, env, simulate.Input{Device: h.Device, Vsys: h.Vsys, Flow: trim(flow)})
+	run, err := securitypolicy.Simulation{}.Run(ctx, env, simulate.Input{Device: h.Device, Vsys: h.Vsys, Flow: flow.FirstAddresses()})
 	if err != nil {
 		return out, err
 	}
@@ -86,15 +86,4 @@ func (Security) Evaluate(ctx context.Context, env *simulate.Env, h routing.Hop, 
 		}
 	}
 	return out, nil
-}
-
-// trim keeps the address routing traced for each endpoint, the first one, and
-// the FQDN's name for matching FQDN objects (spec §3.3).
-func trim(f simulate.Flow) simulate.Flow {
-	for _, ep := range []*simulate.Endpoint{&f.Source, &f.Destination} {
-		if len(ep.Addrs) > 1 {
-			ep.Addrs = ep.Addrs[:1:1]
-		}
-	}
-	return f
 }

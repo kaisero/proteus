@@ -298,6 +298,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`simulate policy --file` now checks the first address of a host name.** It
+  matched every address the name resolved to, so a rule for the second address
+  could answer, unlike path mode. A note now names the other addresses.
 - **Intrazone and interzone rules now check derived zones.** With `--file` and no
   zones given, an intrazone rule from `inside` was a candidate for a flow from
   `inside` to `out`, and the answer could name it. One derived zone on each side
