@@ -66,6 +66,9 @@ Every item names its **component** (the package or area it changes) and one **ta
 | 47 | qa | mcp | Keep the stack of a panic after a timeout |
 | 48 | perf | mcp, query, search, drift | Let the timeout stop a load, a search and a diff |
 | 49 | perf | mcp, search | Cache the zone document for `search` |
+| 50 | feature | mcp | Ask the user for needs and choices with elicitation |
+| 51 | feature | mcp | Publish OAuth resource metadata if Portkey is dropped |
+| 52 | bug | simulate/routing, simulate/nat | NAT in the first vsys of an inter-vsys path sees the wrong egress zone |
 
 ---
 
@@ -466,3 +469,19 @@ Source for each, unless it says otherwise: spec `docs/specs/2026-10-09-mcp-serve
 - Portkey owns authentication, so proteus checks a static bearer token. Without the
   gateway, clients expect the MCP authorisation flow: publish OAuth protected
   resource metadata and verify the access tokens.
+
+## Audit follow-ups
+
+Source for each: the code audit of 2026-10-10 and the cleanup plan
+(`docs/plans/2026-10-10-cleanup.md`).
+
+### 52. NAT in the first vsys of an inter-vsys path sees the wrong egress zone
+
+- **Tag:** bug · **Component:** simulate/routing, simulate/nat · **Source:** audit finding 12
+- Each hop runs zones, then NAT, then next. `next()` puts the external zone in place
+  of the egress zone at the vsys boundary, after NAT has run. So a vsys1 NAT rule
+  from trust to the external zone `to-vsys2` is not found, and the answer says "no
+  NAT rule matches" with fidelity exact.
+- The fix moves the external-zone change into `zones()`, before NAT. It follows the
+  admin guide only. Do it only after a check on a firewall with multi-vsys and
+  external zones (item 5): the lab firewalls have one vsys.
