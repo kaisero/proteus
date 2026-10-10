@@ -101,6 +101,35 @@ func (n *Node) Child(name string) *Node {
 	return nil
 }
 
+// Step returns the node that describes a child element called name: the entry
+// of an entry list, the member of a member list, or a named field. Anonymous
+// choices and unions are pure grammar and are passed through; a named one is
+// an element of its own (PathFields). An attribute is not an element.
+//
+// It returns nil when the schema does not describe such a child. This is the
+// one definition of "described": config.Load counts what it does not describe
+// (AGENTS.md R3), and snapshot diff hides the values of the same elements.
+func (n *Node) Step(name string) *Node {
+	if n == nil {
+		return nil
+	}
+	if n.Kind == KindArray && name == "entry" {
+		return n.EntrySequence()
+	}
+	for _, c := range n.Children {
+		switch {
+		case (c.Kind == KindChoice || c.Kind == KindUnion) && c.Name == "":
+			if got := c.Step(name); got != nil {
+				return got
+			}
+		case c.Kind == KindAttrReq:
+		case c.Name == name:
+			return c
+		}
+	}
+	return nil
+}
+
 // Fields returns the node's children with choice and union wrappers flattened.
 func (n *Node) Fields() []*Node {
 	if n == nil {
@@ -123,9 +152,22 @@ func (n *Node) EntrySequence() *Node {
 	if n == nil || n.Kind != KindArray {
 		return nil
 	}
-	for _, c := range n.Fields() {
-		if c.Kind == KindSequence && c.Name == "entry" {
-			return c
+	return entrySequence(n)
+}
+
+// entrySequence finds the entry sequence among the fields of n, as Fields
+// flattens them, without building the list: a load asks it once per element.
+func entrySequence(n *Node) *Node {
+	for _, c := range n.Children {
+		switch c.Kind {
+		case KindChoice, KindUnion:
+			if s := entrySequence(c); s != nil {
+				return s
+			}
+		case KindSequence:
+			if c.Name == "entry" {
+				return c
+			}
 		}
 	}
 	return nil

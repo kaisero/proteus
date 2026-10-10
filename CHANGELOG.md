@@ -304,6 +304,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The version-gap note counts what the older schema does not know.** When a
+  configuration is read with an older release's schema, the `gap.version` note now
+  says how many of its elements that schema does not describe, such as fields a
+  newer release added. Before, it warned of the gap but not whether this
+  configuration held anything the schema missed.
 - **`--at` and `snapshot diff` pass over a damaged snapshot.** They read the
   next older snapshot that can be read, and a `note.snapshot-skipped` note names
   the one passed over; when none can be read, the hole is `gap.load-failed` and

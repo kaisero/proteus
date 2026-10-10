@@ -92,7 +92,8 @@ Today these nodes are registered:
 - the pushed default security rules under `shared/post-rulebase`;
 - the matching fields of a security rule;
 - the pushed rulebases `shared/pre-rulebase` and `shared/post-rulebase`, which
-  snapshot diff reads with a vsys rulebase's schema;
+  `config` reads with a vsys rulebase's schema, for snapshot diff and for the
+  load's count of undescribed elements;
 - the device's predefined services under `predefined/service`;
 - `phash`, the password hash of a local user (shared and vsys) and of an
   administrator: a secret the schema does not mark `encrypt="yes"`.

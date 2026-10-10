@@ -43,15 +43,17 @@ var handModelled = []HandModel{
 		Path: "/config/shared/pre-rulebase",
 		Reason: "the firewall schema does not declare the rules Panorama pushes before the firewall's own; " +
 			"they sit here with the shape of a vsys rulebase (PAN-OS documentation, \"Device Group Policies\"), " +
-			"and snapshot diff reads them with the schema node of /config/devices/entry/vsys/entry/rulebase",
-		Owner: "internal/drift",
+			"and config reads them with the schema node of /config/devices/entry/vsys/entry/rulebase " +
+			"(config.ChildNode), for snapshot diff and for the load's count of undescribed elements",
+		Owner: "internal/config",
 	},
 	{
 		Path: "/config/shared/post-rulebase",
 		Reason: "the firewall schema does not declare the rules Panorama pushes after the firewall's own; " +
 			"they sit here with the shape of a vsys rulebase (PAN-OS documentation, \"Device Group Policies\"), " +
-			"and snapshot diff reads them with the schema node of /config/devices/entry/vsys/entry/rulebase",
-		Owner: "internal/drift",
+			"and config reads them with the schema node of /config/devices/entry/vsys/entry/rulebase " +
+			"(config.ChildNode), for snapshot diff and for the load's count of undescribed elements",
+		Owner: "internal/config",
 	},
 	{
 		Path: "/config/predefined/service",

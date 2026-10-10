@@ -85,13 +85,6 @@ var ignoredAttrs = map[string]bool{
 	"dirtyId": true,
 }
 
-// pushedRulebases are the shared containers of rules pushed from Panorama. The
-// firewall schema does not declare them; they hold the shape of a vsys rulebase
-// (PAN-OS documentation, "Device Group Policies"), and they are read with its
-// schema node, as resolve reads their rules. Both are registered in
-// schema.HandModelled (AGENTS.md R8).
-var pushedRulebases = map[string]bool{"pre-rulebase": true, "post-rulebase": true}
-
 // Compare returns what differs between two configurations in one scope, sorted by
 // kind and name.
 //
@@ -155,8 +148,8 @@ func entries(cfg *config.Config, sc config.Scope) map[key]entry {
 	out := map[key]entry{}
 	lines := objectLines(cfg, sc)
 	for _, el := range scopeElements(cfg, sc) {
-		w := walker{cfg: cfg, sc: sc, out: out, lines: lines}
-		w.container(el, schemaNode(cfg.Digest(), el), nil)
+		w := walker{cfg: cfg, out: out, lines: lines}
+		w.container(el, cfg.SchemaNode(el), nil)
 	}
 	return out
 }
@@ -178,45 +171,9 @@ func scopeElements(cfg *config.Config, sc config.Scope) []*config.Element {
 	return nil
 }
 
-// schemaNode finds an element's node in the digest, following its path from
-// the root; nil when the digest does not describe it.
-func schemaNode(root *schema.Node, el *config.Element) *schema.Node {
-	var chain []*config.Element
-	for cur := el; cur != nil; cur = cur.Parent {
-		chain = append(chain, cur)
-	}
-	n := root // the configuration's root element, config
-	for i := len(chain) - 2; i >= 0 && n != nil; i-- {
-		n = step(n, chain[i].Name)
-	}
-	return n
-}
-
-// step returns the node of a child element: an entry of an entry list, or a
-// named field. Anonymous choices and unions are pure grammar and are passed
-// through; a named one is an element of its own (schema.PathFields).
-func step(n *schema.Node, name string) *schema.Node {
-	if n == nil {
-		return nil
-	}
-	if n.Kind == schema.KindArray {
-		if name == "entry" {
-			return n.EntrySequence()
-		}
-		return nil
-	}
-	for _, c := range schema.PathFields(n) {
-		if c.Name == name {
-			return c
-		}
-	}
-	return nil
-}
-
 // walker finds the entry lists under one scope element.
 type walker struct {
 	cfg   *config.Config
-	sc    config.Scope
 	out   map[key]entry
 	lines map[key]string
 }
@@ -227,10 +184,7 @@ type walker struct {
 // its path, so a change in it is not lost.
 func (w walker) container(el *config.Element, n *schema.Node, path []string) {
 	for _, c := range el.Children {
-		cn := step(n, c.Name)
-		if cn == nil && len(path) == 0 && w.sc.Sort == config.ScopeShared && pushedRulebases[c.Name] {
-			cn = w.rulebaseNode()
-		}
+		cn := w.cfg.ChildNode(n, c) // the shared pushed rulebases read as a vsys rulebase
 		cpath := append(slices.Clone(path), c.Name)
 		switch {
 		case cn == nil:
@@ -250,15 +204,6 @@ func (w walker) container(el *config.Element, n *schema.Node, path []string) {
 			w.container(c, cn, cpath)
 		}
 	}
-}
-
-// rulebaseNode is the schema node of a vsys rulebase.
-func (w walker) rulebaseNode() *schema.Node {
-	n := w.cfg.Digest()
-	for _, seg := range []string{"devices", "entry", "vsys", "entry", "rulebase"} {
-		n = step(n, seg)
-	}
-	return n
 }
 
 func (w walker) add(container, kind, name string, el *config.Element, n *schema.Node) {
@@ -348,7 +293,7 @@ func objectLines(cfg *config.Config, sc config.Scope) map[key]string {
 func ruleLine(el *config.Element, n *schema.Node) string {
 	var fields []string
 	for _, c := range el.Children {
-		if !step(n, c.Name).IsMemberList() {
+		if !n.Step(c.Name).IsMemberList() {
 			continue
 		}
 		if m := c.Members(); len(m) > 0 {
@@ -357,10 +302,10 @@ func ruleLine(el *config.Element, n *schema.Node) string {
 	}
 	slices.Sort(fields)
 	s := ""
-	if step(n, "action") != nil {
+	if n.Step("action") != nil {
 		s = el.Child("action").TextOr("")
 	}
-	if step(n, "disabled") != nil && el.Child("disabled").TextOr("") == "yes" {
+	if n.Step("disabled") != nil && el.Child("disabled").TextOr("") == "yes" {
 		s += " disabled"
 	}
 	return strings.TrimSpace(s + " " + strings.Join(fields, " "))
@@ -461,7 +406,7 @@ func canonical(el *config.Element, n *schema.Node) form {
 				seg = c.Attr("name")
 				names = append(names, seg)
 			}
-			walk(c, step(n, c.Name), join(path, seg))
+			walk(c, n.Step(c.Name), join(path, seg))
 		}
 		if len(names) > 1 {
 			f.putOrder(path, names, h)

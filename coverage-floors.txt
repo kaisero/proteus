@@ -10,9 +10,9 @@
 #
 #   github.com/okaiser/proteus/internal/schema  86.9
 
-github.com/okaiser/proteus/internal/schema  89.1
+github.com/okaiser/proteus/internal/schema  90.0
 github.com/okaiser/proteus/internal/digest  74.4
-github.com/okaiser/proteus/internal/config  98.2
+github.com/okaiser/proteus/internal/config  98.3
 github.com/okaiser/proteus/internal/resolve  97.5
 github.com/okaiser/proteus/internal/index  98.1
 github.com/okaiser/proteus/internal/inventory  97.1

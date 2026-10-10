@@ -46,6 +46,18 @@ highest not above it, else the lowest (spec §9). `Report.VersionGap` and
 carries it as an `Unresolved`, because a field that moved between releases yields
 no reference and a lookup can then miss rules without looking incomplete.
 
+**Nothing is dropped silently (R3).** `Load` walks the tree against the digest and
+lists each element the digest does not describe in `Report.Untyped` (instance path
+and digest version), once at its top: a field a newer release added counts as one.
+The element stays in the tree, so a reader that wants it still finds it. With a
+version gap, `VersionGap()` adds the count ("that schema does not describe N
+elements"), so the `gap.version` note carries it; without a gap the count stays in
+the report only. "Described" has one definition: `schema.Node.Step`, plus the
+hand-modelled shared pushed rulebases in `Config.ChildNode`; snapshot diff uses the
+same two. The walk costs about 3% of a load (`BenchmarkUndescribedLarge` against
+`BenchmarkLoadLarge`). `TestRoundTripLosesNothing` writes each fixture's tree back
+and checks it against the file.
+
 ### The element tree
 
 `Element` is a small nil-safe node: `Attr`, `Child`, `ChildrenNamed`, `Members`,
@@ -121,6 +133,7 @@ type Scope struct{ ... }
 type ScopeSort int
 type Untyped struct{ ... }
 
+func (c *Config) ChildNode(n *schema.Node, child *Element) *schema.Node
 func (c *Config) DetailVersion() string
 func (c *Config) Digest() *schema.Node
 func (c *Config) DigestVersion() string
@@ -130,6 +143,7 @@ func (c *Config) KindContainers(kind string) [][]string
 func (c *Config) Path() string
 func (c *Config) Predefined() *Element
 func (c *Config) Root() *Element
+func (c *Config) SchemaNode(el *Element) *schema.Node
 func (c *Config) Version() string
 func (c *Config) VersionGap() string
 func (c *Config) Walk(fn func(Event) bool) error

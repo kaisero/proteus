@@ -29,6 +29,7 @@ type Config struct {
 	schema        *loadedSchema
 	root          *Element
 	predefined    *Element
+	untyped       int // elements the digest does not describe, AGENTS.md R3
 }
 
 // PredefinedFile is the file next to a configuration that holds the device's
@@ -104,6 +105,8 @@ func Load(path string) (*Config, Report, error) {
 		path: path, version: version, detailVersion: root.Attr("detail-version"),
 		digestVersion: dv, schema: sch, root: root, predefined: pre,
 	}
+	rep.Untyped = cfg.undescribed()
+	cfg.untyped = len(rep.Untyped)
 	rep.VersionGap = cfg.VersionGap()
 	return cfg, rep, nil
 }
@@ -148,13 +151,23 @@ func (c *Config) DigestVersion() string { return c.digestVersion }
 // A configuration read with another release's schema can be under-read silently: a
 // field that was added or moved yields no reference, so a lookup misses rules and
 // looks complete. Spec §9 requires the gap to travel with every answer.
+//
+// When that schema does not describe some elements of the configuration, the
+// gap says how many (AGENTS.md R3), so the reader sees what the gap holds.
 func (c *Config) VersionGap() string {
 	if c.version == c.digestVersion {
 		return ""
 	}
-	return fmt.Sprintf("the configuration is PAN-OS %s but was read with the %s schema, "+
+	gap := fmt.Sprintf("the configuration is PAN-OS %s but was read with the %s schema, "+
 		"the nearest this build carries; a field added or moved between them yields no "+
 		"reference, so this answer can miss rules", c.version, c.digestVersion)
+	switch {
+	case c.untyped == 1:
+		gap += "; that schema does not describe 1 element of the configuration"
+	case c.untyped > 1:
+		gap += fmt.Sprintf("; that schema does not describe %d elements of the configuration", c.untyped)
+	}
+	return gap
 }
 
 // digestVersions lists the PAN-OS versions a file system carries a firewall digest
@@ -259,6 +272,9 @@ type loadedSchema struct {
 	refs  refTable
 	paths pathTable
 	kinds kindTable
+	// shared and rulebase are the nodes of /config/shared and of a vsys
+	// rulebase, which also describes the shared pushed rulebases (ChildNode).
+	shared, rulebase *schema.Node
 }
 
 var (
@@ -286,6 +302,8 @@ func loadDigest(version string) (*loadedSchema, error) {
 	}
 	ls := &loadedSchema{
 		root: d.Root, refs: buildRefTable(d.Root), paths: buildPathTable(d.Root), kinds: buildKindTable(d.Root),
+		shared:   d.Root.Step("shared"),
+		rulebase: d.Root.Step("devices").Step("entry").Step("vsys").Step("entry").Step("rulebase"),
 	}
 	schemaCache[name] = ls
 	return ls, nil
