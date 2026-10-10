@@ -340,7 +340,21 @@ func toolOf(name string, devices []string) (*sdk.Tool, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &sdk.Tool{Name: sh.tool, Description: toolDescriptions[sh.tool], InputSchema: in, OutputSchema: out}, nil
+	title := toolTitles[sh.tool]
+	return &sdk.Tool{
+		Name: sh.tool, Title: title, Description: toolDescriptions[sh.tool], InputSchema: in, OutputSchema: out,
+		Annotations: annotationsOf(title),
+	}, nil
+}
+
+// annotationsOf are the hints every tool carries (spec 2026-10-10 F1): it
+// only reads the stored snapshots, so a repeated call changes nothing, and
+// its world is the local store. A host name input uses DNS, which only
+// translates the input. DestructiveHint means something only when a tool is
+// not read-only, so it stays unset.
+func annotationsOf(title string) *sdk.ToolAnnotations {
+	closed := false
+	return &sdk.ToolAnnotations{Title: title, ReadOnlyHint: true, IdempotentHint: true, OpenWorldHint: &closed}
 }
 
 // shapeByTool is the shape a tool answers.
@@ -351,6 +365,16 @@ func shapeByTool(tool string) (shape, bool) {
 		}
 	}
 	return shape{}, false
+}
+
+// toolTitles name each tool for a person, plain and short.
+var toolTitles = map[string]string{
+	"simulate_policy":  "Simulate a flow through the security policy",
+	"simulate_routing": "Trace a flow's routing path",
+	"simulate_nat":     "Find the NAT rule a packet hits",
+	"search":           "Search objects and rules for a value",
+	"lookup":           "Look up an object or rule by name",
+	"snapshot_diff":    "Compare two snapshots",
 }
 
 // toolDescriptions say what each tool answers, from stored snapshots.

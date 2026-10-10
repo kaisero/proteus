@@ -375,6 +375,34 @@ func TestToolsListTheDeviceEnum(t *testing.T) {
 	}
 }
 
+// Each tool says it only reads (spec 2026-10-10 F1): a title and the three
+// hints, and no destructive hint.
+func TestToolsAreReadOnly(t *testing.T) {
+	t.Parallel()
+	cs := connect(t, labEnv(t))
+	lt, err := cs.ListTools(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(lt.Tools) != len(toolTitles) {
+		t.Fatalf("%d tools, %d titles", len(lt.Tools), len(toolTitles))
+	}
+	for _, tool := range lt.Tools {
+		a := tool.Annotations
+		if a == nil {
+			t.Errorf("%s: no annotations", tool.Name)
+			continue
+		}
+		want := toolTitles[tool.Name]
+		if want == "" || tool.Title != want || a.Title != want {
+			t.Errorf("%s: title %q, annotation title %q, want %q", tool.Name, tool.Title, a.Title, want)
+		}
+		if !a.ReadOnlyHint || !a.IdempotentHint || a.OpenWorldHint == nil || *a.OpenWorldHint || a.DestructiveHint != nil {
+			t.Errorf("%s: hints %+v", tool.Name, a)
+		}
+	}
+}
+
 // A refused input is a structured error the output schema accepts, with
 // IsError and a text content; the audit has its status. A value outside an
 // enum is the SDK's own input error (S7), audited as usage.
