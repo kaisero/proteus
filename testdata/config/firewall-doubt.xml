@@ -166,6 +166,16 @@
                   <service><member>any</member></service>
                   <action>deny</action>
                 </entry>
+                <entry name="dmz-home-custom">
+                  <from><member>dmz</member></from>
+                  <to><member>home</member></to>
+                  <source><member>any</member></source>
+                  <destination><member>any</member></destination>
+                  <application><member>any</member></application>
+                  <service><member>any</member></service>
+                  <category><member>my-cat</member></category>
+                  <action>allow</action>
+                </entry>
               </rules>
             </security>
           </rulebase>

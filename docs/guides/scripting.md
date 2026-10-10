@@ -21,7 +21,7 @@ are at the top level, so a script cannot miss them.
 $ proteus search 10.124.0.1 --vsys vsys1 --show objects --output json \
     --file testdata/config/firewall-multivsys.xml
 {
-  "format": 1,
+  "format": 2,
   "command": "search",
   "input": {
     "direct": false,
@@ -41,6 +41,7 @@ $ proteus search 10.124.0.1 --vsys vsys1 --show objects --output json \
   },
   "results": [
     {
+      "answer": "file/vsys1: address corp-dc-vienna",
       "device": "file",
       "vsys": "vsys1",
       "stage": "object",
@@ -50,6 +51,7 @@ $ proteus search 10.124.0.1 --vsys vsys1 --show objects --output json \
       "scope": "vsys:vsys1"
     },
     {
+      "answer": "file/vsys1: address corp-location-vienna",
       "device": "file",
       "vsys": "vsys1",
       "stage": "object",
@@ -59,6 +61,12 @@ $ proteus search 10.124.0.1 --vsys vsys1 --show objects --output json \
       "scope": "vsys:vsys1"
     }
   ],
+  "summary": {
+    "answer": "1 with results, 0 without, 0 holes",
+    "found": 2,
+    "with": 1,
+    "without": 0
+  },
   "holes": [],
   "unresolved": [],
   "notes": []
@@ -67,6 +75,65 @@ $ proteus search 10.124.0.1 --vsys vsys1 --show objects --output json \
 
 `format` is the version of the envelope. It changes only when a field changes its
 meaning or is removed.
+
+Each result of `simulate`, `search`, `lookup` and `snapshot diff` has an
+`answer`: one line of the text output that says what the result found, such as
+`denied at hop 2: fw01 / vsys1, rule block-servers (deny)`. `search` and
+`lookup` also print a `summary` with the counts and the count line as its
+`answer`.
+
+A simulate result that is undecided, or whose fidelity is `undermatch`, has a
+`needs` list: the inputs that, given in a second question, can change the
+answer. Each entry has a `code` (`input.port`, `input.protocol`, `input.url`),
+the `input` name and a `text` that names the rules it decides. The list stops at
+the first rule in doubt that no input can settle, such as a rule that names only
+an application or a user: past that rule, no input changes the verdict. A rule
+in doubt for a port and for a user still lists the port, which can rule it out.
+An empty list means no input can help. A result that is decided and not
+`undermatch` has no `needs` key; a decided result with fidelity `undermatch` can
+have one.
+`simulate nat` asked without a protocol lists `input.protocol` beside
+`input.port`.
+
+The questions also take `--detail summary`. The envelope then says
+`"detail": "summary"`, and each result keeps the answer, the verdict, the
+fidelity, the reasons and the needs, and of a path each hop's device, vsys,
+snapshot, zones, route and policy verdict. It leaves out candidates, stage
+tables and each hop's interfaces and lookups. Holes, unresolved entries and
+notes stay. The default is `--detail full`; the envelope says
+`"detail": "full"`.
+
+Format 2 gives every reason a stable code. A hole, an unresolved entry and a
+note are objects with `code` and `text` beside `device` and `vsys`. A list of
+reasons, such as `fidelity.reasons`, a doubt's `reasons` or a check's `reasons`,
+holds `{"code", "text"}` objects. A script matches the `code`; the `text` is for
+people and may change. A reason built from several parts lists each part with
+its own code. Text may join consecutive unresolved entries of one composite on
+one line; JSON lists them separately.
+
+```
+"unresolved": [
+  {
+    "device": "file",
+    "vsys": "vsys1",
+    "code": "doubt.not-evaluated.user",
+    "text": "dmz-user (deny) at position 7 may match first: user not evaluated (corp\\alice)"
+  }
+]
+```
+
+### Reason codes and schemas
+
+Every code comes from one closed registry, `internal/reason/registry.go`. A code
+reads `<class>.<name>`; the class says what kind of reason it is: `doubt`, `gap`,
+`path`, `zone`, `default`, `dns`, `input`, `note`, `call` or `verdict`. Each
+entry has a one-line description. A code that is not in the registry never
+appears in an answer.
+
+The JSON schema of each question's envelope is in `schemas/out/`, one file per
+command and detail: `simulate-policy.full.json`, `search.summary.json`, and so
+on. `simulate-policy-file.*` is `simulate policy --file`. Every JSON example the
+tests hold validates against them.
 
 ## A version without a digest
 

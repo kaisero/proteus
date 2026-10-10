@@ -66,10 +66,14 @@ unknown and the post-NAT zone is not checked.
 
 Reads every device's interface state, FIB and RIB through `simulate.Network`
 (`estate.NewNetwork` over the store; an HA pair is one node, paired by serial) and a
-path device's configuration through `Env.Load`. `routing.Topology` is built once:
-address owners, connected nets, a `bart` table per router, and `Place` (connected,
-else the most specific non-default route, walking on while that route leads to
-another node; ties and default-only are `ChoiceError`, exit 2).
+path device's configuration through `Env.Load`. A `Network` is per question (its lazy
+maps have no lock). It reads the raw tables through `When.Ops` (`estate.OpSource`;
+nil reads the store, a server shares a cache keyed by member and snapshot id) and
+builds every note (stale, HA, unreadable RIB) per question from the meta and `Now`.
+`routing.Topology` is built once: address owners, connected nets, a `bart` table per
+router, and `Place` (connected, else the most specific non-default route, walking on
+while that route leads to another node; ties and default-only are `ChoiceError`,
+exit 2).
 
 | Slug | Fidelity |
 |---|---|
@@ -132,6 +136,7 @@ its tests share with the CLI's.
 <!-- GENERATED:api ./internal/simulate -->
 ```go
 type ChoiceError struct{ ... }
+type CodedError struct{ ... }
 type DeviceData struct{ ... }
 type Endpoint struct{ ... }
 type Env struct{ ... }
@@ -144,6 +149,7 @@ type Missing struct{ ... }
 type Network interface{ ... }
 type Outcome struct{ ... }
 type Port struct{ ... }
+type Reasons []reason.Reason
 type Run struct{ ... }
 type Simulation interface{ ... }
 type Stage struct{ ... }
@@ -153,24 +159,36 @@ type Target struct{ ... }
 type UnavailableError struct{ ... }
 
 func (e *ChoiceError) Error() string
+func (e *CodedError) Code() reason.Code
+func (e *CodedError) Error() string
 func (e *Env) Stepf(format string, args ...any)
 func (e *UnavailableError) Error() string
 func (e Endpoint) String() string
 func (f Fidelity) Declared() bool
 func (f Fidelity) Level() string
 func (f Fidelity) MarshalJSON() ([]byte, error)
-func (f Fidelity) Reasons() []string
+func (f Fidelity) Reasons() Reasons
 func (f Fidelity) Skipped() []string
+func (f Fidelity) SkippedReasons() Reasons
 func (f Fidelity) String() string
-func (f Fidelity) UnderMatchReasons() []string
+func (f Fidelity) UnderMatchGroups() []Reasons
+func (f Fidelity) UnderMatchReasons() Reasons
 func (m Match) First() resolve.FIBRoute
+func (m Missing) Why() reason.Reason
 func (p Port) Link() netip.Prefix
+func (rs Reasons) Joined() reason.Reason
+func (rs Reasons) Prefixed(p string) Reasons
+func (rs Reasons) Text() string
+func (rs Reasons) Texts() []string
+func (t Target) Index(rb resolve.Rulebase, vsys string) (*index.Index, error)
 func Addr(a netip.Addr) Endpoint
+func DNSNotes(f Flow, traced bool) Reasons
 func Execute[S any](ctx context.Context, kind string, state *S, steps []Step[S], keepBitmaps bool, log *runlog.Logger) ([]Stage, error)
+func NewMissing(device string, r reason.Reason) Missing
 func NotEvaluated(dimensions ...string) Fidelity
-func OverMatchBecause(reason string) Fidelity
+func OverMatchBecause(r reason.Reason) Fidelity
 func Overall(stages []Stage) Fidelity
-func UnderMatch(reason string) Fidelity
+func UnderMatch(rs ...reason.Reason) Fidelity
 func Weakest(fs ...Fidelity) Fidelity
 ```
 <!-- /GENERATED:api -->
@@ -188,7 +206,9 @@ func (Simulation) Describe() string
 func (Simulation) Kind() string
 func (Simulation) Run(ctx context.Context, env *simulate.Env, in simulate.Input) (simulate.Run, error)
 func (Simulation) Stages() []string
-func (v Verdict) Decision() (Outcome, string)
+func (d Doubt) Text() string
+func (r Relevance) MarshalJSON() ([]byte, error)
+func (v Verdict) Decision() (Outcome, simulate.Reasons)
 ```
 <!-- /GENERATED:api -->
 
@@ -241,6 +261,7 @@ func (Simulation) Describe() string
 func (Simulation) Kind() string
 func (Simulation) Run(ctx context.Context, env *simulate.Env, in simulate.Input) (simulate.Run, error)
 func (Simulation) Stages() []string
+func (d Doubt) Text() string
 func FQDNs(in Input, m MatchResult) []string
 func Match(in Input) MatchResult
 func Rules(t *resolve.Target) []Rule
@@ -282,6 +303,12 @@ func Load(load func(device, vsys string) (simulate.Target, error), device, vsys 
 ```
 <!-- /GENERATED:api -->
 
+`runlog.Open` names a file `<command>-<UTC ms timestamp>-<seq>.log`. The sequence
+number is a process-wide atomic counter, and a name another process holds is skipped,
+so runs in one millisecond never share a file. Rotation sorts by timestamp, then
+sequence number, ignores files not named so, and treats a file another run removed
+first as removed.
+
 <!-- GENERATED:api ./internal/runlog -->
 ```go
 type Level int
@@ -296,8 +323,10 @@ func (l *Logger) Enabled(lv Level) bool
 func (l *Logger) Errorf(tag Tag, format string, args ...any)
 func (l *Logger) Infof(tag Tag, format string, args ...any)
 func (l *Logger) Path() string
+func (l *Logger) Persist() error
 func (l *Logger) Warnf(tag Tag, format string, args ...any)
 func (lv Level) String() string
+func Buffered(o Options) *Logger
 func Discard() *Logger
 func Open(o Options) (*Logger, error)
 func ParseLevel(s string) (Level, error)

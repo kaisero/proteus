@@ -25,13 +25,18 @@ const (
 	Tag
 )
 
-var fieldNames = map[Field]string{
+var fieldNames = [...]string{
 	Source: "source", Destination: "destination", Application: "application",
 	Service: "service", FromZone: "from", ToZone: "to", Category: "category",
 	SourceUser: "source-user", Tag: "tag",
 }
 
-func (f Field) String() string { return fieldNames[f] }
+func (f Field) String() string {
+	if f < 0 || int(f) >= len(fieldNames) {
+		return ""
+	}
+	return fieldNames[f]
+}
 
 // rulesIndex maps a field value to the rules naming it. The bit index is the
 // rule's position in the effective order, so the lowest set bit is the first
@@ -58,7 +63,8 @@ func newRulesIndex(in *Interner, rules []resolve.Rule) *rulesIndex {
 		if rule.Disabled {
 			r.disabled.Add(bit)
 		}
-		for f, name := range fieldNames {
+		for i, name := range fieldNames {
+			f := Field(i)
 			for _, v := range rule.Fields[name] {
 				id := in.ID(v)
 				if r.byField[f] == nil {
@@ -114,6 +120,13 @@ func (r *rulesIndex) addLiteral(f Field, value string, bit uint32) {
 		}
 		b.Add(bit)
 	}
+}
+
+// RulesReaching returns the rules whose field names the object, or a group that
+// holds it at any depth.
+func (i *Index) RulesReaching(f Field, name string) *roaring.Bitmap {
+	var rep Report
+	return i.RulesWith(f, i.reach(name, &rep)...)
 }
 
 // RulesWith returns the rules naming any of the ids in a field.

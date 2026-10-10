@@ -5,6 +5,8 @@ import (
 	"net/netip"
 
 	"github.com/RoaringBitmap/roaring/v2"
+
+	"github.com/okaiser/proteus/internal/reason"
 )
 
 // Candidates returns every rule whose field could match a value, and a report of
@@ -73,22 +75,20 @@ func (v *View) Candidates(f Field, value string) (*roaring.Bitmap, Report) {
 	rep.Groups = dedupeStrings(rep.Groups)
 	rep.Unresolved = dedupeUnresolved(rep.Unresolved)
 	if i.gap != "" {
-		rep.Unresolved = append(rep.Unresolved, Unresolved{Value: value, Reason: i.gap})
+		rep.Unresolved = append(rep.Unresolved, NewUnresolved(value, "", reason.New("gap.version", i.gap)))
 	}
 
 	// A value nothing recognised is an incomplete answer. A value that was
 	// recognised and matched nothing is a complete one, even with no hits: a URL
 	// belonging to no category really does reach only the any-rules.
 	if !recognised && !named {
-		rep.Unresolved = append(rep.Unresolved, Unresolved{
-			Value: value,
-			Reason: fmt.Sprintf(
+		rep.Unresolved = append(rep.Unresolved, NewUnresolved(value, "", reason.New("gap.object-unresolved",
+			fmt.Sprintf(
 				"no value space of %s recognised this, and no object of that name is visible "+
 					"in %s. Only rules whose %s is \"any\" are reported, so a rule reaching "+
 					"this value through a kind the index does not yet resolve, such as a "+
 					"region or an external list, is missing from the result",
-				f, i.scope, f),
-		})
+				f, i.scope, f))))
 	}
 	return out, rep
 }

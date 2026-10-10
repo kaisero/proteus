@@ -12,12 +12,14 @@ import (
 	"fmt"
 	"io"
 	"net/netip"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
 
 	"github.com/okaiser/proteus/internal/inventory"
+	"github.com/okaiser/proteus/internal/query"
 	"github.com/okaiser/proteus/internal/runlog"
 )
 
@@ -70,6 +72,10 @@ func (a *app) execute(ctx context.Context, argv []string) int {
 	a.stderr = &lockedWriter{w: a.stderr}
 	cmd := a.root()
 	cmd.SetArgs(argv)
+	// An error before the root hook reads no inventory for mcp either.
+	if c, _, err := cmd.Find(argv); err == nil && c.CommandPath() == cmd.Name()+" mcp" {
+		a.noInventory = true
+	}
 	err := cmd.ExecuteContext(ctx)
 	code, msg := a.exitCode(ctx, err)
 	if a.log != nil {
@@ -93,6 +99,8 @@ func (a *app) execute(ctx context.Context, argv []string) int {
 // app holds what every command shares: where it writes, how it reads the
 // environment and the clock, and the persistent flags.
 type app struct {
+	// stdin is what proteus mcp reads its client from without --http.
+	stdin          io.Reader
 	stdout, stderr io.Writer
 	// stdoutTTY and stderrTTY say whether each is a terminal; Run sets them.
 	stdoutTTY, stderrTTY bool
@@ -104,6 +112,8 @@ type app struct {
 	logLevelFlag, logDirFlag                      string
 	verbose                                       bool
 	colorFlag                                     string
+	// detail is --detail on a question: summary or full.
+	detail string
 
 	// Resolved by resolveSettings in the root hook.
 	hookRan      bool
@@ -118,6 +128,8 @@ type app struct {
 	argv   []string
 	log    *runlog.Logger // the run log; nil until the command starts
 	lookup func(ctx context.Context, name string) ([]netip.Addr, error)
+	// canonical gives an FQDN's canonical name; nil gives none.
+	canonical func(ctx context.Context, name string) (string, error)
 	// peerHost maps an HA peer's reported management address to a host; nil uses
 	// the address. Tests point it at a second fake device.
 	peerHost func(mgmtIP string) string
@@ -127,10 +139,12 @@ type app struct {
 	invPath string
 	inv     *inventory.Inventory
 	invErr  error
+	// noInventory skips the inventory: proteus mcp reads none.
+	noInventory bool
 }
 
 func newApp(stdout, stderr io.Writer, getenv func(string) string, now func() time.Time) *app {
-	return &app{stdout: stdout, stderr: stderr, getenv: getenv, now: now, version: "dev", lookup: lookupDNS}
+	return &app{stdin: os.Stdin, stdout: stdout, stderr: stderr, getenv: getenv, now: now, version: "dev", lookup: query.SystemResolve, canonical: query.SystemCanonicalName}
 }
 
 func (a *app) root() *cobra.Command {
@@ -155,6 +169,9 @@ func (a *app) root() *cobra.Command {
 		if skipsHook(c) {
 			return nil
 		}
+		// The server never reads the inventory with credentials: it reads
+		// the store's export (spec 2026-10-09 §4.2).
+		a.noInventory = c.CommandPath() == c.Root().Name()+" mcp"
 		if err := a.resolveSettings(); err != nil {
 			return err
 		}
@@ -169,7 +186,7 @@ func (a *app) root() *cobra.Command {
 		if err := c.ValidateFlagGroups(); err != nil {
 			return &exitErr{code: exitUsage, err: err}
 		}
-		return nil
+		return a.checkDetail(c)
 	}
 
 	inv := group("inventory", "Manage the device inventory", a.inventoryInitCmd())
@@ -177,7 +194,7 @@ func (a *app) root() *cobra.Command {
 		a.snapshotListCmd(), a.snapshotShowCmd(), a.snapshotDiffCmd())
 	sim := group("simulate", "Simulate what a device would do", a.simulateCmds()...)
 
-	cmd.AddCommand(a.fetchCmd(), inv, snap, a.searchCmd(), a.lookupCmd(), sim)
+	cmd.AddCommand(a.fetchCmd(), inv, snap, a.searchCmd(), a.lookupCmd(), sim, a.mcpCmd())
 	cmd.SetHelpCommand(helpCmd(cmd))
 	a.registerCompletions(cmd)
 	return cmd

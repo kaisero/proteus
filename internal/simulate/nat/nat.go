@@ -33,11 +33,16 @@ type Rule struct {
 }
 
 // Doubt is a rule above the match that could also have matched, and why the engine
-// cannot tell (spec §18 N11).
+// cannot tell (spec §18 N11). A rule can be in doubt for several reasons; JSON
+// writes {"rule", "reasons": [{"code", "text"}]} (spec 2026-10-09 §12 C6).
 type Doubt struct {
-	Rule   string `json:"rule"`
-	Reason string `json:"reason"`
+	Rule    string           `json:"rule"`
+	Reasons simulate.Reasons `json:"reasons"`
 }
+
+// Text is the reasons as one line: "the ingress zone is unknown; the source is
+// unknown".
+func (d Doubt) Text() string { return d.Reasons.Text() }
 
 // Excluded is a rule above the match that did not match, and the field that
 // excluded it; `--why` lists them.
@@ -71,7 +76,7 @@ type MatchResult struct {
 	In         simulate.Port      `json:"in"` // the ingress the answer assumed
 	PreNAT     simulate.Forward   `json:"pre_nat"`
 	Dropped    string             `json:"dropped,omitempty"` // why no NAT applies at all
-	Notes      []string           `json:"notes,omitempty"`
+	Notes      simulate.Reasons   `json:"notes,omitempty"`
 	Unresolved []index.Unresolved `json:"unresolved,omitempty"`
 	Fidelity   simulate.Fidelity  `json:"fidelity"`
 

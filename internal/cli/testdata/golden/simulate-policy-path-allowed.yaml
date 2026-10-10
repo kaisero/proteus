@@ -1,5 +1,6 @@
-format: 1
+format: 2
 command: simulate policy
+detail: full
 input:
   mode: path
   flow:
@@ -17,7 +18,8 @@ input:
   router: ""
   at: ""
 results:
-  - mode: path
+  - answer: allowed
+    mode: path
     verdict: allowed
     at: null
     fidelity:
@@ -33,6 +35,7 @@ results:
     placed: connected
     outcome: delivered
     end: 198.18.10.100   delivered
+    end_code: path.delivered
     stages:
       - slug: place
         name: place the start
@@ -170,7 +173,9 @@ results:
         checks:
           security:
             verdict: pass
-            reason: default rule interzone-default (allow), local
+            reasons:
+              - code: verdict.default
+                text: default rule interzone-default (allow), local
             rule: interzone-default
             default: interzone-default
             default_action: allow
@@ -301,7 +306,9 @@ results:
         checks:
           security:
             verdict: pass
-            reason: default rule interzone-default (allow), local
+            reasons:
+              - code: verdict.default
+                text: default rule interzone-default (allow), local
             rule: interzone-default
             default: interzone-default
             default_action: allow

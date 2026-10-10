@@ -53,12 +53,15 @@ shared. It compares objects and rules in the schema's terms, not as XML text.
 $ proteus snapshot diff
 fw01   2026-09-22T08-00-00Z -> 2026-09-28T08-00-00Z
   shared     no changes
+    fw01/shared: 0 added, 0 removed, 0 changed
   vsys:vsys1
+    fw01/vsys:vsys1: 1 added, 1 removed, 2 changed
     changed  address              net-home                 198.18.1.0/24 -> 198.18.2.0/24
     removed  address              net-labor                198.18.0.0/15
     changed  security rule        dc-to-home               allow application=ssl destination=net-home source=g-servers -> allow disabled application=ssl destination=net-home source=g-servers
     added    security rule        new-rule                 allow application=dns destination=any source=net-home
   vsys:vsys2 no changes
+    fw01/vsys:vsys2: 0 added, 0 removed, 0 changed
 ```
 
 By default it compares the snapshot before `latest` with `latest`. `--from` and

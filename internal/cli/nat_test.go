@@ -28,6 +28,8 @@ func TestSimulateNATPortForward(t *testing.T) {
 	out := c.want(0, "simulate", "nat", "198.18.1.10", "198.18.250.10", "--device", "fw01", "--router", "default", "--from-zone", "transport", "--port", "8443")
 	want := `simulate nat 198.18.1.10 -> 198.18.250.10 tcp/8443 on fw01            fidelity: exact
 
+t-dnat-port: destination 198.18.250.10:8443 -> 198.18.10.100:443
+
   ┌─ fw01 ─ vsys1 ─ router default ─ snapshot 1m ────────┐
   │  zones   transport -> server                         │
   │  out     ethernet1/2   198.18.10.1/24                │
@@ -80,7 +82,7 @@ func TestSimulateNATRows(t *testing.T) {
 		}},
 		{[]string{"-", "198.18.250.10", "--from-interface", "ethernet1/3"}, []string{
 			"simulate nat (no source) -> 198.18.250.10 tcp on fw01",
-			"│  doubt   t-dnat-port: service t-8443 not known without a port: give --port",
+			"│  doubt   t-dnat-port: service t-8443 not known without a port: give the destination port",
 			"may be incomplete: overmatch",
 		}},
 		{[]string{"198.18.11.5", "198.18.100.9", "--port", "443"}, []string{
@@ -218,14 +220,14 @@ func TestNATResultNotesReachTheEnvelope(t *testing.T) {
 	out := c.want(0, "simulate", "nat", "198.18.1.10", "198.18.250.30", "--device", "fw01",
 		"--router", "default", "--from-zone", "transport", "--output", "json")
 	var env struct {
-		Notes []struct{ Device, Note string }
+		Notes []struct{ Device, Text string }
 	}
 	if err := json.Unmarshal([]byte(out), &env); err != nil {
 		t.Fatalf("%v\n%s", err, out)
 	}
 	found := false
 	for _, n := range env.Notes {
-		if n.Device == "fw01" && strings.Contains(n.Note, "resolved by this machine's DNS") {
+		if n.Device == "fw01" && strings.Contains(n.Text, "resolved by this machine's DNS") {
 			found = true
 		}
 	}

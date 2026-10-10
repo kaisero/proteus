@@ -1,5 +1,6 @@
-format: 1
+format: 2
 command: snapshot diff
+detail: full
 input:
   from: ""
   selection:
@@ -7,12 +8,14 @@ input:
       - vsys1
   to: ""
 results:
-  - device: fw01
+  - answer: 'fw01/shared: 0 added, 0 removed, 0 changed'
+    device: fw01
     from: 2026-09-28T10-00-00Z
     to: 2026-09-28T10-01-00Z
     scope: shared
     changes: []
-  - device: fw01
+  - answer: 'fw01/vsys:vsys1: 1 added, 1 removed, 2 changed'
+    device: fw01
     from: 2026-09-28T10-00-00Z
     to: 2026-09-28T10-01-00Z
     scope: vsys:vsys1

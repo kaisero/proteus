@@ -46,8 +46,9 @@ flowchart LR
   [simulate policy](guides/simulate-policy.md),
   [simulate NAT](guides/simulate-nat.md),
   [simulate routing](guides/simulate-routing.md),
-  [snapshots](guides/snapshots.md) and
-  [scripting](guides/scripting.md).
+  [snapshots](guides/snapshots.md),
+  [scripting](guides/scripting.md) and
+  [the MCP server](guides/mcp.md).
 - **[Configuration](configuration.md)**: the inventory, settings and paths.
 - **[CLI reference](cli-reference.md)**: every command and flag.
 - **[Architecture](architecture.md)**: the packages and how data flows through

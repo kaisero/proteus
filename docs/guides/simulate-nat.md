@@ -25,6 +25,8 @@ questions on one firewall:
 $ proteus simulate nat 198.19.0.1 198.18.250.10 --device fw01 --port 8443
 simulate nat 198.19.0.1 -> 198.18.250.10 tcp/8443 on fw01            fidelity: exact
 
+t-dnat-port: destination 198.18.250.10:8443 -> 198.18.10.100:443
+
   ┌─ fw01 ─ vsys1 ─ router default ─ snapshot 1m ────────┐
   │  zones   transport -> server                         │
   │  in      ethernet1/1   198.19.0.254/24               │
@@ -50,6 +52,8 @@ allow `transport -> server` for the original addresses and port.
 ```
 $ proteus simulate nat 198.18.11.5 198.18.250.200 --device fw01 --port 443
 simulate nat 198.18.11.5 -> 198.18.250.200 tcp/443 on fw01            fidelity: exact
+
+t-dip-pool: source 198.18.11.5 -> 198.18.250.64/29, port unchanged; fallback 198.19.0.254
 
   ┌─ fw01 ─ vsys1 ─ router default ─ snapshot 2m ───────────────────────────────────┐
   │  zones   client -> transport                                                    │

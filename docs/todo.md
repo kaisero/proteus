@@ -43,7 +43,7 @@ Every item names its **component** (the package or area it changes) and one **ta
 | 24 | feature | resolve, card, simulate/securitypolicy | Table of predefined services (high priority) |
 | 25 | feature | card, cmd | NAT and PBF rules in `lookup` |
 | 26 | feature | search, drift, cmd | `--compare` across devices and time |
-| 27 | feature | cmd | MCP server |
+| 27 | done | mcp, cmd | ~~MCP server~~ (`proteus mcp`, spec `docs/specs/2026-10-09-mcp-server.md`) |
 | 28 | research | resolve | Panorama pushed rules on a managed firewall |
 | 29 | research | config, fetch, internal/digest | A digest for PAN-OS 12.2, possibly from the device |
 | 30 | research | index | URL matching beyond the documentation |
@@ -56,6 +56,16 @@ Every item names its **component** (the package or area it changes) and one **ta
 | 37 | test | simulate/routing, simulate/pathpolicy | Verify a shared-gateway path on a device |
 | 38 | test | resolve, simulate/securitypolicy | Verify pushed default rules and their precedence on a managed firewall |
 | 39 | test | simulate/pathpolicy | Probe fw01 with the path probe |
+| 40 | feature | mcp | Verify a signed identity (`X-User-JWT`) |
+| 41 | feature | mcp, inventory | Reload the inventory without a restart |
+| 42 | research | mcp | Authorisation specifics |
+| 43 | feature | query, simulate | Check every address of a host name |
+| 44 | qa | mcp | Generate the `proteus://limits` resource from `docs/limits.md` |
+| 45 | qa | mcp | The caller's address behind a trusted proxy |
+| 46 | test | mcp | Run the model check through Portkey |
+| 47 | qa | mcp | Keep the stack of a panic after a timeout |
+| 48 | perf | mcp, query, search, drift | Let the timeout stop a load, a search and a diff |
+| 49 | perf | mcp, search | Cache the zone document for `search` |
 
 ---
 
@@ -277,9 +287,9 @@ item 7, and delete the fetched data and API keys from the scratch directory.
 
 ### 27. MCP server
 
-- **Tag:** feature · **Component:** cmd (new binary) · **Source:** spec S11, §12 "Later"
-- Expose the questions to an agent over MCP. The packages and the JSON envelope are
-  already shaped for it.
+- **Tag:** done · **Component:** mcp, cmd · **Source:** spec S11, §12 "Later"
+- Done as `proteus mcp` (spec `docs/specs/2026-10-09-mcp-server.md`). See the
+  [MCP guide](guides/mcp.md). Follow-ups are items 40 to 51.
 
 ## Core and schema
 
@@ -369,3 +379,90 @@ Source for each: spec `docs/specs/2026-10-07-estate-policy-simulation.md` §13.
 - **Tag:** test · **Component:** simulate/pathpolicy · **Source:** spec §10.2
 - The first `--path` run (2026-10-08) probed fw02 only. Run it with fw01's
   credentials, also for a flow that a default rule denies on fw01.
+
+## MCP server follow-ups
+
+Source for each, unless it says otherwise: spec `docs/specs/2026-10-09-mcp-server.md`
+§8 and §10.
+
+### 40. Verify a signed identity (`X-User-JWT`)
+
+- **Tag:** feature · **Component:** mcp · **Source:** spec §4.4, §10
+- proteus audits the claims of `X-User-Claims` without a check, so a token holder can
+  forge them. A gateway can also send the user's identity as a signed JWT. Verify its
+  signature against the gateway's keys, and audit only verified claims.
+
+### 41. Reload the inventory without a restart
+
+- **Tag:** feature · **Component:** mcp, inventory · **Source:** spec §8, §10
+- The device enum of the tools comes from the export when the server starts. A
+  device added by `fetch` needs a server restart. Watch the export, and update the
+  tools' input schemas with a `tools/list_changed` notification.
+
+### 42. Authorisation specifics
+
+- **Tag:** research · **Component:** mcp · **Source:** spec §8, §10
+- proteus does no authorisation; the gateway decides who can call the server.
+  Decide whether proteus should limit tools, devices or labels per identity, and
+  which claim carries the decision.
+
+### 43. Check every address of a host name
+
+- **Tag:** feature · **Component:** query, simulate · **Source:** spec §8, §10
+- A host name is resolved, and only its first IPv4 address is checked. A name with
+  several addresses (DNS round robin, a CDN) can get a different answer for each. Run
+  the question for each address, or say when the answers differ.
+
+### 44. Generate the `proteus://limits` resource from `docs/limits.md`
+
+- **Tag:** qa · **Component:** mcp · **Source:** implementation of the MCP server
+- The resource is a hand summary in Go and can drift from `docs/limits.md`. Generate
+  it, or add a test that checks it against the headings of the document.
+
+### 45. The caller's address behind a trusted proxy
+
+- **Tag:** qa · **Component:** mcp · **Source:** implementation of the MCP server
+- Behind the proxy, the audit's `remote` is the proxy's address, so the rate limit
+  of refused requests (10 per minute per address) is in effect global. Read
+  `X-Forwarded-For` from a proxy named in the settings.
+
+### 46. Run the model check through Portkey
+
+- **Tag:** test · **Component:** mcp · **Source:** spec §7.1; lab acceptance 2026-10-10
+- Run the [model check](guides/mcp.md#model-check) through the Portkey SaaS gateway
+  with the chatbot's model, and record the result in
+  [Limits](limits.md#model-check). This also tests the path through Portkey, which
+  needs a public URL.
+
+### 47. Keep the stack of a panic after a timeout
+
+- **Tag:** qa · **Component:** mcp · **Source:** implementation of the MCP server
+- When a call's work panics after the call timed out, the late record is discarded
+  and the call log is closed, so the stack is lost. Write it to the server's log.
+
+### 48. Let the timeout stop a load, a search and a diff
+
+- **Tag:** perf · **Component:** mcp, query, search, drift · **Source:** spec §4.7, §8
+- A configuration load, an index build, `search` and `drift` take no context. A call
+  past `call_timeout` answers `call.timeout`, but its work keeps a slot until it
+  ends. Pass the context into them.
+
+### 49. Cache the zone document for `search`
+
+- **Tag:** perf · **Component:** mcp, search · **Source:** implementation of the MCP server
+- `search` reads each target's zone document from disk on every call. The server
+  cache holds configurations and operational data, not zones.
+
+### 50. Ask the user for needs and choices with elicitation
+
+- **Tag:** feature · **Component:** mcp · **Source:** spec `docs/specs/2026-10-10-mcp-followup.md` §1
+- A result's `needs` and the error `call.choice` ask the model to ask the user. MCP
+  elicitation lets the server ask the user directly. Add it when Portkey and the
+  clients support it.
+
+### 51. Publish OAuth resource metadata if Portkey is dropped
+
+- **Tag:** feature · **Component:** mcp · **Source:** spec `docs/specs/2026-10-10-mcp-followup.md` §1
+- Portkey owns authentication, so proteus checks a static bearer token. Without the
+  gateway, clients expect the MCP authorisation flow: publish OAuth protected
+  resource metadata and verify the access tokens.

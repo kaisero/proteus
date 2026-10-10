@@ -23,7 +23,7 @@ const minBox = 56
 func renderPath(t *textOut, title string, run simulate.Run, p routing.Path, now time.Time, why bool, rows func(i int) [][2]string) {
 	fmt.Fprintf(t, "%s            fidelity: %s\n\n", title, styledLevel(t.pal, run.Fidelity.Level()))
 	for _, n := range p.Notes {
-		fmt.Fprintf(t, "  %s\n", noteStyle(t.pal, n)("note: "+n))
+		fmt.Fprintf(t, "  %s\n", noteStyle(t.pal, n)("note: "+n.Text))
 	}
 	if len(p.Notes) > 0 {
 		fmt.Fprintln(t)
@@ -125,7 +125,7 @@ func zoneText(z string) string {
 }
 
 func incompleteText(f simulate.Fidelity) string {
-	parts := f.Reasons()
+	parts := f.Reasons().Texts()
 	if s := f.Skipped(); len(s) > 0 {
 		parts = append(parts, "not evaluated: "+strings.Join(s, ", "))
 	}
@@ -170,7 +170,7 @@ func newHopBox(h routing.Hop, now time.Time, extra [][2]string) hopBox {
 		rows = append(rows, [2]string{"ecmp", fmt.Sprintf("%d other next hops not followed: %s", len(h.ECMP), strings.Join(hops, ", "))})
 	}
 	for _, n := range h.Notes {
-		rows = append(rows, noteRow(n))
+		rows = append(rows, noteRow(n.Text))
 	}
 	for _, a := range h.Alternates {
 		s := fmt.Sprintf("%s via %s   %s, distance %d", a.Destination, nextHopsText(a), a.Protocol, a.Distance)

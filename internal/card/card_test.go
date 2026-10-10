@@ -6,6 +6,7 @@ import (
 
 	"github.com/okaiser/proteus/internal/config"
 	"github.com/okaiser/proteus/internal/index"
+	"github.com/okaiser/proteus/internal/resolve"
 )
 
 func find(t *testing.T, fixture, name, kind string) []Card {
@@ -14,7 +15,7 @@ func find(t *testing.T, fixture, name, kind string) []Card {
 	if err != nil {
 		t.Fatal(err)
 	}
-	idx, err := index.For(cfg, config.Scope{Sort: config.ScopeVsys, Name: "vsys1"})
+	idx, err := index.New(cfg, config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}, resolve.Security)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -187,7 +188,7 @@ func TestFindInfersTheKind(t *testing.T) {
 		t.Errorf("unknown name = %v", cs)
 	}
 	cfg, _, _ := config.Load("../../testdata/config/firewall-lookup.xml")
-	idx, _ := index.For(cfg, config.Scope{Sort: config.ScopeVsys, Name: "vsys1"})
+	idx, _ := index.New(cfg, config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}, resolve.Security)
 	if _, err := Find(cfg, idx, "x", "rule"); err == nil || !strings.Contains(err.Error(), "security-rule") {
 		t.Errorf("an unknown kind must list the valid ones: %v", err)
 	}

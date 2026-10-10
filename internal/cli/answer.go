@@ -4,10 +4,11 @@ import (
 	"fmt"
 	"io"
 	"reflect"
-	"strings"
 	"time"
 
 	"github.com/okaiser/proteus/internal/estate"
+	"github.com/okaiser/proteus/internal/query"
+	"github.com/okaiser/proteus/internal/reason"
 	"github.com/okaiser/proteus/internal/runlog"
 )
 
@@ -37,6 +38,19 @@ func (q qualifiers) status() error {
 		return errIncomplete
 	}
 	return nil
+}
+
+// detailer is an answer with a summary form (spec 2026-10-09 §3.5): the
+// questions of the query layer.
+type detailer interface {
+	Detail() string
+	SummaryResults() any
+}
+
+// summarizer is an answer whose envelope counts its results: search and
+// lookup.
+type summarizer interface {
+	Summary() *query.Summary
 }
 
 // statuser is an answer that sets its own exit status. Only fetch needs it.
@@ -69,15 +83,9 @@ func (a *app) emit(ans answer) error {
 	var err error
 	switch a.format {
 	case formatJSON:
-		err = writeJSON(a.stdout, envelope{
-			Command: ans.Command(), Input: ans.Input(), Results: ans.Results(),
-			Holes: q.Holes, Unresolved: q.Unresolved, Notes: q.Notes,
-		})
+		err = writeJSON(a.stdout, a.envelopeOf(ans))
 	case formatYAML:
-		err = writeYAML(a.stdout, envelope{
-			Command: ans.Command(), Input: ans.Input(), Results: ans.Results(),
-			Holes: q.Holes, Unresolved: q.Unresolved, Notes: q.Notes,
-		})
+		err = writeYAML(a.stdout, a.envelopeOf(ans))
 	default:
 		err = ans.Text(&textOut{w: a.stdout, now: a.now(), pal: palette{on: useColor(a.color, a.format, a.getenv, a.stdoutTTY)}})
 	}
@@ -90,6 +98,25 @@ func (a *app) emit(ans answer) error {
 		return s.Status()
 	}
 	return q.status()
+}
+
+// envelopeOf is an answer's JSON envelope, in the form --detail asks.
+func (a *app) envelopeOf(ans answer) envelope {
+	q := ans.Qualifiers()
+	e := envelope{
+		Command: ans.Command(), Input: ans.Input(), Results: ans.Results(),
+		Holes: q.Holes, Unresolved: q.Unresolved, Notes: q.Notes,
+	}
+	if s, ok := ans.(summarizer); ok {
+		e.Summary = s.Summary()
+	}
+	if d, ok := ans.(detailer); ok {
+		e.Detail = d.Detail()
+		if a.detail == query.DetailSummary {
+			e.Results, e.Detail = d.SummaryResults(), query.DetailSummary
+		}
+	}
+	return e
 }
 
 // emitRun is how every RunE ends: an error when there is no answer, else the
@@ -107,8 +134,13 @@ func printQualifiers(t *textOut, q qualifiers) {
 	for _, h := range q.Holes {
 		fmt.Fprintf(t, "%s %s: %s\n", t.pal.bad("hole:"), where(h.Device, h.Vsys), h.Reason)
 	}
-	for _, u := range q.Unresolved {
-		fmt.Fprintf(t, "%s %s: %s\n", t.pal.warn("unresolved:"), where(u.Device, u.Vsys), u.Reason)
+	// A composite reason's parts read as one line, as one reason.
+	for i := 0; i < len(q.Unresolved); {
+		u, text := q.Unresolved[i], q.Unresolved[i].Reason
+		for i++; i < len(q.Unresolved) && q.Unresolved[i].Part; i++ {
+			text += "; " + q.Unresolved[i].Reason
+		}
+		fmt.Fprintf(t, "%s %s: %s\n", t.pal.warn("unresolved:"), where(u.Device, u.Vsys), text)
 	}
 	if len(q.Holes)+len(q.Unresolved) > 0 {
 		fmt.Fprintln(t)
@@ -119,16 +151,16 @@ func printQualifiers(t *textOut, q qualifiers) {
 // printQualifiers, because it makes the answer incomplete rather than qualifying it.
 func printNotes(t *textOut, tg estate.Target) {
 	for _, n := range tg.Notes {
-		if n != tg.Report.VersionGap {
-			fmt.Fprintf(t, "  %s\n", noteStyle(t.pal, n)("note: "+n))
+		if n.Code != "gap.version" {
+			fmt.Fprintf(t, "  %s\n", noteStyle(t.pal, n)("note: "+n.Text))
 		}
 	}
 }
 
 // noteStyle is a note's palette role (spec §9.2): warn for a stale snapshot, dim for
-// any other. A stale note is recognised by the wording of estate.StaleNote.
-func noteStyle(p palette, n string) func(string) string {
-	if strings.HasPrefix(n, "snapshot ") && strings.Contains(n, " old, past the ") && strings.HasSuffix(n, " limit") {
+// any other. A stale note is recognised by its code.
+func noteStyle(p palette, n reason.Reason) func(string) string {
+	if n.Code == "note.snapshot-stale" {
 		return p.warn
 	}
 	return p.dim

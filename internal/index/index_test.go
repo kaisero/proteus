@@ -3,6 +3,7 @@ package index
 import (
 	"net/netip"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/RoaringBitmap/roaring/v2"
@@ -16,30 +17,169 @@ func labIndex(t *testing.T) *Index {
 	return indexOf(t, "../../testdata/config/firewall-multivsys.xml", "vsys1")
 }
 
-func TestIndexIsCachedPerScope(t *testing.T) {
+// The package keeps nothing: each call builds a new index, and the caller owns it.
+func TestNewBuildsEachTime(t *testing.T) {
 	t.Parallel()
 	cfg, _, err := config.Load("../../testdata/config/firewall-multivsys.xml")
 	if err != nil {
 		t.Fatal(err)
 	}
 	sc := config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}
-	a, err := For(cfg, sc)
+	a, err := New(cfg, sc, resolve.Security)
 	if err != nil {
-		t.Fatalf("For: %v", err)
+		t.Fatalf("New: %v", err)
 	}
-	b, _ := For(cfg, sc)
-	if a != b {
-		t.Error("the same scope must return the same cached index")
+	b, _ := New(cfg, sc, resolve.Security)
+	if a == b {
+		t.Error("New must not return an index kept from an earlier call")
 	}
-	other, err := For(cfg, config.Scope{Sort: config.ScopeVsys, Name: "vsys2"})
+	if len(a.Rules()) != len(b.Rules()) {
+		t.Errorf("two builds differ: %d and %d rules", len(a.Rules()), len(b.Rules()))
+	}
+}
+
+// A set builds each (scope, rulebase) index once and keeps it for its owner.
+func TestSetBuildsEachIndexOnce(t *testing.T) {
+	t.Parallel()
+	cfg, _, err := config.Load("../../testdata/config/firewall-multivsys.xml")
 	if err != nil {
-		t.Fatalf("For sibling: %v", err)
+		t.Fatal(err)
+	}
+	s := NewSet(cfg)
+	if s.Config() != cfg {
+		t.Error("Config must return the set's configuration")
+	}
+	sc := config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}
+	a, err := s.Index(sc, resolve.Security)
+	if err != nil {
+		t.Fatalf("Index: %v", err)
+	}
+	if b, _ := s.Provider(sc)(resolve.Security); a != b {
+		t.Error("the same scope and rulebase must return the same index")
+	}
+	if nat, _ := s.Index(sc, resolve.NAT); nat == a {
+		t.Error("another rulebase must get its own index")
+	}
+	other, err := s.Index(config.Scope{Sort: config.ScopeVsys, Name: "vsys2"}, resolve.Security)
+	if err != nil {
+		t.Fatalf("Index sibling: %v", err)
 	}
 	if other == a {
 		t.Error("a different scope must get its own index")
 	}
 	if other.Scope().String() != "vsys:vsys2" {
 		t.Errorf("scope = %q, want vsys:vsys2", other.Scope().String())
+	}
+	if other.refs.all == nil || &other.refs.all[0] != &a.refs.all[0] {
+		t.Error("the indexes of one set must share one edge list")
+	}
+}
+
+// Concurrent first calls share one build.
+func TestSetIsSafeForConcurrentUse(t *testing.T) {
+	t.Parallel()
+	cfg, _, err := config.Load("../../testdata/config/firewall-multivsys.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := NewSet(cfg)
+	sc := config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}
+	got := make([]*Index, 16)
+	var wg sync.WaitGroup
+	for i := range got {
+		wg.Go(func() {
+			idx, err := s.Index(sc, resolve.Security)
+			if err != nil {
+				t.Error(err)
+			}
+			got[i] = idx
+		})
+	}
+	wg.Wait()
+	for _, idx := range got {
+		if idx != got[0] {
+			t.Fatal("concurrent calls built more than one index")
+		}
+	}
+}
+
+// A failed build is not kept: the set tries again on the next call.
+func TestSetDoesNotKeepAFailure(t *testing.T) {
+	t.Parallel()
+	cfg, _, err := config.Load("../../testdata/config/firewall-multivsys.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := NewSet(cfg)
+	sc := config.Scope{Sort: config.ScopeVsys, Name: "vsys9"}
+	if _, err := s.Index(sc, resolve.Security); err == nil {
+		t.Fatal("an unknown vsys must fail")
+	}
+	if len(s.built) != 0 {
+		t.Errorf("the set kept %d failed builds", len(s.built))
+	}
+	if _, err := s.Index(sc, resolve.Security); err == nil {
+		t.Fatal("the second call must fail again, not return a kept result")
+	}
+}
+
+// A build that panics is not kept: every caller of it panics on, and the next
+// call builds again. A kept entry would answer nil with no error from then on.
+func TestSetDoesNotKeepAPanic(t *testing.T) {
+	t.Parallel()
+	cfg, _, err := config.Load("../../testdata/config/firewall-multivsys.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := NewSet(cfg)
+	s.build = func(*config.Config, *Edges, config.Scope, resolve.Rulebase) (*Index, error) { panic("build bug") }
+	sc := config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}
+	func() {
+		defer func() {
+			if p := recover(); p != "build bug" {
+				t.Errorf("recovered %v, want the build's panic", p)
+			}
+		}()
+		_, _ = s.Index(sc, resolve.Security)
+	}()
+	if len(s.built) != 0 {
+		t.Errorf("the set kept %d panicked builds", len(s.built))
+	}
+	s.build = nil
+	if idx, err := s.Index(sc, resolve.Security); err != nil || idx == nil {
+		t.Errorf("the next call: %v %v", idx, err)
+	}
+}
+
+// Edges read from one configuration cannot build another's index: the positions
+// the index keeps would point into the wrong file.
+func TestBuildRefusesEdgesOfAnotherConfiguration(t *testing.T) {
+	t.Parallel()
+	load := func(name string) *config.Config {
+		cfg, _, err := config.Load("../../testdata/config/" + name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return cfg
+	}
+	cfg, other := load("firewall-multivsys.xml"), load("firewall-multivsys.xml")
+	sc := config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}
+	edges, err := ReadEdges(other)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Build(cfg, edges, sc, resolve.Security); err == nil {
+		t.Error("Build accepted edges read from another configuration")
+	}
+	if _, err := Build(cfg, nil, sc, resolve.Security); err == nil {
+		t.Error("Build accepted no edges")
+	}
+	own, err := ReadEdges(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Build(cfg, own, sc, resolve.Security); err != nil {
+		t.Errorf("Build with its own edges: %v", err)
 	}
 }
 
@@ -172,7 +312,7 @@ func TestIndexForAFirewallVsys(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	idx, err := For(cfg, config.Scope{Sort: config.ScopeVsys, Name: "vsys1"})
+	idx, err := New(cfg, config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}, resolve.Security)
 	if err != nil {
 		t.Fatalf("For: %v", err)
 	}
@@ -215,7 +355,7 @@ func TestIndexForAFirewallVsys(t *testing.T) {
 func TestIndexRejectsAnUnknownVsys(t *testing.T) {
 	t.Parallel()
 	cfg, _, _ := config.Load("../../testdata/config/firewall-lab.xml")
-	if _, err := For(cfg, config.Scope{Sort: config.ScopeVsys, Name: "vsys9"}); err == nil {
+	if _, err := New(cfg, config.Scope{Sort: config.ScopeVsys, Name: "vsys9"}, resolve.Security); err == nil {
 		t.Error("an unknown vsys must be an error")
 	}
 }
@@ -229,7 +369,7 @@ func TestAnIndexPerRulebase(t *testing.T) {
 		t.Fatal(err)
 	}
 	sc := config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}
-	nat, err := ForRulebase(cfg, sc, resolve.NAT)
+	nat, err := New(cfg, sc, resolve.NAT)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -237,14 +377,14 @@ func TestAnIndexPerRulebase(t *testing.T) {
 	if !b.Contains(0) || b.Contains(2) {
 		t.Errorf("NAT source candidates = %v", b.ToArray())
 	}
-	pbf, err := ForRulebase(cfg, sc, resolve.PBF)
+	pbf, err := New(cfg, sc, resolve.PBF)
 	if err != nil || pbf == nat {
 		t.Fatalf("pbf index: %v", err)
 	}
 	if b, _ := pbf.Candidates(Destination, "10.1.10.100"); !b.Contains(1) {
 		t.Errorf("PBF destination candidates = %v", b.ToArray())
 	}
-	sec, _ := For(cfg, sc)
+	sec, _ := New(cfg, sc, resolve.Security)
 	if len(sec.Rules()) != 2 || len(nat.Rules()) != 4 {
 		t.Errorf("rules: security %d, nat %d", len(sec.Rules()), len(nat.Rules()))
 	}

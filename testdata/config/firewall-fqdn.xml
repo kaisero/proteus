@@ -1,0 +1,63 @@
+<config version="11.2.0" urldb="paloaltonetworks" detail-version="11.2.5">
+  <!-- FQDN doubt (spec 2026-10-09 §3.8): a deny rule reached only through an
+       FQDN object, an allow rule naming the FQDN object and the network its
+       address is in, a negated rule on the FQDN object, and a catch-all. A
+       network object named like the FQDN is no FQDN object: its rule matches by
+       address only. -->
+  <shared/>
+  <devices>
+    <entry name="localhost.localdomain">
+      <vsys>
+        <entry name="vsys1">
+          <address>
+            <entry name="web-fqdn"><fqdn>www.example.com</fqdn></entry>
+            <entry name="web-net"><ip-netmask>203.0.113.0/24</ip-netmask></entry>
+            <entry name="www.example.com"><ip-netmask>192.0.2.0/24</ip-netmask></entry>
+          </address>
+          <rulebase>
+            <security>
+              <rules>
+                <entry name="block-lookalike">
+                  <source><member>any</member></source>
+                  <destination><member>www.example.com</member></destination>
+                  <application><member>any</member></application>
+                  <service><member>any</member></service>
+                  <action>deny</action>
+                </entry>
+                <entry name="block-web-by-name">
+                  <source><member>any</member></source>
+                  <destination><member>web-fqdn</member></destination>
+                  <application><member>any</member></application>
+                  <service><member>any</member></service>
+                  <action>deny</action>
+                </entry>
+                <entry name="allow-web">
+                  <source><member>any</member></source>
+                  <destination><member>web-fqdn</member><member>web-net</member></destination>
+                  <application><member>any</member></application>
+                  <service><member>any</member></service>
+                  <action>allow</action>
+                </entry>
+                <entry name="not-web">
+                  <source><member>any</member></source>
+                  <destination><member>web-fqdn</member></destination>
+                  <negate-destination>yes</negate-destination>
+                  <application><member>any</member></application>
+                  <service><member>any</member></service>
+                  <action>drop</action>
+                </entry>
+                <entry name="rest">
+                  <source><member>any</member></source>
+                  <destination><member>any</member></destination>
+                  <application><member>any</member></application>
+                  <service><member>any</member></service>
+                  <action>allow</action>
+                </entry>
+              </rules>
+            </security>
+          </rulebase>
+        </entry>
+      </vsys>
+    </entry>
+  </devices>
+</config>

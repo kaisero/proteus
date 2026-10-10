@@ -1,0 +1,33 @@
+{
+  "format": 2,
+  "command": "lookup",
+  "detail": "summary",
+  "input": {
+    "expand": false,
+    "full": false,
+    "kind": "",
+    "name": "branch-to-dc",
+    "selection": {
+      "file": "../../testdata/config/firewall-lookup.xml"
+    }
+  },
+  "results": [
+    {
+      "answer": "file/vsys1: security-rule branch-to-dc",
+      "device": "file",
+      "vsys": "vsys1",
+      "scope": "vsys:vsys1",
+      "kind": "security-rule",
+      "name": "branch-to-dc"
+    }
+  ],
+  "summary": {
+    "answer": "1 with it, 0 without, 0 holes",
+    "found": 1,
+    "with": 1,
+    "without": 0
+  },
+  "holes": [],
+  "unresolved": [],
+  "notes": []
+}

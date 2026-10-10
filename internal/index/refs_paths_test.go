@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/okaiser/proteus/internal/config"
+	"github.com/okaiser/proteus/internal/resolve"
 )
 
 func refpathsIndex(t *testing.T) (*config.Config, *Index) {
@@ -15,7 +16,7 @@ func refpathsIndex(t *testing.T) (*config.Config, *Index) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	idx, err := For(cfg, config.Scope{Sort: config.ScopeVsys, Name: "vsys1"})
+	idx, err := New(cfg, config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}, resolve.Security)
 	if err != nil {
 		t.Fatal(err)
 	}

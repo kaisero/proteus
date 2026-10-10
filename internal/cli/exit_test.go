@@ -4,11 +4,15 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
+	"io"
 	"os"
 	"slices"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/okaiser/proteus/internal/query"
 )
 
 // name returns a completion value's command name, without its tab-separated
@@ -121,6 +125,23 @@ func TestEarlyErrorsFollowTheFormat(t *testing.T) {
 	}
 }
 
+// An early error of proteus mcp does not read the inventory with
+// credentials: its output: json does not apply, a flag does.
+func TestAnEarlyMCPErrorReadsNoInventory(t *testing.T) {
+	t.Parallel()
+	c := newCLI(t)
+	c.inventory("version: 1\ndefaults:\n  output: json\ndevices: []\n")
+	if _, errOut, code := c.run("search", "--bogus"); code != exitUsage || !strings.HasPrefix(errOut, "{") {
+		t.Fatalf("search: exit %d, stderr %q", code, errOut)
+	}
+	if _, errOut, code := c.run("mcp", "--bogus"); code != exitUsage || strings.HasPrefix(errOut, "{") {
+		t.Errorf("mcp: exit %d, stderr %q", code, errOut)
+	}
+	if _, errOut, code := c.run("mcp", "--bogus", "--output", "json"); code != exitUsage || !strings.HasPrefix(errOut, "{") {
+		t.Errorf("mcp --output json: exit %d, stderr %q", code, errOut)
+	}
+}
+
 func TestIncompleteJSONRunsEndWithTheExitLine(t *testing.T) {
 	t.Parallel()
 	c := newCLI(t)
@@ -161,5 +182,16 @@ func TestASignalDuringACommandEndsTheRunLog(t *testing.T) {
 	}
 	if !strings.Contains(string(logContent), "exit 130") {
 		t.Errorf("run log must record exit 130:\n%s", logContent)
+	}
+}
+
+// A question the query layer refuses exits 2 with the command line's text.
+func TestAQueryUsageErrorExitsTwo(t *testing.T) {
+	t.Parallel()
+	a := newApp(io.Discard, io.Discard, getenv, time.Now)
+	u := &query.UsageError{Code: "call.usage", Text: "--port \"x\": want 443 or tcp/443", ToolText: "port \"x\": want 443 or tcp/443"}
+	code, msg := a.exitCode(context.Background(), fmt.Errorf("simulate: %w", u))
+	if code != exitUsage || msg == nil || msg.Error() != u.Text {
+		t.Errorf("exit %d, %v", code, msg)
 	}
 }

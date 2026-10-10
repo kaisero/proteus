@@ -3,20 +3,21 @@ package cli
 import (
 	"fmt"
 	"strconv"
-	"strings"
 	"time"
 
+	"github.com/okaiser/proteus/internal/query"
 	"github.com/okaiser/proteus/internal/simulate"
 	"github.com/okaiser/proteus/internal/simulate/nat"
 )
 
-// renderNAT draws a NAT answer (spec §18 N9): one box as in routing, the packet
-// before and after, and what security policy matches — pre-NAT addresses and port,
-// post-NAT zones (§18 F5, F6, verified on fw01).
-func renderNAT(t *textOut, run simulate.Run, r nat.Result, takenAt, now time.Time, why bool) {
+// renderNAT draws a NAT answer (spec §18 N9): the answer line, one box as in
+// routing, the packet before and after, and what security policy matches —
+// pre-NAT addresses and port, post-NAT zones (§18 F5, F6, verified on fw01).
+func renderNAT(t *textOut, run simulate.Run, r nat.Result, answer string, takenAt, now time.Time, why bool) {
 	f := run.Input.Flow
 	fmt.Fprintf(t, "simulate nat %s -> %s %s on %s            fidelity: %s\n\n",
-		endpointText(f.Source), f.Destination, portSpec(f.Protocol, f.DestPort), run.Device, styledLevel(t.pal, run.Fidelity.Level()))
+		query.EndpointText(f.Source), f.Destination, portSpec(f.Protocol, f.DestPort), run.Device, styledLevel(t.pal, run.Fidelity.Level()))
+	fmt.Fprintf(t, "%s\n\n", answer)
 
 	pre := r.PreNAT
 	out := pre.Out
@@ -59,27 +60,27 @@ func renderNAT(t *textOut, run simulate.Run, r nat.Result, takenAt, now time.Tim
 		rows = append(rows, [2]string{"rule", fmt.Sprintf("%s, matched %s -> %s", name, zoneText(in.Zone), zoneText(pre.Out.Zone))})
 	}
 	if s := r.Source; s != nil {
-		rows = append(rows, [2]string{"source", translationText(endpointText(f.Source), s)})
+		rows = append(rows, [2]string{"source", query.SourceTranslation(query.EndpointText(f.Source), s)})
 	}
 	if d := r.Destination; d != nil {
-		rows = append(rows, [2]string{"dest", fmt.Sprintf("%s:%s", f.Destination, portNumber(f.DestPort)) + " -> " + destinationText(d, f.DestPort)})
+		rows = append(rows, [2]string{"dest", fmt.Sprintf("%s:%s", f.Destination, query.PortNumber(f.DestPort)) + " -> " + query.DestinationTranslation(d, f.DestPort)})
 	}
 	for _, d := range r.Doubts {
-		rows = append(rows, [2]string{"doubt", d.Rule + ": " + d.Reason})
+		rows = append(rows, [2]string{"doubt", d.Rule + ": " + d.Text()})
 	}
 	for _, n := range r.Notes {
-		rows = append(rows, [2]string{"note", n})
+		rows = append(rows, [2]string{"note", n.Text})
 	}
 	b := newBox(title, rows)
 	b.draw(t, max(minBox, b.width), false)
 
 	a := r.Flow
 	fmt.Fprintln(t)
-	fmt.Fprintf(t, "  before   %s -> %s:%s  %s\n", endpointText(f.Source), f.Destination, portNumber(f.DestPort), f.Protocol)
-	fmt.Fprintf(t, "  after    %s -> %s:%s  %s\n\n", afterSource(f, a, r.Source), a.Destination, portNumber(a.DestPort), a.Protocol)
+	fmt.Fprintf(t, "  before   %s -> %s:%s  %s\n", query.EndpointText(f.Source), f.Destination, query.PortNumber(f.DestPort), f.Protocol)
+	fmt.Fprintf(t, "  after    %s -> %s:%s  %s\n\n", afterSource(f, a, r.Source), a.Destination, query.PortNumber(a.DestPort), a.Protocol)
 	if r.Dropped == "" {
 		fmt.Fprintf(t, "security policy matches: %s -> %s, port %s, zones %s -> %s\n",
-			endpointText(f.Source), f.Destination, portNumber(f.DestPort), zoneText(in.Zone), zoneText(out.Zone))
+			query.EndpointText(f.Source), f.Destination, query.PortNumber(f.DestPort), zoneText(in.Zone), zoneText(out.Zone))
 	}
 	if run.Fidelity.Level() != "exact" {
 		fmt.Fprintf(t, "may be incomplete: %s\n", run.Fidelity.Level())
@@ -126,13 +127,6 @@ func prePost(translated bool, label string) string {
 	return "   (" + label + ")"
 }
 
-func endpointText(e simulate.Endpoint) string {
-	if e.Name == "" && len(e.Addrs) == 0 {
-		return "(no source)"
-	}
-	return e.String()
-}
-
 func portSpec(proto string, port uint16) string {
 	if port == 0 {
 		return proto
@@ -140,45 +134,9 @@ func portSpec(proto string, port uint16) string {
 	return proto + "/" + strconv.Itoa(int(port))
 }
 
-func portNumber(p uint16) string {
-	if p == 0 {
-		return "(any)"
-	}
-	return strconv.Itoa(int(p))
-}
-
-func translationText(from string, t *nat.Translation) string {
-	s := from + " -> " + strings.Join(t.Candidates, ", ")
-	switch t.Port {
-	case nat.PortRuntime:
-		s += ", port assigned at runtime"
-	case nat.PortUnchanged:
-		s += ", port unchanged"
-	}
-	if len(t.Fallback) > 0 {
-		s += "; fallback " + strings.Join(t.Fallback, ", ")
-	}
-	return s
-}
-
-func destinationText(d *nat.Translation, port uint16) string {
-	p := portNumber(port)
-	if d.Port != nat.PortUnchanged {
-		p = d.Port
-	}
-	s := d.Address.String() + ":" + p
-	if !d.Address.IsValid() {
-		s = "(no address)"
-	}
-	if len(d.Others) > 0 {
-		s += " (also " + strings.Join(d.Others, ", ") + ", by distribution)"
-	}
-	return s
-}
-
 func afterSource(before, after simulate.Flow, t *nat.Translation) string {
 	if t == nil {
-		return endpointText(before.Source)
+		return query.EndpointText(before.Source)
 	}
 	s := after.Source.String()
 	if t.Port == nat.PortRuntime {

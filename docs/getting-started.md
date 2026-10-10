@@ -45,6 +45,7 @@ Show an object, with its value and the groups that hold it:
 ```
 $ proteus lookup net-vienna --file testdata/config/firewall-lookup.xml
 file / vsys1   testdata/config/firewall-lookup.xml
+  file/vsys1: address net-vienna
 address        net-vienna                   vsys:vsys1
   tags         branch
   description  Vienna office

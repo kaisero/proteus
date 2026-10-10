@@ -105,6 +105,9 @@ func contractRows() []contractRow {
 		// flow there; a rule of the zones fixture does, and the answer is complete.
 		{name: "simulate-policy-match", fixture: labFixture(1), args: []string{"simulate", "policy", "10.1.0.5", "10.2.0.5", "--file", "../../testdata/config/firewall-zones.xml", "--vsys", "vsys1", "--port", "tcp/443"}},
 		{name: "simulate-nat", fixture: natFixture, args: []string{"simulate", "nat", "198.18.1.10", "198.18.250.10", "--device", "fw01", "--router", "default", "--from-zone", "transport", "--port", "8443"}, empty: 3},
+		// The server answers MCP clients, not the command line: here only
+		// its start check, which needs the inventory export, is the contract.
+		{name: "mcp", fixture: emptyFixture, args: []string{"mcp", "--http"}, complete: 2, empty: 2},
 		{name: "simulate-routing", fixture: routingFixture, args: []string{"simulate", "routing", "198.18.10.5", "8.8.8.8"}, empty: 3},
 	}
 }
@@ -218,7 +221,7 @@ func checkStreams(t *testing.T, format string, code int, answered bool, out, err
 			Format int `json:"format"`
 			Exit   int `json:"exit"`
 		}
-		if err := json.Unmarshal([]byte(lines[len(lines)-1]), &last); err != nil || last.Format != 1 || last.Exit != code {
+		if err := json.Unmarshal([]byte(lines[len(lines)-1]), &last); err != nil || last.Format != 2 || last.Exit != code {
 			t.Errorf("the last stderr line must be the JSON exit line (exit %d), got:\n%s", code, errOut)
 		}
 		if strings.Contains(errOut, "\x1b[") {

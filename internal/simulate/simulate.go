@@ -2,6 +2,8 @@ package simulate
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"net/netip"
 	"time"
 
@@ -19,6 +21,9 @@ type Endpoint struct {
 	Name     string       `json:"name,omitempty"` // the FQDN; empty for an address
 	Addrs    []netip.Addr `json:"addrs"`          // the address, or the FQDN's addresses
 	Resolved bool         `json:"resolved"`       // Addrs came from DNS
+	// Canonical is the FQDN's canonical name when this machine's resolver
+	// reports one other than Name; DNSNotes names it.
+	Canonical string `json:"-"`
 }
 
 // Addr returns an endpoint for one address.
@@ -59,10 +64,34 @@ type Input struct {
 
 // Target is what a simulation reads for one device and vsys.
 type Target struct {
-	Config    *config.Config
-	Index     *index.Index
+	Config *config.Config
+	// Indexes gives the vsys's index of a rulebase. The loader's owner builds and
+	// keeps the indexes (spec §4.8); a simulation never builds its own. It is the
+	// one source of a target's indexes: the security check takes its index here too.
+	Indexes   func(resolve.Rulebase) (*index.Index, error)
 	Providers index.Providers
-	Notes     []string
+	Notes     Reasons
+}
+
+// Index is the target's index of a rulebase of the vsys from its provider. A
+// target without a provider is a loader's mistake, reported as an error rather
+// than built here.
+func (t Target) Index(rb resolve.Rulebase, vsys string) (*index.Index, error) {
+	if t.Indexes == nil {
+		return nil, errors.New("no index provider")
+	}
+	idx, err := t.Indexes(rb)
+	if err != nil {
+		return nil, err
+	}
+	if idx == nil {
+		return nil, errors.New("the index provider gives no index")
+	}
+	// A provider of another vsys would answer with that vsys's rules.
+	if idx.Scope().Name != vsys {
+		return nil, fmt.Errorf("the index provider gives %s, not vsys %s", idx.Scope(), vsys)
+	}
+	return idx, nil
 }
 
 // Env bundles one run's dependencies. It is single-use and not safe for
@@ -103,7 +132,7 @@ type DeviceData struct {
 	Interfaces []resolve.InterfaceState
 	FIB        []resolve.FIBRoute
 	RIB        []resolve.RIBRoute // nil when the snapshot has none
-	Notes      []string           // an HA pair, a fetch from the peer, an old snapshot
+	Notes      Reasons            // an HA pair, a fetch from the peer, an old snapshot
 }
 
 // StageState is the candidate set as a stage left it. Its count answers "why did
@@ -135,7 +164,7 @@ type Run struct {
 	Stages   []Stage  `json:"stages"`
 	Output   any      `json:"output"`   // the type each kind documents
 	Fidelity Fidelity `json:"fidelity"` // the weakest stage's
-	Notes    []string `json:"notes,omitempty"`
+	Notes    Reasons  `json:"notes,omitempty"`
 }
 
 // Simulation is one kind of simulation.

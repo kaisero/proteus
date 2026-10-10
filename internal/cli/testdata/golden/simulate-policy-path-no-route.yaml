@@ -1,5 +1,6 @@
-format: 1
+format: 2
 command: simulate policy
+detail: full
 input:
   mode: path
   flow:
@@ -17,13 +18,16 @@ input:
   router: ""
   at: ""
 results:
-  - mode: path
+  - answer: 'denied at hop 2: no route to 198.18.30.5 on fw01'
+    mode: path
     verdict: denied
     at:
       hop: 2
       check: routing
       rule: ""
-      reason: 'dropped on fw01: no route to 198.18.30.5'
+      reasons:
+        - code: path.no-route
+          text: 'dropped on fw01: no route to 198.18.30.5'
     fidelity:
       level: exact
     source:
@@ -37,6 +41,7 @@ results:
     placed: connected
     outcome: dropped
     end: 'dropped on fw01: no route to 198.18.30.5'
+    end_code: path.no-route
     stages:
       - slug: place
         name: place the start
@@ -174,7 +179,9 @@ results:
         checks:
           security:
             verdict: pass
-            reason: default rule interzone-default (allow), local
+            reasons:
+              - code: verdict.default
+                text: default rule interzone-default (allow), local
             rule: interzone-default
             default: interzone-default
             default_action: allow
@@ -289,7 +296,9 @@ results:
         checks:
           security:
             verdict: not-evaluated
-            reason: dropped by routing before security policy
+            reasons:
+              - code: path.no-route
+                text: dropped by routing before security policy
             rule: ""
             default: ""
             default_action: ""

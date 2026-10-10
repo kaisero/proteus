@@ -4,15 +4,23 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+
+	"github.com/okaiser/proteus/internal/reason"
+	"github.com/okaiser/proteus/internal/simulate"
 )
 
 // Doubt names a candidate the check cannot decide, and why. It does not change
-// which rules are candidates.
+// which rules are candidates. Most doubts have one reason; a rule naming several
+// opaque addresses in one field has one per address. JSON writes
+// {"position", "rule", "reasons": [{"code", "text"}]} (spec 2026-10-09 §12 C6).
 type Doubt struct {
-	Position int    `json:"position"` // the rule's position in the effective order
-	Rule     string `json:"rule"`
-	Reason   string `json:"reason"` // "application not evaluated (quic)", "service application-default", ...
+	Position int              `json:"position"` // the rule's position in the effective order
+	Rule     string           `json:"rule"`
+	Reasons  simulate.Reasons `json:"reasons"` // "application not evaluated (quic)", "service application-default", ...
 }
+
+// Text is the reasons as one line, as the output shows them.
+func (d Doubt) Text() string { return d.Reasons.Text() }
 
 // fieldClass says how the check treats one child of a security rule entry.
 type fieldClass int
@@ -78,35 +86,58 @@ var ruleFields = []struct {
 // doubtLabel is how a doubt names a field no stage evaluates.
 var doubtLabel = map[string]string{"source-user": "user"}
 
+// doubtCodes gives each doubtful field its code (spec §3.1, §12 C7, C8). A
+// doubtful field missing here fails every test that reaches it.
+var doubtCodes = map[string]reason.Code{
+	"source-user":      "doubt.not-evaluated.user",
+	"application":      "doubt.application",
+	"source-imsi":      "doubt.imsi",
+	"source-imei":      "doubt.imei",
+	"source-nw-slice":  "doubt.nw-slice",
+	"source-hip":       "doubt.hip",
+	"destination-hip":  "doubt.hip",
+	"saas-user-list":   "doubt.saas-user-list",
+	"saas-tenant-list": "doubt.saas-tenant-list",
+}
+
 // doubts lists the doubts of the current candidates, in rule order: per
 // candidate, the fields it sets that no stage evaluates (spec §4.7).
 func (s *state) doubts() []Doubt {
 	var out []Doubt
-	services := definedIn(s.target.Config, s.target.Index.Scope(), "service")
-	categories := definedIn(s.target.Config, s.target.Index.Scope(), "category")
+	services := definedIn(s.target.Config, s.idx.Scope(), "service")
+	categories := definedIn(s.target.Config, s.idx.Scope(), "category")
 	for _, r := range s.verdict.Candidates {
-		add := func(reason string) {
-			out = append(out, Doubt{Position: r.Position, Rule: r.Name, Reason: reason})
+		add := func(why ...reason.Reason) {
+			out = append(out, Doubt{Position: r.Position, Rule: r.Name, Reasons: why})
 		}
 		for _, f := range ruleFields {
 			switch {
 			case f.name == "service":
-				if why := s.serviceDoubt(r.Fields["service"], services); why != "" {
+				if why := s.serviceDoubt(r.Fields["service"], services); why.Text != "" {
 					add(why)
 				}
 			case f.name == "category":
-				if why := s.categoryDoubt(r.Fields["category"], categories); why != "" {
+				if why := s.categoryDoubt(r.Fields["category"], categories); why.Text != "" {
 					add(why)
 				}
 			case f.name == "source" || f.name == "destination":
 				//nolint:gosec // a rule position cannot reach 2^32; a rulebase is capped far below that
 				if why, ok := s.opaque[f.name][uint32(r.Position-1)]; ok {
-					add(f.name + ": " + why)
+					add(simulate.Reasons(why).Prefixed(f.name + ": ")...)
+				}
+				switch m := s.fqdn[f.name]; {
+				case m.rules == nil:
+				case m.rules.Contains(uint32(r.Position - 1)): //nolint:gosec // as above
+					add(reason.New("doubt.fqdn-resolution", fmt.Sprintf(
+						"%s: %s matched only through an FQDN object; the firewall resolves this object itself; its addresses can differ from ours", f.name, m.name)))
+				case m.negated.Contains(uint32(r.Position - 1)): //nolint:gosec // as above
+					add(reason.New("doubt.fqdn-resolution", fmt.Sprintf(
+						"%s: %s excluded from the negated field only through an FQDN object; the firewall resolves this object itself; its addresses can differ from ours", f.name, m.name)))
 				}
 			case f.class != doubtful:
 			case f.name == "schedule":
 				if r.Schedule != "" {
-					add(fmt.Sprintf("schedule not evaluated (%s)", r.Schedule))
+					add(reason.New("doubt.schedule", fmt.Sprintf("schedule not evaluated (%s)", r.Schedule)))
 				}
 			default:
 				if vs := notAny(r.Fields[f.name]); len(vs) > 0 {
@@ -114,7 +145,7 @@ func (s *state) doubts() []Doubt {
 					if l, ok := doubtLabel[label]; ok {
 						label = l
 					}
-					add(fmt.Sprintf("%s not evaluated (%s)", label, strings.Join(vs, ", ")))
+					add(reason.New(doubtCodes[f.name], fmt.Sprintf("%s not evaluated (%s)", label, strings.Join(vs, ", "))))
 				}
 			}
 		}
@@ -122,23 +153,28 @@ func (s *state) doubts() []Doubt {
 	return out
 }
 
-// serviceDoubt says why a rule's service cannot be judged on this flow, or ""
-// when it can: matchService evaluates a service the configuration defines,
+// serviceDoubt says why a rule's service cannot be judged on this flow, or the
+// zero reason when it can: matchService evaluates a service the configuration defines,
 // against a tcp, udp or sctp port.
-func (s *state) serviceDoubt(vs []string, defined map[string]bool) string {
+func (s *state) serviceDoubt(vs []string, defined map[string]bool) reason.Reason {
 	if len(vs) == 0 {
-		return "service absent"
+		return reason.New("doubt.service-absent", "service absent")
 	}
 	vs = notAny(vs)
 	if len(vs) == 0 {
-		return ""
+		return reason.Reason{}
 	}
+	// A port decides only a service the configuration defines. When every
+	// value is application-default or not defined, no port helps, so that
+	// doubt comes first and the answer asks for no port.
+	judged := slices.ContainsFunc(vs, func(v string) bool { return v != "application-default" && defined[v] })
 	f := s.in.Flow
-	if proto := strings.ToLower(f.Protocol); f.DestPort == 0 || (proto != "tcp" && proto != "udp" && proto != "sctp") {
-		return fmt.Sprintf("service not evaluated without a tcp, udp or sctp port (%s)", strings.Join(vs, ", "))
+	if proto := strings.ToLower(f.Protocol); judged && (f.DestPort == 0 || (proto != "tcp" && proto != "udp" && proto != "sctp")) {
+		return reason.New("doubt.service-no-port",
+			fmt.Sprintf("service not evaluated without a tcp, udp or sctp port (%s)", strings.Join(vs, ", ")))
 	}
 	if slices.Contains(vs, "application-default") {
-		return "service application-default"
+		return reason.New("doubt.service-application-default", "service application-default")
 	}
 	var unknown []string
 	for _, v := range vs {
@@ -147,20 +183,25 @@ func (s *state) serviceDoubt(vs []string, defined map[string]bool) string {
 		}
 	}
 	if len(unknown) > 0 {
-		return fmt.Sprintf("service predefined or not defined in the configuration (%s)", strings.Join(unknown, ", "))
+		return reason.New("doubt.service-predefined",
+			fmt.Sprintf("service predefined or not defined in the configuration (%s)", strings.Join(unknown, ", ")))
 	}
-	return ""
+	return reason.Reason{}
 }
 
 // categoryDoubt says why a rule's URL category cannot be judged on this flow, or
-// "" when it can. A rule without a category matches every URL, as any does.
-func (s *state) categoryDoubt(vs []string, defined map[string]bool) string {
+// the zero reason when it can. A rule without a category matches every URL, as
+// any does.
+func (s *state) categoryDoubt(vs []string, defined map[string]bool) reason.Reason {
 	vs = notAny(vs)
 	if len(vs) == 0 {
-		return ""
+		return reason.Reason{}
 	}
-	if s.in.Flow.URL == "" {
-		return fmt.Sprintf("url category not evaluated without a URL (%s)", strings.Join(vs, ", "))
+	// A URL decides only a category the configuration defines; when none is
+	// defined (PAN-DB categories), no URL helps, so that doubt comes first.
+	if s.in.Flow.URL == "" && slices.ContainsFunc(vs, func(v string) bool { return defined[v] }) {
+		return reason.New("doubt.category-no-url",
+			fmt.Sprintf("url category not evaluated without a URL (%s)", strings.Join(vs, ", ")))
 	}
 	var unknown []string
 	for _, v := range vs {
@@ -169,9 +210,10 @@ func (s *state) categoryDoubt(vs []string, defined map[string]bool) string {
 		}
 	}
 	if len(unknown) > 0 {
-		return fmt.Sprintf("url category not defined in the configuration, such as a PAN-DB category (%s)", strings.Join(unknown, ", "))
+		return reason.New("doubt.category-undefined",
+			fmt.Sprintf("url category not defined in the configuration, such as a PAN-DB category (%s)", strings.Join(unknown, ", ")))
 	}
-	return ""
+	return reason.Reason{}
 }
 
 // notAny returns the values other than any.

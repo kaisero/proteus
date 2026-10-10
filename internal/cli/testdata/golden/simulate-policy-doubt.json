@@ -1,6 +1,7 @@
 {
-  "format": 1,
+  "format": 2,
   "command": "simulate policy",
+  "detail": "full",
   "input": {
     "flow": {
       "source": {
@@ -26,8 +27,14 @@
   },
   "results": [
     {
+      "answer": "first match: interzone-default (deny), default rule (built-in)",
       "verdict": "stop",
-      "reason": "default rule interzone-default (deny), built-in",
+      "reasons": [
+        {
+          "code": "verdict.default",
+          "text": "default rule interzone-default (deny), built-in"
+        }
+      ],
       "rule": "interzone-default",
       "default": "interzone-default",
       "default_action": "deny",
@@ -35,7 +42,10 @@
       "fidelity": {
         "level": "overmatch",
         "reasons": [
-          "earlier candidates in doubt share the action deny: labor-app"
+          {
+            "code": "doubt.same-action",
+            "text": "earlier candidates in doubt share the action deny: labor-app"
+          }
         ],
         "not_evaluated": [
           "application"
@@ -55,7 +65,12 @@
         {
           "position": 14,
           "rule": "labor-app",
-          "reason": "application not evaluated (dropbox)"
+          "reasons": [
+            {
+              "code": "doubt.application",
+              "text": "application not evaluated (dropbox)"
+            }
+          ]
         }
       ],
       "zones": {
@@ -74,7 +89,7 @@
           "fidelity": {
             "level": "exact"
           },
-          "candidates": 13,
+          "candidates": 14,
           "detail": "198.19.0.254: 1 hits, 0 negated rules",
           "elapsed_ms": 0
         },
@@ -84,7 +99,7 @@
           "fidelity": {
             "level": "exact"
           },
-          "candidates": 11,
+          "candidates": 12,
           "detail": "10.2.0.5: 0 hits, 0 negated rules",
           "elapsed_ms": 0
         },
@@ -144,7 +159,10 @@
           "fidelity": {
             "level": "overmatch",
             "reasons": [
-              "earlier candidates in doubt share the action deny: labor-app"
+              {
+                "code": "doubt.same-action",
+                "text": "earlier candidates in doubt share the action deny: labor-app"
+              }
             ],
             "not_evaluated": [
               "application"
@@ -159,7 +177,8 @@
       "relevance": {
         "known": false,
         "relevant": false,
-        "reason": "no stored forwarding table"
+        "code": "gap.fib-missing",
+        "text": "no stored forwarding table"
       },
       "target": {
         "device": "file",

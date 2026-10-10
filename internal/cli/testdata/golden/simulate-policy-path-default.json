@@ -1,6 +1,7 @@
 {
-  "format": 1,
+  "format": 2,
   "command": "simulate policy",
+  "detail": "full",
   "input": {
     "mode": "path",
     "flow": {
@@ -25,13 +26,19 @@
   },
   "results": [
     {
+      "answer": "denied at hop 1: fw02 / vsys1, rule interzone-default (deny)",
       "mode": "path",
       "verdict": "denied",
       "at": {
         "hop": 1,
         "check": "security",
         "rule": "interzone-default",
-        "reason": "default rule interzone-default (deny), built-in"
+        "reasons": [
+          {
+            "code": "verdict.default",
+            "text": "default rule interzone-default (deny), built-in"
+          }
+        ]
       },
       "fidelity": {
         "level": "exact"
@@ -51,6 +58,7 @@
       "placed": "connected",
       "outcome": "delivered",
       "end": "198.18.10.100   delivered",
+      "end_code": "path.delivered",
       "stages": [
         {
           "slug": "place",
@@ -238,7 +246,12 @@
           "checks": {
             "security": {
               "verdict": "stop",
-              "reason": "default rule interzone-default (deny), built-in",
+              "reasons": [
+                {
+                  "code": "verdict.default",
+                  "text": "default rule interzone-default (deny), built-in"
+                }
+              ],
               "rule": "interzone-default",
               "default": "interzone-default",
               "default_action": "deny",
@@ -417,7 +430,12 @@
           "checks": {
             "security": {
               "verdict": "stop",
-              "reason": "default rule interzone-default (deny), built-in",
+              "reasons": [
+                {
+                  "code": "verdict.default",
+                  "text": "default rule interzone-default (deny), built-in"
+                }
+              ],
               "rule": "interzone-default",
               "default": "interzone-default",
               "default_action": "deny",

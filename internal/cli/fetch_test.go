@@ -18,7 +18,7 @@ import (
 	"github.com/okaiser/proteus/internal/fetch"
 	"github.com/okaiser/proteus/internal/index"
 	"github.com/okaiser/proteus/internal/inventory"
-	"github.com/okaiser/proteus/internal/search"
+	"github.com/okaiser/proteus/internal/resolve"
 	"github.com/okaiser/proteus/internal/store"
 )
 
@@ -105,7 +105,7 @@ func TestFetchThenAnswerFromLatest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	idx, err := index.For(cfg, config.Scope{Sort: config.ScopeVsys, Name: "vsys1"})
+	idx, err := index.New(cfg, config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}, resolve.Security)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -201,6 +201,9 @@ type cli struct {
 	// lookup, when set, is passed to every app the harness builds, in place of
 	// the real DNS resolver.
 	lookup func(context.Context, string) ([]netip.Addr, error)
+	// canonical goes with lookup: with a fake resolver, the canonical name
+	// comes from this fake too, nil for none.
+	canonical func(context.Context, string) (string, error)
 }
 
 func newCLI(t *testing.T) *cli {
@@ -235,7 +238,7 @@ func (c *cli) runRaw(args ...string) (string, string, int) {
 	a := newApp(&out, &errOut, func(k string) string { return c.env[k] }, func() time.Time { return now })
 	a.peerHost = c.peerHost
 	if c.lookup != nil {
-		a.lookup = c.lookup
+		a.lookup, a.canonical = c.lookup, c.canonical
 	}
 	code := a.execute(context.Background(), args)
 	return out.String(), errOut.String(), code
@@ -335,7 +338,7 @@ func TestSearchAcrossTheEstate(t *testing.T) {
 		Format  int
 		Results []struct{ Device, Vsys, Stage, Kind, Name, Snapshot string }
 	}
-	if err := json.Unmarshal([]byte(out), &env); err != nil || env.Format != 1 || len(env.Results) == 0 ||
+	if err := json.Unmarshal([]byte(out), &env); err != nil || env.Format != 2 || len(env.Results) == 0 ||
 		env.Results[0].Device != "fw01" || env.Results[0].Snapshot == "" {
 		t.Errorf("json: %v %+v", err, env)
 	}
@@ -508,11 +511,11 @@ func TestSimulatePolicyVersionGap(t *testing.T) {
 	out = c.want(0, append(args, "--output", "json")...)
 	var env struct {
 		Unresolved []any
-		Notes      []struct{ Note string }
-		Results    []struct{ Verdict, Reason string }
+		Notes      []struct{ Text string }
+		Results    []struct{ Verdict string }
 	}
 	if err := json.Unmarshal([]byte(out), &env); err != nil || len(env.Unresolved) != 0 || len(env.Notes) != 1 ||
-		!strings.Contains(env.Notes[0].Note, "12.2.0") || env.Results[0].Verdict != "stop" {
+		!strings.Contains(env.Notes[0].Text, "12.2.0") || env.Results[0].Verdict != "stop" {
 		t.Errorf("json: %v\n%s", err, out)
 	}
 }
@@ -548,6 +551,7 @@ func TestSimulateResolvesAnFQDN(t *testing.T) {
 	a.lookup = func(context.Context, string) ([]netip.Addr, error) {
 		return []netip.Addr{netip.MustParseAddr("203.0.113.10")}, nil
 	}
+	a.canonical = nil
 	code := a.execute(context.Background(), []string{
 		"simulate", "policy", "10.0.0.1", "WWW.example.com",
 		"--file", "../../testdata/config/firewall-simulate.xml",
@@ -561,6 +565,7 @@ func TestSimulateResolvesAnFQDN(t *testing.T) {
 		return map[string]string{"PROTEUS_LOG_DIR": filepath.Join(dir, "log"), "PROTEUS_CONFIG": filepath.Join(dir, "none.yaml")}[k]
 	}, time.Now)
 	a.lookup = func(context.Context, string) ([]netip.Addr, error) { return nil, errors.New("no such host") }
+	a.canonical = nil
 	if code := a.execute(context.Background(), []string{
 		"simulate", "policy", "10.0.0.1", "www.example.com",
 		"--file", "../../testdata/config/firewall-simulate.xml",
@@ -624,15 +629,6 @@ func TestSearchWithAUserSnapshot(t *testing.T) {
 	c.want(1, "search", "x", "--file", file)
 	c.env["PROTEUS_USERS"] = "../../testdata/config/firewall-lab.xml"
 	c.want(1, "search", "x", "--file", file)
-}
-
-func TestModeName(t *testing.T) {
-	t.Parallel()
-	for term, want := range map[string]string{"10.0.0.1": "covers", "tcp/443": "covers", "443": "covers", "10.0.0.0/8": "overlaps", "web": "matches"} {
-		if got := modeName(search.Query{Term: term}); got != want {
-			t.Errorf("modeName(%s) = %s, want %s", term, got, want)
-		}
-	}
 }
 
 // Every run writes a log with its command, settings, snapshots and exit; a run that
@@ -872,7 +868,7 @@ func TestFetchNotesReachTheEnvelope(t *testing.T) {
 	t.Parallel()
 	c := newCLI(t)
 	c.inventory(inventoryFor(lab(t).Start(t)))
-	if got := fetchNotes(t, c.want(0, "fetch", "fw01", "--output", "json")); !slices.Contains(got, note{Device: "fw01", Note: tlsOffNote}) {
+	if got := fetchNotes(t, c.want(0, "fetch", "fw01", "--output", "json")); !slices.Contains(got, note{Device: "fw01", Code: "note.tls-off", Note: tlsOff().Text}) {
 		t.Errorf("a lab fetch has the TLS note, got %+v", got)
 	}
 
@@ -910,5 +906,82 @@ func TestFailedDeviceColoursItsPrefix(t *testing.T) {
 	}
 	if got := failedDevice(p, "gone"); got != p.bad("gone") {
 		t.Errorf("an error without a prefix is coloured whole, got %q", got)
+	}
+}
+
+// exporting turns on export_inventory in an inventory of inventoryFor.
+func exporting(doc string) string {
+	return strings.Replace(doc, "defaults:\n", "defaults:\n  export_inventory: true\n", 1)
+}
+
+// With export_inventory, every fetch run writes the inventory without
+// credentials into the store, a failed run too (spec 2026-10-09 §5).
+func TestFetchExportsTheInventory(t *testing.T) {
+	t.Parallel()
+	c := newCLI(t)
+	path := inventory.ExportPath(c.env["PROTEUS_STORE"])
+	c.inventory(inventoryFor(lab(t).Start(t)))
+	c.want(0, "fetch", "fw01")
+	if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("no export without the setting: %v", err)
+	}
+
+	c.inventory(exporting(inventoryFor(lab(t).Start(t))))
+	c.want(0, "fetch", "fw01")
+	b := read(t, path)
+	if strings.Contains(b, "reader") || strings.Contains(b, "LAB_PW") || !strings.Contains(b, "name: fw01") {
+		t.Errorf("export:\n%s", b)
+	}
+	if fi, err := os.Stat(path); err != nil || fi.Mode().Perm() != 0o600 {
+		t.Errorf("export mode: %v, %v", fi, err)
+	}
+	if inv, err := inventory.ReadExport(path); err != nil || !slices.Equal(inv.Names(), []string{"fw01"}) {
+		t.Errorf("ReadExport = %+v, %v", inv, err)
+	}
+
+	// A run whose every device fails still exports the inventory it read.
+	c.inventory(exporting(inventoryFor("127.0.0.1:1", "127.0.0.1:1")))
+	c.want(exitError, "fetch", "--all")
+	if inv, err := inventory.ReadExport(path); err != nil || !slices.Equal(inv.Names(), []string{"fw01", "fw02"}) {
+		t.Errorf("after a failed run: %+v, %v", inv, err)
+	}
+}
+
+// An export that cannot be written leaves the fetch rules in place (C11):
+// a complete run becomes incomplete with a coded note, an incomplete run stays
+// incomplete, and a run that stored nothing stays an error.
+func TestAFailedExportMakesTheFetchIncomplete(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name   string
+		hosts  func(t *testing.T) []string
+		args   []string
+		code   int
+		stored bool
+	}{
+		{"all stored", func(t *testing.T) []string { return []string{lab(t).Start(t)} }, []string{"fw01"}, exitIncomplete, true},
+		{"some stored", func(t *testing.T) []string { return []string{lab(t).Start(t), "127.0.0.1:1"} }, []string{"--all"}, exitIncomplete, true},
+		{"none stored", func(*testing.T) []string { return []string{"127.0.0.1:1"} }, []string{"fw01"}, exitError, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			c := newCLI(t)
+			c.inventory(exporting(inventoryFor(tc.hosts(t)...)))
+			// A directory where the export goes: the rename fails.
+			if err := os.MkdirAll(filepath.Join(inventory.ExportPath(c.env["PROTEUS_STORE"]), "x"), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			out, errOut, code := c.run(append([]string{"fetch"}, tc.args...)...)
+			if code != tc.code || !strings.Contains(out, "note: inventory export") || strings.Contains(out, "stored fw01@") != tc.stored {
+				t.Errorf("exit %d\nstdout:\n%s\nstderr:\n%s", code, out, errOut)
+			}
+			if !tc.stored && !strings.Contains(errOut, "no device was fetched") {
+				t.Errorf("stderr:\n%s", errOut)
+			}
+			out, _, _ = c.run(append([]string{"fetch", "--output", "json"}, tc.args...)...)
+			if !strings.Contains(out, `"code": "note.export-failed"`) {
+				t.Errorf("json:\n%s", out)
+			}
+		})
 	}
 }

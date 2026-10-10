@@ -1,11 +1,14 @@
 package securitypolicy
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
+	"github.com/okaiser/proteus/internal/reason"
 	"github.com/okaiser/proteus/internal/resolve"
 	"github.com/okaiser/proteus/internal/simulate"
 )
@@ -24,46 +27,47 @@ func TestDecision(t *testing.T) {
 		flow     simulate.Flow
 		outcome  Outcome
 		reason   string
+		code     reason.Code
 		fidelity string // the first-match stage's
 	}{
 		{
 			"the first candidate is certain",
 			flow("198.18.1.68", "192.0.2.1", "home", "wan", "udp", 443),
-			Stop, "rule block-udp-443 (deny)", "exact",
+			Stop, "rule block-udp-443 (deny)", "verdict.rule", "exact",
 		},
 		{
 			"earlier candidates in doubt share the action",
 			flow("198.18.1.10", "192.0.2.9", "home", "wan", "tcp", 443),
-			Pass, "rule internet (allow)",
+			Pass, "rule internet (allow)", "verdict.rule",
 			"overmatch: earlier candidates in doubt share the action allow: app-one, app-two; not evaluated: application",
 		},
 		{
 			"no candidate: the default rule",
 			flow("198.19.0.254", "198.18.1.10", "labor", "home", "tcp", 22),
-			Stop, "default rule interzone-default (deny), built-in", "exact",
+			Stop, "default rule interzone-default (deny), built-in", "verdict.default", "exact",
 		},
 		{
 			"an earlier candidate in doubt has another action",
 			flow("10.0.0.5", "203.0.113.5", "dmz", "wan", "tcp", 443),
-			Undecided, `dmz-user (deny) at position 7 may match first: user not evaluated (corp\alice)`,
+			Undecided, `dmz-user (deny) at position 7 may match first: user not evaluated (corp\alice)`, "doubt.not-evaluated.user",
 			`undermatch: dmz-user (deny) at position 7 may match first: user not evaluated (corp\alice); not evaluated: application, user`,
 		},
 		{
 			"candidates in doubt share the default's action",
 			flow("198.19.0.254", "10.2.0.5", "labor", "dmz", "tcp", 443),
-			Stop, "default rule interzone-default (deny), built-in",
+			Stop, "default rule interzone-default (deny), built-in", "verdict.default",
 			"overmatch: earlier candidates in doubt share the action deny: labor-app; not evaluated: application",
 		},
 		{
 			"a candidate in doubt has another action than the default",
 			flow("10.0.0.5", "192.0.2.9", "home", "wan", "tcp", 443),
-			Undecided, "app-one (allow) at position 3 may match first: service application-default",
+			Undecided, "app-one (allow) at position 3 may match first: service application-default", "doubt.service-application-default",
 			"undermatch: app-one (allow) at position 3 may match first: service application-default; not evaluated: application",
 		},
 		{
 			"every candidate in doubt, and no default without known zones",
 			flow("10.0.0.5", "192.0.2.9", "nowhere", "wan", "tcp", 443),
-			Undecided, "the default rule depends on the zones",
+			Undecided, "the default rule depends on the zones", "default.zones-unknown",
 			"undermatch: the default rule depends on the zones; not evaluated: application",
 		},
 	} {
@@ -71,7 +75,7 @@ func TestDecision(t *testing.T) {
 			r, v := run(t, e, c.flow)
 			got, why := v.Decision()
 			fm := stage(r, "first-match")
-			if got != c.outcome || why != c.reason || fm.Fidelity.String() != c.fidelity {
+			if got != c.outcome || why.Text() != c.reason || why[0].Code != c.code || fm.Fidelity.String() != c.fidelity {
 				t.Errorf("%s: %s, %q, first-match %s\nwant %s, %q, %s\n(%s)", c.name, got, why, fm.Fidelity, c.outcome, c.reason, c.fidelity, fm.Detail)
 			}
 			for _, st := range r.Stages {
@@ -110,16 +114,21 @@ func TestDecisionOfAVerdict(t *testing.T) {
 	for _, c := range []struct {
 		v       Verdict
 		outcome Outcome
+		code    reason.Code
 		reason  string
 	}{
-		{Verdict{}, Undecided, "no rule decides"},
-		{Verdict{Rule: &resolve.Rule{Name: "r", Action: "reset-both"}}, Stop, "rule r (reset-both)"},
-		{Verdict{Rule: &resolve.Rule{Name: "r", Action: "allow"}}, Pass, "rule r (allow)"},
-		{Verdict{Rule: &resolve.Rule{Name: "r", Action: "maybe"}}, Undecided, "rule r (maybe) is not a security rule action"},
-		{Verdict{Rule: &resolve.Rule{Name: "r", Action: "allow"}, Undecided: "doubt"}, Undecided, "doubt"},
-		{Verdict{Default: "intrazone-default", DefaultAction: "allow", DefaultSource: "local"}, Pass, "default rule intrazone-default (allow), local"},
+		{Verdict{}, Undecided, "default.none", "no rule decides"},
+		{Verdict{Rule: &resolve.Rule{Name: "r", Action: "reset-both"}}, Stop, "verdict.rule", "rule r (reset-both)"},
+		{Verdict{Rule: &resolve.Rule{Name: "r", Action: "allow"}}, Pass, "verdict.rule", "rule r (allow)"},
+		{Verdict{Rule: &resolve.Rule{Name: "r", Action: "maybe"}}, Undecided, "doubt.invalid-action", "rule r (maybe) is not a security rule action"},
+		{
+			Verdict{Rule: &resolve.Rule{Name: "r", Action: "allow"}, Undecided: simulate.Reasons{reason.New("doubt.application", "doubt")}},
+			Undecided, "doubt.application", "doubt",
+		},
+		{Verdict{Default: "intrazone-default", DefaultAction: "allow", DefaultSource: "local"}, Pass, "verdict.default", "default rule intrazone-default (allow), local"},
+		{Verdict{Default: "intrazone-default", DefaultAction: "maybe", DefaultSource: "local"}, Undecided, "default.invalid-action", "default rule intrazone-default (maybe), local is not a security rule action"},
 	} {
-		if got, why := c.v.Decision(); got != c.outcome || why != c.reason {
+		if got, why := c.v.Decision(); got != c.outcome || why.Text() != c.reason || why[0].Code != c.code {
 			t.Errorf("%+v: %s, %q; want %s, %q", c.v, got, why, c.outcome, c.reason)
 		}
 	}
@@ -158,7 +167,7 @@ func TestAnUndermatchLeavesTheFlowUndecided(t *testing.T) {
 	} {
 		r, v := run(t, c.env, c.flow)
 		got, why := v.Decision()
-		if got != c.outcome || !strings.HasPrefix(why, c.reason) || strings.Contains(why, "kept rules") {
+		if got != c.outcome || !strings.HasPrefix(why.Text(), c.reason) || strings.Contains(why.Text(), "kept rules") {
 			t.Errorf("%s: %s, %q; want %s, %q (fidelity %s)", c.name, got, why, c.outcome, c.reason, r.Fidelity)
 		}
 		if got == Undecided && r.Fidelity.Level() != "undermatch" {
@@ -172,12 +181,31 @@ func TestAnUndermatchLeavesTheFlowUndecided(t *testing.T) {
 func TestUndermatchedKeepsOnlyUndermatchReasons(t *testing.T) {
 	t.Parallel()
 	stages := []simulate.Stage{
-		{Slug: "match-service", Fidelity: simulate.OverMatchBecause("kept rules whose service is application-default")},
+		{Slug: "match-service", Fidelity: simulate.OverMatchBecause(reason.New("doubt.service-kept", "kept rules whose service is application-default"))},
 		{Slug: "match-url", Fidelity: simulate.Weakest(
-			simulate.OverMatchBecause("kept rules naming a category the configuration does not define, such as a PAN-DB category: r1"),
-			simulate.UnderMatch("cat-x cannot be matched"))},
+			simulate.OverMatchBecause(reason.New("doubt.category-undefined",
+				"kept rules naming a category the configuration does not define, such as a PAN-DB category: r1")),
+			simulate.UnderMatch(reason.New("gap.category-match", "cat-x cannot be matched")),
+			simulate.UnderMatch(reason.New("gap.object-unresolved", "y is unknown")))},
 	}
-	if got := undermatched(stages); got != "cat-x cannot be matched" {
+	// Several undermatch reasons stay parts, each with its code.
+	if got := undermatched(stages); !slices.Equal(got, simulate.Reasons{
+		reason.New("gap.category-match", "cat-x cannot be matched"), reason.New("gap.object-unresolved", "y is unknown"),
+	}) {
 		t.Errorf("undermatched = %q", got)
+	}
+}
+
+// Format 2 writes undecided as its parts, each with its code, and leaves it out
+// when the flow is decided.
+func TestVerdictJSONWritesUndecidedParts(t *testing.T) {
+	t.Parallel()
+	b, err := json.Marshal(Verdict{Undecided: simulate.Reasons{reason.New("default.none", "no rule decides")}})
+	if err != nil || !strings.Contains(string(b), `"undecided":[{"code":"default.none","text":"no rule decides"}]`) {
+		t.Errorf("%s %v", b, err)
+	}
+	b, err = json.Marshal(Verdict{Default: "intrazone-default"})
+	if err != nil || strings.Contains(string(b), "undecided") || !strings.Contains(string(b), `"default":"intrazone-default"`) {
+		t.Errorf("%s %v", b, err)
 	}
 }

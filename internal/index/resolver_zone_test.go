@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/okaiser/proteus/internal/config"
+	"github.com/okaiser/proteus/internal/resolve"
 )
 
 func zonesIndex(t *testing.T) *Index {
@@ -401,7 +402,7 @@ func TestZoneResolverKeepsEveryPlacementForShared(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	idx, err := For(cfg, config.Scope{Sort: config.ScopeShared})
+	idx, err := New(cfg, config.Scope{Sort: config.ScopeShared}, resolve.Security)
 	if err != nil {
 		t.Fatal(err)
 	}

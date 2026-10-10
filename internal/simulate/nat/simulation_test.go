@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/okaiser/proteus/internal/config"
+	"github.com/okaiser/proteus/internal/reason"
 	"github.com/okaiser/proteus/internal/resolve"
 	"github.com/okaiser/proteus/internal/simulate"
 )
@@ -51,7 +52,7 @@ func fw01Env(t *testing.T, file string) *simulate.Env {
 	}
 	return &simulate.Env{
 		Network: fw01{simulate.DeviceData{Name: "fw01", Interfaces: fw01Interfaces(t), FIB: routes}},
-		Load:    func(string, string) (simulate.Target, error) { return simulate.Target{Config: cfg}, nil },
+		Load:    func(_, vsys string) (simulate.Target, error) { return withIndexes(cfg, vsys), nil },
 	}
 }
 
@@ -109,7 +110,7 @@ func TestSimulateIngress(t *testing.T) {
 	// Given by interface.
 	// No source: the dmz rules that name one are doubts, internet-a is sure.
 	if _, res, _ := run(t, env, "", "198.18.250.200", 443, map[string]string{"from-interface": "ethernet1/4"}); res.Rule == nil || res.Rule.Name != "internet-a" ||
-		len(res.Doubts) != 2 || res.Doubts[0].Rule != "t-bidir" || res.Doubts[0].Reason != "the source is unknown" {
+		len(res.Doubts) != 2 || res.Doubts[0].Rule != "t-bidir" || res.Doubts[0].Reasons.Joined() != reason.New("doubt.source-unknown", "the source is unknown") {
 		t.Errorf("from-interface: %v, doubts %v", res.Rule, res.Doubts)
 	}
 	if _, _, err := run(t, env, "", "198.18.250.200", 443, map[string]string{"from-interface": "nope", "router": "default"}); err == nil {
@@ -146,7 +147,7 @@ func TestSimulatePBFAndChoices(t *testing.T) {
 	// firewall-routing.xml's PBF rule for branch-vpn, on fw01's tables.
 	env := fw01Env(t, "firewall-routing.xml")
 	r, res, _ := run(t, env, "10.20.5.5", "8.8.8.8", 443, map[string]string{"from-zone": "branch-vpn", "router": "default"})
-	if r.Stages[1].Fidelity.Level() != "inferred" || len(res.Notes) == 0 || !strings.Contains(res.Notes[0], "pbf rule branch-to-zscaler") {
+	if r.Stages[1].Fidelity.Level() != "inferred" || len(res.Notes) == 0 || !strings.Contains(res.Notes[0].Text, "pbf rule branch-to-zscaler") || res.Notes[0].Code != "path.pbf" {
 		t.Errorf("pbf: %s, notes %v", slugs(r), res.Notes)
 	}
 	env.Load = nil
@@ -171,7 +172,12 @@ func TestSimulatePBFAndChoices(t *testing.T) {
 		"ipv6":        {env, "", "2001:db8::1", nil},
 		"ipv6 source": {env, "2001:db8::1", "8.8.8.8", nil},
 	} {
-		if _, _, err := run(t, tc.env, tc.src, tc.dst, 443, tc.params); !errors.As(err, &ce) {
+		// Only the router is a choice; the others are inputs NAT cannot take.
+		kind := ""
+		if name == "routers" {
+			kind = simulate.ChoiceRouter
+		}
+		if _, _, err := run(t, tc.env, tc.src, tc.dst, 443, tc.params); !errors.As(err, &ce) || ce.Kind != kind {
 			t.Errorf("%s: %v", name, err)
 		}
 	}
@@ -195,5 +201,20 @@ func TestAnUnreadableDeviceIsUnavailable(t *testing.T) {
 	})
 	if _, ok := errors.AsType[*simulate.UnavailableError](err); !ok {
 		t.Errorf("err = %v, want UnavailableError", err)
+	}
+}
+
+// An FQDN's alias and the addresses not followed are notes of the result.
+func TestDNSNotesLeadTheResult(t *testing.T) {
+	t.Parallel()
+	dst := simulate.Endpoint{
+		Name: "web.example", Resolved: true, Canonical: "edge.example",
+		Addrs: []netip.Addr{netip.MustParseAddr("198.18.250.10"), netip.MustParseAddr("198.18.250.11")},
+	}
+	f := simulate.Flow{Source: simulate.Addr(netip.MustParseAddr("198.18.1.10")), Destination: dst, Protocol: "tcp", DestPort: 8443}
+	r, err := Simulation{}.Run(context.Background(), fw01Env(t, "firewall-nat.xml"), simulate.Input{Flow: f, Params: map[string]string{"device": "fw01", "router": "default"}})
+	res, _ := r.Output.(Result)
+	if err != nil || len(res.Notes) < 2 || res.Notes[0].Code != "dns.canonical-name" || res.Notes[1].Code != "dns.other-addresses" {
+		t.Errorf("notes = %v, %v", res.Notes, err)
 	}
 }

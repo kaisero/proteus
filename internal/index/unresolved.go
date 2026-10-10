@@ -1,6 +1,10 @@
 package index
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/okaiser/proteus/internal/reason"
+)
 
 // Unresolved records something a lookup could not evaluate, and why.
 //
@@ -12,12 +16,22 @@ import "fmt"
 type Unresolved struct {
 	// Value is what was asked about: a query value, or the object whose contents
 	// could not be determined.
-	Value string
+	Value string `json:"value"`
 	// Kind is the schema object kind involved, empty when the value named no kind.
-	Kind string
+	Kind string `json:"kind"`
+	// Code names the kind of reason.
+	Code reason.Code `json:"code"`
 	// Reason says why the evaluation could not be completed.
-	Reason string
+	Reason string `json:"text"`
 }
+
+// NewUnresolved returns an entry for value and kind with r's code and text.
+func NewUnresolved(value, kind string, r reason.Reason) Unresolved {
+	return Unresolved{Value: value, Kind: kind, Reason: r.Text, Code: r.Code}
+}
+
+// Why returns the entry's code and text as one reason.
+func (u Unresolved) Why() reason.Reason { return reason.Reason{Code: u.Code, Text: u.Reason} }
 
 func (u Unresolved) String() string {
 	if u.Kind == "" {

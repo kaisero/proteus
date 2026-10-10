@@ -50,9 +50,9 @@ func TestLiveConfigLoads(t *testing.T) {
 				r.Position, r.Layer, r.Scope, r.Name, r.Fields["source"], r.Fields["destination"])
 		}
 
-		idx, err := index.For(cfg, tg.Scope())
+		idx, err := index.New(cfg, tg.Scope(), resolve.Security)
 		if err != nil {
-			t.Fatalf("index.For %s: %v", tg.Scope(), err)
+			t.Fatalf("index.New %s: %v", tg.Scope(), err)
 		}
 		for _, o := range objs {
 			refs := idx.Refs(o.Name)

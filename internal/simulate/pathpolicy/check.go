@@ -4,6 +4,7 @@ import (
 	"context"
 	"slices"
 
+	"github.com/okaiser/proteus/internal/reason"
 	"github.com/okaiser/proteus/internal/simulate"
 	"github.com/okaiser/proteus/internal/simulate/routing"
 	"github.com/okaiser/proteus/internal/simulate/securitypolicy"
@@ -32,12 +33,16 @@ func (Security) Evaluate(ctx context.Context, env *simulate.Env, h routing.Hop, 
 	if h.Vsys == "" || flow.FromZone == "" || flow.ToZone == "" {
 		// Without both zones securitypolicy would derive them; the path gives the
 		// zones, or the hop has none to check (spec §4.4).
-		out.Verdict, out.Reason, out.Fidelity = NotEvaluated, "the hop's vsys or zones are not known", simulate.Exact
+		code := reason.Code("zone.missing")
+		if h.Vsys == "" {
+			code = "zone.vsys-unknown"
+		}
+		out.Verdict, out.Reason, out.Fidelity = NotEvaluated, simulate.Reasons{reason.New(code, "the hop's vsys or zones are not known")}, simulate.Exact
 		return out, nil
 	}
 	t, miss := load(env, h)
 	if miss != nil {
-		out.Verdict, out.Reason, out.Fidelity = Undecided, miss.Reason, simulate.UnderMatch(miss.Reason)
+		out.Verdict, out.Reason, out.Fidelity = Undecided, simulate.Reasons{miss.Why()}, simulate.UnderMatch(miss.Why())
 		return out, &simulate.UnavailableError{Missing: []simulate.Missing{*miss}}
 	}
 	run, err := securitypolicy.Simulation{}.Run(ctx, env, simulate.Input{Device: h.Device, Vsys: h.Vsys, Flow: trim(flow)})
@@ -54,11 +59,11 @@ func (Security) Evaluate(ctx context.Context, env *simulate.Env, h routing.Hop, 
 			fs = append(fs, st.Fidelity)
 		}
 	}
-	if gap := t.Index.VersionGap(); gap != "" {
+	if gap := t.Config.VersionGap(); gap != "" {
 		// Read with the nearest older schema: inferred, not undecided (spec E25).
 		fs = append(fs, simulate.Inferred)
-		if !slices.Contains(out.Notes, gap) {
-			out.Notes = append(out.Notes, gap)
+		if !slices.ContainsFunc(out.Notes, func(n reason.Reason) bool { return n.Code == "gap.version" }) {
+			out.Notes = append(out.Notes, reason.New("gap.version", gap))
 		}
 	}
 	out.Fidelity = simulate.Weakest(fs...)
@@ -72,7 +77,7 @@ func (Security) Evaluate(ctx context.Context, env *simulate.Env, h routing.Hop, 
 		out.Verdict = Stop
 	default:
 		out.Verdict = Undecided
-		out.Fidelity = simulate.Weakest(out.Fidelity, simulate.UnderMatch(why))
+		out.Fidelity = simulate.Weakest(out.Fidelity, simulate.UnderMatch(why...))
 	}
 	if out.Verdict != Undecided {
 		out.Rule = v.Default

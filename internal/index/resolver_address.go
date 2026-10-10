@@ -6,6 +6,7 @@ import (
 
 	"github.com/RoaringBitmap/roaring/v2"
 
+	"github.com/okaiser/proteus/internal/reason"
 	"github.com/okaiser/proteus/internal/resolve"
 )
 
@@ -52,11 +53,8 @@ func (r *addressResolver) resolve(value string, _ Providers) ([]Hit, []Unresolve
 	if hits, ok := r.fqdn[strings.ToLower(value)]; ok {
 		// The object is found by its FQDN, but the addresses behind that name are
 		// resolved on the device and are not in the file.
-		un := []Unresolved{{
-			Value:  value,
-			Kind:   "address",
-			Reason: "an fqdn object matches this name, but the addresses it resolves to are not in the configuration, so rules reaching those addresses another way are not reported",
-		}}
+		un := []Unresolved{NewUnresolved(value, "address", reason.New("gap.fqdn-no-address",
+			"an fqdn object matches this name, but the addresses it resolves to are not in the configuration, so rules reaching those addresses another way are not reported"))}
 		return hits, un, true
 	}
 	return nil, nil, false

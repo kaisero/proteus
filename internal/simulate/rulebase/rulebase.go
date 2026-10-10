@@ -4,6 +4,7 @@
 package rulebase
 
 import (
+	"errors"
 	"fmt"
 	"net/netip"
 	"slices"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/okaiser/proteus/internal/config"
 	"github.com/okaiser/proteus/internal/index"
+	"github.com/okaiser/proteus/internal/reason"
 	"github.com/okaiser/proteus/internal/resolve"
 	"github.com/okaiser/proteus/internal/simulate"
 )
@@ -21,6 +23,8 @@ type Vsys struct {
 	Config *config.Config
 	Target *resolve.Target
 	Scope  config.Scope
+	// Indexes is the loaded target's index provider.
+	Indexes func(resolve.Rulebase) (*index.Index, error)
 }
 
 // Load reads a device's vsys through a simulation's loader; false when there is
@@ -36,7 +40,7 @@ func Load(load func(device, vsys string) (simulate.Target, error), device, vsys 
 	tgs := resolve.Targets(t.Config)
 	for _, tg := range tgs {
 		if tg.Scope().Name == vsys {
-			return Vsys{Config: t.Config, Target: tg, Scope: tg.Scope()}, true
+			return Vsys{Config: t.Config, Target: tg, Scope: tg.Scope(), Indexes: t.Indexes}, true
 		}
 	}
 	return Vsys{}, false
@@ -54,10 +58,10 @@ func Load(load func(device, vsys string) (simulate.Target, error), device, vsys 
 func (v Vsys) Sides(rb resolve.Rulebase, src, dst netip.Addr, negated func(int) (bool, bool)) (
 	s, d *roaring.Bitmap, unresolved []index.Unresolved,
 ) {
-	idx, err := index.ForRulebase(v.Config, v.Scope, rb)
+	idx, err := v.index(rb)
 	if err != nil {
-		reason := fmt.Sprintf("the %s rules of %s were not checked: %v", rb, v.Scope.Name, err)
-		return roaring.New(), roaring.New(), []index.Unresolved{{Value: v.Scope.Name, Reason: reason}}
+		why := reason.New("gap.load-failed", fmt.Sprintf("the %s rules of %s were not checked: %v", rb, v.Scope.Name, err))
+		return roaring.New(), roaring.New(), []index.Unresolved{index.NewUnresolved(v.Scope.Name, "", why)}
 	}
 	n := len(idx.Rules())
 	all := roaring.New()
@@ -67,7 +71,7 @@ func (v Vsys) Sides(rb resolve.Rulebase, src, dst netip.Addr, negated func(int) 
 			return all.Clone()
 		}
 		b, rep := idx.Candidates(f, a.String())
-		unresolved = append(unresolved, withoutGap(rep.Unresolved, v.Config.VersionGap())...)
+		unresolved = append(unresolved, withoutGap(rep.Unresolved)...)
 		out := b.Clone()
 		for i := range n {
 			if neg(i) {
@@ -85,13 +89,31 @@ func (v Vsys) Sides(rb resolve.Rulebase, src, dst netip.Addr, negated func(int) 
 	return s, d, unresolved
 }
 
+// index returns the vsys's index of a rulebase from the loader's provider. A target
+// without one is a loader's mistake, reported like a failed build rather than
+// built here: the loader's owner keeps the indexes.
+func (v Vsys) index(rb resolve.Rulebase) (*index.Index, error) {
+	if v.Indexes == nil {
+		return nil, errors.New("no index provider")
+	}
+	idx, err := v.Indexes(rb)
+	if err != nil {
+		return nil, err
+	}
+	// A provider of another vsys would answer with that vsys's rules.
+	if idx.Scope() != v.Scope {
+		return nil, fmt.Errorf("the index provider gives %s, not %s", idx.Scope(), v.Scope)
+	}
+	return idx, nil
+}
+
 // withoutGap drops the schema version gap from a report's unresolved values. The
 // callers of Sides note a gap themselves, as an inferred answer rather than a
 // missing one.
-func withoutGap(unresolved []index.Unresolved, gap string) []index.Unresolved {
+func withoutGap(unresolved []index.Unresolved) []index.Unresolved {
 	var out []index.Unresolved
 	for _, u := range unresolved {
-		if gap == "" || u.Reason != gap {
+		if u.Code != "gap.version" {
 			out = append(out, u)
 		}
 	}
@@ -123,7 +145,8 @@ func Certainty(rb resolve.Rulebase, unresolved []index.Unresolved) simulate.Fide
 	if len(unresolved) == 0 {
 		return simulate.Exact
 	}
-	return simulate.UnderMatch(fmt.Sprintf("a %s rule reached only through an unresolved value may be missing", rb))
+	return simulate.UnderMatch(reason.New("gap.object-unresolved",
+		fmt.Sprintf("a %s rule reached only through an unresolved value may be missing", rb)))
 }
 
 // PBFMatch is the result of checking a flow against a vsys's PBF rules.
@@ -131,9 +154,9 @@ type PBFMatch struct {
 	// Rule is the first rule that could take the flow; Found says whether there is one.
 	Rule  resolve.PBFRule
 	Found bool
-	// Note says what the rule would do; "" for no-pbf, which leaves the packet to
-	// routing.
-	Note string
+	// Note says what the rule would do; the zero reason for no-pbf, which leaves
+	// the packet to routing.
+	Note reason.Reason
 	// Unresolved lists values the rules name that could not be evaluated. A rule
 	// reached only through one of them may be missing.
 	Unresolved []index.Unresolved
@@ -153,14 +176,15 @@ func (v Vsys) PBF(src, dst netip.Addr, in simulate.Port) PBFMatch {
 		}
 		switch r.ActionKind {
 		case resolve.PBFForward:
-			m.Note = fmt.Sprintf("pbf rule %s may forward this packet to %s", r.Name, r.EgressInterface)
+			note := fmt.Sprintf("pbf rule %s may forward this packet to %s", r.Name, r.EgressInterface)
 			if r.NextHop != "" {
-				m.Note += " via " + r.NextHop
+				note += " via " + r.NextHop
 			}
+			m.Note = reason.New("path.pbf", note)
 		case resolve.PBFForwardToVsys:
-			m.Note = fmt.Sprintf("pbf rule %s may forward this packet to %s", r.Name, r.ForwardVsys)
+			m.Note = reason.New("path.pbf", fmt.Sprintf("pbf rule %s may forward this packet to %s", r.Name, r.ForwardVsys))
 		case resolve.PBFDiscard:
-			m.Note = fmt.Sprintf("pbf rule %s may drop this packet", r.Name)
+			m.Note = reason.New("path.pbf", fmt.Sprintf("pbf rule %s may drop this packet", r.Name))
 		}
 		m.Rule, m.Found = r, true
 		return m

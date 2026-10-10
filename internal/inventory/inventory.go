@@ -11,9 +11,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -36,41 +39,72 @@ type Inventory struct {
 	Version  int      `yaml:"version"`
 	Defaults Settings `yaml:"defaults"`
 	Devices  []Device `yaml:"devices"`
+	// MCP configures proteus mcp. It is written here, in the fetch side's
+	// inventory, and reaches the server through the export (spec 2026-10-09
+	// §4.2, §5). Nil when the file has no mcp: section.
+	MCP *MCP `yaml:"mcp,omitempty"`
+}
+
+// MCP is the mcp: section. Each value can also come from a PROTEUS_MCP_*
+// variable or a flag, which win over the file; zero leaves the default. The
+// token itself is never in the inventory: TokenFile names the file that holds
+// it.
+type MCP struct {
+	Listen         string   `yaml:"listen,omitempty"`          // host:port for --http
+	TokenFile      string   `yaml:"token_file,omitempty"`      // the file that holds the bearer token
+	AllowedHosts   []string `yaml:"allowed_hosts,omitempty"`   // Host header values --http accepts
+	IdentityHeader string   `yaml:"identity_header,omitempty"` // the header with the caller's claims
+	AuditClaims    []string `yaml:"audit_claims,omitempty"`    // the claims the audit line records
+	AuditLog       string   `yaml:"audit_log,omitempty"`       // the audit file, one JSON line per call; - for standard output
+	AuditMaxMB     int      `yaml:"audit_max_mb,omitempty"`    // the audit file's size before it rotates, in MB
+	AuditKeep      int      `yaml:"audit_keep,omitempty"`      // rotated audit files kept
+	LogDir         string   `yaml:"log_dir,omitempty"`         // run logs of the calls, apart from the CLI's
+	LogKeep        int      `yaml:"log_keep,omitempty"`        // run logs kept
+	MaxConcurrent  int      `yaml:"max_concurrent,omitempty"`  // calls answered at once
+	MaxQueue       int      `yaml:"max_queue,omitempty"`       // calls waiting for a slot
+	MaxWait        string   `yaml:"max_wait,omitempty"`        // how long a call waits for a slot, e.g. 10s
+	CallTimeout    string   `yaml:"call_timeout,omitempty"`    // how long a call may run, e.g. 60s
+	MaxLoads       int      `yaml:"max_loads,omitempty"`       // snapshot loads at once
+	MaxCache       int      `yaml:"max_cache,omitempty"`       // cache size in MB
 }
 
 // Settings are the values a device takes unless it sets its own.
 type Settings struct {
-	InsecureTLS  *bool  `yaml:"insecure_tls"`
-	Timeout      int    `yaml:"timeout"` // seconds
-	SnapshotKeep int    `yaml:"snapshot_keep"`
-	Username     string `yaml:"username"`
-	PasswordEnv  string `yaml:"password_env"`
-	Password     string `yaml:"password"`
+	InsecureTLS  *bool  `yaml:"insecure_tls,omitempty"`
+	Timeout      int    `yaml:"timeout,omitempty"` // seconds
+	SnapshotKeep int    `yaml:"snapshot_keep,omitempty"`
+	Username     string `yaml:"username,omitempty"`
+	PasswordEnv  string `yaml:"password_env,omitempty"`
+	Password     string `yaml:"password,omitempty"`
 
 	// The analysis settings of spec §15 C14. Each can also come from a PROTEUS_*
 	// variable or a flag, which win over the file.
-	Store          string `yaml:"store"`            // snapshot store root
-	MaxSnapshotAge string `yaml:"max_snapshot_age"` // e.g. 24h or 7d
-	Output         string `yaml:"output"`           // text or json
-	LogLevel       string `yaml:"log_level"`        // error, warn, info or debug
-	LogDir         string `yaml:"log_dir"`          // where run logs go
-	LogKeep        int    `yaml:"log_keep"`         // run logs kept
-	Color          string `yaml:"color"`            // auto, always or never
+	Store          string `yaml:"store,omitempty"`            // snapshot store root
+	MaxSnapshotAge string `yaml:"max_snapshot_age,omitempty"` // e.g. 24h or 7d
+	Output         string `yaml:"output,omitempty"`           // text or json
+	LogLevel       string `yaml:"log_level,omitempty"`        // error, warn, info or debug
+	LogDir         string `yaml:"log_dir,omitempty"`          // where run logs go
+	LogKeep        int    `yaml:"log_keep,omitempty"`         // run logs kept
+	Color          string `yaml:"color,omitempty"`            // auto, always or never
+
+	// ExportInventory makes fetch write the inventory without credentials to
+	// <store>/.proteus/inventory.yaml after every run, for proteus mcp.
+	ExportInventory bool `yaml:"export_inventory,omitempty"`
 }
 
 // Device is one firewall.
 type Device struct {
-	Name        string            `yaml:"name"`
-	Host        string            `yaml:"host"`
-	Username    string            `yaml:"username"`
-	PasswordEnv string            `yaml:"password_env"`
-	Password    string            `yaml:"password"`
-	InsecureTLS *bool             `yaml:"insecure_tls"`
-	Timeout     int               `yaml:"timeout"`
-	Labels      map[string]string `yaml:"labels"`
+	Name        string            `yaml:"name,omitempty"`
+	Host        string            `yaml:"host,omitempty"`
+	Username    string            `yaml:"username,omitempty"`
+	PasswordEnv string            `yaml:"password_env,omitempty"`
+	Password    string            `yaml:"password,omitempty"`
+	InsecureTLS *bool             `yaml:"insecure_tls,omitempty"`
+	Timeout     int               `yaml:"timeout,omitempty"`
+	Labels      map[string]string `yaml:"labels,omitempty"`
 	// HAPeer is the reachable host of the device's HA peer, for when the address
 	// the device reports is not reachable from here.
-	HAPeer string `yaml:"ha_peer"`
+	HAPeer string `yaml:"ha_peer,omitempty"`
 }
 
 // Target is one device with every default applied and its password read.
@@ -138,6 +172,9 @@ func (inv *Inventory) validate() error {
 	if inv.Defaults.LogKeep < 0 {
 		return errors.New("inventory: defaults: log_keep must not be negative")
 	}
+	if err := inv.MCP.Validate(); err != nil {
+		return fmt.Errorf("inventory: %w", err)
+	}
 	seen := map[string]bool{}
 	for i, d := range inv.Devices {
 		switch {
@@ -154,6 +191,66 @@ func (inv *Inventory) validate() error {
 	}
 	return nil
 }
+
+// Validate checks the mcp: values that a typo could turn into a default, or
+// that the server could not use. A nil section is valid. proteus mcp checks
+// the values from every source with it, not only the file's.
+func (m *MCP) Validate() error {
+	if m == nil {
+		return nil
+	}
+	for _, n := range []struct {
+		key string
+		v   int
+	}{
+		{"audit_max_mb", m.AuditMaxMB},
+		{"audit_keep", m.AuditKeep},
+		{"log_keep", m.LogKeep},
+		{"max_concurrent", m.MaxConcurrent},
+		{"max_queue", m.MaxQueue},
+		{"max_loads", m.MaxLoads},
+		{"max_cache", m.MaxCache},
+	} {
+		if n.v < 0 {
+			return fmt.Errorf("mcp: %s must not be negative", n.key)
+		}
+	}
+	for _, d := range []struct{ key, v string }{{"max_wait", m.MaxWait}, {"call_timeout", m.CallTimeout}} {
+		if d.v == "" {
+			continue
+		}
+		if v, err := time.ParseDuration(d.v); err != nil || v <= 0 {
+			return fmt.Errorf("mcp: %s %q: want a duration like 10s", d.key, d.v)
+		}
+	}
+	if m.Listen != "" {
+		host, port, err := net.SplitHostPort(m.Listen)
+		if n, perr := strconv.Atoi(port); err != nil || perr != nil || n < 1 || n > 65535 || strings.ContainsAny(host, " /") {
+			return fmt.Errorf("mcp: listen %q: want host:port, such as 127.0.0.1:8765", m.Listen)
+		}
+	}
+	for _, h := range m.AllowedHosts {
+		if h == "" || strings.ContainsAny(h, " /") {
+			return fmt.Errorf("mcp: allowed_hosts: %q is not a host name", h)
+		}
+		// The server compares the Host without its port and brackets, so an
+		// entry with them never matches. A colon is fine in an IPv6 address.
+		if _, err := netip.ParseAddr(h); strings.ContainsAny(h, "[]") || strings.Contains(h, ":") && err != nil {
+			return fmt.Errorf("mcp: allowed_hosts: %q: give the host without a port or brackets", h)
+		}
+	}
+	if m.IdentityHeader != "" && !headerName.MatchString(m.IdentityHeader) {
+		return fmt.Errorf("mcp: identity_header %q is not an HTTP header name", m.IdentityHeader)
+	}
+	if slices.Contains(m.AuditClaims, "") {
+		return errors.New("mcp: audit_claims: an entry is empty")
+	}
+	return nil
+}
+
+// headerName is an HTTP field name: one or more token characters (RFC 9110
+// §5.1, §5.6.2).
+var headerName = regexp.MustCompile("^[!#$%&'*+.^_`|~0-9A-Za-z-]+$")
 
 // Names returns the device names in file order.
 func (inv *Inventory) Names() []string {

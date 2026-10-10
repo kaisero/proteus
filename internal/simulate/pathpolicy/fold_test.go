@@ -9,6 +9,7 @@ import (
 
 	"github.com/okaiser/proteus/internal/config"
 	"github.com/okaiser/proteus/internal/index"
+	"github.com/okaiser/proteus/internal/reason"
 	"github.com/okaiser/proteus/internal/simulate"
 	"github.com/okaiser/proteus/internal/simulate/pathlab"
 	"github.com/okaiser/proteus/internal/simulate/routing"
@@ -16,7 +17,7 @@ import (
 
 // check is a security check result with a verdict; a stop or pass names rule r.
 func check(v HopVerdict, f simulate.Fidelity) CheckResult {
-	c := CheckResult{Name: checkSecurity, Verdict: v, Reason: string(v) + " reason", Fidelity: f}
+	c := CheckResult{Name: checkSecurity, Verdict: v, Reason: simulate.Reasons{reason.New("verdict.rule", string(v)+" reason")}, Fidelity: f}
 	if v == Pass || v == Stop {
 		c.Rule = "r-" + string(v)
 	}
@@ -31,7 +32,7 @@ func hops(specs ...string) []Hop {
 		h := Hop{Index: i + 1, Routing: routing.Hop{Device: fmt.Sprintf("fw%d", i+1), Vsys: "vsys1"}}
 		for _, v := range strings.Split(s, ",") {
 			if v == "doubt" {
-				h.Doubts = append(h.Doubts, "ECMP: 1 other next hops not followed")
+				h.Doubts = append(h.Doubts, reason.New("path.ecmp", "ECMP: 1 other next hops not followed"))
 				h.Checks = append(h.Checks, check(Pass, simulate.Exact))
 				continue
 			}
@@ -43,7 +44,7 @@ func hops(specs ...string) []Hop {
 }
 
 func folded(outcome routing.Outcome, hs []Hop) Result {
-	r := Result{Path: routing.Path{Outcome: outcome, End: "end of " + string(outcome)}, Hops: hs}
+	r := Result{Path: routing.Path{Outcome: outcome, End: "end of " + string(outcome), EndCode: "path.loop"}, Hops: hs}
 	fold(&r, simulate.Exact)
 	return r
 }
@@ -93,7 +94,7 @@ func TestFold(t *testing.T) {
 		r := folded(c.outcome, hops(c.hops...))
 		got := string(r.Verdict)
 		if r.At != nil {
-			got += fmt.Sprintf(" at %d %s %s (%s)", r.At.Hop, r.At.Check, r.At.Rule, r.At.Reason)
+			got += fmt.Sprintf(" at %d %s %s (%s)", r.At.Hop, r.At.Check, r.At.Rule, r.At.Reason.Text())
 		}
 		var after []int
 		for _, h := range r.Hops {
@@ -101,7 +102,7 @@ func TestFold(t *testing.T) {
 				after = append(after, h.Index)
 			}
 		}
-		if got != c.want || !slices.Equal(after, c.after) || !slices.Equal(r.Notes, c.notes) {
+		if got != c.want || !slices.Equal(after, c.after) || !slices.Equal(r.Notes.Texts(), c.notes) {
 			t.Errorf("%s:\ngot  %s, after %v, notes %v\nwant %s, after %v, notes %v", c.name, got, after, r.Notes, c.want, c.after, c.notes)
 		}
 	}
@@ -112,8 +113,8 @@ func TestFold(t *testing.T) {
 func TestFoldFidelity(t *testing.T) {
 	t.Parallel()
 	hs := hops("pass", "stop", "pass")
-	hs[0].Checks[0].Fidelity = simulate.OverMatchBecause("hop 1")
-	hs[2].Checks[0].Fidelity = simulate.UnderMatch("hop 3")
+	hs[0].Checks[0].Fidelity = simulate.OverMatchBecause(reason.New("doubt.service-kept", "hop 1"))
+	hs[2].Checks[0].Fidelity = simulate.UnderMatch(reason.New("gap.object-unresolved", "hop 3"))
 	r := Result{Path: routing.Path{Outcome: routing.Delivered}, Hops: hs}
 	fold(&r, simulate.Inferred)
 	if got := r.Fidelity.String(); got != "inferred: hop 1" {
@@ -137,7 +138,7 @@ func TestHiddenFirewallsAreANote(t *testing.T) {
 	t.Parallel()
 	r := Result{Path: routing.Path{Outcome: routing.Delivered, Hidden: []string{"fw9 (Layer 2 or virtual wire)"}}, Hops: hops("pass")}
 	fold(&r, simulate.Exact)
-	if r.Verdict != VerdictAllowed || !slices.Equal(r.Notes, []string{"firewalls that may sit on the path unseen are not checked: fw9 (Layer 2 or virtual wire)"}) {
+	if r.Verdict != VerdictAllowed || !slices.Equal(codeTexts(r.Notes), []string{"path.hidden-firewall: firewalls that may sit on the path unseen are not checked: fw9 (Layer 2 or virtual wire)"}) {
 		t.Errorf("%s %v", r.Verdict, r.Notes)
 	}
 }
@@ -162,20 +163,20 @@ func TestPathDoubts(t *testing.T) {
 			"ECMP",
 			routing.Path{Hops: []routing.Hop{{ECMP: []routing.NotFollowed{{NextHop: "a"}, {NextHop: "b"}}}}},
 			1, nil,
-			[]string{"ECMP: 2 other next hops not followed"},
+			[]string{"path.ecmp: ECMP: 2 other next hops not followed"},
 			false,
 		},
-		{"a PBF rule can match", routing.Path{Hops: []routing.Hop{{PBF: []string{"to-isp2"}}}}, 1, nil, []string{"PBF rule to-isp2 can redirect the flow"}, false},
-		{"PBF stage undermatch", routing.Path{Hops: two}, 2, []simulate.Stage{stage(2, "pbf", simulate.UnderMatch("pbf: an unresolved address"))}, []string{"pbf: an unresolved address"}, false},
+		{"a PBF rule can match", routing.Path{Hops: []routing.Hop{{PBF: []string{"to-isp2"}}}}, 1, nil, []string{"path.pbf: PBF rule to-isp2 can redirect the flow"}, false},
+		{"PBF stage undermatch", routing.Path{Hops: two}, 2, []simulate.Stage{stage(2, "pbf", simulate.UnderMatch(reason.New("gap.object-unresolved", "pbf: an unresolved address")))}, []string{"gap.object-unresolved: pbf: an unresolved address"}, false},
 		{"PBF stage inferred: no effect beyond the stage", routing.Path{Hops: two}, 2, []simulate.Stage{stage(2, "pbf", simulate.Inferred)}, nil, false},
-		{"NAT stage undermatch", routing.Path{Hops: two}, 2, []simulate.Stage{stage(2, "nat", simulate.UnderMatch("nat: a rule in doubt"))}, []string{"nat: a rule in doubt"}, false},
+		{"NAT stage undermatch", routing.Path{Hops: two}, 2, []simulate.Stage{stage(2, "nat", simulate.UnderMatch(reason.New("gap.nat-static", "nat: a rule in doubt")))}, []string{"gap.nat-static: nat: a rule in doubt"}, false},
 		{"NAT stage inferred", routing.Path{Hops: two}, 2, []simulate.Stage{stage(2, "nat", simulate.Inferred)}, nil, true},
-		{"another hop's stage", routing.Path{Hops: two}, 1, []simulate.Stage{stage(2, "nat", simulate.UnderMatch("hop 2"))}, nil, false},
+		{"another hop's stage", routing.Path{Hops: two}, 1, []simulate.Stage{stage(2, "nat", simulate.UnderMatch(reason.New("gap.nat-static", "hop 2")))}, nil, false},
 		{
 			"start by a default route",
 			routing.Path{Hops: two, StartVia: netip.MustParsePrefix("0.0.0.0/0")},
 			1, nil,
-			[]string{"the ingress is a guess from a default route"},
+			[]string{"path.start-default-route: the ingress is a guess from a default route"},
 			false,
 		},
 		{"start by a route", routing.Path{Hops: two, StartVia: netip.MustParsePrefix("198.18.0.0/15")}, 1, nil, nil, true},
@@ -183,7 +184,7 @@ func TestPathDoubts(t *testing.T) {
 	} {
 		doubts, caps := pathDoubts(c.path, c.n, c.stages)
 		capped := len(caps) > 0 && simulate.Weakest(caps...).Level() == "inferred"
-		if !slices.Equal(doubts, c.doubts) || capped != c.capped {
+		if !slices.Equal(codeTexts(doubts), c.doubts) || capped != c.capped {
 			t.Errorf("%s: doubts %q, caps %v; want %q, capped %v", c.name, doubts, caps, c.doubts, c.capped)
 		}
 	}
@@ -204,20 +205,20 @@ func TestZoneDoubts(t *testing.T) {
 		holes  int
 	}{
 		{"both zones defined", e, hop("vsys1", "home", "labor", false), nil, 0},
-		{"vsys unknown", e, hop("", "home", "labor", false), []string{"vsys unknown"}, 0},
-		{"placeholder", e, hop("vsys1", "external", "labor", true), []string{"the zone names are placeholders: no external zone joins these vsys in the configuration"}, 0},
-		{"no egress zone", e, hop("vsys1", "home", "", false), []string{"routing found no egress zone"}, 0},
-		{"no zone at all", e, hop("vsys1", "", "", false), []string{"routing found no ingress zone", "routing found no egress zone"}, 0},
-		{"one undefined", e, hop("vsys1", "home", "wan", false), []string{"zone wan is not defined in vsys1"}, 0},
-		{"the same undefined zone, once", e, hop("vsys1", "wan", "wan", false), []string{"zone wan is not defined in vsys1"}, 0},
+		{"vsys unknown", e, hop("", "home", "labor", false), []string{"zone.vsys-unknown: vsys unknown"}, 0},
+		{"placeholder", e, hop("vsys1", "external", "labor", true), []string{"zone.placeholder: the zone names are placeholders: no external zone joins these vsys in the configuration"}, 0},
+		{"no egress zone", e, hop("vsys1", "home", "", false), []string{"zone.missing: routing found no egress zone"}, 0},
+		{"no zone at all", e, hop("vsys1", "", "", false), []string{"zone.missing: routing found no ingress zone", "zone.missing: routing found no egress zone"}, 0},
+		{"one undefined", e, hop("vsys1", "home", "wan", false), []string{"zone.undefined: zone wan is not defined in vsys1"}, 0},
+		{"the same undefined zone, once", e, hop("vsys1", "wan", "wan", false), []string{"zone.undefined: zone wan is not defined in vsys1"}, 0},
 		{
 			"an unreadable configuration", lab{fail: pathlab.FW02}.env(t), hop("vsys1", "home", "labor", false),
-			[]string{"the configuration of fw02 vsys1 cannot be read: snapshot unreadable"},
+			[]string{"gap.load-failed: the configuration of fw02 vsys1 cannot be read: snapshot unreadable"},
 			1,
 		},
 	} {
 		doubts, holes := zoneDoubts(c.env, c.hop)
-		if !slices.Equal(doubts, c.doubts) || len(holes) != c.holes {
+		if !slices.Equal(codeTexts(doubts), c.doubts) || len(holes) != c.holes {
 			t.Errorf("%s: %q, %v; want %q, %d holes", c.name, doubts, holes, c.doubts, c.holes)
 		}
 	}
@@ -231,14 +232,13 @@ func TestLoadNeedsAnIndex(t *testing.T) {
 		t.Fatal(err)
 	}
 	e := &simulate.Env{Load: func(string, string) (simulate.Target, error) { return simulate.Target{Config: cfg}, nil }}
-	if _, m := load(e, routing.Hop{Device: pathlab.FW02, Vsys: "vsys1"}); m == nil || !strings.HasSuffix(m.Reason, "no configuration") {
+	if _, m := load(e, routing.Hop{Device: pathlab.FW02, Vsys: "vsys1"}); m == nil || !strings.HasSuffix(m.Reason, "no configuration") || m.Code != "gap.config-missing" {
 		t.Errorf("%v", m)
 	}
-	idx, err := index.For(cfg, config.Scope{Sort: config.ScopeVsys, Name: "vsys1"})
-	if err != nil {
-		t.Fatal(err)
+	set := index.NewSet(cfg)
+	e.Load = func(string, string) (simulate.Target, error) {
+		return simulate.Target{Config: cfg, Indexes: set.Provider(config.Scope{Sort: config.ScopeVsys, Name: "vsys1"})}, nil
 	}
-	e.Load = func(string, string) (simulate.Target, error) { return simulate.Target{Config: cfg, Index: idx}, nil }
 	if _, m := load(e, routing.Hop{Device: pathlab.FW02, Vsys: "vsys1"}); m != nil {
 		t.Errorf("%v", m)
 	}
@@ -247,9 +247,33 @@ func TestLoadNeedsAnIndex(t *testing.T) {
 // A routing end's reason is routing's end line without its column padding.
 func TestARoutingEndReadsAsASentence(t *testing.T) {
 	t.Parallel()
-	r := Result{Path: routing.Path{Outcome: routing.LeftEstate, End: "192.168.0.1   leaves the estate (not in the inventory)"}, Hops: hops("pass")}
+	r := Result{Path: routing.Path{
+		Outcome: routing.LeftEstate, End: "192.168.0.1   leaves the estate (not in the inventory)", EndCode: "path.left-estate",
+	}, Hops: hops("pass")}
 	fold(&r, simulate.Exact)
-	if r.At == nil || r.At.Reason != "192.168.0.1 leaves the estate (not in the inventory)" {
+	if r.At == nil || !slices.Equal(r.At.Reason, simulate.Reasons{reason.New("path.left-estate", "192.168.0.1 leaves the estate (not in the inventory)")}) {
 		t.Errorf("point: %+v", r.At)
+	}
+}
+
+// codeTexts lists reasons as "code: text".
+func codeTexts(rs simulate.Reasons) []string {
+	var out []string
+	for _, r := range rs {
+		out = append(out, string(r.Code)+": "+r.Text)
+	}
+	return out
+}
+
+// A loader's coded error keeps its kind on the hop, as a snapshot without a
+// configuration.
+func TestLoadKeepsTheLoadersCode(t *testing.T) {
+	t.Parallel()
+	e := &simulate.Env{Load: func(string, string) (simulate.Target, error) {
+		return simulate.Target{}, &simulate.CodedError{Reason: reason.New("gap.config-missing", "fw02/vsys1: no configuration")}
+	}}
+	_, m := load(e, routing.Hop{Device: pathlab.FW02, Vsys: "vsys1"})
+	if m == nil || m.Code != "gap.config-missing" || !strings.HasSuffix(m.Reason, "cannot be read: fw02/vsys1: no configuration") {
+		t.Errorf("%+v", m)
 	}
 }

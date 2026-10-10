@@ -27,6 +27,16 @@ never stores it.
 certificates). `proteus init` writes it explicitly with a comment on how to
 opt in, and every fetch prints whether verification is on.
 
+The `mcp:` section (`Inventory.MCP`, nil when absent) holds the server's settings;
+`Parse` validates it (no negative numbers, readable durations, `listen` with a
+port). With `defaults.export_inventory: true`, `fetch` calls `WriteExport` after
+every run, a failed one too: `Export()` drops username, password and
+password_env everywhere, and the file lands at `<store>/.proteus/inventory.yaml`
+(0600, temp file and rename, directory synced). A write failure adds
+`note.export-failed` and turns exit 0 into 3, never into 1. `ReadExport` (the server's
+reader) refuses any credential and clears `store` and `log_dir`. `.proteus` is not
+a valid device name, so it cannot collide with a device directory.
+
 ### Fetch
 
 `Client` has three methods and no others: `Keygen`, `Op`, `ExportConfig`. `Op`
@@ -77,6 +87,14 @@ hidden directory and renames it into place, so a reader never sees half a snapsh
 and `fib`. `estate.NewNetwork` reads `interfaces`, `fib`, `rib` and `ha` of every
 device for `simulate routing`, pairing HA members by serial into one node.
 
+A lookup failure matches one kind with `errors.Is`: `ErrNoSnapshot` (nothing to
+pick for the device, id or time), `ErrNoConfig` (the picked snapshot has no
+configuration; `Snapshot.ConfigPath`), `ErrUnreadable` (a stored file is there but
+cannot be read or parsed). `Latest` and `AtOrBefore` on a device whose snapshots
+all lack a configuration match both `ErrNoSnapshot` and `ErrNoConfig`; test
+`ErrNoConfig` first. The message text stays as it was. An absent zone document
+matches `fs.ErrNotExist`, not `ErrUnreadable`.
+
 ## Build / run pointers
 
 - `go test ./internal/inventory ./internal/fetch ./internal/store ./internal/cli`
@@ -123,9 +141,11 @@ func (s *Store) List(device string) ([]string, error)
 func (s *Store) Resolve(ref string) (Snapshot, error)
 func (s *Store) WithClock(now func() time.Time) *Store
 func (s *Store) Write(meta Meta, docs map[string][]byte, keep int) (Snapshot, error)
+func (sn Snapshot) ConfigPath() (string, error)
 func (sn Snapshot) Has(doc string) bool
 func (sn Snapshot) Path(doc string) string
 func (sn Snapshot) Zones() (*index.ZoneSnapshot, error)
+func At(root string) *Store
 func DefaultRoot(getenv func(string) string) (string, error)
 func Open(root string) (*Store, error)
 ```

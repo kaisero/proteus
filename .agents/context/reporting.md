@@ -77,6 +77,7 @@ returning.
 
 <!-- GENERATED:api ./internal/index -->
 ```go
+type Edges struct{ ... }
 type Field int
 type Hit struct{ ... }
 type Index struct{ ... }
@@ -86,6 +87,7 @@ type ProfileUse struct{ ... }
 type Providers struct{ ... }
 type Ref struct{ ... }
 type Report struct{ ... }
+type Set struct{ ... }
 type StaleReporter interface{ ... }
 type UnparsedFilter struct{ ... }
 type Unresolved struct{ ... }
@@ -111,6 +113,7 @@ func (i *Index) Overlapping(p netip.Prefix) []Match
 func (i *Index) ProfileUses(value string) []ProfileUse
 func (i *Index) Refs(name string) []Ref
 func (i *Index) Rules() []resolve.Rule
+func (i *Index) RulesReaching(f Field, name string) *roaring.Bitmap
 func (i *Index) RulesWith(f Field, ids ...uint32) *roaring.Bitmap
 func (i *Index) RulesWithAddr(f Field, addr netip.Addr) *roaring.Bitmap
 func (i *Index) RulesWithAny(f Field) *roaring.Bitmap
@@ -124,6 +127,9 @@ func (in *Interner) ID(name string) uint32
 func (in *Interner) Len() int
 func (in *Interner) Lookup(name string) (uint32, bool)
 func (in *Interner) Name(id uint32) string
+func (s *Set) Config() *config.Config
+func (s *Set) Index(sc config.Scope, rb resolve.Rulebase) (*Index, error)
+func (s *Set) Provider(sc config.Scope) func(resolve.Rulebase) (*Index, error)
 func (s *UserSnapshot) GroupsOf(user string) []string
 func (s *UserSnapshot) Stale() (string, bool)
 func (s *ZoneSnapshot) Describe() string
@@ -131,15 +137,90 @@ func (s *ZoneSnapshot) Routers() []string
 func (s *ZoneSnapshot) UnroutedInterfaces() []string
 func (s *ZoneSnapshot) ZonesOf(addr netip.Addr) []ZonePlacement
 func (u Unresolved) String() string
+func (u Unresolved) Why() reason.Reason
 func (v *View) Candidates(f Field, value string) (*roaring.Bitmap, Report)
-func (v *View) Opaque(f Field) (*roaring.Bitmap, map[uint32]string)
-func For(cfg *config.Config, sc config.Scope) (*Index, error)
-func ForRulebase(cfg *config.Config, sc config.Scope, rb resolve.Rulebase) (*Index, error)
+func (v *View) Opaque(f Field) (*roaring.Bitmap, map[uint32][]reason.Reason)
+func Build(cfg *config.Config, edges *Edges, sc config.Scope, rb resolve.Rulebase) (*Index, error)
 func LoadUserSnapshot(r io.Reader) (*UserSnapshot, error)
 func LoadZoneSnapshot(r io.Reader) (*ZoneSnapshot, error)
+func New(cfg *config.Config, sc config.Scope, rb resolve.Rulebase) (*Index, error)
 func NewInterner() *Interner
+func NewSet(cfg *config.Config) *Set
+func NewUnresolved(value, kind string, r reason.Reason) Unresolved
 func NewZoneSnapshot(takenAt time.Time, source string, interfaces, fib io.Reader) (*ZoneSnapshot, error)
 func PrefixesOf(value string) []netip.Prefix
+func ReadEdges(cfg *config.Config) (*Edges, error)
+```
+<!-- /GENERATED:api -->
+
+## Reason codes (`internal/reason`)
+
+A reason is a code plus a text: `reason.Reason{Code, Text}`, JSON `{code, text}`.
+The code is `<class>.<name>` in lower case and comes from a closed registry
+(`internal/reason/registry.go`). The classes: doubt, gap, path, zone, default,
+dns, input, note, call, verdict. A program acts on the code; a reader reads the
+text. Each not-evaluated dimension has its own code (`doubt.not-evaluated.user`);
+there is no wildcard.
+
+`reason.New` builds a reason. In a test binary (`testing.Testing()`) it panics on
+a code the registry does not hold, so any package's tests fail when a producer
+uses one. A production binary keeps the code. Add a code to the registry, with a
+one-line description, before a producer uses it. A test in `internal/reason` also
+reads every source file and fails on a string that reads as a code and is not
+registered, so a code on a path no test takes is caught too.
+
+Code that only passes a code through, and does not choose it, must not call
+`reason.New` on a value it did not check: a fuzz input or a built code such as
+`"doubt.not-evaluated." + dim` panics in a test binary. Check `reason.Known`
+first, or build `reason.Reason{Code: c, Text: t}` directly. Producers keep a
+fixed table instead (`simulate`'s dimension codes, `securitypolicy`'s doubt
+codes), so each code is a literal the source test sees.
+
+JSON format 2 writes every reason as `{"code", "text"}`, beside its context
+fields: envelope holes, unresolved entries and notes are
+`{device, vsys, [value,] code, text}`; `fidelity.reasons`, `simulate.Reasons`,
+hop notes and doubts are lists of `{code, text}`; a doubt is
+`{position, rule, reasons}`. A composite reason (an undecided rule that names
+its doubt, several undermatch reasons of one stage) keeps its parts, each with
+its own code: `Fidelity` holds it as one group, a check's and a path point's
+`reasons` list its parts, and the envelope has one unresolved entry per part,
+the later ones marked `Part`, which the text joins on one line. Text output is
+the same as in format 1. Only a summary that names its own cause keeps one
+code: `doubt.nat-rule` over NAT doubts, whose parts stay in the NAT doubts, and
+`path.nat-undermatch`, routing's hop note for each NAT doubt. Text may join
+consecutive unresolved entries of one composite on one line; JSON lists them
+separately.
+
+`needs` (`query/needs.go`) reads codes only. `doubt.service-no-port` and
+`path.nat-no-port` need `input.port` (tcp, udp, sctp or no protocol) and
+`input.protocol` when the flow has none: `simulate nat` asked without a
+protocol lists both. `doubt.category-no-url` needs `input.url`. The emitters
+give the unfixable code first: a service that is only application-default or
+not defined is `doubt.service-application-default` or
+`doubt.service-predefined`, a category that is not defined is
+`doubt.category-undefined`, with or without a port or URL. A file check lists
+the doubts in rule order before the first certain match and stops at the first
+rule with no reason an input settles; when that is the first rule in doubt,
+`needs` is `[]`. A rule with a fixable and an unfixable reason keeps its fixable
+causes, since that input alone can rule the rule out, and the walk goes on. NAT
+doubts (`simulate nat`, and each hop's NAT doubts in routing and path mode) come
+in rule order above the rule taken and are cut the same way (`doubtCauses`). A
+blocked walk drops the fidelity's causes too.
+
+`reason` imports only the standard library, so every package may import it; the
+archtest allows it in every R12 rule.
+
+<!-- GENERATED:api ./internal/reason -->
+```go
+type Class string
+type Code string
+type Entry struct{ ... }
+type Reason struct{ ... }
+
+func (r Reason) String() string
+func Known(c Code) bool
+func New(c Code, text string) Reason
+func Registry() []Entry
 ```
 <!-- /GENERATED:api -->
 

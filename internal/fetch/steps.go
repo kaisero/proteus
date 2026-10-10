@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/okaiser/proteus/internal/inventory"
+	"github.com/okaiser/proteus/internal/reason"
 	"github.com/okaiser/proteus/internal/runlog"
 	"github.com/okaiser/proteus/internal/task"
 )
@@ -67,11 +68,12 @@ func haStep(ctx context.Context, s *State) (task.Result, error) {
 		return task.Result{Status: task.Skipped, Detail: "HA is not enabled"}, nil
 	}
 	if !strings.EqualFold(local.Mode, "active-passive") {
-		return s.stay(fmt.Sprintf("HA mode %q: fetched this device as it is; only active-passive pairs are followed", local.Mode))
+		return s.stay(reason.New("note.fetch-ha-mode",
+			fmt.Sprintf("HA mode %q: fetched this device as it is; only active-passive pairs are followed", local.Mode)))
 	}
 	if local.LocalState != "passive" {
 		if local.LocalState != "active" {
-			return s.stay(fmt.Sprintf("HA state %q: fetched this device as it is", local.LocalState))
+			return s.stay(reason.New("note.fetch-ha-state", fmt.Sprintf("HA state %q: fetched this device as it is", local.LocalState)))
 		}
 		return task.Result{Detail: "active"}, nil
 	}
@@ -83,7 +85,8 @@ func haStep(ctx context.Context, s *State) (task.Result, error) {
 		}
 	}
 	if local.PeerState != "active" || peerHost == "" {
-		return s.stay(fmt.Sprintf("passive, but the peer is %q or has no address: fetched this device as it is", local.PeerState))
+		return s.stay(reason.New("note.fetch-peer-unusable",
+			fmt.Sprintf("passive, but the peer is %q or has no address: fetched this device as it is", local.PeerState)))
 	}
 	s.Log.Infof(runlog.TagAPI, "%s: passive; following the active peer %s", s.Target.Name, peerHost)
 	pt := s.Target
@@ -94,7 +97,8 @@ func haStep(ctx context.Context, s *State) (task.Result, error) {
 	}
 	peer, ok := haState(ctx, pc)
 	if !ok || peer.LocalState != "active" || peer.PeerSerial == "" || peer.PeerSerial != local.LocalSerial {
-		return s.stay(fmt.Sprintf("passive, but %s does not confirm it is the active partner: fetched this device as it is", peerHost))
+		return s.stay(reason.New("note.fetch-peer-unconfirmed",
+			fmt.Sprintf("passive, but %s does not confirm it is the active partner: fetched this device as it is", peerHost)))
 	}
 	s.client = pc
 	s.Result.FetchedFrom = peerHost
@@ -102,9 +106,9 @@ func haStep(ctx context.Context, s *State) (task.Result, error) {
 }
 
 // stay records why the fetch stays on the device asked.
-func (s *State) stay(note string) (task.Result, error) {
+func (s *State) stay(note reason.Reason) (task.Result, error) {
 	s.Result.Notes = append(s.Result.Notes, note)
-	return task.Result{Detail: "fetched this device as it is", Notes: []string{note}}, nil
+	return task.Result{Detail: "fetched this device as it is", Notes: []reason.Reason{note}}, nil
 }
 
 func documentsStep(ctx context.Context, s *State) (task.Result, error) {

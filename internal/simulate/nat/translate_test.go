@@ -98,7 +98,7 @@ func TestDynamicDestination(t *testing.T) {
 	}
 	r = translate(t, p, map[string][]netip.Addr{"dns.google": {netip.MustParseAddr("8.8.8.8"), netip.MustParseAddr("8.8.4.4"), netip.MustParseAddr("8.8.8.8")}})
 	if r.Destination.Address.String() != "8.8.4.4" || strings.Join(r.Destination.Others, ",") != "8.8.8.8" ||
-		r.Fidelity.Level() != "undermatch" || len(r.Notes) != 1 || !strings.Contains(r.Notes[0], "DNS") {
+		r.Fidelity.Level() != "undermatch" || len(r.Notes) != 1 || !strings.Contains(r.Notes[0].Text, "DNS") || r.Notes[0].Code != "doubt.fqdn-resolution" {
 		t.Errorf("resolved: %+v, notes %v, fidelity %s", r.Destination, r.Notes, r.Fidelity)
 	}
 }
@@ -136,7 +136,7 @@ func TestTranslationEdges(t *testing.T) {
 func caseTranslate(t *testing.T, src, dst string) Result {
 	t.Helper()
 	in := Input{
-		Target: simulate.Target{Config: natConfig(t, "firewall-nat-translations.xml")}, Vsys: "vsys1",
+		Target: withIndexes(natConfig(t, "firewall-nat-translations.xml"), "vsys1"), Vsys: "vsys1",
 		Flow:   simulate.Flow{Destination: simulate.Addr(netip.MustParseAddr(dst)), Protocol: "tcp", DestPort: 443},
 		In:     simulate.Port{Device: "fw", Router: "r", Zone: "trust"},
 		PreNAT: &simulate.Forward{Out: simulate.Port{Zone: "untrust", Interface: "ethernet1/1"}},
@@ -169,11 +169,11 @@ func TestTranslationCases(t *testing.T) {
 		})
 	}
 	r := caseTranslate(t, "10.9.9.9", "203.0.113.10")
-	if strings.Join(r.Source.Candidates, ",") != "198.51.100.1,198.51.100.2" || len(r.Notes) != 1 || !strings.Contains(r.Notes[0], "no fallback") {
+	if strings.Join(r.Source.Candidates, ",") != "198.51.100.1,198.51.100.2" || len(r.Notes) != 1 || !strings.Contains(r.Notes[0].Text, "no fallback") || r.Notes[0].Code != "note.nat-no-fallback" {
 		t.Errorf("pool group: %+v %v", r.Source, r.Notes)
 	}
 	r = caseTranslate(t, "10.9.9.9", "203.0.113.19")
-	if r.Flow.Destination.String() != "10.1.1.1" || len(r.Notes) != 1 || !strings.Contains(r.Notes[0], "rewrites DNS") {
+	if r.Flow.Destination.String() != "10.1.1.1" || len(r.Notes) != 1 || !strings.Contains(r.Notes[0].Text, "rewrites DNS") || r.Notes[0].Code != "note.dns-rewrite" {
 		t.Errorf("dns rewrite: %+v %v", r.Flow, r.Notes)
 	}
 	r = caseTranslate(t, "10.9.9.9", "203.0.113.21")

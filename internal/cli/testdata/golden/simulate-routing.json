@@ -1,6 +1,7 @@
 {
-  "format": 1,
+  "format": 2,
   "command": "simulate routing",
+  "detail": "full",
   "input": {
     "at": "",
     "device": "",
@@ -24,6 +25,8 @@
   },
   "results": [
     {
+      "answer": "192.168.0.1 leaves the estate (not in the inventory)",
+      "needs": [],
       "source": {
         "addrs": [
           "198.18.10.5"
@@ -39,6 +42,7 @@
       "placed": "connected",
       "outcome": "left-estate",
       "end": "192.168.0.1   leaves the estate (not in the inventory)",
+      "end_code": "path.left-estate",
       "hops": [
         {
           "device": "fw01",
@@ -167,7 +171,10 @@
           "fidelity": {
             "level": "undermatch",
             "reasons": [
-              "the path leaves the estate at 192.168.0.1"
+              {
+                "code": "path.left-estate",
+                "text": "the path leaves the estate at 192.168.0.1"
+              }
             ]
           }
         }
@@ -175,7 +182,10 @@
       "fidelity": {
         "level": "undermatch",
         "reasons": [
-          "the path leaves the estate at 192.168.0.1"
+          {
+            "code": "path.left-estate",
+            "text": "the path leaves the estate at 192.168.0.1"
+          }
         ]
       },
       "stages": [
@@ -285,7 +295,10 @@
           "fidelity": {
             "level": "undermatch",
             "reasons": [
-              "the path leaves the estate at 192.168.0.1"
+              {
+                "code": "path.left-estate",
+                "text": "the path leaves the estate at 192.168.0.1"
+              }
             ]
           },
           "candidates": 0,

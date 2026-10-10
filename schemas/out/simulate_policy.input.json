@@ -1,0 +1,72 @@
+{
+  "type": "object",
+  "properties": {
+    "source": {
+      "type": "string",
+      "description": "an address or a host name; a host name is resolved with DNS and its first IPv4 address is checked"
+    },
+    "destination": {
+      "type": "string",
+      "description": "an address or a host name; a host name is resolved with DNS and its first IPv4 address is checked"
+    },
+    "protocol": {
+      "type": "string",
+      "description": "tcp, udp, icmp or sctp; no default: a rule that needs it is held back and needs names it",
+      "enum": [
+        "tcp",
+        "udp",
+        "icmp",
+        "sctp"
+      ]
+    },
+    "port": {
+      "type": "integer",
+      "description": "the destination port, a number; the protocol goes in protocol",
+      "minimum": 1,
+      "maximum": 65535
+    },
+    "source_port": {
+      "type": "integer",
+      "description": "the source port, a number",
+      "minimum": 1,
+      "maximum": 65535
+    },
+    "url": {
+      "type": "string",
+      "description": "the URL; it decides the rules that name a URL category the configuration defines"
+    },
+    "application": {
+      "type": "string",
+      "description": "recorded, not evaluated; it does not change the answer"
+    },
+    "user": {
+      "type": "string",
+      "description": "the source user, such as corp\\alice; it decides the rules that name a user or a group of the user snapshot"
+    },
+    "device": {
+      "type": "string",
+      "description": "the firewall the path starts on; left out, the source places the start"
+    },
+    "router": {
+      "type": "string",
+      "description": "the start's logical router; needs device"
+    },
+    "at": {
+      "type": "string",
+      "description": "read each device's newest snapshot at or before this time; left out, the latest"
+    },
+    "detail": {
+      "type": "string",
+      "description": "summary or full: how much of each result to return; summary when left out",
+      "enum": [
+        "summary",
+        "full"
+      ]
+    }
+  },
+  "required": [
+    "source",
+    "destination"
+  ],
+  "additionalProperties": false
+}

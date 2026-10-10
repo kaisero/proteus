@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/okaiser/proteus/internal/config"
+	"github.com/okaiser/proteus/internal/reason"
 	"github.com/okaiser/proteus/internal/resolve"
 	"github.com/okaiser/proteus/internal/simulate"
 	"github.com/okaiser/proteus/internal/simulate/topology"
@@ -164,25 +165,26 @@ func TestTheStartNeedsAChoice(t *testing.T) {
 		f      simulate.Flow
 		params map[string]string
 		want   string
+		kind   string
 	}{
-		"tie":            {flow("198.18.100.50", "8.8.8.8"), nil, "fw01 ethernet1/5, fw02 vlan.100"},
-		"default only":   {flow("8.8.4.4", "198.18.10.5"), nil, "only default routes reach 8.8.4.4"},
-		"no source":      {flow("", "8.8.8.8"), nil, "give a source, or a start device with --device"},
-		"routers":        {flow("", "8.8.8.8"), map[string]string{"device": "fw01"}, "fw01 has several routers; name one with --router: default, lte"},
-		"no such router": {flow("", "8.8.8.8"), map[string]string{"device": "fw01", "router": "x"}, `fw01 has no router "x"`},
-		"no such device": {flow("", "8.8.8.8"), map[string]string{"device": "fw09"}, "cannot start on fw09"},
-		"ipv6":           {simulate.Flow{Destination: simulate.Addr(netip.MustParseAddr("2001:db8::1"))}, nil, "IPv6"},
+		"tie":            {flow("198.18.100.50", "8.8.8.8"), nil, "fw01 ethernet1/5, fw02 vlan.100", simulate.ChoiceDevice},
+		"default only":   {flow("8.8.4.4", "198.18.10.5"), nil, "only default routes reach 8.8.4.4", simulate.ChoiceDevice},
+		"no source":      {flow("", "8.8.8.8"), nil, "give a source, or a start device with --device", ""},
+		"routers":        {flow("", "8.8.8.8"), map[string]string{"device": "fw01"}, "fw01 has several routers; name one with --router: default, lte", simulate.ChoiceRouter},
+		"no such router": {flow("", "8.8.8.8"), map[string]string{"device": "fw01", "router": "x"}, `fw01 has no router "x"`, simulate.ChoiceRouter},
+		"no such device": {flow("", "8.8.8.8"), map[string]string{"device": "fw09"}, "cannot start on fw09", simulate.ChoiceDevice},
+		"ipv6":           {simulate.Flow{Destination: simulate.Addr(netip.MustParseAddr("2001:db8::1"))}, nil, "IPv6", ""},
 		"ipv6 source": {simulate.Flow{
 			Source:      simulate.Addr(netip.MustParseAddr("2001:db8::1")),
 			Destination: simulate.Addr(netip.MustParseAddr("192.0.2.1")),
-		}, nil, "IPv6"},
+		}, nil, "IPv6", ""},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			_, _, err := simulateOn(t, labNet(), tc.f, tc.params)
 			var ce *simulate.ChoiceError
-			if !errors.As(err, &ce) || !strings.Contains(err.Error(), tc.want) {
-				t.Errorf("err = %v", err)
+			if !errors.As(err, &ce) || !strings.Contains(err.Error(), tc.want) || ce.Kind != tc.kind {
+				t.Errorf("err = %v (kind %q)", err, ce.Kind)
 			}
 		})
 	}
@@ -195,7 +197,7 @@ func TestAGivenStart(t *testing.T) {
 	t.Parallel()
 	// No source: the ingress is unknown.
 	_, p, err := simulateOn(t, labNet(), flow("", "8.8.8.8"), map[string]string{"device": "fw01", "router": "default"})
-	if err != nil || p.Placed != topology.PlacedGiven || p.Hops[0].Flow.FromZone != "" || !strings.Contains(strings.Join(p.Hops[0].Notes, ";"), "ingress is unknown") {
+	if err != nil || p.Placed != topology.PlacedGiven || p.Hops[0].Flow.FromZone != "" || !strings.Contains(p.Hops[0].Notes.Text(), "ingress is unknown") {
 		t.Errorf("path = %+v, %v", p, err)
 	}
 	// A source connected on the device gives the ingress.
@@ -291,7 +293,7 @@ func TestALoop(t *testing.T) {
 	b := dev("b", []resolve.InterfaceState{iface("e1", "z", "r", "10.0.0.2/30")}, route("r", "0.0.0.0/0", "e1", "10.0.0.1"))
 	b.TakenAt = time.Unix(100, 0)
 	_, p, _ := simulateOn(t, netOf(a, b), flow("10.9.0.5", "8.8.8.8"), nil)
-	if p.Outcome != Loop || p.End != "loop: a -> b -> a" || !strings.Contains(strings.Join(p.Hops[1].Notes, ";"), "different times") {
+	if p.Outcome != Loop || p.End != "loop: a -> b -> a" || !strings.Contains(p.Hops[1].Notes.Text(), "different times") {
 		t.Errorf("loop = %+v", p)
 	}
 }
@@ -332,7 +334,7 @@ func TestADeviceWithoutASnapshotIsAHole(t *testing.T) {
 	n := labNet()
 	n.names = append(n.names, "fw03")
 	run, p, err := simulateOn(t, n, flow("198.18.10.5", "8.8.8.8"), nil)
-	if err != nil || len(run.Stages[0].Unresolved) != 1 || !strings.Contains(run.Stages[0].Unresolved[0].Reason, "fw03 cannot be read") ||
+	if err != nil || len(run.Stages[0].Unresolved) != 1 || !strings.Contains(run.Stages[0].Unresolved[0].Reason, "fw03 cannot be read") || run.Stages[0].Unresolved[0].Code != "gap.load-failed" ||
 		p.Outcome != LeftEstate {
 		t.Errorf("run = %+v, %v", run.Stages[0], err)
 	}
@@ -377,7 +379,7 @@ func TestAVsysCrossing(t *testing.T) {
 	out.Vsys = "2"
 	n := netOf(dev("fw", []resolve.InterfaceState{in, out},
 		route("default", "10.1.0.0/24", "ethernet1/1", "0.0.0.0"), route("default", "10.2.0.0/24", "ethernet1/2", "0.0.0.0")))
-	load := func(string, string) (simulate.Target, error) { return simulate.Target{Config: cfg}, nil }
+	load := func(_, vsys string) (simulate.Target, error) { return withIndexes(cfg, vsys), nil }
 	run, err := Simulation{}.Run(context.Background(), &simulate.Env{Network: n, Load: load}, simulate.Input{Flow: flow("10.1.0.5", "10.2.0.9")})
 	p := run.Output.(Path)
 	if err != nil || trail(p) != "fw(trust->to-vsys2) fw(from-vsys1->dmz)" || p.Hops[1].Vsys != "vsys2" || p.Outcome != Delivered ||
@@ -410,7 +412,7 @@ func TestAnFQDNNamesTheAddressesNotTraced(t *testing.T) {
 	f := flow("198.18.10.5", "8.8.8.8")
 	f.Destination = simulate.Endpoint{Name: "dns.example", Addrs: []netip.Addr{netip.MustParseAddr("8.8.8.8"), netip.MustParseAddr("8.8.4.4")}, Resolved: true}
 	_, p, _ := simulateOn(t, labNet(), f, nil)
-	if len(p.Notes) != 1 || p.Notes[0] != "dns.example resolved to 2 addresses; traced 8.8.8.8, not 8.8.4.4" {
+	if len(p.Notes) != 1 || p.Notes[0] != reason.New("dns.other-addresses", "dns.example resolved to 2 addresses; traced 8.8.8.8, not 8.8.4.4") {
 		t.Errorf("notes = %v", p.Notes)
 	}
 }
@@ -444,7 +446,9 @@ type unreadableNetwork []string
 
 func (n unreadableNetwork) Devices() []string { return n }
 func (n unreadableNetwork) Device(name string) (simulate.DeviceData, error) {
-	return simulate.DeviceData{}, &simulate.UnavailableError{Missing: []simulate.Missing{{Device: name, Reason: "no snapshot"}}}
+	return simulate.DeviceData{}, &simulate.UnavailableError{Missing: []simulate.Missing{
+		simulate.NewMissing(name, reason.New("gap.snapshot-missing", "no snapshot")),
+	}}
 }
 
 // When every device in the inventory is unreadable, the source cannot be placed
@@ -455,6 +459,12 @@ func TestAnUnreadableEstateIsUnavailableNotAQuestion(t *testing.T) {
 	u, ok := errors.AsType[*simulate.UnavailableError](err)
 	if !ok || len(u.Missing) != 2 {
 		t.Fatalf("err = %v, want an UnavailableError for both devices", err)
+	}
+	// Each hole keeps the kind its device reported.
+	for _, m := range u.Missing {
+		if m.Code != "gap.snapshot-missing" {
+			t.Errorf("%s: code %q", m.Device, m.Code)
+		}
 	}
 }
 

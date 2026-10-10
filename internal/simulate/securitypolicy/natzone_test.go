@@ -57,6 +57,9 @@ func TestThePostNATZone(t *testing.T) {
 	if strings.Join(v.Zones.To, ",") != "transport" || !strings.Contains(stage(r, "derive-zones").Fidelity.String(), "the NAT rule is not certain") {
 		t.Errorf("no port: %+v, %s", v.Zones, stage(r, "derive-zones").Fidelity)
 	}
+	if rs := stage(r, "derive-zones").Fidelity.Reasons(); len(rs) == 0 || rs[0].Code != "doubt.nat-rule" {
+		t.Errorf("the NAT summary has its own code: %v", rs)
+	}
 }
 
 func TestGivenZonesWinOverNAT(t *testing.T) {

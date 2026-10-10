@@ -4,6 +4,7 @@ import (
 	"net/netip"
 	"strings"
 
+	"github.com/okaiser/proteus/internal/reason"
 	"github.com/okaiser/proteus/internal/resolve"
 )
 
@@ -46,15 +47,31 @@ type Forward struct {
 	Routes   []Match  `json:"routes"`        // one per router crossed
 	End      string   `json:"end,omitempty"` // "" when the packet leaves by Out
 	Fidelity Fidelity `json:"fidelity"`
-	Notes    []string `json:"notes,omitempty"`
 }
 
 // ChoiceError is a question only the user can answer: which device, which router,
 // which of several starts. A command turns it into a usage error.
 type ChoiceError struct {
+	// Kind is what the user chooses: ChoiceDevice or ChoiceRouter, from
+	// Options. It is empty for a question that offers no choice, such as an
+	// input the simulation cannot take; that stays a usage error.
+	Kind     string
 	Question string
+	// ToolText is Question in a tool's words where Question names a command
+	// line flag; empty where it names none.
+	ToolText string
 	Options  []string
+	// Starts are the equally good starts behind a tie of placement, one per
+	// option, so a front end can offer what its own inputs accept: a device,
+	// or a router of one device. Nil for any other choice.
+	Starts []Port
 }
+
+// The kinds of choice.
+const (
+	ChoiceDevice = "device"
+	ChoiceRouter = "router"
+)
 
 func (e *ChoiceError) Error() string {
 	if len(e.Options) == 0 {
@@ -72,9 +89,31 @@ type UnavailableError struct {
 
 // Missing is one device a simulation could not read, and why.
 type Missing struct {
-	Device string
-	Reason string
+	Device string      `json:"device"`
+	Code   reason.Code `json:"code"` // the kind of Reason
+	Reason string      `json:"text"`
 }
+
+// CodedError is an error that keeps the kind of a failure as a reason code. A
+// loader returns one so a simulation that reports the failure keeps its kind, as
+// gap.config-missing for a snapshot without a configuration.
+type CodedError struct {
+	Reason reason.Reason
+}
+
+// Error is the reason's text.
+func (e *CodedError) Error() string { return e.Reason.Text }
+
+// Code is the kind of the failure.
+func (e *CodedError) Code() reason.Code { return e.Reason.Code }
+
+// NewMissing returns a Missing entry for device with r's code and text.
+func NewMissing(device string, r reason.Reason) Missing {
+	return Missing{Device: device, Reason: r.Text, Code: r.Code}
+}
+
+// Why returns the entry's code and text as one reason.
+func (m Missing) Why() reason.Reason { return reason.Reason{Code: m.Code, Text: m.Reason} }
 
 // Error is the reason alone for one device, so a message that embeds it reads as
 // before; "device: reason; device: reason" for several.

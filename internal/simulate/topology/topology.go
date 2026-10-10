@@ -14,6 +14,7 @@ import (
 
 	"github.com/gaissmai/bart"
 
+	"github.com/okaiser/proteus/internal/reason"
 	"github.com/okaiser/proteus/internal/resolve"
 	"github.com/okaiser/proteus/internal/simulate"
 )
@@ -302,11 +303,14 @@ func (t *Topology) Start(node, router string, src netip.Addr) (simulate.Port, ne
 	routers := t.Routers(node)
 	switch {
 	case router != "" && !slices.Contains(routers, router):
-		return simulate.Port{}, netip.Prefix{}, false, &simulate.ChoiceError{Question: fmt.Sprintf("%s has no router %q", node, router), Options: routers}
+		return simulate.Port{}, netip.Prefix{}, false, &simulate.ChoiceError{Kind: simulate.ChoiceRouter, Question: fmt.Sprintf("%s has no router %q", node, router), Options: routers}
 	case router == "" && len(routers) == 1:
 		router = routers[0]
 	case router == "":
-		return simulate.Port{}, netip.Prefix{}, false, &simulate.ChoiceError{Question: fmt.Sprintf("%s has several routers; name one with --router", node), Options: routers}
+		return simulate.Port{}, netip.Prefix{}, false, &simulate.ChoiceError{
+			Kind: simulate.ChoiceRouter, Question: fmt.Sprintf("%s has several routers; name one with --router", node),
+			ToolText: fmt.Sprintf("%s has several routers; name one in router", node), Options: routers,
+		}
 	}
 	start := simulate.Port{Device: node, Router: router}
 	if !src.IsValid() {
@@ -351,9 +355,11 @@ func (t *Topology) Forward(node, router string, a netip.Addr) simulate.Forward {
 		f.End = simulate.EndLocal
 	case !knownNextHopTypes[first.NextHopType]:
 		f.End = simulate.EndUnknownType
-		f.Fidelity = simulate.UnderMatch(fmt.Sprintf("route %s on %s has next-hop type %s, which is not read yet", m.Destination, node, first.NextHopType))
+		f.Fidelity = simulate.UnderMatch(reason.New("path.next-hop-type",
+			fmt.Sprintf("route %s on %s has next-hop type %s, which is not read yet", m.Destination, node, first.NextHopType)))
 	case len(m.NextHops) > 1:
-		f.Fidelity = simulate.UnderMatch(fmt.Sprintf("ECMP on %s: %d other next hops not followed", node, len(m.NextHops)-1))
+		f.Fidelity = simulate.UnderMatch(reason.New("path.ecmp",
+			fmt.Sprintf("ECMP on %s: %d other next hops not followed", node, len(m.NextHops)-1)))
 	}
 	return f
 }

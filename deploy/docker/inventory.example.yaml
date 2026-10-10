@@ -1,0 +1,32 @@
+# The inventory of the proteus-fetch service, mounted as a secret. Copy it to
+# secrets/inventory.yaml and set the hosts and the user. The password comes
+# from secrets/panos-password into PANOS_PASSWORD.
+#
+# export_inventory: true makes every fetch write the inventory without
+# credentials to <store>/.proteus/inventory.yaml; proteus-mcp reads its device
+# list from there. Changing the devices needs a restart of proteus-mcp.
+version: 1
+
+defaults:
+  username: proteus-reader      # a read-only API user
+  password_env: PANOS_PASSWORD
+  insecure_tls: false           # true only for self-signed lab certificates
+  max_snapshot_age: 2h          # answers from older snapshots carry a note
+  snapshot_keep: 48
+  export_inventory: true
+
+devices:
+  - name: fw01
+    host: fw01.example.org
+  - name: fw02
+    host: fw02.example.org
+
+# The mcp: section travels with the export. compose.yaml sets the paths and
+# hosts with PROTEUS_MCP_* variables, which win over it; the limits can go
+# here.
+mcp:
+  max_concurrent: 4
+  max_queue: 16
+  max_wait: 10s
+  call_timeout: 60s
+  max_cache: 2048

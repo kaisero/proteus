@@ -14,6 +14,7 @@ import (
 
 	"github.com/okaiser/proteus/internal/config"
 	"github.com/okaiser/proteus/internal/index"
+	"github.com/okaiser/proteus/internal/reason"
 	"github.com/okaiser/proteus/internal/resolve"
 	"github.com/okaiser/proteus/internal/simulate"
 	"github.com/okaiser/proteus/internal/simulate/pathlab"
@@ -90,15 +91,16 @@ func (l lab) env(t *testing.T) *simulate.Env {
 		if err != nil {
 			return simulate.Target{}, err
 		}
-		idx, err := index.For(cfg, config.Scope{Sort: config.ScopeVsys, Name: vsys})
-		if err != nil {
+		set := index.NewSet(cfg)
+		sc := config.Scope{Sort: config.ScopeVsys, Name: vsys}
+		if _, err := set.Index(sc, resolve.Security); err != nil {
 			return simulate.Target{}, err
 		}
-		var notes []string
+		var notes simulate.Reasons
 		if rep.VersionGap != "" && !l.quiet {
-			notes = append(notes, rep.VersionGap)
+			notes = append(notes, reason.New("gap.version", rep.VersionGap))
 		}
-		return simulate.Target{Config: cfg, Index: idx, Notes: notes}, nil
+		return simulate.Target{Config: cfg, Indexes: set.Provider(sc), Notes: notes}, nil
 	}
 	return &simulate.Env{Network: l.net, Load: load}
 }
@@ -147,7 +149,7 @@ func runLab(t *testing.T, l lab, dst string) Result {
 func summary(r Result) string {
 	s := string(r.Verdict)
 	if r.At != nil {
-		s += fmt.Sprintf(" at %d %s %s (%s)", r.At.Hop, r.At.Check, r.At.Rule, r.At.Reason)
+		s += fmt.Sprintf(" at %d %s %s (%s)", r.At.Hop, r.At.Check, r.At.Rule, r.At.Reason.Text())
 	}
 	for _, h := range r.Hops {
 		s += fmt.Sprintf(" | %d %s/%s", h.Index, h.Routing.Device, h.Routing.Vsys)
@@ -158,7 +160,7 @@ func summary(r Result) string {
 			}
 		}
 		if len(h.Doubts) > 0 {
-			s += " doubts=" + strings.Join(h.Doubts, "; ")
+			s += " doubts=" + h.Doubts.Text()
 		}
 		if h.AfterDeny {
 			s += " after-deny"
@@ -235,7 +237,7 @@ func TestThePathFixtureVariants(t *testing.T) {
 		}
 	}
 	r := runLab(t, lab{defaults: map[string]pathlab.Defaults{pathlab.FW02: differ}}, pathlab.Destination)
-	if want := "a later hop denies: hop 2 (fw01 vsys1), default rule interzone-default (deny), built-in"; !slices.Equal(r.Notes, []string{want}) {
+	if want := "a later hop denies: hop 2 (fw01 vsys1), default rule interzone-default (deny), built-in"; !slices.Equal(r.Notes, simulate.Reasons{reason.New("note.later-deny", want)}) {
 		t.Errorf("E7 note: %v", r.Notes)
 	}
 	// Undecided at 1 bounds the fidelity: hop 2's exact check does not raise it.
@@ -256,7 +258,7 @@ func TestAVersionGapIsInferredNotUndecided(t *testing.T) {
 		if r.Verdict != VerdictDenied || c.Verdict != Stop || c.Fidelity.Level() != "inferred" || r.Fidelity.Level() != "inferred" {
 			t.Errorf("verdict %s, hop 1 %s %s, run %s", r.Verdict, c.Verdict, c.Fidelity, r.Fidelity)
 		}
-		if len(c.Notes) != 1 || !strings.Contains(c.Notes[0], "12.2.0") {
+		if len(c.Notes) != 1 || !strings.Contains(c.Notes[0].Text, "12.2.0") {
 			t.Errorf("the gap stays a note: %v", c.Notes)
 		}
 		if c2 := r.Hops[1].Checks[0]; c2.Fidelity.Level() != "exact" || len(c2.Notes) != 0 {
@@ -268,7 +270,7 @@ func TestAVersionGapIsInferredNotUndecided(t *testing.T) {
 // The ends of a path: no route, a local address, a loop (spec §4.8, §5.1).
 func TestTheEndsOfAPath(t *testing.T) {
 	t.Parallel()
-	dropped := "dropped by routing before security policy"
+	dropped := reason.New("path.no-route", "dropped by routing before security policy")
 	for _, c := range []struct {
 		name, dst string
 		lab       lab
@@ -295,11 +297,27 @@ func TestTheEndsOfAPath(t *testing.T) {
 		},
 	} {
 		r := runLab(t, c.lab, c.dst)
-		if got := summary(r); got != c.want || !slices.Equal(r.Notes, c.notes) {
+		if got := summary(r); got != c.want || !slices.Equal(r.Notes.Texts(), c.notes) {
 			t.Errorf("%s:\ngot  %s %v\nwant %s %v", c.name, got, r.Notes, c.want, c.notes)
 		}
-		if last := r.Hops[len(r.Hops)-1]; last.Checks[0].Verdict == NotEvaluated && last.Checks[0].Reason != dropped {
+		if last := r.Hops[len(r.Hops)-1]; last.Checks[0].Verdict == NotEvaluated && !slices.Equal(last.Checks[0].Reason, simulate.Reasons{dropped}) {
 			t.Errorf("%s: reason %q", c.name, last.Checks[0].Reason)
+		}
+	}
+}
+
+// A hop routing dropped carries the path's end code on each check it did not
+// evaluate, not a code of its own.
+func TestADroppedHopCarriesTheEndCode(t *testing.T) {
+	t.Parallel()
+	r := runLab(t, lab{defaults: allowAll, net: labNet(t, true)}, "198.18.30.5")
+	last := r.Hops[len(r.Hops)-1]
+	if r.Path.Outcome != routing.Dropped || r.Path.EndCode != "path.no-route" {
+		t.Fatalf("path %s %s", r.Path.Outcome, r.Path.EndCode)
+	}
+	for _, c := range last.Checks {
+		if c.Verdict != NotEvaluated || c.Reason[0].Code != r.Path.EndCode {
+			t.Errorf("%s: %s %+v", c.Name, c.Verdict, c.Reason)
 		}
 	}
 }
@@ -309,12 +327,12 @@ func TestTheEndsOfAPath(t *testing.T) {
 func TestAnUnreadableConfigurationIsAHole(t *testing.T) {
 	t.Parallel()
 	r := runLab(t, lab{defaults: allowAll, fail: pathlab.FW01}, pathlab.Destination)
-	reason := "the configuration of fw01 vsys1 cannot be read: snapshot unreadable"
-	want := "undecided at 2 routing  (" + reason + ") | 1 fw02/vsys1 security=pass:interzone-default | 2 fw01/vsys1 security=undecided doubts=" + reason
+	why := "the configuration of fw01 vsys1 cannot be read: snapshot unreadable"
+	want := "undecided at 2 routing  (" + why + ") | 1 fw02/vsys1 security=pass:interzone-default | 2 fw01/vsys1 security=undecided doubts=" + why
 	if got := summary(r); got != want {
 		t.Errorf("got  %s\nwant %s", got, want)
 	}
-	if !slices.Equal(r.Holes, []simulate.Missing{{Device: pathlab.FW01, Reason: reason}}) {
+	if !slices.Equal(r.Holes, []simulate.Missing{{Device: pathlab.FW01, Reason: why, Code: "gap.load-failed"}}) {
 		t.Errorf("holes %v", r.Holes)
 	}
 }
@@ -347,7 +365,7 @@ func TestErrors(t *testing.T) {
 		t.Errorf("a check's error: %v", err)
 	}
 	miss := &simulate.UnavailableError{Missing: []simulate.Missing{{Device: "fw02", Reason: "gone"}}}
-	r, _, err := run(ctx, e, input(pathlab.Destination), []Check{fake{r: CheckResult{Name: "fake", Verdict: Undecided, Reason: "gone"}, err: miss}})
+	r, _, err := run(ctx, e, input(pathlab.Destination), []Check{fake{r: CheckResult{Name: "fake", Verdict: Undecided, Reason: simulate.Reasons{reason.New("gap.load-failed", "gone")}}, err: miss}})
 	if err != nil || len(r.Holes) != 1 || r.Verdict != VerdictUndecided || r.At.Check != "fake" {
 		t.Errorf("a check's missing data: %v, %v, %+v", err, r.Holes, r.At)
 	}
@@ -378,8 +396,11 @@ func TestTheSecurityCheck(t *testing.T) {
 	h := routing.Hop{Device: pathlab.FW02, Vsys: "vsys1"}
 	f := input(pathlab.Destination).Flow
 	r, err := Security{}.Evaluate(context.Background(), e, h, f)
-	if err != nil || r.Verdict != NotEvaluated || !r.Fidelity.Declared() || r.Name != "security" {
+	if err != nil || r.Verdict != NotEvaluated || !r.Fidelity.Declared() || r.Name != "security" || r.Reason[0].Code != "zone.missing" {
 		t.Errorf("no zones: %+v, %v", r, err)
+	}
+	if r, _ := (Security{}).Evaluate(context.Background(), e, routing.Hop{Device: pathlab.FW02}, f); r.Reason[0].Code != "zone.vsys-unknown" {
+		t.Errorf("no vsys: %+v", r)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancelling := *e
@@ -395,7 +416,7 @@ func TestTheSecurityCheck(t *testing.T) {
 	nilCfg.Load = func(string, string) (simulate.Target, error) { return simulate.Target{}, nil }
 	r, err = Security{}.Evaluate(context.Background(), &nilCfg, h, f)
 	if !isType[*simulate.UnavailableError](err) || r.Verdict != Undecided || r.Fidelity.Level() != "undermatch" ||
-		r.Reason != "the configuration of fw02 vsys1 cannot be read: no configuration" {
+		!slices.Equal(r.Reason, simulate.Reasons{reason.New("gap.config-missing", "the configuration of fw02 vsys1 cannot be read: no configuration")}) {
 		t.Errorf("no configuration: %+v, %v", r, err)
 	}
 }

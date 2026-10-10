@@ -1,12 +1,15 @@
 package securitypolicy
 
 import (
+	"encoding/json"
 	"fmt"
+	"net/netip"
 	"slices"
 	"strings"
 	"testing"
 
 	"github.com/okaiser/proteus/internal/config"
+	"github.com/okaiser/proteus/internal/reason"
 	"github.com/okaiser/proteus/internal/schema"
 	"github.com/okaiser/proteus/internal/simulate"
 )
@@ -62,9 +65,20 @@ func TestRuleFieldsCoverTheSchema(t *testing.T) {
 func doubtList(v Verdict) string {
 	var out []string
 	for _, d := range v.Doubts {
-		out = append(out, fmt.Sprintf("%d %s: %s", d.Position, d.Rule, d.Reason))
+		out = append(out, fmt.Sprintf("%d %s: %s", d.Position, d.Rule, d.Text()))
 	}
 	return strings.Join(out, "\n")
+}
+
+// doubtCodeList lists each doubt's codes: "3 doubt.application".
+func doubtCodeList(v Verdict) []string {
+	var out []string
+	for _, d := range v.Doubts {
+		for _, r := range d.Reasons {
+			out = append(out, fmt.Sprintf("%d %s", d.Position, r.Code))
+		}
+	}
+	return out
 }
 
 // Each candidate's doubts, in rule order: a field no stage evaluates, set to
@@ -91,7 +105,7 @@ func TestDoubts(t *testing.T) {
 			`7 dmz-user: user not evaluated (corp\alice)`,
 			"7 dmz-user: destination-hip not evaluated (hip-a)",
 			"8 dmz-schedule: schedule not evaluated (work-hours)",
-			"9 dmz-pandb: url category not evaluated without a URL (news)",
+			"9 dmz-pandb: url category not defined in the configuration, such as a PAN-DB category (news)",
 			"10 dmz-custom: url category not evaluated without a URL (my-cat)",
 			"11 dmz-predefined: service predefined or not defined in the configuration (service-https)",
 			"12 dmz-no-service: service absent",
@@ -109,22 +123,59 @@ func TestDoubts(t *testing.T) {
 			"12 dmz-no-service: service absent",
 		}},
 		{"no port", flow(0, "icmp", ""), []string{
-			"3 app-one: service not evaluated without a tcp, udp or sctp port (application-default)",
+			"3 app-one: service application-default",
 			"3 app-one: application not evaluated (dropbox)",
-			"4 app-two: service not evaluated without a tcp, udp or sctp port (application-default)",
+			"4 app-two: service application-default",
 			"4 app-two: application not evaluated (zoom)",
 			`7 dmz-user: user not evaluated (corp\alice)`,
 			"7 dmz-user: destination-hip not evaluated (hip-a)",
 			"8 dmz-schedule: schedule not evaluated (work-hours)",
-			"9 dmz-pandb: url category not evaluated without a URL (news)",
+			"9 dmz-pandb: url category not defined in the configuration, such as a PAN-DB category (news)",
 			"10 dmz-custom: url category not evaluated without a URL (my-cat)",
-			"11 dmz-predefined: service not evaluated without a tcp, udp or sctp port (service-https)",
+			"11 dmz-predefined: service predefined or not defined in the configuration (service-https)",
 			"12 dmz-no-service: service absent",
 		}},
 	} {
 		_, v := run(t, e, c.flow)
 		if got, want := doubtList(v), strings.Join(c.want, "\n"); got != want {
 			t.Errorf("%s: doubts\n%s\nwant\n%s\ncandidates %s", c.name, got, want, ruleNames(v))
+		}
+	}
+	// Each doubt has the code of its kind (spec §3.1, §12 C7, C8).
+	codes := map[string][]string{
+		"port, no URL": {
+			"3 doubt.service-application-default", "3 doubt.application",
+			"4 doubt.service-application-default", "4 doubt.application",
+			"7 doubt.not-evaluated.user", "7 doubt.hip", "8 doubt.schedule",
+			"9 doubt.category-undefined", "10 doubt.category-no-url",
+			"11 doubt.service-predefined", "12 doubt.service-absent",
+		},
+		"port and URL": {
+			"3 doubt.service-application-default", "3 doubt.application",
+			"4 doubt.service-application-default", "4 doubt.application",
+			"7 doubt.not-evaluated.user", "7 doubt.hip", "8 doubt.schedule",
+			"9 doubt.category-undefined", "11 doubt.service-predefined", "12 doubt.service-absent",
+		},
+		"no port": {
+			"3 doubt.service-application-default", "3 doubt.application",
+			"4 doubt.service-application-default", "4 doubt.application",
+			"7 doubt.not-evaluated.user", "7 doubt.hip", "8 doubt.schedule",
+			"9 doubt.category-undefined", "10 doubt.category-no-url",
+			"11 doubt.service-predefined", "12 doubt.service-absent",
+		},
+	}
+	for name, want := range codes {
+		var f simulate.Flow
+		switch name {
+		case "port, no URL":
+			f = flow(443, "tcp", "")
+		case "port and URL":
+			f = flow(443, "tcp", "shop.example.com")
+		default:
+			f = flow(0, "icmp", "")
+		}
+		if _, v := run(t, e, f); !slices.Equal(doubtCodeList(v), want) {
+			t.Errorf("%s: codes %v\nwant %v", name, doubtCodeList(v), want)
 		}
 	}
 	// A rule whose fields are all evaluated, or any, has no doubt.
@@ -162,6 +213,10 @@ func TestOpaqueAddressesStayInDoubt(t *testing.T) {
 	if got := doubtList(v); got != want {
 		t.Errorf("doubts\n%s\nwant\n%s", got, want)
 	}
+	wantCodes := []string{"1 doubt.edl", "2 doubt.region", "3 doubt.dynamic-group", "5 doubt.edl", "6 doubt.edl", "7 doubt.region"}
+	if got := doubtCodeList(v); !slices.Equal(got, wantCodes) {
+		t.Errorf("codes %v, want %v", got, wantCodes)
+	}
 	if d := stage(r, "resolve-source").Detail; !strings.Contains(d, "5 kept naming addresses the configuration does not hold") {
 		t.Errorf("resolve-source: %s", d)
 	}
@@ -169,5 +224,93 @@ func TestOpaqueAddressesStayInDoubt(t *testing.T) {
 	_, v = run(t, e, flow("10.1.0.20"))
 	if got := doubtList(v); !strings.Contains(got, "4 from-group: source: external list (edl-bad, in group g-mixed)") || strings.Contains(got, "from-dag") {
 		t.Errorf("doubts\n%s", got)
+	}
+}
+
+// A doubt with several reasons reads as one line; JSON keeps each with its
+// code (spec 2026-10-09 §12 C6).
+func TestADoubtJoinsItsReasons(t *testing.T) {
+	t.Parallel()
+	d := Doubt{Position: 2, Rule: "r", Reasons: simulate.Reasons{
+		reason.New("doubt.edl", "source: external list (a)"), reason.New("doubt.region", "region (AT)"),
+	}}
+	b, err := json.Marshal(d)
+	if err != nil || d.Text() != "source: external list (a); region (AT)" ||
+		string(b) != `{"position":2,"rule":"r","reasons":[{"code":"doubt.edl","text":"source: external list (a)"},{"code":"doubt.region","text":"region (AT)"}]}` {
+		t.Errorf("json = %s, %v", b, err)
+	}
+}
+
+// Relevance writes its reason's code and text beside what it says.
+func TestRelevanceJSON(t *testing.T) {
+	t.Parallel()
+	r := Relevance{Known: true, Relevant: true, Reason: reason.New("verdict.relevant-route", "10.0.0.0/8 via default covers 10.0.0.1")}
+	b, err := json.Marshal(r)
+	if err != nil || string(b) != `{"known":true,"relevant":true,"code":"verdict.relevant-route","text":"10.0.0.0/8 via default covers 10.0.0.1"}` {
+		t.Errorf("json = %s, %v", b, err)
+	}
+}
+
+// A rule that a resolved FQDN reaches only through an FQDN object is in doubt,
+// and an earlier such rule with another action leaves the flow undecided (spec
+// 2026-10-09 §3.8, E20). A rule an address reaches, a field of any and a
+// negated rule are not.
+func TestFQDNResolutionDoubt(t *testing.T) {
+	t.Parallel()
+	e := env(t, "firewall-fqdn.xml", false)
+	dst := func(a string) simulate.Endpoint {
+		return simulate.Endpoint{Name: "www.example.com", Addrs: []netip.Addr{netip.MustParseAddr(a)}, Resolved: true}
+	}
+	want := func(rule string) string {
+		return rule + ": destination: www.example.com matched only through an FQDN object; the firewall resolves this object itself; its addresses can differ from ours"
+	}
+	negated := "not-web: destination: www.example.com excluded from the negated field only through an FQDN object; the firewall resolves this object itself; its addresses can differ from ours"
+	for _, tc := range []struct {
+		name, addr string
+		doubts     []string
+		first      string
+	}{
+		{"name only", "198.51.100.7", []string{want("block-web-by-name"), want("allow-web"), negated}, "rest"},
+		{"name and address", "203.0.113.10", []string{want("block-web-by-name"), negated}, "allow-web"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			_, v := run(t, e, simulate.Flow{Source: ep("10.0.0.1"), Destination: dst(tc.addr)})
+			var got []string
+			for _, d := range v.Doubts {
+				if len(d.Reasons) != 1 || d.Reasons[0].Code != "doubt.fqdn-resolution" {
+					t.Errorf("doubt %v", d.Reasons)
+				}
+				got = append(got, d.Rule+": "+d.Text())
+			}
+			if !slices.Equal(got, tc.doubts) {
+				t.Errorf("doubts = %q, want %q", got, tc.doubts)
+			}
+			// An object named like the FQDN is not reached by the name.
+			for _, r := range v.Candidates {
+				if r.Name == "block-lookalike" {
+					t.Errorf("block-lookalike is a candidate")
+				}
+			}
+			if first(v) != tc.first {
+				t.Errorf("first certain match = %s, want %s", first(v), tc.first)
+			}
+			out, why := v.Decision()
+			if out != Undecided || why[0].Code != "doubt.fqdn-resolution" ||
+				!strings.HasPrefix(why.Text(), "block-web-by-name (deny) at position 2 may match first: destination: www.example.com") {
+				t.Errorf("decision = %s, %+v", out, why)
+			}
+		})
+	}
+	// The network object named like the FQDN matches by its address, with no
+	// FQDN doubt.
+	_, v := run(t, e, simulate.Flow{Source: ep("10.0.0.1"), Destination: dst("192.0.2.9")})
+	if out, _ := v.Decision(); first(v) != "block-lookalike" || out != Stop || slices.ContainsFunc(v.Doubts, func(d Doubt) bool { return d.Rule == "block-lookalike" }) {
+		t.Errorf("lookalike: doubts %v, first %s, %s", v.Doubts, first(v), out)
+	}
+	// An address alone reaches no rule through the FQDN object.
+	_, v = run(t, e, simulate.Flow{Source: ep("10.0.0.1"), Destination: ep("203.0.113.10")})
+	if len(v.Doubts) != 0 || first(v) != "allow-web" {
+		t.Errorf("an address: doubts %v, first %s", v.Doubts, first(v))
 	}
 }

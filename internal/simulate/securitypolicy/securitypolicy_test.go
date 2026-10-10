@@ -13,6 +13,8 @@ import (
 
 	"github.com/okaiser/proteus/internal/config"
 	"github.com/okaiser/proteus/internal/index"
+	"github.com/okaiser/proteus/internal/reason"
+	"github.com/okaiser/proteus/internal/resolve"
 	"github.com/okaiser/proteus/internal/simulate"
 )
 
@@ -30,8 +32,9 @@ func envPath(t *testing.T, path string, zones bool) *simulate.Env {
 		if err != nil {
 			return simulate.Target{}, err
 		}
-		idx, err := index.For(cfg, config.Scope{Sort: config.ScopeVsys, Name: vsys})
-		if err != nil {
+		set := index.NewSet(cfg)
+		sc := config.Scope{Sort: config.ScopeVsys, Name: vsys}
+		if _, err := set.Index(sc, resolve.Security); err != nil {
 			return simulate.Target{}, err
 		}
 		var p index.Providers
@@ -46,11 +49,11 @@ func envPath(t *testing.T, path string, zones bool) *simulate.Env {
 			}
 			p.Zones = z
 		}
-		var notes []string
+		var notes simulate.Reasons
 		if rep.VersionGap != "" {
-			notes = append(notes, rep.VersionGap)
+			notes = append(notes, reason.New("gap.version", rep.VersionGap))
 		}
-		return simulate.Target{Config: cfg, Index: idx, Providers: p, Notes: notes}, nil
+		return simulate.Target{Config: cfg, Indexes: set.Provider(sc), Providers: p, Notes: notes}, nil
 	}}
 }
 
@@ -241,7 +244,7 @@ func TestAVersionGapIsInferred(t *testing.T) {
 			t.Errorf("%s: %s, unresolved %v", slug, st.Fidelity, st.Unresolved)
 		}
 	}
-	if len(r.Notes) != 1 || !strings.Contains(r.Notes[0], "12.2.0") {
+	if len(r.Notes) != 1 || !strings.Contains(r.Notes[0].Text, "12.2.0") {
 		t.Errorf("notes = %v", r.Notes)
 	}
 	if head(v) != "dc-to-home" {
@@ -280,6 +283,21 @@ func TestALoadFailureNamesTheDevice(t *testing.T) {
 	e := &simulate.Env{Load: func(string, string) (simulate.Target, error) { return simulate.Target{}, errors.New("no snapshot") }}
 	_, err := Simulation{}.Run(context.Background(), e, simulate.Input{Device: "fw09", Vsys: "vsys1"})
 	if err == nil || !strings.Contains(err.Error(), "fw09/vsys1") {
+		t.Errorf("err = %v", err)
+	}
+}
+
+// The security index comes from the target's provider. A target without one fails
+// the run like a failed load: the check never builds an index itself.
+func TestATargetWithoutAnIndexProviderFailsLikeALoad(t *testing.T) {
+	t.Parallel()
+	cfg, _, err := config.Load("../../../testdata/config/firewall-zones.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := &simulate.Env{Load: func(string, string) (simulate.Target, error) { return simulate.Target{Config: cfg}, nil }}
+	_, err = Simulation{}.Run(context.Background(), e, simulate.Input{Device: "fw09", Vsys: "vsys1"})
+	if err == nil || err.Error() != "policy: fw09/vsys1: no index provider" {
 		t.Errorf("err = %v", err)
 	}
 }
@@ -506,13 +524,13 @@ func TestDefaultRuleWithoutTheVsys(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	idx, err := index.For(cfg, config.Scope{Sort: config.ScopeVsys, Name: "vsys2"})
+	idx, err := index.New(cfg, config.Scope{Sort: config.ScopeVsys, Name: "vsys2"}, resolve.Security)
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := &state{known: true, target: simulate.Target{Config: other, Index: idx}}
+	s := &state{known: true, target: simulate.Target{Config: other}, idx: idx}
 	s.in.Flow.FromZone, s.in.Flow.ToZone = "inside", "dmz"
-	if d, why := s.defaultRule(); d.Name != "" || why != "the configuration has no vsys:vsys2, so its default rules are not known" {
+	if d, why := s.defaultRule(); d.Name != "" || why != reason.New("default.vsys-missing", "the configuration has no vsys:vsys2, so its default rules are not known") {
 		t.Errorf("got %+v, %q", d, why)
 	}
 }

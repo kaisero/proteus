@@ -2,6 +2,7 @@ package nat
 
 import (
 	"bufio"
+	"encoding/json"
 	"net/netip"
 	"os"
 	"strconv"
@@ -9,6 +10,8 @@ import (
 	"testing"
 
 	"github.com/okaiser/proteus/internal/config"
+	"github.com/okaiser/proteus/internal/index"
+	"github.com/okaiser/proteus/internal/reason"
 	"github.com/okaiser/proteus/internal/simulate"
 	"github.com/okaiser/proteus/internal/simulate/rulebase"
 )
@@ -52,7 +55,7 @@ func probes(t *testing.T, file string) []probe {
 
 func input(cfg *config.Config, p probe) Input {
 	return Input{
-		Target: simulate.Target{Config: cfg}, Vsys: "vsys1",
+		Target: withIndexes(cfg, "vsys1"), Vsys: "vsys1",
 		Flow: simulate.Flow{
 			Source:      simulate.Addr(netip.MustParseAddr(p.src)),
 			Destination: simulate.Addr(netip.MustParseAddr(p.dst)),
@@ -114,8 +117,12 @@ func TestDoubts(t *testing.T) {
 	p := probe{src: "198.18.1.10", dst: "198.18.250.10", from: "transport", to: "transport", iface: "ethernet1/1"}
 	m := Match(input(cfg, p))
 	if m.Rule == nil || m.Rule.Name != "internet-a" || len(m.Doubts) != 1 || m.Doubts[0].Rule != "t-dnat-port" ||
-		!strings.Contains(m.Doubts[0].Reason, "give --port") || m.Fidelity.Level() != "overmatch" {
+		!strings.Contains(m.Doubts[0].Text(), "give the destination port") || m.Doubts[0].Reasons[0].Code != "path.nat-no-port" || m.Fidelity.Level() != "overmatch" {
 		t.Errorf("no port: %+v", m)
+	}
+	// The summary has its own code; the doubt keeps its reasons' codes.
+	if rs := m.Fidelity.Reasons(); len(rs) != 1 || rs[0].Code != "doubt.nat-rule" || !strings.HasPrefix(rs[0].Text, "may instead hit t-dnat-port") {
+		t.Errorf("summary: %v", rs)
 	}
 	// An unknown ingress zone: every rule naming a source zone is a doubt.
 	p = probe{src: "198.18.11.77", dst: "198.18.250.200", port: 443, to: "transport", iface: "ethernet1/1"}
@@ -133,12 +140,12 @@ func TestMatchEnds(t *testing.T) {
 	if m := Match(in); m.Rule != nil || !strings.Contains(m.Dropped, "dropped before NAT") {
 		t.Errorf("no route: %+v", m)
 	}
-	in.PreNAT = &simulate.Forward{End: simulate.EndUnknownType, Fidelity: simulate.UnderMatch("x")}
+	in.PreNAT = &simulate.Forward{End: simulate.EndUnknownType, Fidelity: simulate.UnderMatch(reason.New("path.next-hop-type", "x"))}
 	if m := Match(in); m.Rule != nil || m.Fidelity.Level() != "undermatch" {
 		t.Errorf("unknown route type: %+v", m)
 	}
 	in.PreNAT, in.In = &simulate.Forward{Out: simulate.Port{Zone: "transport"}}, simulate.Port{Interface: "ethernet1/9"}
-	if m := Match(in); len(m.Unresolved) != 1 || !strings.Contains(m.Unresolved[0].Reason, "virtual wire") {
+	if m := Match(in); len(m.Unresolved) != 1 || !strings.Contains(m.Unresolved[0].Reason, "virtual wire") || m.Unresolved[0].Code != "path.virtual-wire" {
 		t.Errorf("virtual wire: %+v", m)
 	}
 	in.In, in.Vsys = simulate.Port{Router: "default", Zone: "transport"}, "vsys9"
@@ -159,7 +166,7 @@ func caseInput(t *testing.T, dst string, proto string, port uint16) Input {
 	t.Helper()
 	cfg := natConfig(t, "firewall-nat-cases.xml")
 	return Input{
-		Target: simulate.Target{Config: cfg}, Vsys: "vsys1",
+		Target: withIndexes(cfg, "vsys1"), Vsys: "vsys1",
 		Flow:   simulate.Flow{Destination: simulate.Addr(netip.MustParseAddr(dst)), Protocol: proto, DestPort: port},
 		In:     simulate.Port{Device: "fw", Router: "r", Zone: "trust"},
 		PreNAT: &simulate.Forward{Out: simulate.Port{Zone: "untrust", Interface: "ethernet1/1"}},
@@ -189,7 +196,7 @@ func TestServicesAndTypes(t *testing.T) {
 			}
 			var doubts strings.Builder
 			for _, d := range m.Doubts {
-				doubts.WriteString(d.Reason)
+				doubts.WriteString(d.Text())
 			}
 			if tc.doubt == "" && doubts.String() != "" || tc.doubt != "" && !strings.Contains(doubts.String(), tc.doubt) {
 				t.Errorf("doubts = %q", doubts.String())
@@ -198,14 +205,14 @@ func TestServicesAndTypes(t *testing.T) {
 	}
 	// nptv6 is skipped; a nat64 rule that could match stops the answer (spec §18 N6).
 	m := Match(caseInput(t, "203.0.113.4", "tcp", 443))
-	if m.Rule != nil || len(m.Unresolved) != 1 || !strings.Contains(m.Unresolved[0].Reason, "NAT64 rule six-four") {
+	if m.Rule != nil || len(m.Unresolved) != 1 || !strings.Contains(m.Unresolved[0].Reason, "NAT64 rule six-four") || m.Unresolved[0].Code != "gap.ipv6" {
 		t.Errorf("nat64: %+v", m)
 	}
 	if m.Excluded[0].Field != "nat-type nptv6" {
 		t.Errorf("nptv6: %+v", m.Excluded)
 	}
 	// An HA binding is ignored with a note (D2).
-	if m := Match(caseInput(t, "198.51.100.1", "tcp", 443)); len(m.Notes) != 1 || !strings.Contains(m.Notes[0], "bound to HA device 0") {
+	if m := Match(caseInput(t, "198.51.100.1", "tcp", 443)); len(m.Notes) != 1 || !strings.Contains(m.Notes[0].Text, "bound to HA device 0") || m.Notes[0].Code != "note.ha-binding" {
 		t.Errorf("binding: %+v", m.Notes)
 	}
 }
@@ -214,13 +221,13 @@ func TestAVersionGapIsNoted(t *testing.T) {
 	t.Parallel()
 	in := input(natConfig(t, "firewall-version-12.2.xml"), probe{src: "10.0.0.1", dst: "10.0.0.2", port: 443, from: "trust", to: "untrust"})
 	m := Match(in)
-	if m.Rule != nil || len(m.Notes) != 1 || !strings.Contains(m.Notes[0], "NAT checked with the") || m.Fidelity.Level() != "inferred" {
+	if m.Rule != nil || len(m.Notes) != 1 || !strings.Contains(m.Notes[0].Text, "NAT checked with the") || m.Notes[0].Code != "gap.version" || m.Fidelity.Level() != "inferred" {
 		t.Errorf("gap: %+v", m)
 	}
 	// A destination-only flow, and an unknown egress zone.
 	in = caseInput(t, "198.51.100.1", "tcp", 443)
 	in.PreNAT = &simulate.Forward{}
-	if m := Match(in); m.Rule != nil || len(m.Doubts) == 0 || !strings.Contains(m.Doubts[0].Reason, "egress zone is unknown") {
+	if m := Match(in); m.Rule != nil || len(m.Doubts) == 0 || !strings.Contains(m.Doubts[0].Text(), "egress zone is unknown") || m.Doubts[0].Reasons[0].Code != "zone.missing" {
 		t.Errorf("unknown egress: %+v", m)
 	}
 	if first(nil) != "" || sourceAddr(nil).IsValid() {
@@ -231,9 +238,64 @@ func TestAVersionGapIsNoted(t *testing.T) {
 func policyOf(t *testing.T, file string) rulebase.Vsys {
 	t.Helper()
 	cfg := natConfig(t, file)
-	v, ok := rulebase.Load(func(string, string) (simulate.Target, error) { return simulate.Target{Config: cfg}, nil }, "fw", "vsys1")
+	v, ok := rulebase.Load(func(_, vsys string) (simulate.Target, error) { return withIndexes(cfg, vsys), nil }, "fw", "vsys1")
 	if !ok {
 		t.Fatal("vsys1")
 	}
 	return v
+}
+
+// A NAT doubt with several reasons reads as one line; JSON keeps each with its
+// code.
+func TestANATDoubtJoinsItsReasons(t *testing.T) {
+	t.Parallel()
+	d := Doubt{Rule: "r", Reasons: simulate.Reasons{
+		reason.New("zone.missing", "the ingress zone is unknown"), reason.New("doubt.source-unknown", "the source is unknown"),
+	}}
+	b, err := json.Marshal(d)
+	if err != nil || d.Text() != "the ingress zone is unknown; the source is unknown" ||
+		string(b) != `{"rule":"r","reasons":[{"code":"zone.missing","text":"the ingress zone is unknown"},{"code":"doubt.source-unknown","text":"the source is unknown"}]}` {
+		t.Errorf("json = %s, %v", b, err)
+	}
+}
+
+// withIndexes is a target over a vsys of cfg with its index provider, as a
+// loader gives it.
+func withIndexes(cfg *config.Config, vsys string) simulate.Target {
+	sc := config.Scope{Sort: config.ScopeVsys, Name: vsys}
+	return simulate.Target{Config: cfg, Indexes: index.NewSet(cfg).Provider(sc)}
+}
+
+// A port decides only a service the configuration defines: a predefined
+// service, or a group of them, is a predefined doubt with or without a port,
+// so a caller is never asked for a port that cannot help.
+func TestServiceFitsAsksForAPortOnlyWhenItHelps(t *testing.T) {
+	t.Parallel()
+	svc := map[string]string{
+		"service:svc-443":           "tcp/443",
+		"service-group:g-defined":   "service-http, svc-443",
+		"service-group:g-undefined": "service-http, service-https",
+		"service-group:loop":        "loop",
+		"service-group:mixed-loop":  "loop, svc-443",
+	}
+	for _, tc := range []struct {
+		name string
+		port uint16
+		want reason.Code
+	}{
+		{"service-http", 0, "doubt.service-predefined"},
+		{"g-undefined", 0, "doubt.service-predefined"},
+		{"loop", 0, "doubt.service-predefined"},
+		{"svc-443", 0, "path.nat-no-port"},
+		{"g-defined", 0, "path.nat-no-port"},
+		{"service-http", 443, "doubt.service-predefined"},
+		{"g-defined", 443, "doubt.service-predefined"},
+		{"mixed-loop", 443, "doubt.service-predefined"},
+		{"svc-443", 443, ""},
+	} {
+		_, r := serviceFits(tc.name, simulate.Flow{Protocol: "tcp", DestPort: tc.port}, svc)
+		if r.Code != tc.want {
+			t.Errorf("%s port %d: %s, want %s", tc.name, tc.port, r.Code, tc.want)
+		}
+	}
 }

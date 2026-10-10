@@ -47,7 +47,7 @@ simulate nat <src> <dst> --device <fw>      the NAT rule and the translated pack
 - **`simulate <kind>`** has one subcommand per kind registered in
   `estate.Simulations`, each from its own builder in `kindCommands`
   (`TestEveryKindHasACommand`). See [simulator](simulator.md).
-- **`simulate policy <src> <dst>`** (`policypath.go`) has two modes (spec
+- **`simulate policy <src> <dst>`** (`cli/policypath.go`, `query/policy.go`) has two modes (spec
   2026-10-07 §3). **Path mode**, the default: routing's path from the start
   (`--device` names it, `--router` picks its router), the security check on every
   hop with the hop's flow and zones (`pathpolicy.Run`), one verdict `allowed`,
@@ -72,14 +72,28 @@ simulate nat <src> <dst> --device <fw>      the NAT rule and the translated pack
   hole (exit 3).
 - **`simulate routing <src> <dst>`** (or `<dst> --device <name> [--router]`) has
   its own command (`kindCommands`): no selectors but `--device`, `--at`, `--rib`,
-  `--why`. It reads every inventory device's stored interfaces and tables, draws a
+  `--why`. An undecided or undermatched simulate result also carries `needs`
+  (`query/needs.go`, spec 2026-10-09 §3.4): the port, protocol or URL a second
+  call can give, found from the reason codes; `[]` when none helps, no key
+  when the result is decided. `--detail summary|full` (default `full`) picks the
+  results' form on `--output json|yaml` for every question; with text output it
+  is a usage error. The envelope says which in `detail`; the summary types
+  (`query/summary.go`, spec §3.5) drop candidates, stage tables and a hop's
+  interfaces and lookups. It reads every inventory device's stored interfaces and tables, draws a
   box per firewall and vsys, and exits 2 for a start it cannot choose (ties,
   default-only, several routers, IPv6); a start device without a snapshot is a hole
   (exit 3). `scripts/device-probe.sh --routing <device>
   <router> <dst>...` checks its first lookup against the device.
 - **Output:** `--output text|json|yaml`. JSON and YAML are the same envelope:
-  `format` (1), `command`, `input`, `results` (always an array), `holes`,
-  `unresolved`, `notes`. Every note the text shows is in `notes` too.
+  `format` (2), `command`, `input`, `results` (always an array), `holes`,
+  `unresolved`, `notes`. Every note the text shows is in `notes` too. Format 2
+  writes every reason as `{code, text}` with its context fields (see
+  reporting.md); the text output does not change with it. Each result of a
+  question (simulate, search, lookup, snapshot diff) carries `answer`, one line
+  of its text output that a `query` builder makes and the renderer prints
+  (`TestGoldenAnswersAreTextLines`); search and lookup add `summary` with the
+  count line as its `answer`. Search prints its findings' answers only with
+  `--why`.
 - **Colour:** `--color auto|always|never` (also `PROTEUS_COLOR`, inventory `color:`),
   default `auto`. JSON and YAML are never coloured. `NO_COLOR`, `CLICOLOR_FORCE` and
   `TERM=dumb` act on `auto` only; `auto` colours a terminal and nothing else.
@@ -93,7 +107,7 @@ simulate nat <src> <dst> --device <fw>      the NAT rule and the translated pack
   prints its answer in all three.
 - **Errors on stderr:** text mode prints `proteus: <message>` and `log: <path>`. In
   JSON and YAML mode the last stderr line of a non-zero exit is one JSON object,
-  `{"format":1,"exit":N,"error":…,"log":…}`, also for command-line errors.
+  `{"format":2,"exit":N,"error":…,"log":…}`, also for command-line errors.
 - **A new command** builds an `answer` (`Command`, `Input`, `Results`,
   `Qualifiers`, `Text`) and ends its `RunE` with `a.emitRun(a.runX(...))`. It never
   writes to stdout itself; `emit` renders the format, logs the `answer:` line and
@@ -119,8 +133,141 @@ simulate nat <src> <dst> --device <fw>      the NAT rule and the translated pack
 
 ## Public API
 
-None. `cmd/proteus` is `main` only; the commands live in `internal/cli` behind
+`cmd/proteus` is `main` only; the commands live in `internal/cli` behind
 `cli.Run`.
+
+**Query layer** (`internal/query`, spec 2026-10-09 §3.7). Each question is a
+function from a typed input and an `Env` to a typed `Envelope[In, Res]`: the
+command line and the MCP server call the same functions. `cli` keeps Cobra, the
+flags, the text renderers, `emit` and the exit codes, and wraps each envelope in
+a local type that implements `answer`. A full result keeps the native values the
+renderers need in `json:"-"` fields, and the envelope keeps every target read
+(`Targets`). Input rules live in each input's `Validate()`; a refused input is a
+`*query.UsageError` with code `call.usage`, the command line's `Text`, and a
+`ToolText` with the input's field names where `Text` names a flag. `cli` maps it
+to exit 2. A choice only the user can make stays a `*simulate.ChoiceError`,
+whose `Kind` says what is chosen (`device`, `router`, or empty for a question
+with no choice).
+
+`Doc[Echo, Res]` is an envelope's JSON form, and `DocOf` builds it: the input
+block comes from the input's `Echo()` (`PathEcho`, `FileEcho`, `RoutingEcho`,
+`NATEcho`, `SearchEcho`, `LookupEcho`, `DiffEcho`, which the command line also
+prints), and every list prints `[]`. Inputs, input blocks and results carry
+`jsonschema` description tags for the generated schemas (spec §3.6).
+
+<!-- GENERATED:api ./internal/query -->
+```go
+type Check struct{ ... }
+type CheckSummary struct{ ... }
+type Checks []Check
+type DiffEcho struct{ ... }
+type DiffInput struct{ ... }
+type DiffResult struct{ ... }
+type DiffSummary struct{ ... }
+type Doc[Echo, Res any] struct{ ... }
+type Echoer[E any] interface{ ... }
+type Env struct{ ... }
+type Envelope[In, Res any] struct{ ... }
+type FileEcho struct{ ... }
+type Finding struct{ ... }
+type FindingSummary struct{ ... }
+type FlowInput struct{ ... }
+type HopSummary struct{ ... }
+type LookupEcho struct{ ... }
+type LookupInput struct{ ... }
+type LookupResult struct{ ... }
+type LookupSummary struct{ ... }
+type NATEcho struct{ ... }
+type NATInput struct{ ... }
+type NATResult struct{ ... }
+type NATSummary struct{ ... }
+type Need struct{ ... }
+type Note struct{ ... }
+type PathEcho struct{ ... }
+type PathHop struct{ ... }
+type PathHopSummary struct{ ... }
+type PathResult struct{ ... }
+type PathSummary struct{ ... }
+type Point struct{ ... }
+type PolicyFileInput struct{ ... }
+type PolicyInput struct{ ... }
+type RoutingEcho struct{ ... }
+type RoutingInput struct{ ... }
+type RoutingResult struct{ ... }
+type RoutingSummary struct{ ... }
+type Rule struct{ ... }
+type SearchEcho struct{ ... }
+type SearchInput struct{ ... }
+type Security struct{ ... }
+type SecurityResult struct{ ... }
+type SecuritySummary struct{ ... }
+type Selection struct{ ... }
+type Stage struct{ ... }
+type Summary struct{ ... }
+type Target struct{ ... }
+type Unresolved struct{ ... }
+type UsageError struct{ ... }
+
+func (cs Checks) MarshalJSON() ([]byte, error)
+func (e *UsageError) Error() string
+func (e *UsageError) Unwrap() error
+func (f Finding) Summary() FindingSummary
+func (in DiffInput) Echo() DiffEcho
+func (in DiffInput) Validate() *UsageError
+func (in LookupInput) Echo() LookupEcho
+func (in LookupInput) Validate() *UsageError
+func (in NATInput) Echo() NATEcho
+func (in NATInput) Validate() *UsageError
+func (in PolicyFileInput) Echo() FileEcho
+func (in PolicyFileInput) Validate() *UsageError
+func (in PolicyInput) Echo() PathEcho
+func (in PolicyInput) Validate() *UsageError
+func (in RoutingInput) Echo() RoutingEcho
+func (in RoutingInput) Validate() *UsageError
+func (in SearchInput) Echo() SearchEcho
+func (in SearchInput) Matching() string
+func (in SearchInput) Validate() *UsageError
+func (r DiffResult) Summary() DiffSummary
+func (r LookupResult) Summary() LookupSummary
+func (r NATResult) Summary() NATSummary
+func (r PathResult) Summary() PathSummary
+func (r RoutingResult) Summary() RoutingSummary
+func (r SecurityResult) Summary() SecuritySummary
+func CheckAction(c pathpolicy.CheckResult) string
+func DecisionLine(v securitypolicy.Verdict, name func(string) string) string
+func DestinationTranslation(d *nat.Translation, port uint16) string
+func Detail(f search.Finding) string
+func DiffAnswer(device, scope string, changes []drift.Change) string
+func DocOf[In Echoer[E], E, Res any](e Envelope[In, Res]) Doc[E, Res]
+func EndpointText(e simulate.Endpoint) string
+func FileAnswer(v securitypolicy.Verdict) string
+func FindingAnswer(t Target, kind, name, field string) string
+func Lookup(ctx context.Context, env Env, in LookupInput) (Envelope[LookupInput, LookupResult], error)
+func LookupAnswer(t Target, kind, name string) string
+func NAT(ctx context.Context, env Env, in NATInput) (Envelope[NATInput, NATResult], error)
+func NATAnswer(r nat.Result, f simulate.Flow) string
+func NoteOf(device, vsys string, r reason.Reason) Note
+func PathAnswer(r pathpolicy.Result) string
+func PointHop(r pathpolicy.Result) (routing.Hop, bool)
+func Policy(ctx context.Context, env Env, in PolicyInput) (Envelope[PolicyInput, PathResult], error)
+func PolicyFile(ctx context.Context, env Env, in PolicyFileInput) (Envelope[PolicyFileInput, SecurityResult], error)
+func PortNumber(p uint16) string
+func Routing(ctx context.Context, env Env, in RoutingInput) (Envelope[RoutingInput, RoutingResult], error)
+func RoutingAnswer(p routing.Path) string
+func Search(ctx context.Context, env Env, in SearchInput) (Envelope[SearchInput, Finding], error)
+func SimStages(stages []simulate.Stage) []Stage
+func SnapshotDiff(ctx context.Context, env Env, in DiffInput) (Envelope[DiffInput, DiffResult], error)
+func SourceTranslation(from string, t *nat.Translation) string
+func Summarize[In, R, S any](e Envelope[In, R], f func(R) S) Envelope[In, S]
+func SystemCanonicalName(ctx context.Context, name string) (string, error)
+func SystemResolve(ctx context.Context, name string) ([]netip.Addr, error)
+func TargetOf(t estate.Target) Target
+func TargetQualifiers(ts []estate.Target) ([]Unresolved, []Note)
+func Targets(ctx context.Context, env Env, sel Selection) ([]estate.Target, []estate.Hole, error)
+func UnresolvedOf(device, vsys string, r reason.Reason) Unresolved
+func UnresolvedOfParts(device, vsys string, rs simulate.Reasons) []Unresolved
+```
+<!-- /GENERATED:api -->
 
 ## Gotchas / invariants
 

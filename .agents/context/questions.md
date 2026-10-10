@@ -57,14 +57,28 @@ what was added, removed or changed. Position is not compared.
 
 <!-- GENERATED:api ./internal/estate -->
 ```go
+type ConfigSource interface{ ... }
+type DiskConfigs struct{}
+type DiskOps struct{}
 type Hole struct{ ... }
+type Indexes interface{ ... }
+type Loaded struct{ ... }
 type Network struct{ ... }
+type OpSource interface{ ... }
+type OpTables struct{ ... }
 type Target struct{ ... }
 type When struct{ ... }
 
+func (DiskConfigs) Config(sn store.Snapshot) (Loaded, error)
+func (DiskOps) HA(sn store.Snapshot) (resolve.HAState, error)
+func (DiskOps) Tables(sn store.Snapshot) (OpTables, error)
+func (h Hole) Why() reason.Reason
 func (n *Network) Device(name string) (simulate.DeviceData, error)
 func (n *Network) Devices() []string
+func (n *Network) Read() []string
+func GapOf(err error) reason.Code
 func Kinds() []string
+func NewHole(device, vsys string, r reason.Reason) Hole
 func NewNetwork(st *store.Store, devices []string, w When) *Network
 func Open(st *store.Store, devices, vsys []string, w When) ([]Target, []Hole)
 func OpenFile(path string, vsys []string, log *runlog.Logger) ([]Target, []Hole, error)

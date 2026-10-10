@@ -1,0 +1,2 @@
+# The compose sample reads its secrets from here: never commit them.
+secrets/

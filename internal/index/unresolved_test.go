@@ -1,6 +1,7 @@
 package index
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/netip"
 	"strings"
@@ -8,6 +9,8 @@ import (
 	"testing"
 
 	"github.com/RoaringBitmap/roaring/v2"
+
+	"github.com/okaiser/proteus/internal/reason"
 )
 
 // The defect that started this, now closed.
@@ -85,7 +88,7 @@ func TestCandidatesReportsAValueNothingRecognises(t *testing.T) {
 	if len(rep.Unresolved) == 0 {
 		t.Fatal("an unrecognised value resolved silently")
 	}
-	if !strings.Contains(rep.Unresolved[0].Reason, "any") {
+	if !strings.Contains(rep.Unresolved[0].Reason, "any") || rep.Unresolved[0].Code != "gap.object-unresolved" {
 		t.Errorf("reason does not say only any-rules are reported: %q", rep.Unresolved[0].Reason)
 	}
 	if !ruleNames(idx, rules)["any-category-early"] {
@@ -184,7 +187,7 @@ func TestCandidatesFindsAnFQDNObjectAndSaysWhatIsMissing(t *testing.T) {
 	if rep.Hits[0].Via != "host.example.com" {
 		t.Errorf("Via = %q, want the value that matched", rep.Hits[0].Via)
 	}
-	if len(rep.Unresolved) == 0 {
+	if len(rep.Unresolved) == 0 || rep.Unresolved[0].Code != "gap.fqdn-no-address" {
 		t.Error("an fqdn resolves on the device, so the answer is incomplete and must say so")
 	}
 	if !ruleNames(idx, rules)["fqdn-rule"] {
@@ -237,5 +240,19 @@ func TestUnresolvedString(t *testing.T) {
 		if got := tc.u.String(); got != tc.want {
 			t.Errorf("String() = %q, want %q", got, tc.want)
 		}
+	}
+}
+
+// An Unresolved keeps its code, and JSON writes it (format 2).
+func TestUnresolvedKeepsItsCode(t *testing.T) {
+	t.Parallel()
+	r := reason.New("zone.missing", "why")
+	u := NewUnresolved("x", "zone", r)
+	if u != (Unresolved{Value: "x", Kind: "zone", Reason: "why", Code: "zone.missing"}) || u.Why() != r {
+		t.Errorf("got %+v", u)
+	}
+	b, err := json.Marshal(u)
+	if err != nil || string(b) != `{"value":"x","kind":"zone","code":"zone.missing","text":"why"}` {
+		t.Errorf("json = %s, %v", b, err)
 	}
 }

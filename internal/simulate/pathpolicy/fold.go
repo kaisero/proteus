@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/okaiser/proteus/internal/reason"
 	"github.com/okaiser/proteus/internal/simulate"
 	"github.com/okaiser/proteus/internal/simulate/routing"
 )
@@ -18,7 +19,7 @@ const (
 // then the first undecided check; then the first check that stops.
 func hopState(h Hop) (HopVerdict, *Point) {
 	if len(h.Doubts) > 0 {
-		return Undecided, &Point{Hop: h.Index, Check: checkRouting, Reason: h.Doubts[0]}
+		return Undecided, &Point{Hop: h.Index, Check: checkRouting, Reason: h.Doubts[:1:1]}
 	}
 	for _, want := range []HopVerdict{Undecided, Stop} {
 		for _, c := range h.Checks {
@@ -49,7 +50,8 @@ func fold(r *Result, routingFid simulate.Fidelity) {
 				r.Verdict = VerdictDenied
 			}
 		case v == Stop && !stopped:
-			r.Notes = append(r.Notes, fmt.Sprintf("a later hop denies: hop %d (%s), %s", h.Index, describe(h.Routing), pt.Reason))
+			r.Notes = append(r.Notes, reason.New("note.later-deny",
+				fmt.Sprintf("a later hop denies: hop %d (%s), %s", h.Index, describe(h.Routing), pt.Reason.Text())))
 		}
 		if v == Stop {
 			stopped = true
@@ -57,8 +59,10 @@ func fold(r *Result, routingFid simulate.Fidelity) {
 	}
 	if r.At == nil {
 		// The end line pads its columns for the text; a reason reads as a
-		// sentence.
-		end := &Point{Hop: len(r.Hops), Check: checkRouting, Reason: strings.Join(strings.Fields(r.Path.End), " ")}
+		// sentence. Its code is routing's.
+		end := &Point{Hop: len(r.Hops), Check: checkRouting, Reason: simulate.Reasons{{
+			Code: r.Path.EndCode, Text: strings.Join(strings.Fields(r.Path.End), " "),
+		}}}
 		switch r.Path.Outcome {
 		case routing.Delivered, routing.Local:
 			r.Verdict = VerdictAllowed
@@ -88,12 +92,13 @@ func fold(r *Result, routingFid simulate.Fidelity) {
 	}
 	r.Fidelity = simulate.Weakest(fs...)
 	if r.Path.Outcome == routing.Local {
-		r.Notes = append(r.Notes, noteLocal)
+		r.Notes = append(r.Notes, reason.New("note.local-services", noteLocal))
 	}
 	if len(r.Path.Hidden) > 0 {
 		// Spec E17: a firewall that forwards without a router may sit on the path
 		// unseen; the verdict does not include it.
-		r.Notes = append(r.Notes, "firewalls that may sit on the path unseen are not checked: "+strings.Join(r.Path.Hidden, ", "))
+		r.Notes = append(r.Notes, reason.New("path.hidden-firewall",
+			"firewalls that may sit on the path unseen are not checked: "+strings.Join(r.Path.Hidden, ", ")))
 	}
 }
 

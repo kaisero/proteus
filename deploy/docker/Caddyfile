@@ -1,0 +1,29 @@
+# TLS in front of proteus mcp --http. Caddy gets a certificate for the name
+# below from Let's Encrypt; the name must resolve to this host. Replace
+# proteus.example.org with the server's name, also in PROTEUS_MCP_ALLOWED_HOSTS
+# of compose.yaml: Caddy passes the Host on, and proteus answers 403 to any
+# other.
+
+proteus.example.org {
+	# Allow only the gateway's egress addresses, when it publishes them.
+	# Placeholders from the documentation range: replace them.
+	# @outside not remote_ip 203.0.113.10 203.0.113.11
+	# respond @outside 403
+
+	# proteus refuses bodies above 1 MiB itself; this stops them earlier.
+	request_body {
+		max_size 1MB
+	}
+
+	reverse_proxy proteus-mcp:8765 {
+		# Answers stream as server-sent events: pass each event at once.
+		flush_interval -1
+		health_uri /healthz
+		health_interval 30s
+	}
+
+	log {
+		output stdout
+		format json
+	}
+}

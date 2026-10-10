@@ -1,8 +1,8 @@
 package index
 
 import (
+	"errors"
 	"fmt"
-	"sync"
 
 	"github.com/okaiser/proteus/internal/config"
 	"github.com/okaiser/proteus/internal/resolve"
@@ -39,60 +39,34 @@ func (i *Index) VersionGap() string { return i.gap }
 // ids RulesWith takes.
 func (i *Index) Interner() *Interner { return i.in }
 
-type cacheKey struct {
-	path  string
-	scope string
-	rb    resolve.Rulebase
-}
-
-type cacheEntry struct {
-	once sync.Once
-	idx  *Index
-	err  error
-}
-
-var (
-	cacheMu sync.Mutex
-	cache   = map[cacheKey]*cacheEntry{}
-)
-
-// For returns the index for a scope, building it on first call and returning the
-// cached instance afterwards.
+// Build builds the index of one scope's rulebase from a configuration and the
+// edges read from it. The security index answers every field; the NAT and PBF
+// indexes answer which of their rules a value can reach with the same matching:
+// groups, negation left to the caller, FQDNs, lists and version gaps alike. Only
+// the address fields are meaningful for those rulebases; zones and interfaces are
+// the caller's to compare.
 //
-// Rule bitmaps key on the vsys: each vsys has its own rulebase, so the cache is
-// bounded by the number of vsys.
-func For(cfg *config.Config, sc config.Scope) (*Index, error) {
-	return ForRulebase(cfg, sc, resolve.Security)
+// The package keeps nothing: the caller owns the index and decides how long it
+// lives. Pass the same edges to every index of one configuration, so the file is
+// read once (see Edges).
+func Build(cfg *config.Config, edges *Edges, sc config.Scope, rb resolve.Rulebase) (*Index, error) {
+	if edges == nil || edges.cfg != cfg {
+		return nil, errors.New("index: the edges were not read from this configuration")
+	}
+	return build(cfg, edges.list, sc, rb)
 }
 
-// ForRulebase returns the index of a scope's NAT or PBF rules, answering which of
-// them a value can reach with the same matching the security index uses: groups,
-// negation left to the caller, FQDNs, lists and version gaps alike. Only the
-// address fields are meaningful for these rulebases; zones and interfaces are the
-// caller's to compare.
-func ForRulebase(cfg *config.Config, sc config.Scope, rb resolve.Rulebase) (*Index, error) {
-	key := cacheKey{path: cfg.Path(), scope: sc.String(), rb: rb}
-
-	cacheMu.Lock()
-	e, ok := cache[key]
-	if !ok {
-		e = &cacheEntry{}
-		cache[key] = e
+// New reads a configuration's edges and builds one index, for a caller that needs
+// a single index of it. A caller that needs more uses a Set or Build.
+func New(cfg *config.Config, sc config.Scope, rb resolve.Rulebase) (*Index, error) {
+	edges, err := ReadEdges(cfg)
+	if err != nil {
+		return nil, err
 	}
-	cacheMu.Unlock()
-
-	e.once.Do(func() { e.idx, e.err = build(cfg, sc, rb) })
-	if e.err != nil {
-		// A failed build is not cached, so a later call can retry.
-		cacheMu.Lock()
-		delete(cache, key)
-		cacheMu.Unlock()
-		return nil, e.err
-	}
-	return e.idx, nil
+	return build(cfg, edges.list, sc, rb)
 }
 
-func build(cfg *config.Config, sc config.Scope, rb resolve.Rulebase) (*Index, error) {
+func build(cfg *config.Config, edges edgeList, sc config.Scope, rb resolve.Rulebase) (*Index, error) {
 	in := NewInterner()
 
 	addrs := resolve.ObjectsInScope(cfg, sc, "address")
@@ -104,10 +78,7 @@ func build(cfg *config.Config, sc config.Scope, rb resolve.Rulebase) (*Index, er
 		in.ID(o.Name)
 	}
 
-	refs, err := newRefsIndex(in, cfg, sc)
-	if err != nil {
-		return nil, err
-	}
+	refs := newRefsIndex(in, edges, sc)
 
 	rules, err := rulesForScope(cfg, sc, rb)
 	if err != nil {
@@ -190,12 +161,4 @@ func rulesForScope(cfg *config.Config, sc config.Scope, rb resolve.Rulebase) ([]
 		}
 	}
 	return nil, fmt.Errorf("index: no vsys named %q", sc.Name)
-}
-
-// clearCache drops every built index. Tests and benchmarks use it to measure a
-// cold build; nothing else should.
-func clearCache() {
-	cacheMu.Lock()
-	defer cacheMu.Unlock()
-	cache = map[cacheKey]*cacheEntry{}
 }

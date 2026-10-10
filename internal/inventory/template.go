@@ -32,6 +32,7 @@ defaults:
   log_keep: 20                   # run logs kept
   # log_dir: ~/.local/state/proteus/log
   # store: ~/.local/share/proteus   # where snapshots are kept
+  # export_inventory: true          # fetch writes <store>/.proteus/inventory.yaml for proteus mcp
 
 devices:
   - name: fw01

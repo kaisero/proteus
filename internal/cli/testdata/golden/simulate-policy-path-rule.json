@@ -1,6 +1,7 @@
 {
-  "format": 1,
+  "format": 2,
   "command": "simulate policy",
+  "detail": "full",
   "input": {
     "mode": "path",
     "flow": {
@@ -25,13 +26,19 @@
   },
   "results": [
     {
+      "answer": "denied at hop 2: fw01 / vsys1, rule block-servers (deny)",
       "mode": "path",
       "verdict": "denied",
       "at": {
         "hop": 2,
         "check": "security",
         "rule": "block-servers",
-        "reason": "rule block-servers (deny)"
+        "reasons": [
+          {
+            "code": "verdict.rule",
+            "text": "rule block-servers (deny)"
+          }
+        ]
       },
       "fidelity": {
         "level": "exact"
@@ -51,6 +58,7 @@
       "placed": "connected",
       "outcome": "delivered",
       "end": "198.18.10.100   delivered",
+      "end_code": "path.delivered",
       "stages": [
         {
           "slug": "place",
@@ -238,7 +246,12 @@
           "checks": {
             "security": {
               "verdict": "pass",
-              "reason": "default rule interzone-default (allow), local",
+              "reasons": [
+                {
+                  "code": "verdict.default",
+                  "text": "default rule interzone-default (allow), local"
+                }
+              ],
               "rule": "interzone-default",
               "default": "interzone-default",
               "default_action": "allow",
@@ -417,7 +430,12 @@
           "checks": {
             "security": {
               "verdict": "stop",
-              "reason": "rule block-servers (deny)",
+              "reasons": [
+                {
+                  "code": "verdict.rule",
+                  "text": "rule block-servers (deny)"
+                }
+              ],
               "rule": "block-servers",
               "default": "",
               "default_action": "",

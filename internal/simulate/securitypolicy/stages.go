@@ -10,6 +10,7 @@ import (
 	"github.com/RoaringBitmap/roaring/v2"
 
 	"github.com/okaiser/proteus/internal/index"
+	"github.com/okaiser/proteus/internal/reason"
 	"github.com/okaiser/proteus/internal/resolve"
 	"github.com/okaiser/proteus/internal/simulate"
 )
@@ -44,15 +45,23 @@ func resolveDestination(_ context.Context, s *state) (simulate.Outcome, error) {
 // side resolves one endpoint in one field: the FQDN against FQDN objects, every
 // address against everything, and negated rules inverted.
 func (s *state) side(f index.Field, ep simulate.Endpoint, negated func(resolve.Rule) bool) (*roaring.Bitmap, simulate.Outcome) {
-	b := roaring.New()
+	b, byFQDN, byAddr := roaring.New(), roaring.New(), roaring.New()
 	var out simulate.Outcome
 	var hits []string
 	if ep.Name != "" {
-		nb, rep := s.view.Candidates(f, ep.Name)
-		b.Or(nb)
+		// The name reaches rules only through FQDN objects, and a field of any.
+		// An object merely named like the FQDN holds an address the
+		// configuration states, so the addresses below decide it.
+		_, rep := s.view.Candidates(f, ep.Name)
+		b.Or(s.idx.RulesWithAny(f))
 		for _, h := range rep.Hits {
 			hits = append(hits, fmt.Sprintf("%s (%s) via %s", h.Name, h.Kind, h.Via))
+			// Only an address object whose value is the name is an FQDN object.
+			if h.Kind == "address" && strings.EqualFold(h.Via, ep.Name) {
+				byFQDN.Or(s.idx.RulesReaching(f, h.Name))
+			}
 		}
+		b.Or(byFQDN)
 		// An FQDN nothing defines is expected; only a real gap, such as a version
 		// gap, counts as unresolved.
 		for _, u := range rep.Unresolved {
@@ -64,6 +73,7 @@ func (s *state) side(f index.Field, ep simulate.Endpoint, negated func(resolve.R
 	for _, a := range ep.Addrs {
 		ab, rep := s.view.Candidates(f, a.String())
 		b.Or(ab)
+		byAddr.Or(ab)
 		for _, h := range rep.Hits {
 			hits = append(hits, fmt.Sprintf("%s (%s) via %s", h.Name, h.Kind, h.Via))
 		}
@@ -81,24 +91,42 @@ func (s *state) side(f index.Field, ep simulate.Endpoint, negated func(resolve.R
 			neg.Add(uint32(i))
 		}
 	}
+	// A rule an FQDN object reaches and no address does matched only through
+	// that object. The firewall resolves that object itself and refreshes it
+	// (default every 30 minutes), and policy matches the packet's addresses, so
+	// the rule holds the flow only if the firewall's answer agrees with this
+	// machine's. Source: PAN-OS admin guide, "Use FQDN Objects" (spec 2026-10-09
+	// §3.8, R9). A field of any matches every address and is no FQDN match.
+	// A negated rule excluded only through such an object may match on the
+	// firewall, so it stays a candidate with the same doubt.
+	byFQDN.AndNot(byAddr)
+	byFQDN.AndNot(s.idx.RulesWithAny(f))
+	fqdnOnly := roaring.AndNot(byFQDN, neg)
+	fqdnNegated := roaring.And(byFQDN, neg)
 	if !neg.IsEmpty() {
 		inverted := roaring.AndNot(neg, b)
 		b.AndNot(neg)
 		b.Or(inverted)
 	}
+	b.Or(fqdnNegated)
 	b.Or(opaque)
 	if s.opaque == nil {
-		s.opaque = map[string]map[uint32]string{}
+		s.opaque = map[string]map[uint32][]reason.Reason{}
 	}
-	s.opaque[f.String()] = map[uint32]string{}
+	s.opaque[f.String()] = map[uint32][]reason.Reason{}
 	for it := opaque.Iterator(); it.HasNext(); {
 		bit := it.Next()
 		s.opaque[f.String()][bit] = why[bit]
 	}
+	if s.fqdn == nil {
+		s.fqdn = map[string]fqdnMatch{}
+	}
+	s.fqdn[f.String()] = fqdnMatch{name: ep.Name, rules: fqdnOnly, negated: fqdnNegated}
 
 	switch {
 	case ep.Name != "" && len(ep.Addrs) == 0:
-		out.Fidelity = simulate.UnderMatch(fmt.Sprintf("%s resolved to no address, so only FQDN objects of that name were matched", ep.Name))
+		out.Fidelity = simulate.UnderMatch(reason.New("gap.fqdn-no-address",
+			fmt.Sprintf("%s resolved to no address, so only FQDN objects of that name were matched", ep.Name)))
 	case ep.Resolved:
 		out.Fidelity = simulate.Inferred
 	default:
@@ -106,7 +134,7 @@ func (s *state) side(f index.Field, ep simulate.Endpoint, negated func(resolve.R
 	}
 	out.Unresolved = s.withoutGap(&out.Fidelity, dedupe(out.Unresolved))
 	for _, u := range out.Unresolved {
-		out.Fidelity = simulate.Weakest(out.Fidelity, simulate.UnderMatch(u.Reason))
+		out.Fidelity = simulate.Weakest(out.Fidelity, simulate.UnderMatch(u.Why()))
 	}
 	out.Detail = fmt.Sprintf("%s: %d hits, %d negated rules", ep, len(hits), neg.GetCardinality())
 	if !opaque.IsEmpty() {
@@ -142,7 +170,8 @@ func deriveZones(_ context.Context, s *state) (simulate.Outcome, error) {
 		} else {
 			kept := s.narrowZones(fb, tb)
 			if !kept.IsEmpty() {
-				out.Fidelity = simulate.OverMatchBecause("a given zone is not defined in the vsys, so rule-type could not compare from and to for: " + names(s.rules, kept))
+				out.Fidelity = simulate.OverMatchBecause(reason.New("zone.undefined",
+					"a given zone is not defined in the vsys, so rule-type could not compare from and to for: "+names(s.rules, kept)))
 			}
 		}
 		// A given zone wins; the engine only says when it derives another (§18 N10).
@@ -178,7 +207,9 @@ func deriveZones(_ context.Context, s *state) (simulate.Outcome, error) {
 		z.Source += ", after NAT rule " + strings.Join(nz.rules, ", ")
 	}
 	if len(nz.doubts) > 0 {
-		out.Fidelity = simulate.Weakest(out.Fidelity, simulate.OverMatchBecause("the NAT rule is not certain: "+strings.Join(nz.doubts, "; ")))
+		// One code for the summary; the NAT doubts keep their own codes.
+		why := nz.doubts.Prefixed("the NAT rule is not certain: ").Joined()
+		out.Fidelity = simulate.Weakest(out.Fidelity, simulate.OverMatchBecause(reason.New("doubt.nat-rule", why.Text)))
 	}
 	z.From, z.To = from, to
 	// Derived zones are never single and known, so whether from equals to is open:
@@ -191,7 +222,8 @@ func deriveZones(_ context.Context, s *state) (simulate.Outcome, error) {
 		details = append(details, "to "+strings.Join(to, ", "))
 	}
 	if !kept.IsEmpty() {
-		out.Fidelity = simulate.Weakest(out.Fidelity, simulate.OverMatchBecause("the zones are derived, so rule-type could not compare from and to for: "+names(s.rules, kept)))
+		out.Fidelity = simulate.Weakest(out.Fidelity, simulate.OverMatchBecause(reason.New("zone.derived",
+			"the zones are derived, so rule-type could not compare from and to for: "+names(s.rules, kept))))
 	}
 	switch {
 	case fromB == nil && toB == nil:
@@ -277,7 +309,7 @@ func (s *state) narrowZones(from, to *roaring.Bitmap) *roaring.Bitmap {
 
 // defined reports whether the vsys defines a zone of this name.
 func (s *state) defined(zone string) bool {
-	for _, z := range resolve.ZonesInScope(s.target.Config, s.target.Index.Scope()) {
+	for _, z := range resolve.ZonesInScope(s.target.Config, s.idx.Scope()) {
 		if z.Name == zone {
 			return true
 		}
@@ -354,10 +386,11 @@ func matchService(_ context.Context, s *state) (simulate.Outcome, error) {
 	out := simulate.Outcome{Fidelity: simulate.Exact, Detail: term, Candidates: s.cand}
 	out.Unresolved = s.withoutGap(&out.Fidelity, rep.Unresolved)
 	if still := roaring.And(kept, s.cand); !still.IsEmpty() {
-		out.Fidelity = simulate.Weakest(out.Fidelity, simulate.OverMatchBecause("kept rules whose service is application-default, predefined or absent: "+names(s.rules, still)))
+		out.Fidelity = simulate.Weakest(out.Fidelity, simulate.OverMatchBecause(reason.New("doubt.service-kept",
+			"kept rules whose service is application-default, predefined or absent: "+names(s.rules, still))))
 	}
 	for _, u := range out.Unresolved {
-		out.Fidelity = simulate.Weakest(out.Fidelity, simulate.UnderMatch(u.Reason))
+		out.Fidelity = simulate.Weakest(out.Fidelity, simulate.UnderMatch(u.Why()))
 	}
 	out.Debug = []string{"left: " + names(s.rules, s.cand)}
 	return out, nil
@@ -385,10 +418,11 @@ func matchURL(_ context.Context, s *state) (simulate.Outcome, error) {
 		out.Debug = append(out.Debug, fmt.Sprintf("%s (%s) via %s", h.Name, h.Kind, h.Via))
 	}
 	if still := roaring.And(kept, s.cand); !still.IsEmpty() {
-		out.Fidelity = simulate.Weakest(out.Fidelity, simulate.OverMatchBecause("kept rules naming a category the configuration does not define, such as a PAN-DB category: "+names(s.rules, still)))
+		out.Fidelity = simulate.Weakest(out.Fidelity, simulate.OverMatchBecause(reason.New("doubt.category-undefined",
+			"kept rules naming a category the configuration does not define, such as a PAN-DB category: "+names(s.rules, still))))
 	}
 	for _, u := range out.Unresolved {
-		out.Fidelity = simulate.Weakest(out.Fidelity, simulate.UnderMatch(u.Reason))
+		out.Fidelity = simulate.Weakest(out.Fidelity, simulate.UnderMatch(u.Why()))
 	}
 	out.Debug = append(out.Debug, "left: "+names(s.rules, s.cand))
 	return out, nil
@@ -409,7 +443,7 @@ func (s *state) withoutField(field string) *roaring.Bitmap {
 // not define, one of the given keywords, or nothing at all: a rule a configuration
 // exports without the field cannot be judged on it, so it is kept, not dropped.
 func (s *state) unevaluable(field string, keywords ...string) *roaring.Bitmap {
-	defined := definedIn(s.target.Config, s.target.Index.Scope(), field)
+	defined := definedIn(s.target.Config, s.idx.Scope(), field)
 	out := roaring.New()
 	for i, r := range s.rules {
 		if len(r.Fields[field]) == 0 && field != "category" {
@@ -443,7 +477,7 @@ func (s *state) anyNames(field string) bool {
 }
 
 func dropDisabled(_ context.Context, s *state) (simulate.Outcome, error) {
-	disabled := roaring.And(s.cand, s.target.Index.Disabled())
+	disabled := roaring.And(s.cand, s.idx.Disabled())
 	s.cand.AndNot(disabled)
 	return simulate.Outcome{
 		Fidelity: simulate.Exact, Detail: fmt.Sprintf("%d disabled", disabled.GetCardinality()),
@@ -499,9 +533,9 @@ func firstMatch(_ context.Context, s *state) (simulate.Outcome, error) {
 			lead = "every candidate is in doubt"
 		}
 		d, err := s.defaultRule()
-		if err != "" {
-			out.Detail = lead + "; " + err
-			s.verdict.Undecided = err
+		if err.Text != "" {
+			out.Detail = lead + "; " + err.Text
+			s.verdict.Undecided = simulate.Reasons{err}
 			out.Fidelity = simulate.Weakest(out.Fidelity, simulate.UnderMatch(err))
 			return out, nil
 		}
@@ -511,17 +545,19 @@ func firstMatch(_ context.Context, s *state) (simulate.Outcome, error) {
 	}
 	for _, r := range before {
 		if r.Action != action {
+			// The undecided reason is the doubt's, named with its rule: each of
+			// the doubt's parts keeps its code.
 			d := doubted[r.Position]
-			why := fmt.Sprintf("%s (%s) at position %d may match first: %s", r.Name, r.Action, r.Position, d.Reason)
+			why := d.Reasons.Prefixed(fmt.Sprintf("%s (%s) at position %d may match first: ", r.Name, r.Action, r.Position))
 			s.verdict.Undecided = why
-			out.Detail += "; undecided: " + why
-			out.Fidelity = simulate.Weakest(out.Fidelity, simulate.UnderMatch(why))
+			out.Detail += "; undecided: " + why.Text()
+			out.Fidelity = simulate.Weakest(out.Fidelity, simulate.UnderMatch(why...))
 			return out, nil
 		}
 	}
 	if len(before) > 0 {
-		out.Fidelity = simulate.Weakest(out.Fidelity, simulate.OverMatchBecause(
-			"earlier candidates in doubt share the action "+action+": "+listNames(before)))
+		out.Fidelity = simulate.Weakest(out.Fidelity, simulate.OverMatchBecause(reason.New("doubt.same-action",
+			"earlier candidates in doubt share the action "+action+": "+listNames(before))))
 	}
 	return out, nil
 }
@@ -567,9 +603,9 @@ var validActions = []string{"allow", "deny", "drop", "reset-client", "reset-serv
 // PAN-OS evaluates the default rules after every other rule; intrazone-default
 // takes traffic within one zone and interzone-default traffic between zones.
 // Source: PAN-OS admin guide, "Default Security Policy Rules".
-func (s *state) defaultRule() (resolve.DefaultRule, string) {
+func (s *state) defaultRule() (resolve.DefaultRule, reason.Reason) {
 	if !s.known {
-		return resolve.DefaultRule{}, "the default rule depends on the zones"
+		return resolve.DefaultRule{}, reason.New("default.zones-unknown", "the default rule depends on the zones")
 	}
 	name := "interzone-default"
 	if s.in.Flow.FromZone == s.in.Flow.ToZone {
@@ -579,7 +615,7 @@ func (s *state) defaultRule() (resolve.DefaultRule, string) {
 	var stored []resolve.DefaultRule
 	found := false
 	for _, tg := range resolve.Targets(s.target.Config) {
-		if tg.Scope() != s.target.Index.Scope() {
+		if tg.Scope() != s.idx.Scope() {
 			continue
 		}
 		found = true
@@ -596,7 +632,8 @@ func (s *state) defaultRule() (resolve.DefaultRule, string) {
 	if !found {
 		// Without the vsys its overrides are unknown; the built-in action would be
 		// a guess.
-		return resolve.DefaultRule{}, fmt.Sprintf("the configuration has no %s, so its default rules are not known", s.target.Index.Scope())
+		return resolve.DefaultRule{}, reason.New("default.vsys-missing",
+			fmt.Sprintf("the configuration has no %s, so its default rules are not known", s.idx.Scope()))
 	}
 	// Precedence between a local and a pushed override is not verified on a
 	// device (spec E24): one source decides alone; two must agree, and then the
@@ -606,13 +643,14 @@ func (s *state) defaultRule() (resolve.DefaultRule, string) {
 		case i == 0:
 			d = e
 		case e.Action != d.Action:
-			return resolve.DefaultRule{}, "local and pushed default rules disagree; precedence not verified"
+			return resolve.DefaultRule{}, reason.New("default.precedence-unverified", "local and pushed default rules disagree; precedence not verified")
 		}
 	}
 	if !slices.Contains(validActions, d.Action) {
-		return resolve.DefaultRule{}, fmt.Sprintf("%s has the action %q, which is not a security rule action", name, d.Action)
+		return resolve.DefaultRule{}, reason.New("default.invalid-action",
+			fmt.Sprintf("%s has the action %q, which is not a security rule action", name, d.Action))
 	}
-	return d, ""
+	return d, reason.Reason{}
 }
 
 // withoutGap drops the version gap from a lookup's unresolved entries and lowers
@@ -621,10 +659,9 @@ func (s *state) defaultRule() (resolve.DefaultRule, string) {
 // as routing's version gap does. The gap stays in the run's notes. Every lookup
 // reports it, with no kind; any other entry stays unresolved.
 func (s *state) withoutGap(f *simulate.Fidelity, us []index.Unresolved) []index.Unresolved {
-	gap := s.target.Index.VersionGap()
 	var out []index.Unresolved
 	for _, u := range us {
-		if gap != "" && u.Reason == gap && u.Kind == "" {
+		if u.Code == "gap.version" {
 			*f = simulate.Weakest(*f, simulate.Inferred)
 			continue
 		}

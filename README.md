@@ -88,6 +88,7 @@ proteus search 10.20.0.0/16            # ask every firewall
 | Simulations | [Policy](docs/guides/simulate-policy.md), [NAT](docs/guides/simulate-nat.md), [Routing](docs/guides/simulate-routing.md) |
 | Snapshots and change history | [Snapshots](docs/guides/snapshots.md) |
 | JSON output and exit codes | [Scripting](docs/guides/scripting.md) |
+| Questions for an agent over MCP | [MCP server](docs/guides/mcp.md) |
 | Inventory, settings and paths | [Configuration](docs/configuration.md) |
 | Every command and flag | [CLI reference](docs/cli-reference.md) |
 | How it is built | [Architecture](docs/architecture.md) |

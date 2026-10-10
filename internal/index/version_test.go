@@ -23,7 +23,7 @@ func TestEveryReportCarriesTheVersionGap(t *testing.T) {
 		_, rep := idx.Candidates(q.f, q.value)
 		var told bool
 		for _, u := range rep.Unresolved {
-			if strings.Contains(u.Reason, "12.2.0") && strings.Contains(u.Reason, "11.2.0") {
+			if strings.Contains(u.Reason, "12.2.0") && strings.Contains(u.Reason, "11.2.0") && u.Code == "gap.version" {
 				told = true
 			}
 		}

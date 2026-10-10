@@ -144,7 +144,7 @@ func TestRoutingJSON(t *testing.T) {
 		t.Fatalf("results = %+v", env.Results)
 	}
 	r := env.Results[0]
-	if env.Format != 1 || env.Command != "simulate routing" || r.Outcome != "left-estate" || r.Fidelity.Level != "undermatch" ||
+	if env.Format != 2 || env.Command != "simulate routing" || r.Outcome != "left-estate" || r.Fidelity.Level != "undermatch" ||
 		len(r.Hops) != 2 || r.Hops[1].Device != "fw02" || r.Hops[0].Flow.FromZone != "server" || r.Hops[0].Flow.ToZone != "transport" ||
 		r.Hops[0].Flow.Source.Addrs[0] != "198.18.10.5" || r.Hops[1].Vsys != "vsys1" {
 		t.Errorf("json = %+v", env)
@@ -182,14 +182,14 @@ func TestRoutingNotesReachTheEnvelope(t *testing.T) {
 	}
 	out := c.want(0, "simulate", "routing", "198.18.10.5", "dns.example", "--output", "json")
 	var env struct {
-		Notes []struct{ Device, Note string }
+		Notes []struct{ Device, Text string }
 	}
 	if err := json.Unmarshal([]byte(out), &env); err != nil {
 		t.Fatalf("%v\n%s", err, out)
 	}
 	found := false
 	for _, n := range env.Notes {
-		if strings.Contains(n.Note, "dns.example resolved to 2 addresses") {
+		if strings.Contains(n.Text, "dns.example resolved to 2 addresses") {
 			found = true
 		}
 	}

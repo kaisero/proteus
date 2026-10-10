@@ -1,6 +1,7 @@
 {
-  "format": 1,
+  "format": 2,
   "command": "simulate policy",
+  "detail": "full",
   "input": {
     "flow": {
       "source": {
@@ -26,8 +27,14 @@
   },
   "results": [
     {
+      "answer": "first match: interzone-default (deny), default rule (built-in)",
       "verdict": "stop",
-      "reason": "default rule interzone-default (deny), built-in",
+      "reasons": [
+        {
+          "code": "verdict.default",
+          "text": "default rule interzone-default (deny), built-in"
+        }
+      ],
       "rule": "interzone-default",
       "default": "interzone-default",
       "default_action": "deny",
@@ -133,7 +140,8 @@
       "relevance": {
         "known": false,
         "relevant": false,
-        "reason": "no stored forwarding table"
+        "code": "gap.fib-missing",
+        "text": "no stored forwarding table"
       },
       "target": {
         "device": "file",

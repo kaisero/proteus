@@ -5,13 +5,17 @@
 package estate
 
 import (
+	"errors"
 	"fmt"
 	"slices"
 	"time"
 
 	"github.com/okaiser/proteus/internal/config"
+	"github.com/okaiser/proteus/internal/index"
+	"github.com/okaiser/proteus/internal/reason"
 	"github.com/okaiser/proteus/internal/resolve"
 	"github.com/okaiser/proteus/internal/runlog"
+	"github.com/okaiser/proteus/internal/simulate"
 	"github.com/okaiser/proteus/internal/store"
 )
 
@@ -26,15 +30,58 @@ type Target struct {
 	Snapshot *store.Snapshot // nil for a target read from a file
 	Config   *config.Config
 	Report   config.Report
+	// Indexes builds the configuration's indexes when the source that loaded
+	// it keeps them; nil leaves them to the caller. It is no data of the
+	// answer, so JSON leaves it out.
+	Indexes Indexes `json:"-"`
 	// Notes qualify every answer from this target: a stale snapshot, a version gap.
-	Notes []string
+	Notes simulate.Reasons
 }
 
 // Hole is a device or vsys that was asked for and could not be answered.
 type Hole struct {
-	Device string `json:"device"`
-	Vsys   string `json:"vsys,omitempty"`
-	Reason string `json:"reason"`
+	Device string      `json:"device"`
+	Vsys   string      `json:"vsys,omitempty"`
+	Code   reason.Code `json:"code"` // the kind of Reason
+	Reason string      `json:"text"`
+}
+
+// NewHole returns a hole for a device and vsys with r's code and text.
+func NewHole(device, vsys string, r reason.Reason) Hole {
+	return Hole{Device: device, Vsys: vsys, Reason: r.Text, Code: r.Code}
+}
+
+// Why returns the hole's code and text as one reason.
+func (h Hole) Why() reason.Reason { return reason.Reason{Code: h.Code, Text: h.Reason} }
+
+// GapOf is the code of a failure to read a device's data: a missing
+// configuration, a missing snapshot, or a load that failed (spec §12 C10). A
+// device whose snapshots all lack a configuration is a missing configuration.
+func GapOf(err error) reason.Code {
+	var c *codedError
+	switch {
+	case errors.As(err, &c):
+		return c.code
+	case errors.Is(err, store.ErrNoConfig):
+		return "gap.config-missing"
+	case errors.Is(err, store.ErrNoSnapshot):
+		return "gap.snapshot-missing"
+	}
+	return "gap.load-failed"
+}
+
+// codedError is a read failure that names its own code.
+type codedError struct {
+	code reason.Code
+	err  error
+}
+
+func (e *codedError) Error() string { return e.err.Error() }
+func (e *codedError) Unwrap() error { return e.err }
+
+// coded marks err with code c, which GapOf returns.
+func coded(c reason.Code, err error) error {
+	return &codedError{code: reason.New(c, "").Code, err: err}
 }
 
 // When says which snapshot of each device to read.
@@ -43,6 +90,60 @@ type When struct {
 	MaxAge time.Duration // zero: no age note
 	Now    time.Time
 	Log    *runlog.Logger // receives which snapshot each device resolved to
+	// Ops reads the devices' operational data; nil reads it from the store on
+	// every ask. A server fills it with its cache.
+	Ops OpSource
+	// Configs loads the snapshots' configurations; nil loads each from the
+	// store on every ask. A server fills it with its cache.
+	Configs ConfigSource
+}
+
+// Indexes gives a configuration's indexes: each scope's index of a rulebase.
+type Indexes interface {
+	Index(sc config.Scope, rb resolve.Rulebase) (*index.Index, error)
+}
+
+// Loaded is a snapshot's configuration as a ConfigSource gives it.
+type Loaded struct {
+	Config *config.Config
+	Report config.Report
+	// Indexes builds the configuration's indexes; nil leaves them to the
+	// caller.
+	Indexes Indexes
+}
+
+// ConfigSource loads a snapshot's configuration. The answer depends only on
+// the snapshot (its device and id), so an implementation may cache by them.
+// The returned values are shared: a caller must not change them. A source a
+// server shares between questions must be safe for concurrent use. Notes do
+// not come from it: each question builds them (spec 2026-10-09 §4.8).
+type ConfigSource interface {
+	Config(sn store.Snapshot) (Loaded, error)
+}
+
+// DiskConfigs loads each configuration from the store on every ask.
+type DiskConfigs struct{}
+
+// Config implements ConfigSource.
+func (DiskConfigs) Config(sn store.Snapshot) (Loaded, error) {
+	cfg, rep, err := config.Load(sn.Path(store.ConfigDoc))
+	return Loaded{Config: cfg, Report: rep}, err
+}
+
+// configs is the source of configurations.
+func (w When) configs() ConfigSource {
+	if w.Configs == nil {
+		return DiskConfigs{}
+	}
+	return w.Configs
+}
+
+// ops is the source of operational data.
+func (w When) ops() OpSource {
+	if w.Ops == nil {
+		return DiskOps{}
+	}
+	return w.Ops
 }
 
 // Open reads each device's chosen snapshot and returns one target per vsys, in
@@ -64,8 +165,8 @@ func Open(st *store.Store, devices, vsys []string, w When) ([]Target, []Hole) {
 // older one, so a caller that pinned a snapshot reads exactly that one.
 func OpenSnapshot(st *store.Store, device, id string, vsys []string, w When) ([]Target, []Hole) {
 	sn, err := st.Get(device, id)
-	if err == nil && !sn.Has(store.ConfigDoc) {
-		err = fmt.Errorf("store: %s@%s has no configuration", device, id)
+	if err == nil {
+		_, err = sn.ConfigPath()
 	}
 	return openSnapshot(device, sn, err, vsys, w)
 }
@@ -74,20 +175,21 @@ func OpenSnapshot(st *store.Store, device, id string, vsys []string, w When) ([]
 func openSnapshot(d string, sn store.Snapshot, err error, vsys []string, w When) ([]Target, []Hole) {
 	if err != nil {
 		w.Log.Warnf(runlog.TagSnap, "%s: hole: %v", d, err)
-		return nil, []Hole{{Device: d, Reason: err.Error()}}
+		return nil, []Hole{NewHole(d, "", reason.New(GapOf(err), err.Error()))}
 	}
-	cfg, rep, err := config.Load(sn.Path(store.ConfigDoc))
+	l, err := w.configs().Config(sn)
 	if err != nil {
 		w.Log.Warnf(runlog.TagSnap, "%s: hole: %v", d, err)
-		return nil, []Hole{{Device: d, Reason: err.Error()}}
+		return nil, []Hole{NewHole(d, "", reason.New("gap.load-failed", err.Error()))}
 	}
+	cfg := l.Config
 	w.Log.Infof(runlog.TagSnap, "%s: snapshot %s taken %s, PAN-OS %s read with the %s schema",
 		d, sn.ID, sn.Meta.TakenAt.Format(time.RFC3339), cfg.Version(), cfg.DigestVersion())
-	var notes []string
+	var notes simulate.Reasons
 	if age := w.Now.Sub(sn.Meta.TakenAt); w.MaxAge > 0 && age > w.MaxAge {
-		notes = append(notes, StaleNote(sn.ID, age, w.MaxAge))
+		notes = append(notes, reason.New("note.snapshot-stale", StaleNote(sn.ID, age, w.MaxAge)))
 	}
-	ts, hs := scopes(d, &sn, cfg, rep, vsys, notes)
+	ts, hs := scopes(d, &sn, cfg, l.Report, l.Indexes, vsys, notes)
 	for _, h := range hs {
 		w.Log.Warnf(runlog.TagSnap, "%s/%s: hole: %s", h.Device, h.Vsys, h.Reason)
 	}
@@ -101,7 +203,7 @@ func OpenFile(path string, vsys []string, log *runlog.Logger) ([]Target, []Hole,
 		return nil, nil, err
 	}
 	log.Infof(runlog.TagSnap, "file %s: PAN-OS %s read with the %s schema", path, cfg.Version(), cfg.DigestVersion())
-	ts, hs := scopes(FileDevice, nil, cfg, rep, vsys, nil)
+	ts, hs := scopes(FileDevice, nil, cfg, rep, nil, vsys, nil)
 	return ts, hs, nil
 }
 
@@ -115,11 +217,11 @@ func pick(st *store.Store, device string, at time.Time) (store.Snapshot, error) 
 // scopes returns a target per vsys the configuration defines, keeping only the
 // asked ones when vsys is not empty. An asked vsys the configuration lacks is a hole.
 func scopes(device string, sn *store.Snapshot, cfg *config.Config, rep config.Report,
-	vsys, notes []string,
+	ix Indexes, vsys []string, notes simulate.Reasons,
 ) ([]Target, []Hole) {
 	have := resolve.Vsyses(cfg)
 	if rep.VersionGap != "" {
-		notes = append(notes, rep.VersionGap)
+		notes = append(notes, reason.New("gap.version", rep.VersionGap))
 	}
 	want := map[string]bool{}
 	for _, v := range vsys {
@@ -137,7 +239,7 @@ func scopes(device string, sn *store.Snapshot, cfg *config.Config, rep config.Re
 		delete(missing, v)
 		out = append(out, Target{
 			Device: device, Vsys: v, Scope: config.Scope{Sort: config.ScopeVsys, Name: v},
-			Snapshot: sn, Config: cfg, Report: rep, Notes: notes,
+			Snapshot: sn, Config: cfg, Report: rep, Indexes: ix, Notes: notes,
 		})
 	}
 	var holes []Hole
@@ -147,7 +249,7 @@ func scopes(device string, sn *store.Snapshot, cfg *config.Config, rep config.Re
 	}
 	slices.Sort(names)
 	for _, v := range names {
-		holes = append(holes, Hole{Device: device, Vsys: v, Reason: fmt.Sprintf("no vsys %s; it has %v", v, have)})
+		holes = append(holes, NewHole(device, v, reason.New("gap.vsys-missing", fmt.Sprintf("no vsys %s; it has %v", v, have))))
 	}
 	return out, holes
 }

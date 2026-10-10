@@ -1,5 +1,6 @@
-format: 1
+format: 2
 command: simulate policy
+detail: full
 input:
   flow:
     source:
@@ -17,8 +18,11 @@ input:
   selection:
     file: ../../testdata/config/firewall-zones.xml
 results:
-  - verdict: stop
-    reason: default rule interzone-default (deny), built-in
+  - answer: 'first match: interzone-default (deny), default rule (built-in)'
+    verdict: stop
+    reasons:
+      - code: verdict.default
+        text: default rule interzone-default (deny), built-in
     rule: interzone-default
     default: interzone-default
     default_action: deny
@@ -95,7 +99,8 @@ results:
     relevance:
       known: false
       relevant: false
-      reason: no stored forwarding table
+      code: gap.fib-missing
+      text: no stored forwarding table
     target:
       device: file
       vsys: vsys1

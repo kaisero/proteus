@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/okaiser/proteus/internal/reason"
 	"github.com/okaiser/proteus/internal/resolve"
 	"github.com/okaiser/proteus/internal/simulate"
 	"github.com/okaiser/proteus/internal/simulate/routing"
@@ -154,7 +155,11 @@ func TestRenderRowsAndEnds(t *testing.T) {
 		Destination: pfx("10.0.0.0/8"),
 		NextHops:    []resolve.FIBRoute{{NextHop: "10.1.0.2"}},
 	}}
-	hop := func(dev, vsys string, notes ...string) routing.Hop {
+	hop := func(dev, vsys string, texts ...string) routing.Hop {
+		var notes simulate.Reasons
+		for _, n := range texts {
+			notes = append(notes, reason.New("note.nat-applied", n))
+		}
 		return routing.Hop{
 			Device: dev, Vsys: vsys, Lookups: []routing.Lookup{lk}, Notes: notes,
 			In:  simulate.Port{Interface: "e1", Addr: pfx("10.0.0.1/24")},
@@ -171,7 +176,7 @@ func TestRenderRowsAndEnds(t *testing.T) {
 	p := routing.Path{
 		Source: simulate.Addr(netip.MustParseAddr("10.0.0.5")), Destination: simulate.Addr(netip.MustParseAddr("10.9.9.9")),
 		Placed: topology.PlacedConnected, Outcome: routing.LeftByInterface, End: "leaves by tunnel.1 (zone b)",
-		Hops: []routing.Hop{h1, h2}, Hidden: []string{"fw5 (Layer 2 or virtual wire)"}, Notes: []string{"n.example resolved to 2 addresses"},
+		Hops: []routing.Hop{h1, h2}, Hidden: []string{"fw5 (Layer 2 or virtual wire)"}, Notes: simulate.Reasons{reason.New("dns.other-addresses", "n.example resolved to 2 addresses")},
 	}
 	var b bytes.Buffer
 	renderPath(&textOut{w: &b}, routingTitle(p), simulate.Run{Fidelity: simulate.Inferred}, p, viewNow, false, nil)

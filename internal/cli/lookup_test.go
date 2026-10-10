@@ -160,7 +160,7 @@ func TestLookupAcrossTheEstate(t *testing.T) {
 			Card                          card.Card
 		}
 	}
-	if err := json.Unmarshal([]byte(out), &env); err != nil || env.Format != 1 || env.Command != "lookup" || len(env.Results) != 1 {
+	if err := json.Unmarshal([]byte(out), &env); err != nil || env.Format != 2 || env.Command != "lookup" || len(env.Results) != 1 {
 		t.Fatalf("json: %v %+v", err, env)
 	}
 	r := env.Results[0]

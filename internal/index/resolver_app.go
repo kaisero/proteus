@@ -5,6 +5,7 @@ import (
 
 	"github.com/RoaringBitmap/roaring/v2"
 
+	"github.com/okaiser/proteus/internal/reason"
 	"github.com/okaiser/proteus/internal/resolve"
 )
 
@@ -37,22 +38,16 @@ func newAppResolver(apps, filters, containers []resolve.Object) *appResolver {
 	}
 	for _, f := range filters {
 		r.filters++
-		r.limits = append(r.limits, Unresolved{
-			Value: f.Name,
-			Kind:  "application-filter",
-			Reason: "an application filter selects predefined applications by category, risk " +
-				"and behaviour, and that metadata is in the content database a firewall " +
-				"downloads rather than in the configuration, so which applications it holds " +
-				"cannot be determined here",
-		})
+		r.limits = append(r.limits, NewUnresolved(f.Name, "application-filter", reason.New("gap.application-filter",
+			"an application filter selects predefined applications by category, risk "+
+				"and behaviour, and that metadata is in the content database a firewall "+
+				"downloads rather than in the configuration, so which applications it holds "+
+				"cannot be determined here")))
 	}
 	for _, c := range containers {
-		r.limits = append(r.limits, Unresolved{
-			Value: c.Name,
-			Kind:  "application-container",
-			Reason: "an application container groups predefined applications, and its members " +
-				"are in the content database rather than the configuration",
-		})
+		r.limits = append(r.limits, NewUnresolved(c.Name, "application-container", reason.New("gap.application-container",
+			"an application container groups predefined applications, and its members "+
+				"are in the content database rather than the configuration")))
 	}
 	return r
 }

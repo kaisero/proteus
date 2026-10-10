@@ -30,11 +30,7 @@ type refsIndex struct {
 
 // newRefsIndex keeps the positions of the edges whose scope this index covers.
 // Shared edges are kept too, because every scope inherits shared.
-func newRefsIndex(in *Interner, cfg *config.Config, sc config.Scope) (*refsIndex, error) {
-	all, err := edgesOf(cfg)
-	if err != nil {
-		return nil, err
-	}
+func newRefsIndex(in *Interner, all edgeList, sc config.Scope) *refsIndex {
 	r := &refsIndex{all: all, byTarget: map[uint32][]int32{}}
 	for i, e := range all {
 		if e.Scope != sc && e.Scope.Sort != config.ScopeShared {
@@ -46,7 +42,7 @@ func newRefsIndex(in *Interner, cfg *config.Config, sc config.Scope) (*refsIndex
 		//nolint:gosec // see above
 		r.byTarget[id] = append(r.byTarget[id], int32(i))
 	}
-	return r, nil
+	return r
 }
 
 // Refs returns every edge pointing at a name.

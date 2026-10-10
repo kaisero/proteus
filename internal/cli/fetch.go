@@ -13,7 +13,9 @@ import (
 	"github.com/okaiser/proteus/internal/estate"
 	"github.com/okaiser/proteus/internal/fetch"
 	"github.com/okaiser/proteus/internal/inventory"
+	"github.com/okaiser/proteus/internal/reason"
 	"github.com/okaiser/proteus/internal/runlog"
+	"github.com/okaiser/proteus/internal/simulate"
 	"github.com/okaiser/proteus/internal/store"
 	"github.com/okaiser/proteus/internal/task"
 )
@@ -80,7 +82,17 @@ func (a *app) runFetch(ctx context.Context, o fetchOptions) (answer, error) {
 	if err != nil {
 		return nil, err
 	}
-	return fetchAnswer{o: o, results: a.fetcher(s.inv, st).each(ctx, names)}, nil
+	ans := fetchAnswer{o: o, results: a.fetcher(s.inv, st).each(ctx, names)}
+	// The export follows every run, a failed one too, so the server's device
+	// list follows the inventory (spec 2026-10-09 §5).
+	if s.inv.Defaults.ExportInventory {
+		if ans.exportErr = inventory.WriteExport(s.storeRoot, s.inv); ans.exportErr != nil {
+			a.log.Errorf(runlog.TagRun, "%v", ans.exportErr)
+		} else {
+			a.log.Infof(runlog.TagRun, "inventory exported to %s", inventory.ExportPath(s.storeRoot))
+		}
+	}
+	return ans, nil
 }
 
 // fetcher fetches devices into one store.
@@ -145,7 +157,7 @@ func (f fetcher) store(_ context.Context, d *deviceFetch) (task.Result, error) {
 		Device: d.Target.Name, Host: d.Target.Host,
 		Hostname: res.System.Hostname, Model: res.System.Model,
 		Serial: res.System.Serial, SWVersion: res.System.SWVersion,
-		FetchedFrom: res.FetchedFrom, Notes: res.Notes,
+		FetchedFrom: res.FetchedFrom, Notes: simulate.Reasons(res.Notes).Texts(),
 	}
 	for _, o := range res.Outcomes {
 		dm := store.DocumentMeta{Name: o.Name}
@@ -237,17 +249,17 @@ func taskStages(recs []task.Record) []stageJSON {
 
 // fetchResult is one device in fetch's answer (spec §6.4).
 type fetchResult struct {
-	Device          string         `json:"device"`
-	Host            string         `json:"host,omitempty"`
-	FetchedFrom     string         `json:"fetched_from,omitempty"`
-	TLSVerification *bool          `json:"tls_verification,omitempty"` // absent when resolve failed
-	Stored          bool           `json:"stored"`
-	Snapshot        string         `json:"snapshot,omitempty"`
-	System          fetch.System   `json:"system"`
-	Documents       []documentJSON `json:"documents"`
-	Stages          []stageJSON    `json:"stages"`
-	Notes           []string       `json:"notes,omitempty"`
-	Error           string         `json:"error,omitempty"`
+	Device          string           `json:"device"`
+	Host            string           `json:"host,omitempty"`
+	FetchedFrom     string           `json:"fetched_from,omitempty"`
+	TLSVerification *bool            `json:"tls_verification,omitempty"` // absent when resolve failed
+	Stored          bool             `json:"stored"`
+	Snapshot        string           `json:"snapshot,omitempty"`
+	System          fetch.System     `json:"system"`
+	Documents       []documentJSON   `json:"documents"`
+	Stages          []stageJSON      `json:"stages"`
+	Notes           simulate.Reasons `json:"notes,omitempty"`
+	Error           string           `json:"error,omitempty"`
 }
 
 // documentJSON is one document of a device's fetch.
@@ -266,8 +278,9 @@ type fetchInput struct {
 
 // fetchAnswer is fetch's answer: one result per device named.
 type fetchAnswer struct {
-	o       fetchOptions
-	results []fetchResult
+	o         fetchOptions
+	results   []fetchResult
+	exportErr error // the inventory export failed
 }
 
 func (f fetchAnswer) Command() string { return "fetch" }
@@ -282,20 +295,34 @@ func (f fetchAnswer) Qualifiers() qualifiers {
 	var q qualifiers
 	for _, r := range f.results {
 		if r.TLSVerification != nil && !*r.TLSVerification {
-			q.Notes = append(q.Notes, note{Device: r.Device, Note: tlsOffNote})
+			q.Notes = append(q.Notes, noteOf(r.Device, "", tlsOff()))
 		}
 		for _, n := range r.Notes {
-			q.Notes = append(q.Notes, note{Device: r.Device, Note: n})
+			q.Notes = append(q.Notes, noteOf(r.Device, "", n))
 		}
 		if r.Error != "" {
-			q.Holes = append(q.Holes, estate.Hole{Device: r.Device, Reason: r.Error})
+			q.Holes = append(q.Holes, estate.NewHole(r.Device, "", reason.New("gap.fetch-failed", r.Error)))
 		}
+	}
+	if n, ok := f.exportNote(); ok {
+		q.Notes = append(q.Notes, noteOf("", "", n))
 	}
 	return q
 }
 
+// exportNote is the note of a failed inventory export, if it failed.
+func (f fetchAnswer) exportNote() (reason.Reason, bool) {
+	if f.exportErr == nil {
+		return reason.Reason{}, false
+	}
+	return reason.New("note.export-failed", f.exportErr.Error()), true
+}
+
 // Status is C11: every device stored every document → complete; a failure with at
 // least one device stored → incomplete; no device stored → an error (spec §6.4).
+// A failed inventory export makes a complete run incomplete: the snapshots are
+// stored, and the note names the part that is missing. It never makes a run an
+// error, and a run that stored nothing stays one.
 func (f fetchAnswer) Status() error {
 	stored, failed := 0, 0
 	for _, r := range f.results {
@@ -313,7 +340,7 @@ func (f fetchAnswer) Status() error {
 	switch {
 	case stored == 0:
 		return &exitErr{code: exitError, err: errors.New("no device was fetched")}
-	case failed > 0:
+	case failed > 0 || f.exportErr != nil:
 		return errIncomplete
 	}
 	return nil
@@ -334,7 +361,7 @@ func (f fetchAnswer) Text(t *textOut) error {
 			fmt.Fprintf(t, "  %s is the passive HA peer; fetched from the active peer %s\n", r.Device, r.FetchedFrom)
 		}
 		for _, n := range r.Notes {
-			fmt.Fprintf(t, "  %s\n", noteStyle(t.pal, n)("note: "+n))
+			fmt.Fprintf(t, "  %s\n", noteStyle(t.pal, n)("note: "+n.Text))
 		}
 		var tb table
 		for _, d := range r.Documents {
@@ -355,6 +382,9 @@ func (f fetchAnswer) Text(t *textOut) error {
 		if f.o.why {
 			printTaskStages(t, r.Stages)
 		}
+	}
+	if n, ok := f.exportNote(); ok {
+		fmt.Fprintf(t, "%s\n", t.pal.warn("note: "+n.Text))
 	}
 	return t.err
 }

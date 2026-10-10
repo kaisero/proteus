@@ -1,6 +1,7 @@
 {
-  "format": 1,
+  "format": 2,
   "command": "simulate policy",
+  "detail": "full",
   "input": {
     "flow": {
       "source": {
@@ -24,8 +25,14 @@
   },
   "results": [
     {
+      "answer": "first match: from-inside (allow)",
       "verdict": "pass",
-      "reason": "rule from-inside (allow)",
+      "reasons": [
+        {
+          "code": "verdict.rule",
+          "text": "rule from-inside (allow)"
+        }
+      ],
       "rule": "from-inside",
       "default": "",
       "default_action": "",
@@ -146,7 +153,8 @@
       "relevance": {
         "known": false,
         "relevant": false,
-        "reason": "no stored forwarding table"
+        "code": "gap.fib-missing",
+        "text": "no stored forwarding table"
       },
       "target": {
         "device": "file",

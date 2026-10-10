@@ -1,7 +1,10 @@
 package cli
 
 import (
+	"context"
+	"encoding/json"
 	"flag"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -192,6 +195,7 @@ func TestGoldenText(t *testing.T) {
 		args []string
 	}{
 		{"search", 0, []string{"search", "10.124.0.1", "--file", fixture("firewall-multivsys.xml")}},
+		{"search-why", 0, []string{"search", "10.124.0.1", "--why", "--file", fixture("firewall-multivsys.xml")}},
 		{"lookup", 0, []string{"lookup", "branch-to-dc", "--file", fixture("firewall-lookup.xml")}},
 		{"snapshot-show-file", 0, []string{"snapshot", "show", "--file", fixture("firewall-multivsys.xml")}},
 		{"simulate-policy", 0, []string{"simulate", "policy", "10.1.0.5", "10.2.0.5", "--port", "443", "--file", fixture("firewall-zones.xml")}},
@@ -256,4 +260,191 @@ func TestGoldenText(t *testing.T) {
 		goldenText(t, "simulate-routing", routingLab(t, false).want(0, "simulate", "routing", "198.18.10.5", "8.8.8.8", "--why"))
 		goldenColour(t, "simulate-routing", routingLab(t, false).want(0, "simulate", "routing", "198.18.10.5", "8.8.8.8", "--why", "--color", "always"))
 	})
+}
+
+// fqdnGoldens are simulate policy on an FQDN (spec 2026-10-09 §3.8). The fake
+// resolver gives www.example.com one address and an alias. Off 203.0.113.0/24,
+// to-web-by-name matches only through its FQDN object; on it, the address rule
+// matches too.
+var fqdnGoldens = []struct {
+	name, addr string
+}{
+	{"simulate-policy-fqdn-only", "198.51.100.7"},
+	{"simulate-policy-fqdn-and-address", "203.0.113.10"},
+}
+
+// fqdnCLI is a harness whose resolver answers www.example.com with addr, and
+// web.cdn.example.net as its canonical name.
+func fqdnCLI(t *testing.T, addr string) *cli {
+	c := newCLI(t)
+	c.lookup = func(context.Context, string) ([]netip.Addr, error) {
+		return []netip.Addr{netip.MustParseAddr(addr)}, nil
+	}
+	c.canonical = func(context.Context, string) (string, error) { return "web.cdn.example.net.", nil }
+	return c
+}
+
+func TestGoldenFQDN(t *testing.T) {
+	t.Parallel()
+	for _, g := range fqdnGoldens {
+		t.Run(g.name, func(t *testing.T) {
+			t.Parallel()
+			args := []string{"simulate", "policy", "10.0.0.1", "www.example.com", "--port", "443", "--file", fixture("firewall-simulate.xml")}
+			goldenText(t, g.name, fqdnCLI(t, g.addr).want(0, append(args, "--why")...))
+			golden(t, g.name, fqdnCLI(t, g.addr).want(0, append(args, "--output", "json")...))
+			goldenFile(t, g.name+".yaml", fqdnCLI(t, g.addr).want(0, append(args, "--output", "yaml")...))
+		})
+	}
+}
+
+// answerText is the text golden that shows a JSON golden's answers: search
+// adds its findings' answers only with --why (spec 2026-10-09 §3.3).
+var answerText = map[string]string{"search": "search-why"}
+
+// answering are the commands whose results carry an answer: the questions of
+// the query layer.
+var answering = map[string]bool{
+	"simulate policy": true, "simulate routing": true, "simulate nat": true,
+	"search": true, "lookup": true, "snapshot diff": true,
+}
+
+// Every result's answer, and a summary's, is a line of the text output of the
+// same question (spec 2026-10-09 §3.3, §7). Indentation is not part of it; a
+// routing end line is compared with its runs of spaces collapsed.
+func TestGoldenAnswersAreTextLines(t *testing.T) {
+	t.Parallel()
+	files, err := filepath.Glob(filepath.Join("testdata", "golden", "*.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	checked := 0
+	for _, file := range files {
+		name := strings.TrimSuffix(filepath.Base(file), ".json")
+		textName := name
+		if n, ok := answerText[name]; ok {
+			textName = n
+		}
+		text, err := os.ReadFile(filepath.Join("testdata", "golden", textName+".txt"))
+		if err != nil {
+			continue // no text twin, such as inventory init
+		}
+		raw, err := os.ReadFile(file)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var env struct {
+			Command string `json:"command"`
+			Results []struct {
+				Answer *string `json:"answer"`
+			} `json:"results"`
+			Summary *struct {
+				Answer string `json:"answer"`
+			} `json:"summary"`
+		}
+		if err := json.Unmarshal(raw, &env); err != nil {
+			t.Fatalf("%s: %v", file, err)
+		}
+		if !answering[env.Command] {
+			continue
+		}
+		lines := map[string]bool{}
+		for _, l := range strings.Split(string(text), "\n") {
+			lines[strings.TrimSpace(l)] = true
+			if env.Command == "simulate routing" {
+				lines[strings.Join(strings.Fields(l), " ")] = true
+			}
+		}
+		var answers []string
+		for _, r := range env.Results {
+			if r.Answer == nil {
+				t.Errorf("%s: a result has no answer", file)
+				continue
+			}
+			answers = append(answers, *r.Answer)
+		}
+		if env.Summary != nil {
+			answers = append(answers, env.Summary.Answer)
+		}
+		for _, a := range answers {
+			checked++
+			if a == "" || !lines[a] {
+				t.Errorf("%s: answer %q is not a line of %s.txt", file, a, textName)
+			}
+		}
+	}
+	if checked < 20 {
+		t.Errorf("only %d answers checked", checked)
+	}
+}
+
+// Every question's --detail summary (spec 2026-10-09 §3.5): the same
+// envelope with "detail": "summary" and summary results.
+func TestGoldenSummary(t *testing.T) {
+	t.Parallel()
+	summary := []string{"--output", "json", "--detail", "summary"}
+	for _, tc := range []struct {
+		name string
+		code int
+		args []string
+	}{
+		{"search-summary", 0, []string{"search", "10.124.0.1", "--file", fixture("firewall-multivsys.xml")}},
+		{"lookup-summary", 0, []string{"lookup", "branch-to-dc", "--file", fixture("firewall-lookup.xml")}},
+		{"simulate-policy-summary", 3, []string{"simulate", "policy", "10.0.0.5", "203.0.113.5", "--port", "443", "--from-zone", "dmz", "--to-zone", "wan", "--file", fixture("firewall-doubt.xml")}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			golden(t, tc.name, newCLI(t).want(tc.code, append(tc.args, summary...)...))
+		})
+	}
+	t.Run("search-summary-yaml", func(t *testing.T) {
+		t.Parallel()
+		goldenFile(t, "search-summary.yaml", newCLI(t).want(0, "search", "10.124.0.1", "--file", fixture("firewall-multivsys.xml"),
+			"--output", "yaml", "--detail", "summary"))
+	})
+	for _, g := range pathGoldens(t) {
+		if g.name != "simulate-policy-path-rule" && g.name != "simulate-policy-path-undecided" {
+			continue
+		}
+		t.Run(g.name, func(t *testing.T) {
+			t.Parallel()
+			golden(t, g.name+"-summary", pathVariant(t, g.pc, true).want(g.code, append(g.args, summary...)...))
+		})
+	}
+	t.Run("simulate-nat-summary", func(t *testing.T) {
+		t.Parallel()
+		golden(t, "simulate-nat-summary", natLab(t).want(0, append([]string{
+			"simulate", "nat", "198.18.1.10", "198.18.250.10",
+			"--device", "fw01", "--router", "default", "--from-zone", "transport", "--port", "8443",
+		}, summary...)...))
+	})
+	t.Run("simulate-routing-summary", func(t *testing.T) {
+		t.Parallel()
+		golden(t, "simulate-routing-summary", routingLab(t, false).want(0, append([]string{"simulate", "routing", "198.18.10.5", "8.8.8.8"}, summary...)...))
+	})
+	t.Run("snapshot-diff-summary", func(t *testing.T) {
+		t.Parallel()
+		d := lab(t)
+		c := newCLI(t)
+		c.inventory(inventoryFor(d.Start(t)))
+		c.want(0, "fetch", "fw01")
+		d.Config = read(t, fixture("firewall-lab-changed.xml"))
+		c.want(0, "fetch", "fw01")
+		golden(t, "snapshot-diff-summary", c.want(0, append([]string{"snapshot", "diff", "--vsys", "vsys1"}, summary...)...))
+	})
+}
+
+// --detail takes summary or full, and only with JSON or YAML output.
+func TestDetailIsAUsageErrorWithText(t *testing.T) {
+	t.Parallel()
+	args := []string{"search", "10.124.0.1", "--file", fixture("firewall-multivsys.xml")}
+	for _, extra := range [][]string{{"--detail", "summary"}, {"--detail", "full"}, {"--output", "json", "--detail", "short"}} {
+		out, errOut, code := newCLI(t).run(append(append([]string{}, args...), extra...)...)
+		if code != exitUsage || out != "" || !strings.Contains(errOut, "--detail") {
+			t.Errorf("%v: exit %d\n%s\n%s", extra, code, out, errOut)
+		}
+	}
+	full := newCLI(t).want(0, append(args, "--output", "json", "--detail", "full")...)
+	if def := newCLI(t).want(0, append(args, "--output", "json")...); def != full || !strings.Contains(full, `"detail": "full"`) {
+		t.Errorf("the default is not full:\n%s", def)
+	}
 }

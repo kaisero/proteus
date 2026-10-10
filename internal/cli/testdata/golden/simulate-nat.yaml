@@ -1,5 +1,6 @@
-format: 1
+format: 2
 command: simulate nat
+detail: full
 input:
   at: ""
   device: fw01
@@ -18,7 +19,8 @@ input:
   from_zone: transport
   router: default
 results:
-  - rule:
+  - answer: 't-dnat-port: destination 198.18.250.10:8443 -> 198.18.10.100:443'
+    rule:
       Name: t-dnat-port
       Action: ""
       Disabled: false

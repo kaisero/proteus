@@ -15,6 +15,7 @@ import (
 	"slices"
 
 	"github.com/okaiser/proteus/internal/config"
+	"github.com/okaiser/proteus/internal/reason"
 	"github.com/okaiser/proteus/internal/resolve"
 	"github.com/okaiser/proteus/internal/simulate"
 	"github.com/okaiser/proteus/internal/simulate/routing"
@@ -45,12 +46,12 @@ type Check interface {
 type CheckResult struct {
 	Name     string
 	Verdict  HopVerdict
-	Reason   string // why it passes, stops, is undecided, or is not evaluated
-	Rule     string // the deciding rule's name, or the default rule's name; empty when undecided
+	Reason   simulate.Reasons // why it passes, stops, is undecided, or is not evaluated; a composite has parts
+	Rule     string           // the deciding rule's name, or the default rule's name; empty when undecided
 	Fidelity simulate.Fidelity
 	Security *securitypolicy.Verdict // the security check's typed output
 	Stages   []simulate.Stage
-	Notes    []string // the notes of the target the check read, such as a version gap
+	Notes    simulate.Reasons // the notes of the target the check read, such as a version gap
 }
 
 // Hop is one routing hop with its checks, in list order.
@@ -60,7 +61,7 @@ type Hop struct {
 	// Doubts say why the path or the zones leave the hop undecided, whatever its
 	// checks conclude (spec §4.4, §4.5). The checks still run, so the answer shows
 	// what the hop would decide.
-	Doubts    []string
+	Doubts    simulate.Reasons
 	Checks    []CheckResult
 	AfterDeny bool
 }
@@ -80,7 +81,7 @@ type Point struct {
 	Hop    int    // index of the hop; for a routing end, the last hop
 	Check  string // "security" or "routing"
 	Rule   string
-	Reason string
+	Reason simulate.Reasons // a composite has parts, each with its code
 }
 
 // Result is a path mode answer.
@@ -91,7 +92,7 @@ type Result struct {
 	Hops     []Hop
 	Fidelity simulate.Fidelity // weakest of routing stages and checks up to At
 	Holes    []simulate.Missing
-	Notes    []string
+	Notes    simulate.Reasons
 }
 
 // The checks' names, and the routing pseudo-check a Point names.
@@ -131,7 +132,8 @@ func run(ctx context.Context, env *simulate.Env, in simulate.Input, checks []Che
 			// route up first (KB "Packet Flow Sequence in PAN-OS", spec §4.8).
 			for _, c := range checks {
 				h.Checks = append(h.Checks, CheckResult{
-					Name: c.Name(), Verdict: NotEvaluated, Reason: "dropped by routing before security policy", Fidelity: simulate.Exact,
+					Name: c.Name(), Verdict: NotEvaluated, Fidelity: simulate.Exact,
+					Reason: simulate.Reasons{{Code: p.EndCode, Text: "dropped by routing before security policy"}},
 				})
 			}
 			res.Hops = append(res.Hops, h)
@@ -149,7 +151,7 @@ func run(ctx context.Context, env *simulate.Env, in simulate.Input, checks []Che
 				return res, rr.Stages, err
 			}
 			r.Fidelity = simulate.Weakest(append([]simulate.Fidelity{r.Fidelity}, caps...)...)
-			env.Stepf("hop%d: %s (%s)", h.Index, r.Verdict, r.Reason)
+			env.Stepf("hop%d: %s (%s)", h.Index, r.Verdict, r.Reason.Text())
 			h.Checks = append(h.Checks, r)
 		}
 		res.Hops = append(res.Hops, h)
@@ -194,15 +196,15 @@ func addHoles(holes []simulate.Missing, ms ...simulate.Missing) []simulate.Missi
 // they put on its checks' fidelity (spec §4.5, E21). The hop's PBF list names at
 // most the first rule that can redirect the flow, so an empty one does not prove
 // that none applies: an undermatch PBF stage leaves the hop undecided too.
-func pathDoubts(p routing.Path, n int, stages []simulate.Stage) ([]string, []simulate.Fidelity) {
+func pathDoubts(p routing.Path, n int, stages []simulate.Stage) (simulate.Reasons, []simulate.Fidelity) {
 	h := p.Hops[n-1]
-	var doubts []string
+	var doubts simulate.Reasons
 	var caps []simulate.Fidelity
 	if len(h.ECMP) > 0 {
-		doubts = append(doubts, fmt.Sprintf("ECMP: %d other next hops not followed", len(h.ECMP)))
+		doubts = append(doubts, reason.New("path.ecmp", fmt.Sprintf("ECMP: %d other next hops not followed", len(h.ECMP))))
 	}
 	for _, r := range h.PBF {
-		doubts = append(doubts, fmt.Sprintf("PBF rule %s can redirect the flow", r))
+		doubts = append(doubts, reason.New("path.pbf", fmt.Sprintf("PBF rule %s can redirect the flow", r)))
 	}
 	if f, ok := stageFidelity(stages, n, "pbf"); ok && f.Level() == "undermatch" {
 		doubts = append(doubts, f.UnderMatchReasons()...)
@@ -217,7 +219,7 @@ func pathDoubts(p routing.Path, n int, stages []simulate.Stage) ([]string, []sim
 	}
 	if n == 1 && p.StartVia.IsValid() {
 		if p.StartVia.Bits() == 0 {
-			doubts = append(doubts, "the ingress is a guess from a default route")
+			doubts = append(doubts, reason.New("path.start-default-route", "the ingress is a guess from a default route"))
 		} else {
 			caps = append(caps, simulate.Inferred)
 		}
@@ -239,33 +241,34 @@ func stageFidelity(stages []simulate.Stage, n int, name string) (simulate.Fideli
 // zoneDoubts checks the hop's zones before its checks run (spec §4.4): both must
 // be named and defined in the hop's vsys, and neither may be routing's
 // placeholder. A configuration that cannot be read is a hole.
-func zoneDoubts(env *simulate.Env, h routing.Hop) ([]string, []simulate.Missing) {
+func zoneDoubts(env *simulate.Env, h routing.Hop) (simulate.Reasons, []simulate.Missing) {
 	switch {
 	case h.Vsys == "":
-		return []string{"vsys unknown"}, nil
+		return simulate.Reasons{reason.New("zone.vsys-unknown", "vsys unknown")}, nil
 	case h.ZonePlaceholder:
-		return []string{"the zone names are placeholders: no external zone joins these vsys in the configuration"}, nil
+		return simulate.Reasons{reason.New("zone.placeholder",
+			"the zone names are placeholders: no external zone joins these vsys in the configuration")}, nil
 	}
-	var out []string
+	var out simulate.Reasons
 	if h.Flow.FromZone == "" {
-		out = append(out, "routing found no ingress zone")
+		out = append(out, reason.New("zone.missing", "routing found no ingress zone"))
 	}
 	if h.Flow.ToZone == "" {
-		out = append(out, "routing found no egress zone")
+		out = append(out, reason.New("zone.missing", "routing found no egress zone"))
 	}
 	if len(out) > 0 {
 		return out, nil
 	}
 	t, miss := load(env, h)
 	if miss != nil {
-		return []string{miss.Reason}, []simulate.Missing{*miss}
+		return simulate.Reasons{miss.Why()}, []simulate.Missing{*miss}
 	}
 	defined := map[string]bool{}
 	for _, z := range resolve.ZonesInScope(t.Config, config.Scope{Sort: config.ScopeVsys, Name: h.Vsys}) {
 		defined[z.Name] = true
 	}
 	for _, z := range []string{h.Flow.FromZone, h.Flow.ToZone} {
-		why := fmt.Sprintf("zone %s is not defined in %s", z, h.Vsys)
+		why := reason.New("zone.undefined", fmt.Sprintf("zone %s is not defined in %s", z, h.Vsys))
 		if !defined[z] && !slices.Contains(out, why) {
 			out = append(out, why)
 		}
@@ -276,11 +279,17 @@ func zoneDoubts(env *simulate.Env, h routing.Hop) ([]string, []simulate.Missing)
 // load reads the hop's target, or says why it cannot.
 func load(env *simulate.Env, h routing.Hop) (simulate.Target, *simulate.Missing) {
 	t, err := env.Load(h.Device, h.Vsys)
-	if err == nil && (t.Config == nil || t.Index == nil) {
-		err = errors.New("no configuration")
+	code := reason.Code("gap.load-failed")
+	var coded interface{ Code() reason.Code }
+	if errors.As(err, &coded) {
+		code = coded.Code()
+	}
+	if err == nil && (t.Config == nil || t.Indexes == nil) {
+		err, code = errors.New("no configuration"), "gap.config-missing"
 	}
 	if err != nil {
-		return t, &simulate.Missing{Device: h.Device, Reason: fmt.Sprintf("the configuration of %s %s cannot be read: %v", h.Device, h.Vsys, err)}
+		m := simulate.NewMissing(h.Device, reason.New(code, fmt.Sprintf("the configuration of %s %s cannot be read: %v", h.Device, h.Vsys, err)))
+		return t, &m
 	}
 	return t, nil
 }

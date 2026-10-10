@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
+	"sync"
 	"testing"
 	"time"
 
@@ -183,18 +184,35 @@ func Env(tb testing.TB, d Defaults) *simulate.Env {
 	for _, dev := range Devices {
 		paths[dev] = ConfigPath(tb, dev, d)
 	}
-	load := func(device, vsys string) (simulate.Target, error) {
+	// One configuration and one index set per device for the env's life, as a
+	// command's loader keeps them for its run.
+	var mu sync.Mutex
+	sets := map[string]*index.Set{}
+	set := func(device string) (*index.Set, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		if s, ok := sets[device]; ok {
+			return s, nil
+		}
 		path, ok := paths[device]
 		if !ok {
-			return simulate.Target{}, fmt.Errorf("no device %q in the inventory", device)
+			return nil, fmt.Errorf("no device %q in the inventory", device)
 		}
 		// Both configurations are 11.2 and read with their own digest: no version gap.
 		cfg, _, err := config.Load(path)
 		if err != nil {
+			return nil, err
+		}
+		sets[device] = index.NewSet(cfg)
+		return sets[device], nil
+	}
+	load := func(device, vsys string) (simulate.Target, error) {
+		s, err := set(device)
+		if err != nil {
 			return simulate.Target{}, err
 		}
-		idx, err := index.For(cfg, config.Scope{Sort: config.ScopeVsys, Name: vsys})
-		if err != nil {
+		sc := config.Scope{Sort: config.ScopeVsys, Name: vsys}
+		if _, err := s.Index(sc, resolve.Security); err != nil {
 			return simulate.Target{}, err
 		}
 		z, err := index.NewZoneSnapshot(time.Time{}, device,
@@ -203,7 +221,7 @@ func Env(tb testing.TB, d Defaults) *simulate.Env {
 		if err != nil {
 			return simulate.Target{}, err
 		}
-		return simulate.Target{Config: cfg, Index: idx, Providers: index.Providers{Zones: z}}, nil
+		return simulate.Target{Config: s.Config(), Indexes: s.Provider(sc), Providers: index.Providers{Zones: z}}, nil
 	}
 	return &simulate.Env{Network: Network(tb), Load: load}
 }

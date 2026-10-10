@@ -25,15 +25,21 @@ Three packages, dependency order strictly one-way — `config` <- `resolve` <- `
 - **`index`** — speed and answers. `For(cfg, scope)` builds an immutable, cached
   index: a prefix trie, group-closure bitmaps, rule-field bitmaps and a reference
   table. It exposes the lookups and the report that comes with them.
-  The reference edges are read once per configuration and cached as an edge list
-  (`edgesOf`); a scope's index holds positions into it, never its own copies, and
+  The reference edges are read once per configuration into an edge list
+  (`index.ReadEdges`, kept by an `index.Set`); a scope's index holds positions into it, never its own copies, and
   still sees only its own scope and shared. The list is a materialisation of the
   file, not an index — it answers no question and is keyed by nothing — so R10
   still holds, and `TestNoGlobalIndex` is what proves it.
 
 Control flow for the main question, "which rules can this value reach":
 
-`index.For(cfg, scope)` builds once per `(file, scope)` and caches. A query goes
+The package keeps no state (spec 2026-10-09 §4.8; `TestNoPackageLevelCache`).
+The caller builds and owns every index: `index.Build(cfg, edges, scope, rb)`, the
+one-shot `index.New(cfg, scope, rb)`, or an `index.Set` per configuration, which
+builds each `(scope, rulebase)` index once and gives simulations their
+`Target.Indexes` provider, the one source of a target's indexes (the security
+check takes its index there too, through `Target.Index`). A query keeps one set
+per configuration, or per snapshot for its store loader (`internal/query`). A query goes
 to `View.Candidates(field, value)`, which asks each **resolver** wired to that
 field to turn the value into object names. The schema decides that wiring:
 `config.FieldKinds("rulebase/security/rules")` says which object kinds a field
@@ -54,9 +60,12 @@ Repo map:
   `refs.go`, `profileuse.go`, `snapshot.go`, `intern.go`.
 - `internal/schema`, `internal/digest` — schema parsing and the digest format;
   `internal/tools/schemadigest` — the dev tool that writes a digest. `internal/archtest` — the R12 import check.
+- `internal/reason/` — reason codes: `{code, text}` and the closed registry; stdlib only.
 - `internal/task/` — staged operations: `Run` runs named steps in order, records
   each step's status, detail and time, logs them, and stops at the first error.
   `fetch` uses it per device.
+- `internal/query/` — the questions as typed inputs and envelopes, for the command line and the MCP server; no flags, no rendering.
+- `internal/mcp/` — the MCP server: six tools over `query`, schemas generated at start (the same generator writes `schemas/out/`, `go test ./internal/mcp -update`), device enum from the exported inventory, resources and instructions, and a receiving middleware that audits each call and turns a panic into `call.internal` (it panics on in a test binary). `Serve(ctx, Options, transport)`, `Stdio()`, `ServeHTTP` (bearer token, Host check when `allowed_hosts` is set, `/healthz`, refusals counted by status in the process log); every tool annotated read-only; a snapshot cache with a load semaphore, a call limiter, the audit (a file rotated by size and count, or a stream such as standard output) and per-call run logs buffered in memory and written only for `internal` and `timeout` calls, or every call at debug. The only importer of the SDK and jsonschema-go. User docs: `docs/guides/mcp.md`.
 - `internal/estate/` — selectors and a time to targets and holes; `internal/search/` — five-stage findings for one term; `internal/card/` — the whole element behind one name, for `lookup`; `internal/drift/` — changes between two configurations.
 - `internal/inventory/` — the YAML device list and credentials; `internal/fetch/` — the read-only XML
   API client and the `Document` list; `internal/store/` — timestamped snapshots, `latest`.

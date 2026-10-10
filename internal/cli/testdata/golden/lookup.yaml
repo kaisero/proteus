@@ -1,5 +1,6 @@
-format: 1
+format: 2
 command: lookup
+detail: full
 input:
   expand: false
   full: false
@@ -8,7 +9,8 @@ input:
   selection:
     file: ../../testdata/config/firewall-lookup.xml
 results:
-  - device: file
+  - answer: 'file/vsys1: security-rule branch-to-dc'
+    device: file
     vsys: vsys1
     scope: vsys:vsys1
     card:
@@ -133,6 +135,11 @@ results:
           rows:
             - label: ""
               text: business-hours
+summary:
+  answer: 1 with it, 0 without, 0 holes
+  found: 1
+  with: 1
+  without: 0
 holes: []
 unresolved: []
 notes: []

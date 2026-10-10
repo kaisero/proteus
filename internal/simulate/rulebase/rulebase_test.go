@@ -8,6 +8,7 @@ import (
 
 	"github.com/okaiser/proteus/internal/config"
 	"github.com/okaiser/proteus/internal/index"
+	"github.com/okaiser/proteus/internal/reason"
 	"github.com/okaiser/proteus/internal/resolve"
 	"github.com/okaiser/proteus/internal/simulate"
 )
@@ -20,7 +21,7 @@ func routingVsys(t *testing.T) Vsys {
 	if err != nil {
 		t.Fatal(err)
 	}
-	v, ok := Load(func(string, string) (simulate.Target, error) { return simulate.Target{Config: cfg}, nil }, "fw", "vsys1")
+	v, ok := Load(func(_, vsys string) (simulate.Target, error) { return withIndexes(cfg, vsys), nil }, "fw", "vsys1")
 	if !ok {
 		t.Fatal("vsys1")
 	}
@@ -37,7 +38,7 @@ func TestLoad(t *testing.T) {
 		t.Error("no loader")
 	}
 	cfg, _, _ := config.Load("../../../testdata/config/firewall-routing.xml")
-	ok := func(string, string) (simulate.Target, error) { return simulate.Target{Config: cfg}, nil }
+	ok := func(_, vsys string) (simulate.Target, error) { return withIndexes(cfg, vsys), nil }
 	if _, found := Load(ok, "fw", "vsys9"); found {
 		t.Error("a vsys the configuration lacks")
 	}
@@ -56,22 +57,22 @@ func TestPBF(t *testing.T) {
 	v := routingVsys(t)
 	branch := simulate.Port{Zone: "branch-vpn", Interface: "ethernet1/3"}
 	if m := pbf(t, v, "10.20.5.5", "10.1.10.100", branch); !m.Found || m.Rule.Name != "branch-to-zscaler" ||
-		m.Note != "pbf rule branch-to-zscaler may forward this packet to tunnel.1 via 198.19.255.254" {
+		m.Note != reason.New("path.pbf", "pbf rule branch-to-zscaler may forward this packet to tunnel.1 via 198.19.255.254") {
 		t.Errorf("forward: %+v", m)
 	}
 	// By interface, destination negated: dc01 is excluded.
-	if m := pbf(t, v, "10.99.0.5", "10.1.10.50", branch); m.Note != "pbf rule lab-by-interface may drop this packet" {
+	if m := pbf(t, v, "10.99.0.5", "10.1.10.50", branch); m.Note != reason.New("path.pbf", "pbf rule lab-by-interface may drop this packet") {
 		t.Errorf("discard: %q", m.Note)
 	}
 	if m := pbf(t, v, "10.99.0.5", "10.1.10.100", branch); m.Found {
 		t.Error("the negated destination")
 	}
 	dc := simulate.Port{Zone: "datacenter", Interface: "ethernet1/2"}
-	if m := pbf(t, v, "10.1.1.1", "10.30.0.9", dc); !m.Found || m.Note != "" || m.Rule.Name != "keep-routing" {
+	if m := pbf(t, v, "10.1.1.1", "10.30.0.9", dc); !m.Found || m.Note != (reason.Reason{}) || m.Rule.Name != "keep-routing" {
 		t.Errorf("no-pbf: %+v", m)
 	}
 	sdwan := simulate.Port{Zone: "sdwan", Interface: "ethernet1/4"}
-	if m := pbf(t, v, "10.30.0.7", "10.1.1.1", sdwan); m.Note != "pbf rule sdwan-to-vsys2 may forward this packet to vsys2" {
+	if m := pbf(t, v, "10.30.0.7", "10.1.1.1", sdwan); m.Note != reason.New("path.pbf", "pbf rule sdwan-to-vsys2 may forward this packet to vsys2") {
 		t.Errorf("to vsys: %q", m.Note)
 	}
 }
@@ -82,6 +83,7 @@ func TestAnUnbuildableIndexIsUnresolved(t *testing.T) {
 	t.Parallel()
 	bad := routingVsys(t)
 	bad.Scope = config.Scope{Sort: config.ScopeVsys, Name: "vsys9"}
+	bad.Indexes = index.NewSet(bad.Config).Provider(bad.Scope)
 	noNegation := func(int) (bool, bool) { return false, false }
 	s, d, un := bad.Sides(resolve.NAT, ip("1.1.1.1"), ip("1.1.1.1"), noNegation)
 	if !s.IsEmpty() || !d.IsEmpty() || s == d || len(un) != 1 || !strings.Contains(un[0].Reason, "not checked") {
@@ -89,6 +91,30 @@ func TestAnUnbuildableIndexIsUnresolved(t *testing.T) {
 	}
 	if m := bad.PBF(ip("1.1.1.1"), ip("1.1.1.1"), simulate.Port{}); m.Found || len(m.Unresolved) != 1 {
 		t.Errorf("PBF: %+v", m)
+	}
+}
+
+// A target without an index provider is a loader's mistake. It is reported the
+// same way; the simulation never builds an index of its own.
+func TestNoIndexProviderIsUnresolved(t *testing.T) {
+	t.Parallel()
+	v := routingVsys(t)
+	v.Indexes = nil
+	_, _, un := v.Sides(resolve.PBF, ip("1.1.1.1"), ip("1.1.1.1"), func(int) (bool, bool) { return false, false })
+	if len(un) != 1 || un[0].Code != "gap.load-failed" || !strings.Contains(un[0].Reason, "no index provider") {
+		t.Errorf("Sides: %v", un)
+	}
+}
+
+// A provider of another vsys's indexes is a loader's mistake too: its rules are
+// not this vsys's.
+func TestAProviderOfAnotherVsysIsUnresolved(t *testing.T) {
+	t.Parallel()
+	v := routingVsys(t)
+	v.Indexes = index.NewSet(v.Config).Provider(config.Scope{Sort: config.ScopeShared})
+	_, _, un := v.Sides(resolve.Security, ip("1.1.1.1"), ip("1.1.1.1"), func(int) (bool, bool) { return false, false })
+	if len(un) != 1 || !strings.Contains(un[0].Reason, "the index provider gives shared, not vsys:vsys1") {
+		t.Errorf("Sides: %v", un)
 	}
 }
 
@@ -126,11 +152,23 @@ func TestCertainty(t *testing.T) {
 
 func TestWithoutGap(t *testing.T) {
 	t.Parallel()
-	un := []index.Unresolved{{Value: "a", Reason: "gap"}, {Value: "b", Reason: "other"}}
-	if got := withoutGap(un, "gap"); len(got) != 1 || got[0].Value != "b" {
+	// The gap is known by its code, not by its text: another entry with the same
+	// text stays.
+	un := []index.Unresolved{
+		index.NewUnresolved("a", "", reason.New("gap.version", "gap")),
+		index.NewUnresolved("b", "", reason.New("gap.object-unresolved", "gap")),
+	}
+	if got := withoutGap(un); len(got) != 1 || got[0].Value != "b" {
 		t.Errorf("with a gap: %v", got)
 	}
-	if got := withoutGap(un, ""); len(got) != 2 {
+	if got := withoutGap(un[1:]); len(got) != 1 {
 		t.Errorf("without a gap: %v", got)
 	}
+}
+
+// withIndexes is a target over a vsys of cfg with its index provider, as a
+// loader gives it.
+func withIndexes(cfg *config.Config, vsys string) simulate.Target {
+	sc := config.Scope{Sort: config.ScopeVsys, Name: vsys}
+	return simulate.Target{Config: cfg, Indexes: index.NewSet(cfg).Provider(sc)}
 }

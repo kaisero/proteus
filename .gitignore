@@ -3,7 +3,9 @@
 
 # Vendor schema files pulled off an appliance. Redistribution is unresolved,
 # so they stay out of git until that question is answered. See ARCHITECTURE.md.
-/schemas/
+# schemas/out/ holds proteus's own generated JSON schemas and is committed.
+/schemas/*
+!/schemas/out/
 
 # internal/config/schemadigest/ is committed, not ignored. It is the only copy of
 # the digests: go:embed reads them there, and the generator reads them there too.
