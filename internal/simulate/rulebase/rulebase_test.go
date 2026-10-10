@@ -49,7 +49,7 @@ func TestLoad(t *testing.T) {
 
 func pbf(t *testing.T, v Vsys, src, dst string, in simulate.Port) PBFMatch {
 	t.Helper()
-	return v.PBF(ip(src), ip(dst), in)
+	return v.PBF(ip(src), ip(dst), "", 0, in)
 }
 
 func TestPBF(t *testing.T) {
@@ -89,7 +89,7 @@ func TestAnUnbuildableIndexIsUnresolved(t *testing.T) {
 	if !s.IsEmpty() || !d.IsEmpty() || s == d || len(un) != 1 || !strings.Contains(un[0].Reason, "not checked") {
 		t.Errorf("Sides: %v %v %v", s.ToArray(), d.ToArray(), un)
 	}
-	if m := bad.PBF(ip("1.1.1.1"), ip("1.1.1.1"), simulate.Port{}); m.Found || len(m.Unresolved) != 1 {
+	if m := bad.PBF(ip("1.1.1.1"), ip("1.1.1.1"), "tcp", 443, simulate.Port{}); m.Found || len(m.Unresolved) != 1 {
 		t.Errorf("PBF: %+v", m)
 	}
 }
@@ -171,4 +171,188 @@ func TestWithoutGap(t *testing.T) {
 func withIndexes(cfg *config.Config, vsys string) simulate.Target {
 	sc := config.Scope{Sort: config.ScopeVsys, Name: vsys}
 	return simulate.Target{Config: cfg, Indexes: index.NewSet(cfg).Provider(sc)}
+}
+
+func pbfServiceVsys(t *testing.T) Vsys {
+	t.Helper()
+	cfg, _, err := config.Load("../../../testdata/config/firewall-pbf-service.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	v, ok := Load(func(_, vsys string) (simulate.Target, error) { return withIndexes(cfg, vsys), nil }, "fw", "vsys1")
+	if !ok {
+		t.Fatal("vsys1")
+	}
+	return v
+}
+
+// PBF matches the service. As observed on fw02, PAN-OS 12.2.3 (L3): a no-pbf rule
+// with service tcp/22 above a forward rule with service any takes tcp/22, and
+// tcp/443 and udp/22 go on to the forward rule. A flow without a port cannot
+// decide the no-pbf rule, so the scan goes past it.
+func TestPBFMatchesTheService(t *testing.T) {
+	t.Parallel()
+	v := pbfServiceVsys(t)
+	home := simulate.Port{Zone: "home"}
+	for _, tc := range []struct {
+		proto  string
+		port   uint16
+		rule   string
+		sure   bool
+		passed string
+	}{
+		{"tcp", 443, "home-out", true, ""},
+		{"tcp", 22, "ssh-no-pbf", true, ""},
+		{"udp", 22, "home-out", true, ""},
+		{"TCP", 22, "ssh-no-pbf", true, ""},
+		{"tcp", 0, "home-out", true, "no-pbf rule ssh-no-pbf may match (the rule names a service, and the flow has no port)"},
+		{"icmp", 0, "home-out", true, "no-pbf rule ssh-no-pbf may match (the rule names a service, and the flow has no port)"},
+	} {
+		m := v.PBF(ip("10.88.3.5"), ip("10.88.9.5"), tc.proto, tc.port, home)
+		var passed []string
+		for _, p := range m.Passed {
+			passed = append(passed, p.String())
+		}
+		if !m.Found || m.Rule.Name != tc.rule || m.Sure != tc.sure || strings.Join(passed, "; ") != tc.passed || len(m.Unresolved) != 0 {
+			t.Errorf("%s/%d: %+v", tc.proto, tc.port, m)
+		}
+	}
+	if m := v.PBF(ip("10.88.3.5"), ip("10.88.9.5"), "tcp", 22, home); m.Note != (reason.Reason{}) {
+		t.Errorf("a no-pbf rule has no note: %q", m.Note)
+	}
+	if m := v.PBF(ip("10.88.3.5"), ip("10.88.9.5"), "tcp", 443, home); m.Note != reason.New("path.pbf",
+		"pbf rule home-out may forward this packet to ethernet1/4 via 198.18.0.1") {
+		t.Errorf("forward note: %q", m.Note)
+	}
+}
+
+// A no-pbf rule that names an application only may match, so it does not end the
+// scan; the next rule takes the flow and the passed rule is named.
+func TestPBFGoesPastANoPBFRuleThatMayMatch(t *testing.T) {
+	t.Parallel()
+	v := pbfServiceVsys(t)
+	m := v.PBF(ip("10.88.4.5"), ip("10.88.9.5"), "tcp", 22, simulate.Port{Zone: "lab"})
+	if !m.Found || m.Rule.Name != "lab-out" || !m.Sure || len(m.Passed) != 1 || m.Passed[0].Rule != "lab-app-no-pbf" ||
+		m.Passed[0].Doubts[0].Code != "doubt.application" {
+		t.Fatalf("%+v", m)
+	}
+	if got := PassedText(m.Passed); got != "; no-pbf rule lab-app-no-pbf may match (the rule names an application, which is not evaluated)" {
+		t.Errorf("PassedText = %q", got)
+	}
+	if PassedText(nil) != "" {
+		t.Error("no passed rule, no text")
+	}
+}
+
+// A forward or discard rule that only may match still ends the scan; its note
+// says why it only may.
+func TestPBFADiscardThatMayMatchEndsTheScan(t *testing.T) {
+	t.Parallel()
+	v := pbfServiceVsys(t)
+	dmz := simulate.Port{Zone: "dmz"}
+	for _, tc := range []struct {
+		port uint16
+		rule string
+		code reason.Code
+	}{
+		{443, "dmz-https", "doubt.service-predefined"},
+		{8443, "dmz-https", "doubt.service-predefined"},
+	} {
+		m := v.PBF(ip("10.88.5.5"), ip("10.88.9.5"), "tcp", tc.port, dmz)
+		if !m.Found || m.Rule.Name != tc.rule || m.Sure || len(m.Doubts) != 1 || m.Doubts[0].Code != tc.code ||
+			!strings.HasPrefix(m.Note.Text, "pbf rule "+tc.rule+" may drop this packet, if it matches: ") {
+			t.Errorf("%d: %+v", tc.port, m)
+		}
+	}
+}
+
+// The service judgement on its own: absent, any, no port, application-default,
+// undefined, defined and not carrying the flow.
+func TestPBFServiceJudge(t *testing.T) {
+	t.Parallel()
+	v := pbfServiceVsys(t)
+	rules := v.Target.PBFRules()
+	m := v.pbfServices(rules, "tcp", 443)
+	rule := func(svc ...string) resolve.PBFRule {
+		r := resolve.PBFRule{}
+		r.Fields = map[string][]string{}
+		if svc != nil {
+			r.Fields["service"] = svc
+		}
+		return r
+	}
+	for _, tc := range []struct {
+		svc  []string
+		fits bool
+		code reason.Code
+	}{
+		{nil, true, "doubt.service-absent"},
+		{[]string{"any"}, true, ""},
+		{[]string{"application-default"}, true, "doubt.service-application-default"},
+		{[]string{"service-https"}, true, "doubt.service-predefined"},
+		{[]string{"svc-ssh"}, false, ""},
+	} {
+		why, fits := m.judge(len(rules), rule(tc.svc...)) // a position no rule has
+		code := reason.Code("")
+		if len(why) > 0 {
+			code = why[0].Code
+		}
+		if fits != tc.fits || code != tc.code {
+			t.Errorf("%v: fits %v %v", tc.svc, fits, why)
+		}
+	}
+	if why, fits := v.pbfServices(rules, "", 0).judge(0, rule("svc-ssh")); !fits || why[0].Code != "doubt.service-no-port" {
+		t.Errorf("no port: %v %v", why, fits)
+	}
+	if got := v.pbfServices(nil, "tcp", 443); got.term != "" {
+		t.Errorf("no rules: %+v", got)
+	}
+}
+
+func TestServiceTerm(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		proto string
+		port  uint16
+		want  string
+	}{{"tcp", 443, "tcp/443"}, {"UDP", 53, "udp/53"}, {"sctp", 9, "sctp/9"}, {"tcp", 0, ""}, {"icmp", 8, ""}, {"6", 443, ""}} {
+		got, ok := ServiceTerm(tc.proto, tc.port)
+		if got != tc.want || ok != (tc.want != "") {
+			t.Errorf("%s/%d = %q %v", tc.proto, tc.port, got, ok)
+		}
+	}
+}
+
+// A PBF check does not evaluate the application or the source user: a rule that
+// names either only may match.
+func TestPBFNotEvaluated(t *testing.T) {
+	t.Parallel()
+	r := resolve.PBFRule{}
+	r.Fields = map[string][]string{"application": {"any"}, "source-user": {`corp\ops`}}
+	if got := notEvaluated(r); len(got) != 1 || got[0].Code != "doubt.not-evaluated.user" {
+		t.Errorf("user: %v", got)
+	}
+	r.Fields["source-user"] = []string{"any"}
+	if got := notEvaluated(r); got != nil {
+		t.Errorf("any: %v", got)
+	}
+}
+
+func TestUndecidable(t *testing.T) {
+	t.Parallel()
+	defined := map[string]bool{"svc-ssh": true}
+	for _, tc := range []struct {
+		values []string
+		want   bool
+	}{
+		{[]string{"any"}, false},
+		{[]string{"any", "svc-ssh"}, false},
+		{[]string{"svc-ssh", "service-https"}, true},
+		{[]string{"application-default"}, true},
+		{nil, false},
+	} {
+		if got := Undecidable(tc.values, defined, "application-default"); got != tc.want {
+			t.Errorf("%v = %v", tc.values, got)
+		}
+	}
 }

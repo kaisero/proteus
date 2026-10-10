@@ -6,7 +6,9 @@ import (
 	"strings"
 
 	"github.com/okaiser/proteus/internal/reason"
+	"github.com/okaiser/proteus/internal/resolve"
 	"github.com/okaiser/proteus/internal/simulate"
+	"github.com/okaiser/proteus/internal/simulate/rulebase"
 )
 
 // Doubt names a candidate the check cannot decide, and why. It does not change
@@ -104,8 +106,8 @@ var doubtCodes = map[string]reason.Code{
 // candidate, the fields it sets that no stage evaluates (spec §4.7).
 func (s *state) doubts() []Doubt {
 	var out []Doubt
-	services := definedIn(s.target.Config, s.idx.Scope(), "service")
-	categories := definedIn(s.target.Config, s.idx.Scope(), "category")
+	services := rulebase.Defined(s.target.Config, s.idx.Scope(), resolve.Security, "service")
+	categories := rulebase.Defined(s.target.Config, s.idx.Scope(), resolve.Security, "category")
 	for _, r := range s.verdict.Candidates {
 		add := func(why ...reason.Reason) {
 			out = append(out, Doubt{Position: r.Position, Rule: r.Name, Reasons: why})

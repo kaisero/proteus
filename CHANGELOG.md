@@ -298,6 +298,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A PBF rule now matches only the services it names.** A no-pbf rule for
+  `tcp/22` also took `tcp/443`, so a later forward rule was never found and the
+  path was called exact; a no-pbf rule that names an application no longer ends
+  the search.
 - **A wildcard address object now matches the addresses its mask allows.** An
   object such as `10.88.2.1/0.0.255.0` matched no address, so a simulation skipped
   the rules using it and a later rule answered.

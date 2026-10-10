@@ -1,0 +1,73 @@
+<config version="11.2.0" urldb="paloaltonetworks" detail-version="11.2.5">
+  <!-- PBF rules that differ by service (lab fact L3). From home: ssh-no-pbf
+       (tcp/22) above home-out (any). From lab: lab-app-no-pbf names an
+       application, so it only may match, above lab-out. From dmz: dmz-https names
+       a service the configuration does not define. -->
+  <shared/>
+  <devices>
+    <entry name="localhost.localdomain">
+      <vsys>
+        <entry name="vsys1">
+          <zone>
+            <entry name="home"/>
+            <entry name="lab"/>
+            <entry name="dmz"/>
+            <entry name="wan"/>
+          </zone>
+          <service>
+            <entry name="svc-ssh"><protocol><tcp><port>22</port></tcp></protocol></entry>
+          </service>
+          <rulebase>
+            <pbf>
+              <rules>
+                <entry name="ssh-no-pbf">
+                  <from><zone><member>home</member></zone></from>
+                  <source><member>10.88.3.0/24</member></source>
+                  <destination><member>10.88.9.0/24</member></destination>
+                  <service><member>svc-ssh</member></service>
+                  <action><no-pbf/></action>
+                </entry>
+                <entry name="home-out">
+                  <from><zone><member>home</member></zone></from>
+                  <source><member>10.88.3.0/24</member></source>
+                  <destination><member>10.88.9.0/24</member></destination>
+                  <service><member>any</member></service>
+                  <action><forward><egress-interface>ethernet1/4</egress-interface><nexthop><ip-address>198.18.0.1</ip-address></nexthop></forward></action>
+                </entry>
+                <entry name="lab-app-no-pbf">
+                  <from><zone><member>lab</member></zone></from>
+                  <source><member>any</member></source>
+                  <destination><member>any</member></destination>
+                  <application><member>ssh</member></application>
+                  <service><member>any</member></service>
+                  <action><no-pbf/></action>
+                </entry>
+                <entry name="lab-out">
+                  <from><zone><member>lab</member></zone></from>
+                  <source><member>any</member></source>
+                  <destination><member>any</member></destination>
+                  <service><member>any</member></service>
+                  <action><forward><egress-interface>ethernet1/4</egress-interface></forward></action>
+                </entry>
+                <entry name="dmz-https">
+                  <from><zone><member>dmz</member></zone></from>
+                  <source><member>any</member></source>
+                  <destination><member>any</member></destination>
+                  <service><member>service-https</member></service>
+                  <action><discard/></action>
+                </entry>
+                <entry name="dmz-default">
+                  <from><zone><member>dmz</member></zone></from>
+                  <source><member>any</member></source>
+                  <destination><member>any</member></destination>
+                  <service><member>application-default</member></service>
+                  <action><discard/></action>
+                </entry>
+              </rules>
+            </pbf>
+          </rulebase>
+        </entry>
+      </vsys>
+    </entry>
+  </devices>
+</config>

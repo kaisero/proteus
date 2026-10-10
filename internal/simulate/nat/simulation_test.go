@@ -218,3 +218,33 @@ func TestDNSNotesLeadTheResult(t *testing.T) {
 		t.Errorf("notes = %v, %v", res.Notes, err)
 	}
 }
+
+// The PBF stage matches the flow's service (L3) and says which rule left the
+// packet to routing.
+func TestSimulatePBFMatchesTheService(t *testing.T) {
+	t.Parallel()
+	env := fw01Env(t, "firewall-pbf-service.xml")
+	params := map[string]string{"from-zone": "home", "router": "default"}
+	for _, tc := range []struct {
+		port   uint16
+		detail string
+		level  string
+	}{
+		{22, "no-pbf rule ssh-no-pbf leaves the packet to routing", "exact"},
+		{443, "pbf rule home-out may forward this packet to ethernet1/4 via 198.18.0.1", "inferred"},
+	} {
+		r, _, _ := run(t, env, "10.88.3.5", "10.88.9.5", tc.port, params)
+		if st := r.Stages[1]; st.Slug != "pbf" || st.Detail != tc.detail || st.Fidelity.Level() != tc.level {
+			t.Errorf("tcp/%d: %s %q %s", tc.port, st.Slug, st.Detail, st.Fidelity)
+		}
+	}
+	r, _, _ := run(t, env, "10.88.4.5", "10.88.9.5", 22, map[string]string{"from-zone": "lab", "router": "default"})
+	if want := "pbf rule lab-out may forward this packet to ethernet1/4; no-pbf rule lab-app-no-pbf may match " +
+		"(the rule names an application, which is not evaluated)"; r.Stages[1].Detail != want {
+		t.Errorf("lab: %q", r.Stages[1].Detail)
+	}
+	r, _, _ = run(t, env, "10.88.5.5", "10.88.9.5", 22, map[string]string{"from-zone": "wan", "router": "default"})
+	if r.Stages[1].Detail != "no PBF rule could take the packet" {
+		t.Errorf("wan: %q", r.Stages[1].Detail)
+	}
+}

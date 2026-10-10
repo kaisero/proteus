@@ -16,7 +16,6 @@ import (
 
 	"github.com/RoaringBitmap/roaring/v2"
 
-	"github.com/okaiser/proteus/internal/config"
 	"github.com/okaiser/proteus/internal/index"
 	"github.com/okaiser/proteus/internal/reason"
 	"github.com/okaiser/proteus/internal/resolve"
@@ -228,17 +227,4 @@ func relevance(zl index.ZoneLocator, f simulate.Flow) Relevance {
 func isDefault(route string) bool {
 	p, err := netip.ParsePrefix(route)
 	return err == nil && p.Bits() == 0
-}
-
-// definedIn returns the names a configuration defines for the kinds a rule field
-// may name, so a value outside them is known to be predefined or unknown here.
-func definedIn(cfg *config.Config, sc config.Scope, field string) map[string]bool {
-	out := map[string]bool{}
-	for _, kind := range cfg.FieldKinds("rulebase/security/rules")[field] {
-		objs := resolve.ObjectsInScope(cfg, sc, kind)
-		for _, o := range objs {
-			out[o.Name] = true
-		}
-	}
-	return out
 }

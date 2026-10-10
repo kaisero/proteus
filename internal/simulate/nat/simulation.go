@@ -152,17 +152,22 @@ func pbfStage(_ context.Context, s *state) (simulate.Outcome, error) {
 		}, nil
 	}
 	s.nat.Target = simulate.Target{Config: v.Config, Indexes: v.Indexes}
-	m := v.PBF(sourceAddr(s.in.Flow.Source.Addrs), s.in.Flow.Destination.Addrs[0], s.nat.In)
+	f := s.in.Flow
+	m := v.PBF(sourceAddr(f.Source.Addrs), f.Destination.Addrs[0], f.Protocol, f.DestPort, s.nat.In)
 	out := simulate.Outcome{
 		Fidelity:   rulebase.Certainty(resolve.PBF, m.Unresolved),
 		Detail:     "no PBF rule could take the packet",
 		Unresolved: m.Unresolved,
 	}
-	if !m.Found || m.Note.Text == "" {
-		return out, nil
+	switch {
+	case !m.Found:
+	case m.Note.Text == "":
+		out.Detail = "no-pbf rule " + m.Rule.Name + " leaves the packet to routing"
+	default:
+		s.notes = append(s.notes, reason.Reason{Code: m.Note.Code, Text: m.Note.Text + "; the NAT zones below assume it does not"})
+		out.Fidelity, out.Detail = simulate.Weakest(out.Fidelity, simulate.Inferred), m.Note.Text
 	}
-	s.notes = append(s.notes, reason.Reason{Code: m.Note.Code, Text: m.Note.Text + "; the NAT zones below assume it does not"})
-	out.Fidelity, out.Detail = simulate.Weakest(out.Fidelity, simulate.Inferred), m.Note.Text
+	out.Detail += rulebase.PassedText(m.Passed)
 	return out, nil
 }
 

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/netip"
 	"slices"
+	"strings"
 
 	"github.com/RoaringBitmap/roaring/v2"
 
@@ -154,42 +155,213 @@ type PBFMatch struct {
 	// Rule is the first rule that could take the flow; Found says whether there is one.
 	Rule  resolve.PBFRule
 	Found bool
+	// Sure says Rule matches the flow. It is false when Rule only may match: it
+	// names an application or a user, which are not evaluated, or a service the
+	// answer cannot judge on this flow. Doubts say which.
+	Sure   bool
+	Doubts []reason.Reason
 	// Note says what the rule would do; the zero reason for no-pbf, which leaves
 	// the packet to routing.
 	Note reason.Reason
+	// Passed are the no-pbf rules before Rule that only may match. Only a sure
+	// no-pbf match ends the scan, so the scan went on past them.
+	Passed []PBFPassed
 	// Unresolved lists values the rules name that could not be evaluated. A rule
 	// reached only through one of them may be missing.
 	Unresolved []index.Unresolved
 }
 
+// PBFPassed is a no-pbf rule the scan went past because it only may match.
+type PBFPassed struct {
+	Rule   string
+	Doubts []reason.Reason
+}
+
+// String says which rule and why it only may match.
+func (p PBFPassed) String() string {
+	return fmt.Sprintf("no-pbf rule %s may match (%s)", p.Rule, texts(p.Doubts))
+}
+
+// PassedText is the passed no-pbf rules as a suffix to a stage's detail; empty
+// when there are none.
+func PassedText(ps []PBFPassed) string {
+	var out strings.Builder
+	for _, p := range ps {
+		out.WriteString("; " + p.String())
+	}
+	return out.String()
+}
+
+func texts(rs []reason.Reason) string {
+	out := make([]string, 0, len(rs))
+	for _, r := range rs {
+		out = append(out, r.Text)
+	}
+	return strings.Join(out, "; ")
+}
+
 // PBF returns the first PBF rule that could take the flow arriving on in, and what
-// it would do. A disabled rule never matches.
-func (v Vsys) PBF(src, dst netip.Addr, in simulate.Port) PBFMatch {
+// it would do. A disabled rule never matches. proto and port are the flow's
+// protocol and destination port; a port of 0 means none was given.
+//
+// A rule matches on its from, addresses and service. A rule that names an
+// application or a user, or a service the answer cannot judge, only may match.
+// Such a forward or discard rule still ends the scan: it can redirect the packet,
+// so the path is undecided. Such a no-pbf rule does not: only a sure no-pbf
+// match leaves the packet to routing. As observed on fw02, PAN-OS 12.2.3 (L3): a
+// no-pbf rule with service tcp/22 above a forward rule with service any took
+// tcp/22; tcp/443 and udp/22 went on to the forward rule.
+func (v Vsys) PBF(src, dst netip.Addr, proto string, port uint16, in simulate.Port) PBFMatch {
 	rules := v.Target.PBFRules()
 	s, d, un := v.Sides(resolve.PBF, src, dst, func(i int) (bool, bool) {
 		return rules[i].NegateSource, rules[i].NegateDestination
 	})
 	m := PBFMatch{Unresolved: un}
+	svc := v.pbfServices(rules, proto, port)
+	m.Unresolved = append(m.Unresolved, svc.unresolved...)
 	for i, r := range rules {
 		if r.Disabled || !s.Contains(uint32(i)) || !d.Contains(uint32(i)) || !FromFits(r, in) {
 			continue
 		}
+		doubts, fits := svc.judge(i, r)
+		if !fits {
+			continue
+		}
+		doubts = append(doubts, notEvaluated(r)...)
+		if r.ActionKind == resolve.PBFNoPBF && len(doubts) > 0 {
+			m.Passed = append(m.Passed, PBFPassed{Rule: r.Name, Doubts: doubts})
+			continue
+		}
+		var note string
 		switch r.ActionKind {
 		case resolve.PBFForward:
-			note := fmt.Sprintf("pbf rule %s may forward this packet to %s", r.Name, r.EgressInterface)
+			note = fmt.Sprintf("pbf rule %s may forward this packet to %s", r.Name, r.EgressInterface)
 			if r.NextHop != "" {
 				note += " via " + r.NextHop
 			}
-			m.Note = reason.New("path.pbf", note)
 		case resolve.PBFForwardToVsys:
-			m.Note = reason.New("path.pbf", fmt.Sprintf("pbf rule %s may forward this packet to %s", r.Name, r.ForwardVsys))
+			note = fmt.Sprintf("pbf rule %s may forward this packet to %s", r.Name, r.ForwardVsys)
 		case resolve.PBFDiscard:
-			m.Note = reason.New("path.pbf", fmt.Sprintf("pbf rule %s may drop this packet", r.Name))
+			note = fmt.Sprintf("pbf rule %s may drop this packet", r.Name)
 		}
-		m.Rule, m.Found = r, true
+		if note != "" {
+			if len(doubts) > 0 {
+				note += ", if it matches: " + texts(doubts)
+			}
+			m.Note = reason.New("path.pbf", note)
+		}
+		m.Rule, m.Found, m.Sure, m.Doubts = r, true, len(doubts) == 0, doubts
 		return m
 	}
 	return m
+}
+
+// notEvaluated is why a rule only may match for the dimensions a PBF check does not
+// evaluate: the application and the source user (todo item 22).
+func notEvaluated(r resolve.PBFRule) []reason.Reason {
+	var out []reason.Reason
+	if names(r.Fields["application"]) {
+		out = append(out, reason.New("doubt.application", "the rule names an application, which is not evaluated"))
+	}
+	if names(r.Fields["source-user"]) {
+		out = append(out, reason.New("doubt.not-evaluated.user", "the rule names a source user, which is not evaluated"))
+	}
+	return out
+}
+
+// names reports whether a field names something other than any.
+func names(values []string) bool {
+	for _, v := range values {
+		if v != "any" {
+			return true
+		}
+	}
+	return false
+}
+
+// pbfServiceMatch is the flow's service matched against a PBF rulebase.
+type pbfServiceMatch struct {
+	term       string          // "tcp/443"; empty when the flow has no port
+	hits       *roaring.Bitmap // rules whose service carries the flow
+	defined    map[string]bool // the service names the configuration defines
+	unresolved []index.Unresolved
+}
+
+// pbfServices matches the flow's protocol and port against the PBF rules' services
+// through the PBF index, as the security check does through its own.
+func (v Vsys) pbfServices(rules []resolve.PBFRule, proto string, port uint16) pbfServiceMatch {
+	out := pbfServiceMatch{hits: roaring.New()}
+	term, ok := ServiceTerm(proto, port)
+	if !ok || len(rules) == 0 {
+		return out
+	}
+	idx, err := v.index(resolve.PBF)
+	if err != nil {
+		return out // Sides has said so; no rule passes it
+	}
+	b, rep := idx.Candidates(index.Service, term)
+	out.term, out.hits, out.unresolved = term, b, withoutGap(rep.Unresolved)
+	out.defined = Defined(v.Config, v.Scope, resolve.PBF, "service")
+	return out
+}
+
+// judge says whether rule i's service can carry the flow, and if only perhaps, why.
+func (m pbfServiceMatch) judge(i int, r resolve.PBFRule) ([]reason.Reason, bool) {
+	values := r.Fields["service"]
+	switch {
+	case len(values) == 0:
+		return []reason.Reason{reason.New("doubt.service-absent", "the rule names no service")}, true
+	case !names(values):
+		return nil, true
+	case m.term == "":
+		return []reason.Reason{reason.New("doubt.service-no-port", "the rule names a service, and the flow has no port")}, true
+	case m.hits.Contains(uint32(i)): //nolint:gosec // a rule position cannot reach 2^32; a rulebase is capped far below that
+		return nil, true
+	case slices.Contains(values, "application-default"):
+		return []reason.Reason{reason.New("doubt.service-application-default",
+			"the rule uses service application-default, whose ports depend on the application")}, true
+	case Undecidable(values, m.defined):
+		return []reason.Reason{reason.New("doubt.service-predefined",
+			"the rule names a service the configuration does not define, such as a predefined one")}, true
+	}
+	return nil, false
+}
+
+// ServiceTerm is the flow's protocol and destination port as a service query,
+// "tcp/443". False when there is no port, or the protocol has none.
+func ServiceTerm(proto string, port uint16) (string, bool) {
+	proto = strings.ToLower(proto)
+	if port == 0 || (proto != "tcp" && proto != "udp" && proto != "sctp") {
+		return "", false
+	}
+	return fmt.Sprintf("%s/%d", proto, port), true
+}
+
+// Defined returns the names a configuration defines for the kinds a rulebase's
+// field may name, so a value outside them is predefined or unknown here.
+func Defined(cfg *config.Config, sc config.Scope, rb resolve.Rulebase, field string) map[string]bool {
+	out := map[string]bool{}
+	for _, kind := range cfg.FieldKinds("rulebase/" + rb.String() + "/rules")[field] {
+		for _, o := range resolve.ObjectsInScope(cfg, sc, kind) {
+			out[o.Name] = true
+		}
+	}
+	return out
+}
+
+// Undecidable reports whether a field names a value the configuration cannot
+// judge: one of the keywords, or a name it does not define. "any" can always be
+// judged.
+func Undecidable(values []string, defined map[string]bool, keywords ...string) bool {
+	for _, v := range values {
+		if v == "any" {
+			continue
+		}
+		if slices.Contains(keywords, v) || !defined[v] {
+			return true
+		}
+	}
+	return false
 }
 
 // FromFits reports whether a PBF rule's source zone or interface fits the

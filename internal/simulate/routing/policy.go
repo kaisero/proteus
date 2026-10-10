@@ -39,7 +39,7 @@ func pbf(_ context.Context, s *state) (simulate.Outcome, error) {
 		h.Notes = append(h.Notes, reason.New("gap.version", fmt.Sprintf("schema: PBF checked with the %s digest", v.Config.DigestVersion())))
 		out.Fidelity = simulate.Inferred
 	}
-	m := v.PBF(s.src, s.dst, h.In)
+	m := v.PBF(s.src, s.dst, s.cur.Protocol, s.cur.DestPort, h.In)
 	out.Unresolved = m.Unresolved
 	out.Fidelity = simulate.Weakest(out.Fidelity, rulebase.Certainty(resolve.PBF, m.Unresolved))
 	if m.Found {
@@ -48,9 +48,10 @@ func pbf(_ context.Context, s *state) (simulate.Outcome, error) {
 			h.PBF = append(h.PBF, m.Rule.Name)
 			out.Fidelity, out.Detail = simulate.Weakest(out.Fidelity, simulate.Inferred), m.Note.Text
 		} else {
-			out.Detail = "pbf rule " + m.Rule.Name + " leaves the packet to routing"
+			out.Detail = "no-pbf rule " + m.Rule.Name + " leaves the packet to routing"
 		}
 	}
+	out.Detail += rulebase.PassedText(m.Passed)
 	return out, nil
 }
 

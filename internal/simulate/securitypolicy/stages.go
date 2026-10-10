@@ -13,6 +13,7 @@ import (
 	"github.com/okaiser/proteus/internal/reason"
 	"github.com/okaiser/proteus/internal/resolve"
 	"github.com/okaiser/proteus/internal/simulate"
+	"github.com/okaiser/proteus/internal/simulate/rulebase"
 )
 
 // steps is the security-policy pipeline. Each matching dimension narrows the
@@ -373,12 +374,10 @@ func viaDefault(via string) bool {
 // configuration does not define such as service-https, cannot be evaluated from a
 // configuration; they stay, and the stage says so.
 func matchService(_ context.Context, s *state) (simulate.Outcome, error) {
-	f := s.in.Flow
-	proto := strings.ToLower(f.Protocol)
-	if f.DestPort == 0 || (proto != "tcp" && proto != "udp" && proto != "sctp") {
+	term, ok := rulebase.ServiceTerm(s.in.Flow.Protocol, s.in.Flow.DestPort)
+	if !ok {
 		return simulate.Outcome{Fidelity: simulate.NotEvaluated("service"), Detail: "no port given"}, nil
 	}
-	term := fmt.Sprintf("%s/%d", proto, f.DestPort)
 	b, rep := s.view.Candidates(index.Service, term)
 	kept := s.unevaluable("service", "application-default")
 	b.Or(kept)
@@ -443,21 +442,11 @@ func (s *state) withoutField(field string) *roaring.Bitmap {
 // not define, one of the given keywords, or nothing at all: a rule a configuration
 // exports without the field cannot be judged on it, so it is kept, not dropped.
 func (s *state) unevaluable(field string, keywords ...string) *roaring.Bitmap {
-	defined := definedIn(s.target.Config, s.idx.Scope(), field)
+	defined := rulebase.Defined(s.target.Config, s.idx.Scope(), resolve.Security, field)
 	out := roaring.New()
 	for i, r := range s.rules {
-		if len(r.Fields[field]) == 0 && field != "category" {
+		if (len(r.Fields[field]) == 0 && field != "category") || rulebase.Undecidable(r.Fields[field], defined, keywords...) {
 			out.Add(uint32(i))
-			continue
-		}
-		for _, v := range r.Fields[field] {
-			if v == "any" {
-				continue
-			}
-			if slices.Contains(keywords, v) || !defined[v] {
-				out.Add(uint32(i))
-				break
-			}
 		}
 	}
 	return out

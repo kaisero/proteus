@@ -292,14 +292,20 @@ func NewTopology(devs []simulate.DeviceData) *Topology
 <!-- GENERATED:api ./internal/simulate/rulebase -->
 ```go
 type PBFMatch struct{ ... }
+type PBFPassed struct{ ... }
 type Vsys struct{ ... }
 
+func (p PBFPassed) String() string
 func (v Vsys) Holds(value string, a netip.Addr) bool
-func (v Vsys) PBF(src, dst netip.Addr, in simulate.Port) PBFMatch
+func (v Vsys) PBF(src, dst netip.Addr, proto string, port uint16, in simulate.Port) PBFMatch
 func (v Vsys) Sides(rb resolve.Rulebase, src, dst netip.Addr, negated func(int) (bool, bool)) (
 func Certainty(rb resolve.Rulebase, unresolved []index.Unresolved) simulate.Fidelity
+func Defined(cfg *config.Config, sc config.Scope, rb resolve.Rulebase, field string) map[string]bool
 func FromFits(r resolve.PBFRule, in simulate.Port) bool
 func Load(load func(device, vsys string) (simulate.Target, error), device, vsys string) (Vsys, bool)
+func PassedText(ps []PBFPassed) string
+func ServiceTerm(proto string, port uint16) (string, bool)
+func Undecidable(values []string, defined map[string]bool, keywords ...string) bool
 ```
 <!-- /GENERATED:api -->
 

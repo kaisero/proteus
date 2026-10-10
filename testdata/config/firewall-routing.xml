@@ -108,18 +108,21 @@
                   <source><member>any</member></source>
                   <destination><member>dc01</member></destination>
                   <negate-destination>yes</negate-destination>
+                  <service><member>any</member></service>
                   <action><discard/></action>
                 </entry>
                 <entry name="keep-routing">
                   <from><zone><member>datacenter</member></zone></from>
                   <source><member>any</member></source>
                   <destination><member>any</member></destination>
+                  <service><member>any</member></service>
                   <action><no-pbf/></action>
                 </entry>
                 <entry name="to-other-vsys">
                   <from><zone><member>sdwan</member></zone></from>
                   <source><member>any</member></source>
                   <destination><member>any</member></destination>
+                  <service><member>any</member></service>
                   <action><forward-to-vsys>vsys2</forward-to-vsys></action>
                   <disabled>yes</disabled>
                 </entry>
@@ -127,6 +130,7 @@
                   <from><zone><member>sdwan</member></zone></from>
                   <source><member>any</member></source>
                   <destination><member>any</member></destination>
+                  <service><member>any</member></service>
                   <action><forward-to-vsys>vsys2</forward-to-vsys></action>
                 </entry>
               </rules>

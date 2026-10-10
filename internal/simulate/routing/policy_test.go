@@ -236,3 +236,54 @@ func withIndexes(cfg *config.Config, vsys string) simulate.Target {
 	sc := config.Scope{Sort: config.ScopeVsys, Name: vsys}
 	return simulate.Target{Config: cfg, Indexes: index.NewSet(cfg).Provider(sc)}
 }
+
+// The PBF stage matches the flow's service (L3): on the same addresses, tcp/22
+// takes the no-pbf rule and routing decides; tcp/443 and udp/22 reach the
+// forward rule, which makes the hop inferred. A no-pbf rule that only may match is
+// named in the stage, and the scan goes on.
+func TestPBFStageMatchesTheService(t *testing.T) {
+	t.Parallel()
+	cfg, _, err := config.Load("../../../testdata/config/firewall-pbf-service.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	n := netOf(dev("fw", []resolve.InterfaceState{
+		iface("ethernet1/1", "home", "default", "10.88.3.1/24"),
+		iface("ethernet1/2", "wan", "default", "10.88.9.1/24"),
+		iface("ethernet1/3", "lab", "default", "10.88.4.1/24"),
+	},
+		route("default", "10.88.3.0/24", "ethernet1/1", "0.0.0.0"),
+		route("default", "10.88.9.0/24", "ethernet1/2", "0.0.0.0"),
+		route("default", "10.88.4.0/24", "ethernet1/3", "0.0.0.0"),
+	))
+	load := func(_, vsys string) (simulate.Target, error) { return withIndexes(cfg, vsys), nil }
+	for _, tc := range []struct {
+		src, proto string
+		port       uint16
+		pbf        []string
+		detail     string
+	}{
+		{"10.88.3.5", "tcp", 22, nil, "no-pbf rule ssh-no-pbf leaves the packet to routing"},
+		{"10.88.3.5", "tcp", 443, []string{"home-out"}, "pbf rule home-out may forward this packet to ethernet1/4 via 198.18.0.1"},
+		{"10.88.3.5", "udp", 22, []string{"home-out"}, "pbf rule home-out may forward this packet to ethernet1/4 via 198.18.0.1"},
+		{"10.88.4.5", "tcp", 22, []string{"lab-out"}, "pbf rule lab-out may forward this packet to ethernet1/4; " +
+			"no-pbf rule lab-app-no-pbf may match (the rule names an application, which is not evaluated)"},
+	} {
+		f := flow(tc.src, "10.88.9.5")
+		f.Protocol, f.DestPort = tc.proto, tc.port
+		run, err := Simulation{}.Run(context.Background(), &simulate.Env{Network: n, Load: load}, simulate.Input{Flow: f})
+		if err != nil {
+			t.Fatal(err)
+		}
+		h := run.Output.(Path).Hops[0]
+		var detail string
+		for _, st := range run.Stages {
+			if strings.HasSuffix(st.Slug, "pbf") {
+				detail = st.Detail
+			}
+		}
+		if !slices.Equal(h.PBF, tc.pbf) || detail != tc.detail {
+			t.Errorf("%s %s/%d: pbf %v, detail %q", tc.src, tc.proto, tc.port, h.PBF, detail)
+		}
+	}
+}
