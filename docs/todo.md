@@ -289,7 +289,7 @@ item 7, and delete the fetched data and API keys from the scratch directory.
 
 - **Tag:** done · **Component:** mcp, cmd · **Source:** spec S11, §12 "Later"
 - Done as `proteus mcp` (spec `docs/specs/2026-10-09-mcp-server.md`). See the
-  [MCP guide](guides/mcp.md). Follow-ups are items 40 to 49.
+  [MCP guide](guides/mcp.md). Follow-ups are items 40 to 51.
 
 ## Core and schema
 
@@ -452,3 +452,17 @@ Source for each, unless it says otherwise: spec `docs/specs/2026-10-09-mcp-serve
 - **Tag:** perf · **Component:** mcp, search · **Source:** implementation of the MCP server
 - `search` reads each target's zone document from disk on every call. The server
   cache holds configurations and operational data, not zones.
+
+### 50. Ask the user for needs and choices with elicitation
+
+- **Tag:** feature · **Component:** mcp · **Source:** spec `docs/specs/2026-10-10-mcp-followup.md` §1
+- A result's `needs` and the error `call.choice` ask the model to ask the user. MCP
+  elicitation lets the server ask the user directly. Add it when Portkey and the
+  clients support it.
+
+### 51. Publish OAuth resource metadata if Portkey is dropped
+
+- **Tag:** feature · **Component:** mcp · **Source:** spec `docs/specs/2026-10-10-mcp-followup.md` §1
+- Portkey owns authentication, so proteus checks a static bearer token. Without the
+  gateway, clients expect the MCP authorisation flow: publish OAuth protected
+  resource metadata and verify the access tokens.

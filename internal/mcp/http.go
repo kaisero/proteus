@@ -101,8 +101,8 @@ func newHTTPServer(s *sdk.Server, o Options, h HTTPOptions, lim *limiter) *http.
 	sdkHandler := sdk.NewStreamableHTTPHandler(func(*http.Request) *sdk.Server { return s }, &sdk.StreamableHTTPOptions{
 		Stateless:           true,
 		MaxRequestBodyBytes: maxBody,
-		// The guard checks the Host against allowed_hosts instead: behind a
-		// proxy the loopback-only check refuses every request (S5).
+		// Behind a proxy the loopback-only check refuses every request (S5).
+		// The guard checks the Host instead, when allowed_hosts is set.
 		DisableLocalhostProtection: true,
 		// The handler ends when the client goes, for clients of protocol
 		// 2026-07-28 on; for older ones the call timeout is the bound (S4).
@@ -208,9 +208,10 @@ func (r *refusals) refuse(code int) {
 	r.by[code]++
 }
 
-// flush writes one warn line with the counts by status, once a minute has
-// passed since the first refusal it counts, or at once when all is set; then
-// it counts from zero. Without a refusal it writes nothing.
+// flush writes one warn line with the counts by status since the last such
+// line, once a minute has passed since the first refusal it counts, or at
+// once when all is set; then it counts from zero. Without a refusal it
+// writes nothing.
 func (r *refusals) flush(all bool) {
 	r.mu.Lock()
 	if len(r.by) == 0 || !all && r.now().Sub(r.start) < refusalWindow {
@@ -224,5 +225,5 @@ func (r *refusals) flush(all bool) {
 	}
 	clear(r.by)
 	r.mu.Unlock()
-	r.log.Warnf(runlog.TagRun, "mcp: refused in the last minute: %s", strings.Join(parts, ", "))
+	r.log.Warnf(runlog.TagRun, "mcp: refused since the last report: %s", strings.Join(parts, ", "))
 }

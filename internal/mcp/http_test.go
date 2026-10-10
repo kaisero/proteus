@@ -204,7 +204,7 @@ func TestTheGuard(t *testing.T) {
 	if err := stop(); !errors.Is(err, context.Canceled) {
 		t.Errorf("ServeHTTP returned %v", err)
 	}
-	if got := procLog.String(); !strings.Contains(got, "[WARN] [RUN] mcp: refused in the last minute: 401 ×5, 403 ×2\n") {
+	if got := procLog.String(); !strings.Contains(got, "[WARN] [RUN] mcp: refused since the last report: 401 ×5, 403 ×2\n") {
 		t.Errorf("process log:\n%s", got)
 	}
 }
@@ -533,7 +533,7 @@ func TestRefusalsAreCounted(t *testing.T) {
 	now = now.Add(30 * time.Second)
 	r.flush(false)
 	r.flush(false) // counted from zero: no second line
-	want := []string{"[WARN] [RUN] mcp: refused in the last minute: 401 ×3, 403 ×1"}
+	want := []string{"[WARN] [RUN] mcp: refused since the last report: 401 ×3, 403 ×1"}
 	if got := lines(); !slices.Equal(got, want) {
 		t.Fatalf("lines %q, want %q", got, want)
 	}
@@ -542,7 +542,7 @@ func TestRefusalsAreCounted(t *testing.T) {
 	now = now.Add(time.Hour)
 	r.refuse(http.StatusUnauthorized)
 	r.flush(true)
-	want = append(want, "[WARN] [RUN] mcp: refused in the last minute: 401 ×1")
+	want = append(want, "[WARN] [RUN] mcp: refused since the last report: 401 ×1")
 	if got := lines(); !slices.Equal(got, want) {
 		t.Errorf("lines %q, want %q", got, want)
 	}

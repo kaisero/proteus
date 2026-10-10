@@ -509,7 +509,7 @@ func TestMCPOverHTTP(t *testing.T) {
 		if logs, _ := os.ReadDir(filepath.Join(c.env["PROTEUS_LOG_DIR"], "mcp")); len(logs) != 0 {
 			t.Errorf("call logs %v", logs)
 		}
-		if l := c.logFile(); !strings.Contains(l, "[WARN] [RUN] mcp: refused in the last minute: 401 ×1") {
+		if l := c.logFile(); !strings.Contains(l, "[WARN] [RUN] mcp: refused since the last report: 401 ×1") {
 			t.Errorf("command log:\n%s", l)
 		}
 	}

@@ -6,11 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/fs"
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -103,7 +104,8 @@ func cut(s string, n int) string {
 // AuditLog writes each call as one JSON line (spec §4.9): to a file opened
 // append-only, mode 0600, which it rotates by size and count (spec 2026-10-10
 // F3), or to a stream such as standard output, which the container platform
-// collects. The file holds addresses and identities: treat it as sensitive.
+// collects. The lines hold identities, and the addresses in the inputs:
+// treat them as sensitive.
 // It is safe for concurrent use. One process writes a file: two servers that
 // share one would each rotate it.
 type AuditLog struct {
@@ -126,7 +128,7 @@ type AuditLog struct {
 }
 
 // Rotation bounds the audit file: before a line would take it past MaxBytes,
-// it is renamed to <name>.<UTC time> and a new file starts; the newest Keep
+// it is renamed to <name>.<UTC time>-<seq> and a new file starts; the newest Keep
 // renamed files stay. A zero field takes its default.
 type Rotation struct {
 	MaxBytes int64
@@ -141,7 +143,7 @@ const (
 	DefaultAuditKeep  = 10
 )
 
-// rotatedLayout is a renamed file's suffix: UTC, sortable as text.
+// rotatedLayout is the time in a renamed file's name, UTC.
 const rotatedLayout = "2006-01-02T15-04-05.000000000Z"
 
 // OpenAudit opens the audit file at path for appending, creating it with
@@ -259,10 +261,12 @@ func (a *AuditLog) write(line []byte) error {
 	switch {
 	case a.path == "" || a.closed:
 	case a.f == nil:
-		// The new file did not open at a rotation: try again.
+		// The new file did not open after a rotation renamed the old one:
+		// try again, and prune as that rotation could not.
 		if err := a.open(); err != nil {
 			return err
 		}
+		rotated = a.prune()
 	case a.size > 0 && a.size+int64(len(line)) > a.rot.MaxBytes:
 		// A line longer than the limit still goes to a new file whole.
 		rotated = a.rotate()
@@ -271,11 +275,30 @@ func (a *AuditLog) write(line []byte) error {
 		return cmp.Or(rotated, os.ErrClosed)
 	}
 	n, err := a.w.Write(line)
+	if err != nil && n > 0 && n < len(line) {
+		// A short write, as on a full disk, leaves a fragment that would
+		// run into the next line. The file has one writer and appends, so
+		// cut it back; a stream gets the line ended instead.
+		err = errors.Join(err, a.repair())
+		if a.f != nil {
+			n = 0
+		}
+	}
 	a.size += int64(n)
 	return errors.Join(rotated, err)
 }
 
-// rotate renames the file to <name>.<UTC time>, opens a new one, and removes
+// repair undoes a short write: the file is cut back to its size before it,
+// a stream gets the fragment ended with a newline. a.mu is held.
+func (a *AuditLog) repair() error {
+	if a.f != nil {
+		return a.f.Truncate(a.size)
+	}
+	_, err := a.w.Write([]byte{'\n'})
+	return err
+}
+
+// rotate renames the file to <name>.<UTC time>-<seq>, opens a new one, and removes
 // the oldest renamed files past Keep. When the rename fails the file stays
 // as it is. a.mu is held.
 func (a *AuditLog) rotate() error {
@@ -295,39 +318,71 @@ func (a *AuditLog) rotate() error {
 	return errors.Join(closed, a.prune())
 }
 
-// rotatedName is a free name for the file rotated now: <name>.<UTC time>.
-// Two rotations in one clock tick get names a nanosecond apart, still in
-// order.
+// rotatedName is a free name for the file rotated now:
+// <name>.<UTC time>-<seq>. The sequence is one above the highest of the
+// rotated files, so prune keeps the newest even when the clock went back.
 func (a *AuditLog) rotatedName() string {
-	t := a.rot.Now().UTC()
+	files, _ := a.rotated() // unreadable: start at 1, and Rename reports it
+	seq := 1
+	if len(files) > 0 {
+		seq = files[len(files)-1].seq + 1
+	}
+	stamp := a.rot.Now().UTC().Format(rotatedLayout)
 	for {
-		name := a.path + "." + t.Format(rotatedLayout)
-		if _, err := os.Lstat(name); errors.Is(err, fs.ErrNotExist) {
+		name := fmt.Sprintf("%s.%s-%06d", a.path, stamp, seq)
+		// Only a name that exists moves on; any other error is Rename's to
+		// report, so the loop cannot spin under the lock.
+		if _, err := os.Lstat(name); err != nil {
 			return name
 		}
-		t = t.Add(time.Nanosecond)
+		seq++
 	}
 }
 
-// prune removes the oldest rotated files past Keep. Only names of the form
-// <name>.<UTC time> count: other files beside the audit stay.
-func (a *AuditLog) prune() error {
+// rotatedFile is a rotated audit file and its sequence number.
+type rotatedFile struct {
+	name string
+	seq  int
+}
+
+// rotatedSuffix matches the suffix of a rotated file: the UTC time and the
+// sequence number.
+var rotatedSuffix = regexp.MustCompile(`^(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}\.\d{9}Z)-(\d+)$`)
+
+// rotated are the rotated files beside the audit file, oldest first by
+// sequence number. Other files beside it do not count.
+func (a *AuditLog) rotated() ([]rotatedFile, error) {
 	dir, base := filepath.Split(a.path)
 	entries, err := os.ReadDir(cmp.Or(dir, "."))
 	if err != nil {
+		return nil, err
+	}
+	var files []rotatedFile
+	for _, e := range entries {
+		suffix, ok := strings.CutPrefix(e.Name(), base+".")
+		m := rotatedSuffix.FindStringSubmatch(suffix)
+		if !ok || m == nil || !e.Type().IsRegular() {
+			continue
+		}
+		seq, err := strconv.Atoi(m[2])
+		if err != nil {
+			continue // past the int range: not a name this log wrote
+		}
+		files = append(files, rotatedFile{filepath.Join(dir, e.Name()), seq})
+	}
+	slices.SortFunc(files, func(x, y rotatedFile) int { return cmp.Compare(x.seq, y.seq) })
+	return files, nil
+}
+
+// prune removes the oldest rotated files past Keep.
+func (a *AuditLog) prune() error {
+	files, err := a.rotated()
+	if err != nil {
 		return err
 	}
-	var rotated []string
-	for _, e := range entries {
-		stamp, ok := strings.CutPrefix(e.Name(), base+".")
-		if _, perr := time.Parse(rotatedLayout, stamp); ok && perr == nil && e.Type().IsRegular() {
-			rotated = append(rotated, e.Name())
-		}
-	}
-	slices.Sort(rotated) // the time in each name sorts as text
 	var errs []error
-	for _, name := range rotated[:max(0, len(rotated)-a.rot.Keep)] {
-		errs = append(errs, os.Remove(filepath.Join(dir, name)))
+	for _, f := range files[:max(0, len(files)-a.rot.Keep)] {
+		errs = append(errs, os.Remove(f.name))
 	}
 	return errors.Join(errs...)
 }

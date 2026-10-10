@@ -48,6 +48,7 @@ The server checks its setup before it answers. A failed check stops it:
 | The export is missing ("run proteus fetch first") | 2 |
 | The export holds a credential, cannot be parsed, or has no device | 2 |
 | `--http` without a token, with a token shorter than 32 bytes, or without `audit_log` | 2 |
+| `audit_log: -` over stdio, where standard output carries MCP | 2 |
 | The export cannot be read, the store cannot be opened, the address cannot be listened on, or the audit file cannot be opened | 1 |
 
 Over HTTP the server prints `proteus mcp: serving http://<address> (Host check on: <hosts>)`
@@ -253,7 +254,7 @@ devices.
 
 **The audit.** The server appends one JSON line per call to `audit_log`, mode
 0600. Before a line would take the file past `audit_max_mb`, the server renames it
-to `<audit_log>.<UTC time>` and starts a new file; it keeps the newest `audit_keep`
+to `<audit_log>.<UTC time>-<sequence>` and starts a new file; it keeps the newest `audit_keep`
 renamed files. With `audit_log: -` the lines go to standard output, and the
 container platform collects and keeps them (`--http` only):
 
@@ -277,10 +278,11 @@ container platform collects and keeps them (`--http` only):
 The audit holds only the calls that reached the server. A refused HTTP request
 (401 or 403) gets no audit line. While requests are refused, the server process's
 run log gets one warning per minute with the counts by status, such as
-`mcp: refused in the last minute: 401 ×3, 403 ×1`. A count shows a wrong token or
+`mcp: refused since the last report: 401 ×3, 403 ×1`. A count shows a wrong token or
 Host; the gateway's and the proxy's logs show who sent the requests.
 
-The audit file holds addresses and identities. Treat it as sensitive. The token
+The audit lines hold identities, and the addresses in the tools' inputs. Treat them
+as sensitive. The token
 never reaches the audit or a log.
 
 **Run logs.** A call that ends `internal` or `timeout` writes its own run log in

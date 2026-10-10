@@ -66,8 +66,8 @@ or the audit is not reliable.
 
 - proteus does no authorisation. Portkey decides which users and workspaces can
   use the server.
-- The audit lines hold addresses and identities. Treat the container's log, or
-  the audit file, as sensitive.
+- The audit lines hold identities, and the addresses in the tools' inputs. Treat
+  the container's log, or the audit file, as sensitive.
 - proteus does not audit a refused request (401 or 403). Its process log counts
   them by status once a minute. Portkey's logs hold the refused attempts at the
   gateway, and Caddy's logs the requests that bypass it. Behind the proxy every

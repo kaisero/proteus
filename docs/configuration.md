@@ -160,12 +160,13 @@ identity `unknown` with `identity_source: header`. proteus makes an existing aud
 file mode 0600.
 
 Before a line would take the audit file past `audit_max_mb`, proteus renames the
-file to `<audit_log>.<UTC time>` and starts a new one, mode 0600. It keeps the
-newest `audit_keep` renamed files and removes the older ones. `audit_log: -` writes
-the lines to standard output instead, for a container platform that collects and
-keeps them; nothing else goes to standard output with `--http`. Over stdio,
-standard output carries MCP, so the server refuses `-` (exit 2). The [MCP guide](guides/mcp.md#audit-and-run-logs) lists the fields
-of an audit line.
+file to `<audit_log>.<UTC time>-<sequence>` and starts a new one, mode 0600. It
+keeps the `audit_keep` renamed files with the highest sequence numbers and removes
+the older ones. `audit_log: -` writes the lines to standard output instead, for a
+container platform that collects and keeps them; nothing else goes to standard
+output with `--http`. Over stdio, standard output carries MCP, so the server
+refuses `-` (exit 2). The [MCP guide](guides/mcp.md#audit-and-run-logs) lists the
+fields of an audit line.
 
 The `--max-age`, `--log-level` and `--store` settings apply to the server too;
 `max_snapshot_age` comes from the export's `defaults:`. The server writes a call's

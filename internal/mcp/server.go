@@ -173,7 +173,7 @@ func build(o Options, strict bool) (*sdk.Server, *limiter, error) {
 	if err := addResources(s); err != nil {
 		return nil, nil, err
 	}
-	m := middleware{audit: o.Audit, now: o.Now, identify: o.Identify, logs: o.Logs, strict: strict, lim: newLimiter(lim.MaxConcurrent, lim.MaxQueue, lim.MaxWait, lim.CallTimeout)}
+	m := middleware{audit: o.Audit, now: o.Now, identify: o.Identify, logs: o.Logs, proc: o.Log, strict: strict, lim: newLimiter(lim.MaxConcurrent, lim.MaxQueue, lim.MaxWait, lim.CallTimeout)}
 	if m.now == nil {
 		m.now = time.Now
 	}
@@ -242,7 +242,10 @@ type middleware struct {
 	now      func() time.Time
 	identify func(http.Header) Identity
 	logs     *runlog.Options
-	strict   bool
+	// proc is the process log: a call log that could not be written is
+	// reported there.
+	proc   *runlog.Logger
+	strict bool
 	// lim bounds the calls; nil runs each at once with no time limit.
 	lim *limiter
 }
@@ -287,7 +290,7 @@ func (m middleware) receive(next sdk.MethodHandler) sdk.MethodHandler {
 			if m.audit != nil {
 				m.audit.Audit(*c)
 			}
-			closeLog(log, c)
+			m.closeLog(log, c)
 		}()
 		if m.lim != nil {
 			if err := m.lim.enter(ctx); err != nil {
@@ -343,12 +346,15 @@ func (m middleware) openLog(c *Call) *runlog.Logger {
 // included, and closes the log. A buffered log is written only when the call
 // ended internal or timeout: a fault or a slow call keeps its detail, and an
 // answer explains itself in its reasons and codes (spec 2026-10-10 F4).
-func closeLog(l *runlog.Logger, c *Call) {
+func (m middleware) closeLog(l *runlog.Logger, c *Call) {
 	if l == nil {
 		return
 	}
 	if c.Status == StatusInternal || c.Status == StatusTimeout {
-		_ = l.Persist() // a log that does not open leaves the call without one
+		if err := l.Persist(); err != nil {
+			// The call stays without its log; the process log says so.
+			m.proc.Warnf(runlog.TagRun, "mcp: the run log of a call to %s (status %s) was not written: %v", cut(c.Tool, maxLogTool), c.Status, err)
+		}
 	}
 	if c.Err != "" {
 		l.Warnf(runlog.TagRun, "%s", c.Err)

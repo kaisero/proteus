@@ -3,7 +3,9 @@ package mcp
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -79,8 +81,8 @@ func TestTheAuditRotates(t *testing.T) {
 	}
 	// 10 lines, 3 per file: 3 rotations, the newest 2 kept, 1 line current.
 	rotated := rotatedFiles(t, dir, "audit.jsonl")
-	if len(rotated) != 3 || rotated[0] != "audit.jsonl.2026-10-10T06-00-00.000000001Z" ||
-		rotated[1] != "audit.jsonl.2026-10-10T06-00-00.000000002Z" || rotated[2] != "audit.jsonl.bak" {
+	if len(rotated) != 3 || rotated[0] != "audit.jsonl.2026-10-10T06-00-00.000000000Z-000002" ||
+		rotated[1] != "audit.jsonl.2026-10-10T06-00-00.000000000Z-000003" || rotated[2] != "audit.jsonl.bak" {
 		t.Fatalf("rotated %v", rotated)
 	}
 	for _, name := range append(rotated[:2], "audit.jsonl") {
@@ -202,7 +204,14 @@ func TestTheAuditReopensAfterAFailedOpen(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "audit.jsonl")
-	a, err := OpenAudit(path, Rotation{MaxBytes: 10})
+	// Two older rotated files; the reopen prunes to the newest one, which
+	// the failed rotation wrote.
+	for _, old := range []string{"2026-10-10T06-00-00.000000000Z-000001", "2026-10-10T06-00-00.000000000Z-000002"} {
+		if err := os.WriteFile(path+"."+old, nil, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	a, err := OpenAudit(path, Rotation{MaxBytes: 10, Keep: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -225,6 +234,119 @@ func TestTheAuditReopensAfterAFailedOpen(t *testing.T) {
 	if got := jsonLines(t, path); len(got) != 1 || !strings.Contains(got[0], `"tool":"three"`) {
 		t.Errorf("after the reopen %v", got)
 	}
+	if rotated := rotatedFiles(t, dir, "audit.jsonl"); len(rotated) != 1 || !strings.HasSuffix(rotated[0], "-000003") {
+		t.Errorf("rotated %v", rotated)
+	}
+}
+
+// A clock that went back does not make prune remove the newest rotated
+// file: the sequence orders them, not the time.
+func TestTheAuditPrunesBySequence(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "audit.jsonl")
+	now := time.Date(2026, 10, 10, 8, 0, 0, 0, time.UTC)
+	a, err := OpenAudit(path, Rotation{MaxBytes: 10, Keep: 2, Now: func() time.Time { now = now.Add(-time.Hour); return now }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tool := range []string{"one", "two", "three", "four"} {
+		a.Audit(Call{Tool: tool})
+	}
+	_ = a.Close()
+	rotated := rotatedFiles(t, dir, "audit.jsonl")
+	if len(rotated) != 2 {
+		t.Fatalf("rotated %v", rotated)
+	}
+	for i, tool := range []string{"two", "three"} {
+		var got []string
+		for _, f := range rotated {
+			if strings.HasSuffix(f, fmt.Sprintf("-%06d", i+2)) {
+				got = jsonLines(t, filepath.Join(dir, f))
+			}
+		}
+		if len(got) != 1 || !strings.Contains(got[0], `"tool":"`+tool+`"`) {
+			t.Errorf("rotated %d: %v (files %v)", i+2, got, rotated)
+		}
+	}
+}
+
+// A rotated name the file system refuses (too long) is reported by the
+// rename and does not stop the log: the name check does not loop on an
+// error other than "exists".
+func TestTheAuditSurvivesARefusedName(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	path := filepath.Join(dir, strings.Repeat("a", 240)) // the rotated name passes 255 bytes
+	a, err := OpenAudit(path, Rotation{MaxBytes: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var errs []error
+	a.OnError = func(err error) { errs = append(errs, err) }
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		a.Audit(Call{Tool: "one"})
+		a.Audit(Call{Tool: "two"})
+	}()
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the rotation does not return")
+	}
+	_ = a.Close()
+	if len(errs) != 1 {
+		t.Errorf("errors %v", errs)
+	}
+	if got := jsonLines(t, path); len(got) != 2 {
+		t.Errorf("lines %v", got)
+	}
+}
+
+// shortWriter writes half of each write longer than a byte to w and fails,
+// as a disk that fills up mid-line.
+type shortWriter struct{ w io.Writer }
+
+func (s shortWriter) Write(p []byte) (int, error) {
+	if len(p) == 1 {
+		return s.w.Write(p)
+	}
+	n, _ := s.w.Write(p[:len(p)/2])
+	return n, errors.New("disk full")
+}
+
+// A short write leaves no fragment in the file to run into the next line;
+// a stream gets the fragment ended.
+func TestAShortWriteIsUndone(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "audit.jsonl")
+	a, err := OpenAudit(path, Rotation{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var errs []error
+	a.OnError = func(err error) { errs = append(errs, err) }
+	a.Audit(Call{Tool: "one"})
+	a.mu.Lock()
+	a.w = shortWriter{a.f}
+	a.mu.Unlock()
+	a.Audit(Call{Tool: "lost"})
+	a.mu.Lock()
+	a.w = a.f
+	a.mu.Unlock()
+	a.Audit(Call{Tool: "three"})
+	_ = a.Close()
+	got := jsonLines(t, path)
+	if len(errs) != 1 || len(got) != 2 || !strings.Contains(got[1], `"tool":"three"`) {
+		t.Errorf("errors %v, lines %v", errs, got)
+	}
+	var buf bytes.Buffer
+	s := AuditTo(shortWriter{&buf})
+	s.Audit(Call{Tool: "cut"})
+	if b := buf.String(); !strings.HasSuffix(b, "\n") || strings.Count(b, "\n") != 1 {
+		t.Errorf("stream %q", b)
+	}
 }
 
 // AuditTo writes the lines to a stream and leaves it open; a line after
@@ -245,5 +367,48 @@ func TestAuditTo(t *testing.T) {
 	}
 	if l := buf.String(); strings.Count(l, "\n") != 1 || !strings.Contains(l, `"tool":"search"`) {
 		t.Errorf("stream %q", l)
+	}
+}
+
+// A name that is taken moves the sequence on; a directory or a sequence
+// past the int range beside the file is not a rotated file.
+func TestTheAuditSkipsTakenAndForeignNames(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "audit.jsonl")
+	const stamp = "2026-10-10T08-00-00.000000000Z"
+	if err := os.Mkdir(path+"."+stamp+"-000001", 0o700); err != nil {
+		t.Fatal(err)
+	}
+	huge := path + "." + stamp + "-" + strings.Repeat("9", 30)
+	if err := os.WriteFile(huge, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 10, 10, 8, 0, 0, 0, time.UTC)
+	a, err := OpenAudit(path, Rotation{MaxBytes: 10, Keep: 1, Now: func() time.Time { return now }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.Audit(Call{Tool: "one"})
+	a.Audit(Call{Tool: "two"})
+	_ = a.Close()
+	if _, err := os.Stat(path + "." + stamp + "-000002"); err != nil {
+		t.Errorf("the next free name: %v (files %v)", err, rotatedFiles(t, dir, "audit.jsonl"))
+	}
+	if _, err := os.Stat(huge); err != nil {
+		t.Errorf("a foreign file was pruned: %v", err)
+	}
+}
+
+// A directory that cannot be read fails prune, and the rotated name starts
+// at sequence 1 for the rename to report.
+func TestTheAuditWithoutItsDirectory(t *testing.T) {
+	t.Parallel()
+	a := &AuditLog{path: filepath.Join(t.TempDir(), "gone", "audit.jsonl"), rot: Rotation{Keep: 1, Now: time.Now}}
+	if err := a.prune(); err == nil {
+		t.Error("pruned a missing directory")
+	}
+	if name := a.rotatedName(); !strings.HasSuffix(name, "-000001") {
+		t.Errorf("name %s", name)
 	}
 }
