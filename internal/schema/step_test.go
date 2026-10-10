@@ -10,6 +10,15 @@ func TestStep(t *testing.T) {
 	entries := &Node{Kind: KindArray, Name: "address", Children: []*Node{seq}}
 	member := &Node{Kind: KindElement, Name: "member"}
 	members := &Node{Kind: KindArray, Name: "tag", Children: []*Node{member}}
+	// A vsys user-group: an array whose entry is itself an array, not a
+	// sequence.
+	ugEntry := &Node{Kind: KindArray, Name: "entry", Children: []*Node{
+		{Kind: KindAttrReq, Name: "name"}, {Kind: KindElement, Name: "member"},
+	}}
+	userGroup := &Node{Kind: KindArray, Name: "user-group", Children: []*Node{ugEntry}}
+	action := &Node{Kind: KindElement, Name: "action", Children: []*Node{
+		{Kind: KindEnum, Name: "allow"}, {Kind: KindMemberOf, Name: "zone"},
+	}}
 	inChoice := &Node{Kind: KindElement, Name: "fqdn"}
 	group := &Node{Kind: KindElement, Name: "group"}
 	named := &Node{Kind: KindUnion, Name: "profile-setting", Children: []*Node{group}}
@@ -34,6 +43,11 @@ func TestStep(t *testing.T) {
 		{root, "name", nil},
 		{root, "missing", nil},
 		{nil, "address", nil},
+		{userGroup, "entry", ugEntry},
+		{ugEntry, "member", ugEntry.Children[1]},
+		{ugEntry, "name", nil},
+		{action, "allow", nil},
+		{action, "zone", nil},
 	}
 	for _, c := range cases {
 		if got := c.from.Step(c.name); got != c.want {

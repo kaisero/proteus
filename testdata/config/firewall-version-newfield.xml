@@ -1,0 +1,30 @@
+<config version="12.2.0" urldb="paloaltonetworks" detail-version="12.2.1">
+  <!-- A newer release read with the 11.2 digest. dc01 carries a field and the
+       rule an element that the 11.2 schema does not describe, so the version
+       gap note counts two. -->
+  <devices>
+    <entry name="localhost.localdomain">
+      <vsys>
+        <entry name="vsys1">
+          <address>
+            <entry name="dc01"><ip-netmask>198.18.10.100</ip-netmask>
+              <new-field><x>1</x></new-field></entry>
+          </address>
+          <rulebase>
+            <security>
+              <rules>
+                <entry name="dc-out">
+                  <source><member>dc01</member></source>
+                  <destination><member>any</member></destination>
+                  <application><member>any</member></application>
+                  <action>allow</action>
+                  <new-match>yes</new-match>
+                </entry>
+              </rules>
+            </security>
+          </rulebase>
+        </entry>
+      </vsys>
+    </entry>
+  </devices>
+</config>

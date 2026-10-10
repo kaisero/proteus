@@ -110,6 +110,9 @@ func TestGoldenJSON(t *testing.T) {
 		{"simulate-policy-default", 0, []string{"simulate", "policy", "10.2.0.5", "10.1.0.5", "--port", "443", "--from-zone", "dmz", "--to-zone", "inside", "--file", fixture("firewall-zones.xml")}},
 		{"simulate-policy-doubt", 0, []string{"simulate", "policy", "198.19.0.254", "10.2.0.5", "--port", "443", "--from-zone", "labor", "--to-zone", "dmz", "--file", fixture("firewall-doubt.xml")}},
 		{"simulate-policy-undecided", 3, []string{"simulate", "policy", "10.0.0.5", "203.0.113.5", "--port", "443", "--from-zone", "dmz", "--to-zone", "wan", "--file", fixture("firewall-doubt.xml")}},
+		// A version gap with elements the older schema does not describe: the
+		// gap.version text gives their count (AGENTS.md R3).
+		{"search-version-gap", 3, []string{"search", "198.18.10.100", "--file", fixture("firewall-version-newfield.xml")}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

@@ -106,6 +106,10 @@ func (n *Node) Child(name string) *Node {
 // choices and unions are pure grammar and are passed through; a named one is
 // an element of its own (PathFields). An attribute is not an element.
 //
+// An entry list's entry is its entry sequence. Not every array's entry is one:
+// a vsys user-group holds an array named entry, with a name attribute and
+// members, and that is found by name like any other field.
+//
 // It returns nil when the schema does not describe such a child. This is the
 // one definition of "described": config.Load counts what it does not describe
 // (AGENTS.md R3), and snapshot diff hides the values of the same elements.
@@ -114,7 +118,9 @@ func (n *Node) Step(name string) *Node {
 		return nil
 	}
 	if n.Kind == KindArray && name == "entry" {
-		return n.EntrySequence()
+		if seq := n.EntrySequence(); seq != nil {
+			return seq
+		}
 	}
 	for _, c := range n.Children {
 		switch {
@@ -122,7 +128,10 @@ func (n *Node) Step(name string) *Node {
 			if got := c.Step(name); got != nil {
 				return got
 			}
-		case c.Kind == KindAttrReq:
+		case c.Kind == KindAttrReq, c.Kind == KindEnum, c.Kind == KindMemberOf:
+			// An attribute, an enum value or a reference target names no
+			// element. The parser keeps the last two on their field, so
+			// this only guards a hand-built tree.
 		case c.Name == name:
 			return c
 		}

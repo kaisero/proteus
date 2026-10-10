@@ -21,7 +21,8 @@ func writeConfig(t *testing.T, doc string) string {
 // R3. An element the digest does not describe, such as a field a newer release
 // added, is counted once at its top, with its path and the digest that did not
 // describe it. What the digest describes is not counted: the pushed rulebases
-// are read as a vsys rulebase, and a member list's members are its own.
+// are read as a vsys rulebase, a member list's members are its own, and a vsys
+// user-group's entry, an array rather than an entry sequence, is a field.
 func TestLoadCountsUndescribedElements(t *testing.T) {
 	t.Parallel()
 	path := writeConfig(t, `<config version="12.2.0" detail-version="12.2.1">
@@ -32,6 +33,7 @@ func TestLoadCountsUndescribedElements(t *testing.T) {
       <source><member>any</member></source></entry></rules></security></post-rulebase>
   </shared>
   <devices><entry name="localhost.localdomain"><vsys><entry name="vsys1">
+    <user-group><entry name="ug"><member>cn=staff</member></entry></user-group>
     <rulebase><security><rules><entry name="r"><action>allow</action>
       <source><member>a</member></source><new-match>yes</new-match></entry></rules></security></rulebase>
   </entry></vsys></entry></devices>
@@ -105,6 +107,10 @@ func TestLoadFixturesUntyped(t *testing.T) {
 		"firewall-apps.xml":             {"/config/devices/localhost.localdomain/vsys/vsys1/application-container"},
 		"firewall-nat-shapes.xml":       {"/config/devices/localhost.localdomain/vsys/vsys1/rulebase/nat/rules/future/source-translation/magic-ip"},
 		"firewall-nat-translations.xml": {"/config/devices/localhost.localdomain/vsys/vsys1/rulebase/nat/rules/magic/source-translation/magic-ip"},
+		"firewall-version-newfield.xml": {
+			"/config/devices/localhost.localdomain/vsys/vsys1/address/dc01/new-field",
+			"/config/devices/localhost.localdomain/vsys/vsys1/rulebase/security/rules/dc-out/new-match",
+		},
 	}
 	files, err := filepath.Glob("../../testdata/config/firewall-*.xml")
 	if err != nil || len(files) == 0 {
