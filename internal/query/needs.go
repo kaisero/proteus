@@ -242,14 +242,19 @@ func pathNeeds(flow simulate.Flow, r pathpolicy.Result) []Need {
 }
 
 // routingNeeds is a routing answer's needs. A hop whose NAT rule another rule
-// may replace leaves the path undecided there.
+// may replace leaves the path undecided there. So does a hop whose PBF rule may
+// or may not take the flow: why it may not, such as a service without the
+// port, is a cause an input can settle.
 func routingNeeds(flow simulate.Flow, p routing.Path, f simulate.Fidelity) []Need {
 	var causes []cause
 	doubted, blocked := false, false
 	for _, h := range p.Hops {
 		cs, b := natCauses(flow, h.NATDoubts)
 		causes, blocked = append(causes, cs...), blocked || b
-		doubted = doubted || len(h.NATDoubts) > 0
+		for _, r := range h.PBFDoubts {
+			causes = append(causes, cause{code: r.Code})
+		}
+		doubted = doubted || len(h.NATDoubts) > 0 || len(h.PBFDoubts) > 0
 	}
 	if !holdsBack(doubted, f) {
 		return nil

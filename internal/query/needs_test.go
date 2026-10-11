@@ -268,6 +268,20 @@ func TestNeedsPBFPort(t *testing.T) {
 	if again := ask("443"); again.Verdict != "denied" || again.Needs != nil {
 		t.Errorf("tcp/443: %s, needs %+v", again.Answer, again.Needs)
 	}
+	// simulate routing asks for the port too: it decides the PBF rule.
+	route := func(port string) RoutingResult {
+		e, err := Routing(context.Background(), env, RoutingInput{Source: pathlab.Source, Destination: pathlab.Destination, Protocol: "tcp", Port: port})
+		if err != nil || len(e.Results) != 1 {
+			t.Fatalf("%+v %v", e, err)
+		}
+		return e.Results[0]
+	}
+	if r := route(""); !slices.Equal(needCodes(r.Needs), []string{"input.port port"}) {
+		t.Errorf("routing, no port: %s, needs %+v", r.Answer, r.Needs)
+	}
+	if r := route("443"); slices.Contains(needCodes(r.Needs), "input.port port") {
+		t.Errorf("routing, tcp/443: %s, needs %+v", r.Answer, r.Needs)
+	}
 }
 
 // Derived zones that leave rule-type or the default rule open need both zones:

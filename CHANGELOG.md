@@ -361,7 +361,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **A path held back by a PBF rule's service now asks for the port.** Asked
   without a port, a PBF rule that names a service left the path undecided with
   `needs: []`. The hop now says why the rule only may match, and `needs` asks
-  for the port.
+  for the port, in `simulate_policy` and `simulate_routing` alike.
 - **A PBF rule from an external list, a region or a dynamic group now may
   match.** Only the addresses the configuration places in them counted, so such
   a rule was skipped for every other address and the path was called exact. A
