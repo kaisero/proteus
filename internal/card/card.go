@@ -61,13 +61,18 @@ type Card struct {
 	Sections    []Section    `json:"sections"`
 }
 
-// builder resolves names in one scope, caching the objects of each kind.
+// builder resolves names in one scope, caching the objects of each kind. One
+// builder builds one card.
 type builder struct {
 	cfg    *config.Config
 	idx    *index.Index
 	sc     config.Scope
 	byKind map[string]map[string]resolve.Object
 	kinds  map[string][]string // rule field -> the object kinds it may name
+
+	// path holds the groups being opened, from the card's top down, and opened
+	// every group the card has opened. Both key on kind and name.
+	path, opened map[string]bool
 }
 
 func newBuilder(cfg *config.Config, idx *index.Index) *builder {
@@ -75,6 +80,8 @@ func newBuilder(cfg *config.Config, idx *index.Index) *builder {
 		cfg: cfg, idx: idx, sc: idx.Scope(),
 		byKind: map[string]map[string]resolve.Object{},
 		kinds:  cfg.FieldKinds("rulebase/security/rules"),
+		path:   map[string]bool{},
+		opened: map[string]bool{},
 	}
 }
 
@@ -101,13 +108,13 @@ var fieldsWithPredefined = map[string]bool{
 }
 
 // item resolves one name a rule field holds.
-func (b *builder) item(field, name string, seen map[string]bool) Item {
+func (b *builder) item(field, name string) Item {
 	if config.Keywords[name] {
 		return Item{Name: name}
 	}
 	for _, kind := range b.kinds[field] {
 		if o, ok := b.object(kind, name); ok {
-			return b.objectItem(o, seen)
+			return b.objectItem(o)
 		}
 	}
 	if (field == "source" || field == "destination") && len(index.PrefixesOf(name)) > 0 {
@@ -116,16 +123,9 @@ func (b *builder) item(field, name string, seen map[string]bool) Item {
 	return Item{Name: name, Predefined: fieldsWithPredefined[field]}
 }
 
-// objectItem is an object with its value and, for a group, its members. seen cuts
-// a group cycle; the configuration allows one and the tree must not loop.
-func (b *builder) objectItem(o resolve.Object, seen map[string]bool) Item {
+// objectItem is an object with its value and, for a group, its members.
+func (b *builder) objectItem(o resolve.Object) Item {
 	it := Item{Name: o.Name, Kind: o.Kind}
-	key := o.Kind + "/" + o.Name
-	if seen[key] {
-		it.Value = "cycle"
-		return it
-	}
-	seen = with(seen, key)
 	switch o.Kind {
 	case "address":
 		it.Value = addressValue(o.Value)
@@ -138,15 +138,11 @@ func (b *builder) objectItem(o resolve.Object, seen map[string]bool) Item {
 			}
 			break
 		}
-		for _, n := range splitList(o.Value) {
-			it.Children = append(it.Children, b.item("source", n, seen))
-		}
+		it.Children, it.Value = b.members(o, "source")
 	case "service":
 		it.Value = o.Value
 	case "service-group":
-		for _, n := range splitList(o.Value) {
-			it.Children = append(it.Children, b.item("service", n, seen))
-		}
+		it.Children, it.Value = b.members(o, "service")
 	case "application-group":
 		for _, n := range splitList(o.Value) {
 			it.Children = append(it.Children, Item{Name: n})
@@ -162,6 +158,31 @@ func (b *builder) objectItem(o resolve.Object, seen map[string]bool) Item {
 		it.Value = o.Value
 	}
 	return it
+}
+
+// members opens a group: its members, each resolved as the field names it. A
+// card opens each group once. A group met again shows no members and says they
+// are shown above; a group met inside itself, which the configuration allows,
+// is a cycle. So a card grows with the groups it holds, not with the paths that
+// reach them. Measured on groups that each hold three others
+// (BenchmarkObjectCardDenseGroups): opening a group on every path took 1.1 s
+// and 1.8 GB for the card of one of 24; opening each once takes 9 ms for one
+// of 30.
+func (b *builder) members(o resolve.Object, field string) ([]Item, string) {
+	key := o.Kind + "/" + o.Name
+	switch {
+	case b.path[key]:
+		return nil, "cycle"
+	case b.opened[key]:
+		return nil, "members shown above"
+	}
+	b.path[key], b.opened[key] = true, true
+	defer delete(b.path, key)
+	var out []Item
+	for _, n := range splitList(o.Value) {
+		out = append(out, b.item(field, n))
+	}
+	return out, ""
 }
 
 // addressValue names what an address object holds. An ip-netmask and an
@@ -214,15 +235,6 @@ func splitList(v string) []string {
 		return nil
 	}
 	return strings.Split(v, ", ")
-}
-
-func with(seen map[string]bool, key string) map[string]bool {
-	out := make(map[string]bool, len(seen)+1)
-	for k := range seen {
-		out[k] = true
-	}
-	out[key] = true
-	return out
 }
 
 func sorted(m map[string][]string) []string {

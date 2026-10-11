@@ -18,7 +18,7 @@ func Rule(cfg *config.Config, idx *index.Index, r resolve.Rule, rules int) Card 
 	row := func(label, field string) Row {
 		out := Row{Label: label}
 		for _, n := range r.Fields[field] {
-			out.Items = append(out.Items, b.item(field, n, nil))
+			out.Items = append(out.Items, b.item(field, n))
 		}
 		return out
 	}

@@ -7,6 +7,7 @@ import (
 	"github.com/okaiser/proteus/internal/config"
 	"github.com/okaiser/proteus/internal/index"
 	"github.com/okaiser/proteus/internal/resolve"
+	"github.com/okaiser/proteus/internal/testconfig"
 )
 
 func find(t *testing.T, fixture, name, kind string) []Card {
@@ -281,5 +282,68 @@ func TestHeldByKeepsToTheObjectsKind(t *testing.T) {
 	}
 	if got := flat(row(one(t, "firewall-shared-names.xml", "svc-web"), "held by", "").Items); got != "webgrp" {
 		t.Errorf("svc-web held by %s", got)
+	}
+}
+
+// A group that several groups hold opens once on a card: met again, it shows no
+// members and says so. A group met inside itself is still a cycle. So the card of
+// the first of 30 groups that each hold three others names each group's members
+// once; before, it opened a group on every path to it, and grew exponentially.
+func TestACardOpensEachGroupOnce(t *testing.T) {
+	t.Parallel()
+	cfg, _, err := config.Load(testconfig.Write(t, testconfig.Groups{Addrs: 100, Dense: 30}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	idx, err := index.New(cfg, config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}, resolve.Security)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cs, err := Find(cfg, idx, "d-0", "address-group")
+	if err != nil || len(cs) != 1 {
+		t.Fatalf("Find: %d cards, %v", len(cs), err)
+	}
+	opened := map[string]int{"d-0": 1}
+	marks := map[string]int{}
+	items := 0
+	var walk func([]Item)
+	walk = func(its []Item) {
+		for _, it := range its {
+			items++
+			if it.Kind != "address-group" {
+				continue
+			}
+			if len(it.Children) > 0 {
+				opened[it.Name]++
+				walk(it.Children)
+				continue
+			}
+			marks[it.Value]++
+		}
+	}
+	walk(row(cs[0], "members", "").Items)
+	for g, n := range opened {
+		if n != 1 {
+			t.Errorf("%s opened %d times, want once", g, n)
+		}
+	}
+	// Each of the 30 groups opens once and names three groups and an address.
+	if len(opened) != 30 || items != 30*4 || marks["cycle"] == 0 || marks["members shown above"] == 0 ||
+		marks["cycle"]+marks["members shown above"] != 30*3-29 {
+		t.Errorf("%d groups opened, %d items, marks %v", len(opened), items, marks)
+	}
+}
+
+// An application group lists its members by name, and an external list says what
+// it is: the configuration holds neither's contents.
+func TestApplicationGroupAndExternalListCards(t *testing.T) {
+	t.Parallel()
+	g := one(t, "firewall-apps.xml", "erp-bundle")
+	if g.Kind != "application-group" || flat(row(g, "members", "").Items) != "custom-erp, ssl" {
+		t.Errorf("application group = %+v", g)
+	}
+	e := one(t, "firewall-opaque.xml", "edl-bad")
+	if e.Kind != "external-list" || row(e, "value", "").Text != "external list, ip" {
+		t.Errorf("external list = %+v", e)
 	}
 }
