@@ -4,7 +4,8 @@
        application, so it only may match, above lab-out. From dmz: dmz-https names
        a service the configuration does not define. From bare: bare-no-pbf names
        no service, application or source user, so each holds its schema
-       default, any. -->
+       default, any. From sched: sched-no-pbf has a schedule, so it only may
+       match, above sched-out. From night: night-fwd has a schedule. -->
   <shared/>
   <devices>
     <entry name="localhost.localdomain">
@@ -16,10 +17,15 @@
             <entry name="dmz"/>
             <entry name="wan"/>
             <entry name="bare"/>
+            <entry name="sched"/>
+            <entry name="night"/>
           </zone>
           <service>
             <entry name="svc-ssh"><protocol><tcp><port>22</port></tcp></protocol></entry>
           </service>
+          <schedule>
+            <entry name="office-hours"><schedule-type><recurring><daily><member>08:00-17:00</member></daily></recurring></schedule-type></entry>
+          </schedule>
           <rulebase>
             <pbf>
               <rules>
@@ -77,6 +83,29 @@
                   <source><member>any</member></source>
                   <destination><member>any</member></destination>
                   <service><member>any</member></service>
+                  <action><forward><egress-interface>ethernet1/4</egress-interface></forward></action>
+                </entry>
+                <entry name="sched-no-pbf">
+                  <from><zone><member>sched</member></zone></from>
+                  <source><member>any</member></source>
+                  <destination><member>any</member></destination>
+                  <service><member>any</member></service>
+                  <schedule>office-hours</schedule>
+                  <action><no-pbf/></action>
+                </entry>
+                <entry name="sched-out">
+                  <from><zone><member>sched</member></zone></from>
+                  <source><member>any</member></source>
+                  <destination><member>any</member></destination>
+                  <service><member>any</member></service>
+                  <action><forward><egress-interface>ethernet1/4</egress-interface></forward></action>
+                </entry>
+                <entry name="night-fwd">
+                  <from><zone><member>night</member></zone></from>
+                  <source><member>any</member></source>
+                  <destination><member>any</member></destination>
+                  <service><member>any</member></service>
+                  <schedule>office-hours</schedule>
                   <action><forward><egress-interface>ethernet1/4</egress-interface></forward></action>
                 </entry>
               </rules>

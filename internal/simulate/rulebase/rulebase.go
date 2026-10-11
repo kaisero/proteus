@@ -172,9 +172,9 @@ type PBFMatch struct {
 	Found bool
 	// Note says what the rule would do; the zero reason for no-pbf, which leaves
 	// the packet to routing only on a sure match. When a forward or discard rule
-	// only may match, because it names an application or a user, which are not
-	// evaluated, or a service the answer cannot judge on this flow, the note ends
-	// with ", if it matches: " and why.
+	// only may match, because it names an application or a user or has a
+	// schedule, which are not evaluated, or a service the answer cannot judge on
+	// this flow, the note ends with ", if it matches: " and why.
 	Note reason.Reason
 	// Passed are the no-pbf rules before Rule that only may match. Only a sure
 	// no-pbf match ends the scan, so the scan went on past them.
@@ -218,7 +218,8 @@ func texts(rs []reason.Reason) string {
 // protocol and destination port; a port of 0 means none was given.
 //
 // A rule matches on its from, addresses and service. A rule that names an
-// application or a user, or a service the answer cannot judge, only may match.
+// application or a user, has a schedule, or names a service the answer cannot
+// judge, only may match.
 // Such a forward or discard rule still ends the scan: it can redirect the packet,
 // so the path is undecided. Such a no-pbf rule does not: only a sure no-pbf
 // match leaves the packet to routing. As observed on fw02, PAN-OS 12.2.3 (L3): a
@@ -242,7 +243,7 @@ func (v Vsys) PBF(src, dst netip.Addr, proto string, port uint16, in simulate.Po
 		if !fits {
 			continue
 		}
-		doubts = append(doubts, notEvaluated(fields)...)
+		doubts = append(doubts, notEvaluated(fields, r.Schedule)...)
 		if r.ActionKind == resolve.PBFNoPBF && len(doubts) > 0 {
 			m.Passed = append(m.Passed, PBFPassed{Rule: r.Name, Doubts: doubts})
 			continue
@@ -305,14 +306,17 @@ func withDefaults(fields map[string][]string, defaults map[string]string) map[st
 }
 
 // notEvaluated is why a rule only may match for the dimensions a PBF check does not
-// evaluate: the application and the source user (todo item 22).
-func notEvaluated(fields map[string][]string) []reason.Reason {
+// evaluate: the application, the source user (todo item 22) and the schedule.
+func notEvaluated(fields map[string][]string, schedule string) []reason.Reason {
 	var out []reason.Reason
 	if names(fields["application"]) {
 		out = append(out, reason.New("doubt.application", "the rule names an application, which is not evaluated"))
 	}
 	if names(fields["source-user"]) {
 		out = append(out, reason.New("doubt.not-evaluated.user", "the rule names a source user, which is not evaluated"))
+	}
+	if schedule != "" {
+		out = append(out, reason.New("doubt.schedule", fmt.Sprintf("schedule not evaluated (%s)", schedule)))
 	}
 	return out
 }

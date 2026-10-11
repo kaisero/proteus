@@ -317,17 +317,37 @@ func TestServiceTerm(t *testing.T) {
 	}
 }
 
-// A PBF check does not evaluate the application or the source user: a rule that
-// names either only may match.
+// A PBF check does not evaluate the application, the source user or the
+// schedule: a rule that names one only may match.
 func TestPBFNotEvaluated(t *testing.T) {
 	t.Parallel()
 	fields := map[string][]string{"application": {"any"}, "source-user": {`corp\ops`}}
-	if got := notEvaluated(fields); len(got) != 1 || got[0].Code != "doubt.not-evaluated.user" {
+	if got := notEvaluated(fields, ""); len(got) != 1 || got[0].Code != "doubt.not-evaluated.user" {
 		t.Errorf("user: %v", got)
 	}
 	fields["source-user"] = []string{"any"}
-	if got := notEvaluated(fields); got != nil {
+	if got := notEvaluated(fields, ""); got != nil {
 		t.Errorf("any: %v", got)
+	}
+	if got := notEvaluated(fields, "office-hours"); len(got) != 1 || got[0] != reason.New("doubt.schedule", "schedule not evaluated (office-hours)") {
+		t.Errorf("schedule: %v", got)
+	}
+}
+
+// A scheduled no-pbf rule only may match, so the scan goes past it to
+// sched-out; a scheduled forward rule only may forward.
+func TestPBFScheduleIsNotEvaluated(t *testing.T) {
+	t.Parallel()
+	v := pbfServiceVsys(t)
+	m := v.PBF(ip("10.88.7.5"), ip("10.88.9.5"), "tcp", 443, simulate.Port{Zone: "sched"})
+	if !m.Found || m.Rule.Name != "sched-out" || strings.Contains(m.Note.Text, "if it matches") ||
+		PassedText(m.Passed) != "; no-pbf rule sched-no-pbf may match (schedule not evaluated (office-hours))" {
+		t.Errorf("sched: %+v", m)
+	}
+	m = v.PBF(ip("10.88.7.5"), ip("10.88.9.5"), "tcp", 443, simulate.Port{Zone: "night"})
+	if !m.Found || m.Rule.Name != "night-fwd" ||
+		m.Note != reason.New("path.pbf", "pbf rule night-fwd may forward this packet to ethernet1/4, if it matches: schedule not evaluated (office-hours)") {
+		t.Errorf("night: %+v", m)
 	}
 }
 

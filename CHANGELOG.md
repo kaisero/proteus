@@ -348,6 +348,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   of an HTTP server profile and the values of an MFA server profile now read
   `(secret)`, as passwords do. Before, their old and new values showed, because
   the schema does not mark them as encrypted.
+- **A PBF rule with a schedule now only may match.** The schedule was not
+  read, so a scheduled no-pbf rule always left the packet to routing and hid
+  the forward rule below it, and a scheduled forward rule counted as certain.
 - **`simulate policy --file` no longer takes a default static route as the
   source zone.** With no zones given, a source that only a `0.0.0.0/0` static
   route reaches was placed in that route's zone, so the default rule decided
