@@ -52,7 +52,8 @@ rule-field bitmaps. The rules whose field is `any` join them. The result is a
 Repo map:
 
 - `internal/config/` — `load.go` (Load, Panorama refusal, digest cache), `tree.go` (element tree),
-  `walk.go` (reference walk, `FieldKinds`, `KindContainers`), `embed.go`,
+  `walk.go` (`Event`, `FieldKinds`, `KindContainers`), `walkpath.go` (`WalkPaths`),
+  `describe.go` (`SchemaNode`, `ChildNode`, the undescribed count), `embed.go`,
   `schemadigest/` (embedded digests).
 - `internal/resolve/` — `target.go`, `rules.go`, `objects.go`,
   `filter.go` (tag filters), `urlpattern.go`, `profiles.go`, `zones.go`.

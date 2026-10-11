@@ -84,7 +84,9 @@ Each result of `simulate`, `search`, `lookup` and `snapshot diff` has an
 `lookup` and `snapshot diff` also print a `summary` with the counts and the
 count line as its `answer`. With `--limit N`, `results` holds the first N
 results, and `summary.omitted` counts the ones left out; it is 0 when nothing
-is left out.
+is left out. For `snapshot diff`, N counts single changes: `results` holds the
+scopes up to the one where the limit falls, and `summary.omitted` counts the
+changes left out.
 
 A simulate result that is undecided, or whose fidelity is `undermatch`, has a
 `needs` list: the inputs that, given in a second question, can change the

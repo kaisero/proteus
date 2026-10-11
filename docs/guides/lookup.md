@@ -84,7 +84,7 @@ tag and an address group. `lookup dc-mgmt` then exits with code 2 and names both
 Pick one with `--kind address-group`.
 
 A name that proteus finds nowhere is an empty answer: it prints
-`no element named "x"` and exits 0.
+`no element named "x" in the selection` and exits 0.
 
 `--output json` returns the whole element. It never cuts a list.
 

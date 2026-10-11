@@ -28,7 +28,7 @@ nothing else. The client refuses any other command before it reaches the device.
 
 ```
 $ proteus snapshot list fw01
-* 2026-09-29T06-29-08Z  PAN-OS 11.2.5   4 documents, 0 failed
+* 2026-09-29T06-29-08Z PAN-OS 11.2.5 7 documents, 0 failed
 ```
 
 The list is newest first. `*` marks `latest`. A snapshot whose `meta.json` is
@@ -109,9 +109,9 @@ not a change.
 `--limit N` keeps the first N changes, in the order above, over all scopes and
 devices together. The scope where the limit falls shows its first changes, and
 its count line keeps the whole counts and adds how many it shows:
-`fw01/vsys:vsys1: 1 added, 1 removed, 2 changed (1 of 4 changes shown)`. The
+`fw01/vsys:vsys1: 1 added, 1 removed, 3 changed (1 of 5 changes shown)`. The
 scopes after it are left out. There is no default. With changes left out, the
-last line ends `; 1 of 4 shown, narrow by device`. In JSON and YAML,
+last line ends `; 1 of 5 shown, narrow by device`. In JSON and YAML,
 `summary.found` counts every change and `summary.omitted` the changes left out;
 `omitted` is 0 when nothing is left out. With `--detail summary`, each scope
 counts all of its changes. Holes and notes are never cut: the note of a device

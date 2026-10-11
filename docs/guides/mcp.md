@@ -149,9 +149,10 @@ carries `needs`: the inputs that can decide it. Each entry is
 | `input.port` | `port` | a rule's service or a NAT rule needs the destination port |
 | `input.url` | `url` | a rule names a URL category that the configuration defines |
 
-`needs: []` means that no input can decide the result. A predefined service, an
-application or a PAN-DB category is an example. A decided result has no `needs`
-key.
+`needs: []` means that no input can decide the result. A predefined service that
+the snapshot does not hold (stored before this release, or refused by the
+device), an application or a PAN-DB category is an example. A decided result has
+no `needs` key.
 
 ## Errors
 

@@ -135,7 +135,9 @@ A hop is undecided for one of these causes:
 
 - **Doubts on a rule.** A candidate above the match names:
   - an application, or service `application-default`;
-  - a predefined service such as `service-https`, or no service;
+  - a predefined service such as `service-https` that the snapshot does not
+    hold (stored before this release, refused by the device, or `--file`
+    without `predefined.xml`), or no service;
   - a user, a HIP profile or a schedule;
   - a URL category, when no `--url` is given or the category is not in the
     configuration (a PAN-DB category);
