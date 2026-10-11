@@ -348,6 +348,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   of an HTTP server profile and the values of an MFA server profile now read
   `(secret)`, as passwords do. Before, their old and new values showed, because
   the schema does not mark them as encrypted.
+- **`simulate policy --file` no longer takes a default static route as the
+  source zone.** With no zones given, a source that only a `0.0.0.0/0` static
+  route reaches was placed in that route's zone, so the default rule decided
+  on a zone the packet may not arrive in. The source zone now stays open, as it
+  does with a forwarding table.
 - **A rule that names a service group holding an unknown service is now in
   doubt.** In a snapshot without the predefined services, a group such as `web`
   with `service-https` and `tcp/8443` counted as known, so a PBF or security

@@ -378,6 +378,25 @@ func TestADefaultRouteDoesNotPlaceTheSource(t *testing.T) {
 	}
 }
 
+// Without a forwarding table the configuration places the source, and a
+// default static route places nothing either: 198.51.100.7 reaches outside only
+// through the route internet, so the source zone stays open and the default
+// rule is not decided on it.
+func TestADefaultStaticRouteDoesNotPlaceTheSource(t *testing.T) {
+	t.Parallel()
+	r, v := run(t, env(t, "firewall-default-route.xml", false), simulate.Flow{Source: ep("198.51.100.7"), Destination: ep("10.1.0.5")})
+	if len(v.Zones.From) != 0 || strings.Join(v.Zones.To, ",") != "inside" ||
+		!strings.Contains(v.Zones.Detail, "198.51.100.7: outside via ethernet1/3 static route internet 0.0.0.0/0 ignored") {
+		t.Errorf("zones = %+v", v.Zones)
+	}
+	if o, why := v.Decision(); o != Undecided || why[0].Code != "default.zones-unknown" || v.Default != "" {
+		t.Errorf("%s %v, default %s", o, why, v.Default)
+	}
+	if f := stage(r, "derive-zones").Fidelity; !strings.Contains(f.String(), "not evaluated: source zone") {
+		t.Errorf("derive-zones = %s", f)
+	}
+}
+
 // rule-type with single and known zones: each type with equal and with different
 // zones.
 func TestRuleTypeWithGivenZones(t *testing.T) {

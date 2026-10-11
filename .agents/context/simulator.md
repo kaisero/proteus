@@ -362,7 +362,9 @@ func ParseLevel(s string) (Level, error)
   the arrival interface's zone, which a table only predicts (PAN-OS "Packet Flow
   Sequence").
 - **A default route does not place a source.** A source placed only by a default
-  route leaves the source zone open (not evaluated). Measured on fw01 on 2026-09-29:
+  route leaves the source zone open (not evaluated), from the forwarding table and
+  from a default static route in the configuration alike: each placement ends with
+  the route's prefix, which `viaDefault` reads. Measured on fw01 on 2026-09-29:
   derived zones agreed with the device for 3 of 7 probe flows (given zones: 7 of 7).
   The misses came from overlay routing the forwarding table does not show: traffic
   arriving on a tunnel zone whose source a specific route places elsewhere, and a
