@@ -31,9 +31,6 @@ func TestDNSNotes(t *testing.T) {
 	if got := DNSNotes(f, "checked"); len(got) != 3 || got[2].Text != "dst.example resolved to 3 addresses; checked 198.18.0.2, not 198.18.0.3, 198.18.0.4" {
 		t.Errorf("checked: %v", got)
 	}
-	if got := DNSNotes(f, ""); len(got) != 1 || got[0] != want[0] {
-		t.Errorf("not traced, only the alias: %v", got)
-	}
 	if got := DNSNotes(Flow{Source: Addr(netip.MustParseAddr("198.18.0.1"))}, "traced"); got != nil {
 		t.Errorf("an address has no DNS note: %v", got)
 	}

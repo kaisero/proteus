@@ -229,7 +229,8 @@ func deriveZones(_ context.Context, s *state) (simulate.Outcome, error) {
 	// in doubt may give another destination zone, so the pair is not known then
 	// either (spec S12, over-match is the safe direction).
 	kept := roaring.New()
-	if len(nz.doubts) == 0 && len(from) == 1 && len(to) == 1 && s.defined(from[0]) && s.defined(to[0]) {
+	defined := resolve.ZoneNames(s.target.Config, s.idx.Scope())
+	if len(nz.doubts) == 0 && len(from) == 1 && len(to) == 1 && slices.Contains(defined, from[0]) && slices.Contains(defined, to[0]) {
 		s.known, s.from, s.to = true, from[0], to[0]
 		s.cand.And(s.byRuleType(fromB, toB, from[0] == to[0]))
 	} else {
@@ -331,16 +332,6 @@ func (s *state) narrowZones(from, to *roaring.Bitmap) *roaring.Bitmap {
 	}
 	typed.And(s.cand)
 	return typed
-}
-
-// defined reports whether the vsys defines a zone of this name.
-func (s *state) defined(zone string) bool {
-	for _, z := range resolve.ZonesInScope(s.target.Config, s.idx.Scope()) {
-		if z.Name == zone {
-			return true
-		}
-	}
-	return false
 }
 
 // zonesOf returns the rules whose zone field could match the endpoint's addresses,

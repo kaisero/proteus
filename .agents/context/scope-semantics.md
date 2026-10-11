@@ -146,6 +146,7 @@ func TargetFor(cfg *config.Config, device, vsys string) (*Target, error)
 func Targets(cfg *config.Config) []*Target
 func URLFilteringProfilesInScope(cfg *config.Config, sc config.Scope) []URLFilteringProfile
 func Vsyses(cfg *config.Config) []string
+func ZoneNames(cfg *config.Config, sc config.Scope) []string
 func ZonesInScope(cfg *config.Config, sc config.Scope) []Zone
 ```
 <!-- /GENERATED:api -->

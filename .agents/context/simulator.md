@@ -324,7 +324,6 @@ func ServiceTerm(proto string, port uint16) (string, bool)
 func Undecidable(values []string, defined map[string]bool, keywords ...string) bool
 func UndefinedService(cfg *config.Config, text string) reason.Reason
 func UndefinedZones(cfg *config.Config, sc config.Scope, from, to string) *ZoneRefusal
-func ZoneNames(cfg *config.Config, sc config.Scope) []string
 ```
 <!-- /GENERATED:api -->
 

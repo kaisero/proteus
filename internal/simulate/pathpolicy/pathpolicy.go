@@ -273,13 +273,10 @@ func zoneDoubts(env *simulate.Env, h routing.Hop) (simulate.Reasons, []simulate.
 	if miss != nil {
 		return simulate.Reasons{miss.Why()}, []simulate.Missing{*miss}
 	}
-	defined := map[string]bool{}
-	for _, z := range resolve.ZonesInScope(t.Config, config.Scope{Sort: config.ScopeVsys, Name: h.Vsys}) {
-		defined[z.Name] = true
-	}
+	defined := resolve.ZoneNames(t.Config, config.Scope{Sort: config.ScopeVsys, Name: h.Vsys})
 	for _, z := range []string{h.Flow.FromZone, h.Flow.ToZone} {
 		why := reason.New("zone.undefined", fmt.Sprintf("zone %s is not defined in %s", z, h.Vsys))
-		if !defined[z] && !slices.Contains(out, why) {
+		if !slices.Contains(defined, z) && !slices.Contains(out, why) {
 			out = append(out, why)
 		}
 	}
