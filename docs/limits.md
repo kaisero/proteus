@@ -86,7 +86,8 @@ hop's firewall the same question with `test security-policy-match`. On fw02,
 
 - **A prefix cannot decide a wildcard address object.** A wildcard object, such as
   `10.88.2.1/0.0.255.0`, matches an address by mask, and a simulation or a search
-  for one address decides it. A search for a prefix or a range, or with `--within`
+  for one address decides it. One address can also be written as a /32 or as a
+  range of one address. A search for a larger prefix or range, or with `--within`
   or `--exact`, lists each wildcard object that can hold one of its addresses as
   unresolved, with `gap.address-wildcard`, and exits with code 3.
 - **A device-level reference is matched by name alone.** A static route, an IKE

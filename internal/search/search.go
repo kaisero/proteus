@@ -260,21 +260,11 @@ func (s *searcher) wildcards() {
 	if !s.kindAllowed("address") {
 		return
 	}
-	for _, w := range s.idx.Wildcards() {
-		if s.term.single && s.q.Mode == Auto {
-			if w.Contains(s.term.prefixes[0].Addr()) {
-				s.addObject("address", w.Name, w.Scope, w.Value)
-			}
-			continue
-		}
-		for _, p := range s.term.prefixes {
-			if w.Overlaps(p) {
-				s.unresolved = append(s.unresolved,
-					index.NewUnresolved(w.Name, "address", index.WildcardUndecided(w, s.q.Term)))
-				break
-			}
-		}
+	hits, un := s.idx.MatchWildcards(s.term.prefixes, s.term.single && s.q.Mode == Auto)
+	for _, h := range hits {
+		s.addObject(h.Kind, h.Name, h.Scope, h.Via)
 	}
+	s.unresolved = append(s.unresolved, un...)
 }
 
 // groups is stage 3: every group holding an object found. A name found as
@@ -430,7 +420,7 @@ func (s *searcher) result() []Finding {
 // term is the search term, read once.
 type term struct {
 	prefixes []netip.Prefix // an address, prefix or range; nil otherwise
-	single   bool           // one address
+	single   bool           // one address: an address, a /32 or a range of one address
 }
 
 // holds says whether every prefix lies inside one of the term's.
@@ -446,11 +436,9 @@ func (t term) holds(ps []netip.Prefix) bool {
 }
 
 func parseTerm(s string) term {
-	if a, err := netip.ParseAddr(s); err == nil {
-		return term{prefixes: []netip.Prefix{netip.PrefixFrom(a, a.BitLen())}, single: true}
+	ps := index.PrefixesOf(s)
+	if len(ps) == 0 {
+		return term{}
 	}
-	if ps := index.PrefixesOf(s); len(ps) > 0 {
-		return term{prefixes: ps}
-	}
-	return term{}
+	return term{prefixes: ps, single: len(ps) == 1 && ps[0].IsSingleIP()}
 }

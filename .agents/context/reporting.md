@@ -95,7 +95,6 @@ type Unresolved struct{ ... }
 type UserDirectory interface{ ... }
 type UserSnapshot struct{ ... }
 type View struct{ ... }
-type Wildcard struct{ ... }
 type ZoneLocator interface{ ... }
 type ZonePlacement struct{ ... }
 type ZoneSnapshot struct{ ... }
@@ -106,6 +105,7 @@ func (i *Index) Containing(addr netip.Addr) []Match
 func (i *Index) Disabled() *roaring.Bitmap
 func (i *Index) GroupsHolding(kind, name string, direct bool) []Group
 func (i *Index) Interner() *Interner
+func (i *Index) MatchWildcards(prefixes []netip.Prefix, single bool) ([]Hit, []Unresolved)
 func (i *Index) Overlapping(p netip.Prefix) []Match
 func (i *Index) ProfileUses(value string) []ProfileUse
 func (i *Index) Refs(name string) []Ref
@@ -119,7 +119,6 @@ func (i *Index) Scope() config.Scope
 func (i *Index) SearchValues(substr string) []Hit
 func (i *Index) UnparsedFilters() []UnparsedFilter
 func (i *Index) VersionGap() string
-func (i *Index) Wildcards() []Wildcard
 func (i *Index) With(p Providers) *View
 func (in *Interner) ID(name string) uint32
 func (in *Interner) Len() int
@@ -138,8 +137,6 @@ func (u Unresolved) String() string
 func (u Unresolved) Why() reason.Reason
 func (v *View) Candidates(f Field, value string) (*roaring.Bitmap, Report)
 func (v *View) Opaque(f Field) (*roaring.Bitmap, map[uint32][]reason.Reason)
-func (w Wildcard) Contains(a netip.Addr) bool
-func (w Wildcard) Overlaps(p netip.Prefix) bool
 func Build(cfg *config.Config, edges *Edges, sc config.Scope, rb resolve.Rulebase) (*Index, error)
 func LoadUserSnapshot(r io.Reader) (*UserSnapshot, error)
 func LoadZoneSnapshot(r io.Reader) (*ZoneSnapshot, error)
@@ -150,7 +147,6 @@ func NewUnresolved(value, kind string, r reason.Reason) Unresolved
 func NewZoneSnapshot(takenAt time.Time, source string, interfaces, fib io.Reader) (*ZoneSnapshot, error)
 func PrefixesOf(value string) []netip.Prefix
 func ReadEdges(cfg *config.Config) (*Edges, error)
-func WildcardUndecided(w Wildcard, term string) reason.Reason
 ```
 <!-- /GENERATED:api -->
 

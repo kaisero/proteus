@@ -1,7 +1,6 @@
 package index
 
 import (
-	"fmt"
 	"net/netip"
 	"strings"
 
@@ -20,7 +19,7 @@ import (
 // matched by its mask.
 type addressResolver struct {
 	cidr      *cidrIndex
-	wildcards []Wildcard
+	wildcards []wildcard
 	fqdn      map[string][]Hit
 	rules     *rulesIndex
 }
@@ -55,17 +54,17 @@ func newAddressResolver(objs []resolve.Object, rules *rulesIndex) *addressResolv
 func (r *addressResolver) kinds() []string { return []string{"address", "address-group"} }
 
 func (r *addressResolver) resolve(value string, _ Providers) ([]Hit, []Unresolved, bool) {
-	if addr, err := netip.ParseAddr(value); err == nil {
-		hits := r.hitsOf(r.covering(addr))
-		for _, w := range r.wildcards {
-			if w.Contains(addr) {
-				hits = append(hits, w.hit())
-			}
+	if p, ok := addressOrPrefix(value); ok {
+		// A /32 is one address, and is asked as the address is.
+		single := p.IsSingleIP()
+		var hits []Hit
+		if single {
+			hits = r.hitsOf(r.covering(p.Addr()))
+		} else {
+			hits = r.hitsOf(r.overlapping(p))
 		}
-		return hits, nil, true
-	}
-	if p, err := netip.ParsePrefix(value); err == nil {
-		return r.hitsOf(r.overlapping(p)), r.undecided(p), true
+		wild, un := r.matchWildcards([]netip.Prefix{p}, single)
+		return append(hits, wild...), un, true
 	}
 	for _, w := range r.wildcards {
 		if strings.EqualFold(w.Value, value) {
@@ -83,38 +82,24 @@ func (r *addressResolver) resolve(value string, _ Providers) ([]Hit, []Unresolve
 }
 
 func (r *addressResolver) literalRules(f Field, value string) *roaring.Bitmap {
+	p, ok := addressOrPrefix(value)
+	switch {
+	case !ok:
+		return roaring.New()
+	case p.IsSingleIP():
+		return r.rules.withAddr(f, p.Addr())
+	}
+	return r.rules.withPrefix(f, p)
+}
+
+// addressOrPrefix reads a value as an address, which is a prefix of one
+// address, or as a prefix.
+func addressOrPrefix(value string) (netip.Prefix, bool) {
 	if addr, err := netip.ParseAddr(value); err == nil {
-		return r.rules.withAddr(f, addr)
+		return netip.PrefixFrom(addr, addr.BitLen()), true
 	}
-	if p, err := netip.ParsePrefix(value); err == nil {
-		return r.rules.withPrefix(f, p)
-	}
-	return roaring.New()
-}
-
-// undecided lists the wildcard objects that may hold addresses of the prefix. A
-// prefix query asks about a block of addresses, and a wildcard object holds a
-// pattern of them, so it is not said to cover or overlap the prefix (owner
-// decision C1). One that cannot hold any address of the prefix is left out.
-func (r *addressResolver) undecided(p netip.Prefix) []Unresolved {
-	var out []Unresolved
-	for _, w := range r.wildcards {
-		if w.Overlaps(p) {
-			out = append(out, NewUnresolved(w.Name, "address", WildcardUndecided(w, p.String())))
-		}
-	}
-	return out
-}
-
-// WildcardUndecided is the reason a prefix query, for the term, cannot decide a
-// wildcard object.
-func WildcardUndecided(w Wildcard, term string) reason.Reason {
-	return reason.New("gap.address-wildcard", fmt.Sprintf(
-		"wildcard object %s (%s) matches by mask; a prefix query cannot decide it for %s", w.Name, w.Value, term))
-}
-
-func (w Wildcard) hit() Hit {
-	return Hit{Name: w.Name, Kind: "address", Scope: w.Scope, Via: w.Value}
+	p, err := netip.ParsePrefix(value)
+	return p, err == nil
 }
 
 // covering returns every object whose value covers the address, most specific

@@ -151,8 +151,11 @@ func TestWildcardObjects(t *testing.T) {
 		unresolved bool
 	}{
 		{"10.88.7.1", Auto, nil, true, false},
+		{"10.88.7.1/32", Auto, nil, true, false},
+		{"10.88.7.1-10.88.7.1", Auto, nil, true, false},
 		{"10.88.200.1", Auto, nil, true, false},
 		{"10.88.7.2", Auto, nil, false, false},
+		{"10.88.7.2/32", Auto, nil, false, false},
 		{"10.89.7.1", Auto, nil, false, false},
 		{"10.88.0.0/16", Auto, nil, false, true},
 		{"10.88.0.0/16", Within, nil, false, true},
@@ -176,8 +179,9 @@ func TestWildcardObjects(t *testing.T) {
 				}
 			}
 		}
+		// The reason names the prefix of the term the object may hold an address of.
 		got := len(un) == 1 && un[0].Value == "wc" && un[0].Code == "gap.address-wildcard" &&
-			strings.Contains(un[0].Reason, tc.term)
+			strings.HasSuffix(un[0].Reason, " for "+index.PrefixesOf(tc.term)[0].String())
 		if got != tc.unresolved || len(un) > 1 {
 			t.Errorf("%s (%d): unresolved %v, want %v", tc.term, tc.mode, un, tc.unresolved)
 		}
