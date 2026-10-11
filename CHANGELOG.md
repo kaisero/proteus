@@ -356,8 +356,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   claims.** `docker compose down` now lets proteus-mcp finish its running calls,
   and proteus-fetch stops its fetch at once and exits 143. The server's whole
   stop ends within `call_timeout` + `max_wait` + 10 s, also when a call hangs.
-  Caddy's access log drops the `X-User-Claims` header. Before, the fetch
-  container ignored SIGTERM until Docker killed it after 10 seconds, the
+  Caddy drops the `X-User-Claims` header from every log line, also from the
+  error line of a request that fails while proteus-mcp restarts. Before, the
+  fetch container ignored SIGTERM until Docker killed it after 10 seconds, the
   server's running calls got only those 10 seconds, and each proxy log line held
   the user's claims.
 - **`snapshot list` shows the good snapshots when one is damaged.** A snapshot
