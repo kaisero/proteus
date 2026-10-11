@@ -207,7 +207,7 @@ func (w walker) container(el *config.Element, n *schema.Node, path []string) {
 			len(c.Children) == 0 && setByPresence(cn):
 			w.setting(strings.Join(cpath, "/"), c, cn)
 		default:
-			w.attrs(strings.Join(cpath, "/"), c, cn)
+			w.attrs(strings.Join(cpath, "/"), c)
 			w.container(c, cn, cpath)
 		}
 	}
@@ -215,18 +215,14 @@ func (w walker) container(el *config.Element, n *schema.Node, path []string) {
 
 // attrs records the attributes of a container the walk descends into as a
 // setting named by its path: its children are compared on their own, so its
-// attributes would be lost.
-func (w walker) attrs(path string, el *config.Element, n *schema.Node) {
+// attributes would be lost. The schema declares a name attribute for entries
+// only, so a container's attribute is one it does not describe.
+func (w walker) attrs(path string, el *config.Element) {
 	var f form
 	for _, a := range el.Attrs {
-		if ignoredAttrs[a.Name.Local] {
-			continue
+		if !ignoredAttrs[a.Name.Local] {
+			f.put(el.Name+"/@"+a.Name.Local, a.Value, undescribed)
 		}
-		h := undescribed
-		if declaresAttr(n, a.Name.Local) {
-			h = visible
-		}
-		f.put(el.Name+"/@"+a.Name.Local, a.Value, h)
 	}
 	if len(f.paths) > 0 {
 		w.out[key{path, settingKind, path}] = entry{form: f}

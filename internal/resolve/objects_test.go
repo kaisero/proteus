@@ -413,3 +413,18 @@ func TestDynamicGroupIsKnownByItsElement(t *testing.T) {
 		t.Error("g-servers: want a static group holding dc01")
 	}
 }
+
+// Services and service groups resolve together, and so do addresses and
+// address groups (L9, L10); any other kind resolves alone.
+func TestNamesakes(t *testing.T) {
+	t.Parallel()
+	for kind, want := range map[string]string{
+		"service": "service service-group", "service-group": "service service-group",
+		"address": "address address-group", "address-group": "address address-group",
+		"tag": "tag",
+	} {
+		if got := strings.Join(Namesakes(kind), " "); got != want {
+			t.Errorf("%s: %s, want %s", kind, got, want)
+		}
+	}
+}

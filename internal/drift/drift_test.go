@@ -280,10 +280,11 @@ func TestCompareReadsScopeSettings(t *testing.T) {
 			}}},
 		},
 		{
-			// A container the walk descends into keeps its own attributes.
+			// A container the walk descends into keeps its own attributes,
+			// but for bookkeeping ones.
 			"an attribute of a setting's container changed", vsys1,
-			`<captive-portal future="a"><enable-captive-portal>no</enable-captive-portal></captive-portal>`,
-			`<captive-portal future="b"><enable-captive-portal>no</enable-captive-portal></captive-portal>`,
+			`<captive-portal future="a" admin="u1"><enable-captive-portal>no</enable-captive-portal></captive-portal>`,
+			`<captive-portal future="b" admin="u2"><enable-captive-portal>no</enable-captive-portal></captive-portal>`,
 			[]Change{{Op: Changed, Kind: "setting", Name: "captive-portal", Fields: []FieldChange{
 				{Path: "captive-portal/@future", Undescribed: true},
 			}}},
