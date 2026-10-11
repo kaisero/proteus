@@ -262,6 +262,33 @@ func TestCompareReadsScopeSettings(t *testing.T) {
 			},
 		},
 		{
+			// An element the digest does not describe is compared whole,
+			// its own text too: a newer release can add such a setting.
+			"an undescribed setting changed", vsys1,
+			`<future-setting>DUMMYOLD</future-setting>`,
+			`<future-setting>DUMMYNEW</future-setting>`,
+			[]Change{{Op: Changed, Kind: "future-setting", Fields: []FieldChange{
+				{Path: "future-setting", Undescribed: true},
+			}}},
+		},
+		{
+			"an undescribed leaf of a setting changed", vsys1,
+			`<setting><ssl-decrypt><future-knob>yes</future-knob></ssl-decrypt></setting>`,
+			`<setting><ssl-decrypt><future-knob>no</future-knob></ssl-decrypt></setting>`,
+			[]Change{{Op: Changed, Kind: "setting/ssl-decrypt/future-knob", Fields: []FieldChange{
+				{Path: "future-knob", Undescribed: true},
+			}}},
+		},
+		{
+			// A container the walk descends into keeps its own attributes.
+			"an attribute of a setting's container changed", vsys1,
+			`<captive-portal future="a"><enable-captive-portal>no</enable-captive-portal></captive-portal>`,
+			`<captive-portal future="b"><enable-captive-portal>no</enable-captive-portal></captive-portal>`,
+			[]Change{{Op: Changed, Kind: "setting", Name: "captive-portal", Fields: []FieldChange{
+				{Path: "captive-portal/@future", Undescribed: true},
+			}}},
+		},
+		{
 			"a secret setting", vsys1,
 			`<url-admin-override><password>DUMMYOVERRIDE0</password></url-admin-override>`,
 			`<url-admin-override><password>DUMMYOVERRIDE1</password></url-admin-override>`,
@@ -297,9 +324,11 @@ func TestCompareReadsScopeSettings(t *testing.T) {
 		t.Errorf("got  %+v\nwant %+v", got, want)
 	}
 	assertAbsent(t, append(got, Compare(set, none, vsys1)...), "DUMMYOVERRIDE", "DUMMYFUTURE")
-	// A container of entry lists that holds nothing is no setting, and an
-	// empty list is absent, as inside an entry.
-	empty := loadXML(t, inScope(vsys1, `<rulebase/><profiles/><import><network><interface/></network></import>`))
+	// A container that holds nothing is no setting, and an empty list is
+	// absent, as inside an entry. Only an empty element that picks an
+	// alternative of a choice, or that has nothing to hold, is set by its
+	// presence.
+	empty := loadXML(t, inScope(vsys1, `<rulebase/><profiles/><import><network><interface/></network></import><captive-portal/><import><network/></import>`))
 	if got := Compare(none, empty, vsys1); len(got) != 0 {
 		t.Errorf("empty containers: got %+v", got)
 	}
@@ -336,14 +365,14 @@ func TestCompareKeepsWhatTheDigestDoesNotDescribe(t *testing.T) {
 	before := loadXML(t, fmt.Sprintf(tmpl, "v1"))
 	after := loadXML(t, fmt.Sprintf(tmpl, "v2"))
 	shared := config.Scope{Sort: config.ScopeShared}
-	want := []Change{{Op: Changed, Kind: "future-list", Fields: []FieldChange{{Path: "a/x", Undescribed: true}}}}
+	want := []Change{{Op: Changed, Kind: "future-list", Fields: []FieldChange{{Path: "future-list/a/x", Undescribed: true}}}}
 	if got := Compare(before, after, shared); !reflect.DeepEqual(got, want) {
 		t.Errorf("got  %+v\nwant %+v", got, want)
 	}
 	gone := loadXML(t, `<config version="11.2.0"><shared><future-list><entry name="a"><x>v1</x></entry><item>2</item><item>1</item></future-list></shared></config>`)
 	want = []Change{{Op: Changed, Kind: "future-list", Fields: []FieldChange{
-		{Path: "a/y", Undescribed: true},
-		{Path: "item", Undescribed: true},
+		{Path: "future-list/a/y", Undescribed: true},
+		{Path: "future-list/item", Undescribed: true},
 	}}}
 	got := Compare(before, gone, shared)
 	if !reflect.DeepEqual(got, want) {

@@ -185,16 +185,18 @@ const settingKind = "setting"
 // An entry list's entries are compared whole, so the descent stops there. An
 // element the digest does not describe is compared whole as one entry named by
 // its path, so a change in it is not lost. So is a setting of the scope: an
-// element or a list that is not an entry list, and an element that holds
-// nothing where its node holds no entry list, such as a choice made by
-// presence alone.
+// element or a list that is not an entry list, and an empty element that is
+// set by its presence (setByPresence), such as a choice made by presence
+// alone. A container the walk descends into keeps its own attributes (attrs).
 func (w walker) container(el *config.Element, n *schema.Node, path []string) {
 	for _, c := range el.Children {
 		cn := w.cfg.ChildNode(n, c) // the shared pushed rulebases read as a vsys rulebase
 		cpath := append(slices.Clone(path), c.Name)
 		switch {
 		case cn == nil:
-			w.add(strings.Join(cpath, "/"), strings.Join(cpath, "/"), "", c, nil)
+			// Its paths start at its own name, so its own text is a field.
+			p := strings.Join(cpath, "/")
+			w.out[key{p, p, ""}] = entry{form: canonical(c, nil, c.Name)}
 		case cn.IsEntryList() || namedEntries(cn):
 			kind := ruleKind(c)
 			seq := cn.Step("entry")
@@ -202,11 +204,32 @@ func (w walker) container(el *config.Element, n *schema.Node, path []string) {
 				w.add(strings.Join(cpath, "/"), kind, e.Attr("name"), e, seq)
 			}
 		case cn.Kind == schema.KindArray || cn.Kind == schema.KindElement,
-			len(c.Children) == 0 && !holdsEntryList(cn):
+			len(c.Children) == 0 && setByPresence(cn):
 			w.setting(strings.Join(cpath, "/"), c, cn)
 		default:
+			w.attrs(strings.Join(cpath, "/"), c, cn)
 			w.container(c, cn, cpath)
 		}
+	}
+}
+
+// attrs records the attributes of a container the walk descends into as a
+// setting named by its path: its children are compared on their own, so its
+// attributes would be lost.
+func (w walker) attrs(path string, el *config.Element, n *schema.Node) {
+	var f form
+	for _, a := range el.Attrs {
+		if ignoredAttrs[a.Name.Local] {
+			continue
+		}
+		h := undescribed
+		if declaresAttr(n, a.Name.Local) {
+			h = visible
+		}
+		f.put(el.Name+"/@"+a.Name.Local, a.Value, h)
+	}
+	if len(f.paths) > 0 {
+		w.out[key{path, settingKind, path}] = entry{form: f}
 	}
 }
 
@@ -233,11 +256,13 @@ func namedEntries(n *schema.Node) bool {
 	return n.Kind == schema.KindArray && declaresAttr(n.Step("entry"), "name")
 }
 
-// holdsEntryList reports whether a node or one below it is an entry list.
-func holdsEntryList(n *schema.Node) bool {
-	found := false
-	n.Walk(func(c *schema.Node) { found = found || c.IsEntryList() })
-	return found
+// setByPresence reports whether an empty element says something by being
+// there: it picks an alternative of a choice, such as captive-portal mode
+// transparent, or its node has nothing it could hold. Any other empty
+// container holds nothing, and is absent.
+func setByPresence(n *schema.Node) bool {
+	alt := n.Parent != nil && (n.Parent.Kind == schema.KindChoice || n.Parent.Kind == schema.KindUnion)
+	return alt || len(n.Children) == 0
 }
 
 // add records one entry with its short line. A rule's line reads only the

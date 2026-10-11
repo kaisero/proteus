@@ -59,7 +59,7 @@ func TestCompareLongLists(t *testing.T) {
 	const n = 20000
 	before, after := loadXML(t, longLists(n, false)), loadXML(t, longLists(n, true))
 	got := Compare(before, after, vsys1)
-	if len(got) != 2 || got[0].Kind != "future-list" || len(got[0].Fields) != 1 || got[0].Fields[0] != (FieldChange{Path: "item", Undescribed: true}) {
+	if len(got) != 2 || got[0].Kind != "future-list" || len(got[0].Fields) != 1 || got[0].Fields[0] != (FieldChange{Path: "future-list/item", Undescribed: true}) {
 		t.Fatalf("got %d changes, first %+v", len(got), got[0])
 	}
 	order := got[1]
