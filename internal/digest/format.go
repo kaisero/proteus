@@ -17,7 +17,10 @@ const PlatformFirewall = "firewall"
 
 // formatVersion changes when the on-disk shape changes. Read refuses a digest it
 // does not understand rather than decoding it wrongly.
-const formatVersion = 1
+//
+// 2 added the encrypted mark (Node.Encrypted). A digest of format 1 would read
+// as one without secrets, so it is refused rather than read.
+const formatVersion = 2
 
 // Digest is one platform's schema at one PAN-OS version.
 type Digest struct {

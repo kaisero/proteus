@@ -1,0 +1,39 @@
+format: 2
+command: search
+detail: full
+input:
+  direct: false
+  fields: null
+  kinds: null
+  limit: 2
+  mode: covers
+  selection:
+    file: ../../testdata/config/firewall-multivsys.xml
+  show: null
+  term: 10.124.0.1
+results:
+  - answer: 'file/vsys1: address corp-dc-vienna'
+    device: file
+    vsys: vsys1
+    stage: object
+    kind: address
+    name: corp-dc-vienna
+    via: 10.124.0.1/32
+    scope: vsys:vsys1
+  - answer: 'file/vsys1: address corp-location-vienna'
+    device: file
+    vsys: vsys1
+    stage: object
+    kind: address
+    name: corp-location-vienna
+    via: 10.124.0.0/16
+    scope: vsys:vsys1
+summary:
+  answer: 1 with results, 2 without, 0 holes; 2 of 6 shown, narrow by device, vsys or kind
+  found: 6
+  with: 1
+  without: 2
+  omitted: 4
+holes: []
+unresolved: []
+notes: []

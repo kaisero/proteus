@@ -68,6 +68,10 @@ or the audit is not reliable.
   use the server.
 - The audit lines hold identities, and the addresses in the tools' inputs. Treat
   the container's log, or the audit file, as sensitive.
+- Caddy's logs do not hold the identity. The sample `Caddyfile` deletes
+  `X-User-Claims` from every log line, the error lines of a failed request too,
+  and Caddy redacts `Authorization` itself. Keep both filters when you change
+  the logs: the audit is the one place for identities.
 - proteus does not audit a refused request (401 or 403). Its process log counts
   them by status once a minute. Portkey's logs hold the refused attempts at the
   gateway, and Caddy's logs the requests that bypass it. Behind the proxy every

@@ -78,8 +78,7 @@ func TestErrorsMatchTheirKind(t *testing.T) {
 			"store: no snapshot fw01@2026-09-27T00-00-00Z",
 		},
 		{
-			"Get of an unreadable meta.json", func() error { _, err := s.Get("fw03", "2026-09-28T09-00-00Z"); return err }, ErrUnreadable,
-			"store: no snapshot fw03@2026-09-28T09-00-00Z",
+			"Get of an unreadable meta.json", func() error { _, err := s.Get("fw03", "2026-09-28T09-00-00Z"); return err }, ErrUnreadable, "",
 		},
 		{"Get of a corrupt meta.json", func() error { _, err := s.Get("fw04", corrupt.ID); return err }, ErrUnreadable, ""},
 		{

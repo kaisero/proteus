@@ -13,6 +13,7 @@ import (
 	"github.com/okaiser/proteus/internal/reason"
 	"github.com/okaiser/proteus/internal/resolve"
 	"github.com/okaiser/proteus/internal/simulate"
+	"github.com/okaiser/proteus/internal/simulate/rulebase"
 )
 
 // steps is the security-policy pipeline. Each matching dimension narrows the
@@ -158,22 +159,16 @@ func (s *state) side(f index.Field, ep simulate.Endpoint, negated func(resolve.R
 func deriveZones(_ context.Context, s *state) (simulate.Outcome, error) {
 	f := s.in.Flow
 	z := &s.verdict.Zones
-	if f.FromZone != "" {
+	// Run refuses a given zone the vsys does not define, so given zones are
+	// single and known. A front end gives both or neither.
+	if f.FromZone != "" && f.ToZone != "" {
 		fb, _ := s.view.Candidates(index.FromZone, f.FromZone)
 		tb, _ := s.view.Candidates(index.ToZone, f.ToZone)
 		z.From, z.To, z.Source = []string{f.FromZone}, []string{f.ToZone}, "given"
 		detail := fmt.Sprintf("from %s, to %s, as given", f.FromZone, f.ToZone)
 		out := simulate.Outcome{Fidelity: simulate.Exact}
-		s.known = s.defined(f.FromZone) && s.defined(f.ToZone)
-		if s.known {
-			s.cand.And(s.byRuleType(fb, tb, f.FromZone == f.ToZone))
-		} else {
-			kept := s.narrowZones(fb, tb)
-			if !kept.IsEmpty() {
-				out.Fidelity = simulate.OverMatchBecause(reason.New("zone.undefined",
-					"a given zone is not defined in the vsys, so rule-type could not compare from and to for: "+names(s.rules, kept)))
-			}
-		}
+		s.known, s.from, s.to = true, f.FromZone, f.ToZone
+		s.cand.And(s.byRuleType(fb, tb, f.FromZone == f.ToZone))
 		// A given zone wins; the engine only says when it derives another (§18 N10).
 		if nz := s.postNATZones([]string{f.FromZone}); len(nz.zones) > 0 && !slices.Contains(nz.zones, f.ToZone) {
 			detail += "; note: NAT would give " + nz.describe()
@@ -197,8 +192,21 @@ func deriveZones(_ context.Context, s *state) (simulate.Outcome, error) {
 	case nz.skipped != "":
 		out.Debug = append(out.Debug, nz.skipped)
 	case len(nz.zones) > 0:
-		to, toB = nz.zones, roaring.New()
-		for _, zn := range nz.zones {
+		if len(nz.doubts) == 0 {
+			to = nz.zones
+		} else if toB != nil {
+			// A NAT rule in doubt may match first and leave the destination as it
+			// is, so the zones without NAT stay candidates (spec S12, over-match
+			// is the safe direction). With none derived, the side does not narrow.
+			to = slices.Compact(slices.Sorted(slices.Values(slices.Concat(to, nz.zones))))
+		}
+		if len(to) == 0 {
+			// Nothing narrows the side, so NAT names a zone only as a note.
+			toVia = append(toVia, "NAT may give "+nz.describe()+", but a NAT rule is in doubt")
+			break
+		}
+		toB = roaring.New()
+		for _, zn := range to {
 			zb, _ := s.view.Candidates(index.ToZone, zn)
 			toB.Or(zb)
 		}
@@ -212,9 +220,23 @@ func deriveZones(_ context.Context, s *state) (simulate.Outcome, error) {
 		out.Fidelity = simulate.Weakest(out.Fidelity, simulate.OverMatchBecause(reason.New("doubt.nat-rule", why.Text)))
 	}
 	z.From, z.To = from, to
-	// Derived zones are never single and known, so whether from equals to is open:
-	// an intrazone or interzone rule whose zones fit stays a candidate.
-	kept := s.narrowZones(fromB, toB)
+	// One derived zone on each side, defined in the vsys: rule-type and the
+	// default rules compare from and to as for given zones, and the zones stay
+	// inferred (C5, C16). With several zones, or none, on a side, whether from
+	// equals to is open: an intrazone or interzone rule whose zones fit stays a
+	// candidate, and its zone.derived doubt lets the first match decide whether
+	// it matters (E20); with no rule, the default rule is undecided. A NAT rule
+	// in doubt may give another destination zone, so the pair is not known then
+	// either (spec S12, over-match is the safe direction).
+	kept := roaring.New()
+	defined := resolve.ZoneNames(s.target.Config, s.idx.Scope())
+	if len(nz.doubts) == 0 && len(from) == 1 && len(to) == 1 && slices.Contains(defined, from[0]) && slices.Contains(defined, to[0]) {
+		s.known, s.from, s.to = true, from[0], to[0]
+		s.cand.And(s.byRuleType(fromB, toB, from[0] == to[0]))
+	} else {
+		kept = s.narrowZones(fromB, toB)
+		s.ruleTypeOpen = kept
+	}
 	if fromB != nil {
 		details = append(details, "from "+strings.Join(from, ", "))
 	}
@@ -254,7 +276,10 @@ func deriveZones(_ context.Context, s *state) (simulate.Outcome, error) {
 // universal "applies to both interzone and intrazone traffic"; intrazone "only
 // applies to traffic within one of the specified zones", so the to zone is not
 // read; interzone "does not apply to traffic within a zone, even if the same zone
-// is in source and destination columns".
+// is in source and destination columns". As observed on fw02, PAN-OS 12.2.3
+// (L5): an intrazone rule from home takes home to home and not home to wan; an
+// interzone rule from home to home and wan takes home to wan and not home to
+// home.
 func (s *state) byRuleType(from, to *roaring.Bitmap, same bool) *roaring.Bitmap {
 	out := roaring.New()
 	for i, r := range s.rules {
@@ -277,13 +302,15 @@ func (s *state) byRuleType(from, to *roaring.Bitmap, same bool) *roaring.Bitmap 
 	return out
 }
 
-// narrowZones narrows by zone when zone equality is not known. Every rule must
-// name the from zone. Universal and interzone rules must name the to zone too: an
-// interzone match is a universal match between different zones. An intrazone rule
-// does not read its to zone, so it stays when its from zone matches (byRuleType
-// cites the source). Whether from equals to is open, so an intrazone or interzone
-// rule left is a candidate the zones may not match (spec S12, over-match is the
-// safe direction); narrowZones returns them. A nil bitmap does not narrow.
+// narrowZones narrows by zone when zone equality is not known: derived zones
+// that are not one on each side. Every
+// rule must name the from zone. Universal and interzone rules must name the to
+// zone too: an interzone match is a universal match between different zones. An
+// intrazone rule does not read its to zone, so it stays when its from zone
+// matches (byRuleType cites the source). Whether from equals to is open, so an
+// intrazone or interzone rule left is a candidate the zones may not match (spec
+// S12, over-match is the safe direction); narrowZones returns them, and each
+// gets a zone.derived doubt. A nil bitmap does not narrow.
 func (s *state) narrowZones(from, to *roaring.Bitmap) *roaring.Bitmap {
 	if from != nil {
 		s.cand.And(from)
@@ -305,16 +332,6 @@ func (s *state) narrowZones(from, to *roaring.Bitmap) *roaring.Bitmap {
 	}
 	typed.And(s.cand)
 	return typed
-}
-
-// defined reports whether the vsys defines a zone of this name.
-func (s *state) defined(zone string) bool {
-	for _, z := range resolve.ZonesInScope(s.target.Config, s.idx.Scope()) {
-		if z.Name == zone {
-			return true
-		}
-	}
-	return false
 }
 
 // zonesOf returns the rules whose zone field could match the endpoint's addresses,
@@ -369,18 +386,22 @@ func viaDefault(via string) bool {
 	return err == nil && p.Bits() == 0
 }
 
-// matchService narrows by port. Rules naming application-default, or a service the
-// configuration does not define such as service-https, cannot be evaluated from a
-// configuration; they stay, and the stage says so.
+// matchService narrows by port. Rules naming application-default, or a service no
+// scope defines, such as service-https in a snapshot without the predefined
+// services, cannot be evaluated from a configuration; they stay, and the stage says
+// so.
 func matchService(_ context.Context, s *state) (simulate.Outcome, error) {
-	f := s.in.Flow
-	proto := strings.ToLower(f.Protocol)
-	if f.DestPort == 0 || (proto != "tcp" && proto != "udp" && proto != "sctp") {
+	term, ok := rulebase.ServiceTerm(s.in.Flow.Protocol, s.in.Flow.DestPort)
+	if !ok {
 		return simulate.Outcome{Fidelity: simulate.NotEvaluated("service"), Detail: "no port given"}, nil
 	}
-	term := fmt.Sprintf("%s/%d", proto, f.DestPort)
 	b, rep := s.view.Candidates(index.Service, term)
+	// A rule whose service holds the port through an object the
+	// configuration defines matches on it, whatever else the field names, as
+	// a service group with one undefined member does.
+	s.serviceHits = b.Clone()
 	kept := s.unevaluable("service", "application-default")
+	kept.AndNot(s.serviceHits)
 	b.Or(kept)
 	s.cand.And(b)
 	out := simulate.Outcome{Fidelity: simulate.Exact, Detail: term, Candidates: s.cand}
@@ -443,21 +464,11 @@ func (s *state) withoutField(field string) *roaring.Bitmap {
 // not define, one of the given keywords, or nothing at all: a rule a configuration
 // exports without the field cannot be judged on it, so it is kept, not dropped.
 func (s *state) unevaluable(field string, keywords ...string) *roaring.Bitmap {
-	defined := definedIn(s.target.Config, s.idx.Scope(), field)
+	defined := rulebase.Defined(s.target.Config, s.idx.Scope(), resolve.Security, field)
 	out := roaring.New()
 	for i, r := range s.rules {
-		if len(r.Fields[field]) == 0 && field != "category" {
+		if (len(r.Fields[field]) == 0 && field != "category") || rulebase.Undecidable(r.Fields[field], defined, keywords...) {
 			out.Add(uint32(i))
-			continue
-		}
-		for _, v := range r.Fields[field] {
-			if v == "any" {
-				continue
-			}
-			if slices.Contains(keywords, v) || !defined[v] {
-				out.Add(uint32(i))
-				break
-			}
 		}
 	}
 	return out
@@ -607,8 +618,10 @@ func (s *state) defaultRule() (resolve.DefaultRule, reason.Reason) {
 	if !s.known {
 		return resolve.DefaultRule{}, reason.New("default.zones-unknown", "the default rule depends on the zones")
 	}
+	// The zones compared are the known pair, given or derived: a derived pair
+	// leaves the flow's own zones empty.
 	name := "interzone-default"
-	if s.in.Flow.FromZone == s.in.Flow.ToZone {
+	if s.from == s.to {
 		name = "intrazone-default"
 	}
 	d := resolve.DefaultRule{Name: name, Action: builtInDefaults[name], Source: "built-in"}

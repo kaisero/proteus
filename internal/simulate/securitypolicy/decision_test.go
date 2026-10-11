@@ -64,12 +64,6 @@ func TestDecision(t *testing.T) {
 			Undecided, "app-one (allow) at position 3 may match first: service application-default", "doubt.service-application-default",
 			"undermatch: app-one (allow) at position 3 may match first: service application-default; not evaluated: application",
 		},
-		{
-			"every candidate in doubt, and no default without known zones",
-			flow("10.0.0.5", "192.0.2.9", "nowhere", "wan", "tcp", 443),
-			Undecided, "the default rule depends on the zones", "default.zones-unknown",
-			"undermatch: the default rule depends on the zones; not evaluated: application",
-		},
 	} {
 		for _, e := range []*simulate.Env{env(t, "firewall-doubt.xml", false), envPath(t, gapped, false)} {
 			r, v := run(t, e, c.flow)

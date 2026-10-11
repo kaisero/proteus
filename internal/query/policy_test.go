@@ -332,7 +332,8 @@ func TestPolicyFileNotesAVersionGap(t *testing.T) {
 }
 
 // The resolver's first IPv4 address goes in front, the rest keep their order,
-// and an alias's canonical name becomes a note (C2, C3).
+// and an alias's canonical name becomes a note (C2, C3). File mode checks that
+// first address and names the others.
 func TestEndpointOrdersAndNamesTheAlias(t *testing.T) {
 	t.Parallel()
 	env := Env{
@@ -367,8 +368,38 @@ func TestEndpointOrdersAndNamesTheAlias(t *testing.T) {
 	for _, n := range e.Notes {
 		codes = append(codes, string(n.Code))
 	}
-	if err != nil || !slices.Contains(codes, "dns.canonical-name") || slices.Contains(codes, "dns.other-addresses") {
+	// File mode checks the first address, as path mode does (D1b), and names
+	// the others in a note.
+	if err != nil || !slices.Equal(codes, []string{"dns.canonical-name", "dns.other-addresses"}) ||
+		e.Notes[1].Note != "app.example.test resolved to 4 addresses; checked 10.1.0.5, not 2001:db8::1, 2001:db8::2, 10.1.0.6" {
 		t.Errorf("file notes: %+v %v", e.Notes, err)
+	}
+	if len(e.Results) != 1 || fmt.Sprint(e.Results[0].Run.Input.Flow.Destination.Addrs) != "[10.1.0.5]" ||
+		len(e.Input.Simulated.Destination.Addrs) != 4 {
+		t.Errorf("checked %+v, simulated %+v", e.Results, e.Input.Simulated.Destination)
+	}
+}
+
+// A source host name is cut to its first address too: from inside only, the
+// derived zones are one on each side and inter-inside decides; the note names
+// the other address (D1b).
+func TestFileModeChecksTheFirstSourceAddress(t *testing.T) {
+	t.Parallel()
+	env := Env{Resolve: resolver(map[string][]string{"two.example.test": {"10.1.0.5", "10.3.0.5"}})}
+	e, err := PolicyFile(context.Background(), env, PolicyFileInput{
+		Flow:      FlowInput{Source: "two.example.test", Destination: "10.2.0.5", Protocol: "tcp", Port: "443"},
+		Selection: Selection{File: fixture("firewall-ruletype.xml"), Vsys: []string{"vsys1"}},
+	})
+	if err != nil || len(e.Results) != 1 {
+		t.Fatalf("%+v %v", e, err)
+	}
+	r := e.Results[0]
+	if fmt.Sprint(r.Run.Input.Flow.Source.Addrs) != "[10.1.0.5]" || r.Verdict != "stop" || r.Answer != "first match: inter-inside (deny)" {
+		t.Errorf("checked %v: %s, %s", r.Run.Input.Flow.Source.Addrs, r.Verdict, r.Answer)
+	}
+	if len(e.Notes) != 1 || e.Notes[0].Code != "dns.other-addresses" ||
+		e.Notes[0].Note != "two.example.test resolved to 2 addresses; checked 10.1.0.5, not 10.3.0.5" {
+		t.Errorf("notes %+v", e.Notes)
 	}
 }
 
@@ -406,4 +437,40 @@ func TestAnEmptySubjectIsAUsageError(t *testing.T) {
 	usageOK(t, NATInput{Device: "fw01", Flow: FlowInput{Source: "-"}}.Validate(), "give a destination")
 	usageOK(t, SearchInput{Selection: file}.Validate(), "give a search term")
 	usageOK(t, LookupInput{Name: "  ", Selection: file}.Validate(), "give a name to look up")
+}
+
+// A given zone the vsys does not define is a usage error that lists the vsys's
+// zones (C15). With several vsys selected, a vsys without it is a hole and the
+// others answer; with none defining it, the error lists each.
+func TestFileModeRefusesAnUndefinedZone(t *testing.T) {
+	t.Parallel()
+	ask := func(from, to string, vsys ...string) (Envelope[PolicyFileInput, SecurityResult], error) {
+		return PolicyFile(context.Background(), Env{}, PolicyFileInput{
+			Flow:      FlowInput{Source: "10.3.0.5", Destination: "10.1.0.5", Protocol: "tcp", Port: "443", FromZone: from, ToZone: to},
+			Selection: Selection{File: fixture("firewall-ruletype.xml"), Vsys: vsys},
+		})
+	}
+	_, err := ask("nowhere", "inside", "vsys1")
+	u, ok := errors.AsType[*UsageError](err)
+	if !ok || u.Text != "--from-zone nowhere is not a zone of vsys1 (its zones: dmz, inside, out)" ||
+		u.ToolText != "from_zone nowhere is not a zone of vsys1 (its zones: dmz, inside, out)" {
+		t.Errorf("one vsys: %v", err)
+	}
+	_, err = ask("out", "nowhere", "vsys1", "vsys2")
+	if u, ok := errors.AsType[*UsageError](err); !ok ||
+		u.Text != "no selected vsys defines the given zones: --to-zone nowhere is not a zone of vsys1 (its zones: dmz, inside, out); "+
+			"--from-zone out is not a zone of vsys2 (its zones: dmz, inside)" ||
+		u.ToolText != "no selected vsys defines the given zones: to_zone nowhere is not a zone of vsys1 (its zones: dmz, inside, out); "+
+			"from_zone out is not a zone of vsys2 (its zones: dmz, inside)" {
+		t.Errorf("no vsys: %v", err)
+	}
+	// vsys2 has no zone out: a hole; vsys1 answers.
+	e, err := ask("out", "dmz", "vsys1", "vsys2")
+	if err != nil || len(e.Results) != 1 || e.Results[0].Answer != "first match: universal-out (allow)" {
+		t.Fatalf("%+v %v", e.Results, err)
+	}
+	if len(e.Holes) != 1 || e.Holes[0].Vsys != "vsys2" || e.Holes[0].Code != "zone.undefined" ||
+		e.Holes[0].Reason != "not checked: the from zone out is not a zone of vsys2 (its zones: dmz, inside)" {
+		t.Errorf("holes %+v", e.Holes)
+	}
 }

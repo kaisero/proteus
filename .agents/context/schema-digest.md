@@ -20,7 +20,23 @@ describes. That is rule R1.
   `go run ./internal/tools/schemadigest -schema schemas -out internal/config/schemadigest -version x.y.z`.
   It parses the proprietary grammar and writes a trimmed, gzipped JSON digest
   carrying its PAN-OS version and platform. It refuses a parse that found no
-  `memberof` target, the failure mode that once cost a proof-of-concept cycle.
+  `memberof` target, the failure mode that once cost a proof-of-concept cycle,
+  and one that marked no element `encrypt="yes"`.
+
+### Secrets
+
+The schema marks a key, password or secret `encrypt="yes"` (150 live elements in
+the 11.2 firewall schema). The parser keeps it as `Node.Encrypted`, and the digest
+carries it (`enc`). Digest format 2 added it; `digest.Read` refuses format 1, which
+would read as a schema without secrets. `phash`, a password hash, is not marked;
+it is a hand-modelled secret (R8). So are the credentials the schema keeps in
+clear text: the SNMP v2c trap community, the SCEP fixed challenge, an HTTP log
+server profile's URL, payload, header and parameter values and an MFA server profile's values.
+A registered path's `*` stands for one segment (`path.Match`), and
+`config.TestNoSecretIsAReference` checks that each path names a node of the
+digest. `schema.IsSecret` answers both. No secret is a
+reference (`config.TestNoSecretIsAReference`), so the walk, the index and search
+never see one; snapshot diff shows `(secret)` in its place.
 
 A Go model was once generated from the digest as well. Nothing read it, because
 `internal/config`, `resolve` and `index` walk the element tree through the digest,

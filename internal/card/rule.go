@@ -15,10 +15,19 @@ func Rule(cfg *config.Config, idx *index.Index, r resolve.Rule, rules int) Card 
 		Layer: r.Layer.String(), Disabled: r.Disabled, UUID: r.UUID,
 		Tags: r.Fields["tag"], Description: r.Description,
 	}
+	var top []resolve.Object
+	for _, field := range []string{"source", "destination", "service"} {
+		for _, n := range r.Fields[field] {
+			if o, ok := b.named(field, n); ok {
+				top = append(top, o)
+			}
+		}
+	}
+	b.plan(top)
 	row := func(label, field string) Row {
 		out := Row{Label: label}
 		for _, n := range r.Fields[field] {
-			out.Items = append(out.Items, b.item(field, n, nil))
+			out.Items = append(out.Items, b.item(field, n))
 		}
 		return out
 	}

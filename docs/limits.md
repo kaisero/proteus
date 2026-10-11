@@ -16,6 +16,11 @@ proteus reports each of these limits in its answers. It does not hide them.
 - **Predefined content.** Regions, predefined applications and PAN-DB URL
   categories live in content that the firewall downloads. A rule that names one of
   them stays in a simulation's candidate list, in doubt.
+- **Predefined services come from the device.** `fetch` stores `service-http` and
+  `service-https` with each snapshot, in `predefined.xml`. A snapshot stored
+  before, a firewall that refused them, or `--file` without `predefined.xml` next
+  to the configuration keeps a rule that names one, or a service group that
+  holds one, in doubt.
 - **External dynamic lists.** The firewall fetches their contents at runtime.
 - **User-to-group mapping.** It comes from User-ID. Give proteus a
   [user snapshot](configuration.md#the-user-snapshot).
@@ -25,10 +30,10 @@ proteus reports each of these limits in its answers. It does not hide them.
 - **No return path.** Only the forward path is checked. Asymmetric routing is not
   detected.
 - **Doubtful rules can leave a hop undecided.** Application, `application-default`,
-  predefined or absent services, user, HIP, schedule, PAN-DB URL categories,
-  regions, external dynamic lists and dynamic address groups are not evaluated. A
-  rule that names one of them before the match makes the hop undecided, unless it
-  has the same action as the match.
+  absent services, predefined services the snapshot does not hold, user, HIP,
+  schedule, PAN-DB URL categories, regions, external dynamic lists and dynamic
+  address groups are not evaluated. A rule that names one of them before the match
+  makes the hop undecided, unless it has the same action as the match.
 - **Default-rule overrides that disagree.** When the local and the pushed override
   of a default rule have different actions, the hop is undecided. The precedence is
   not verified on a Panorama-managed firewall.
@@ -78,12 +83,26 @@ hop's firewall the same question with `test security-policy-match`. On fw02,
 - A path ends where it leaves the inventory, also into a tunnel.
 - Firewalls in virtual wire or Layer 2 mode are not seen on a path.
 
+## search
+
+- **A prefix cannot decide a wildcard address object.** A wildcard object, such as
+  `10.88.2.1/0.0.255.0`, matches an address by mask, and a simulation or a search
+  for one address decides it. One address can also be written as a /32 or as a
+  range of one address. A search for a larger prefix or range, or with `--within`
+  or `--exact`, lists each wildcard object that can hold one of its addresses as
+  unresolved, with `gap.address-wildcard`, and exits with code 3.
+- **A device-level reference is matched by name alone.** A static route, an IKE
+  gateway or other configuration outside any vsys that names an object is listed
+  as a reference with scope `config`. proteus does not decide which vsys's object
+  that name refers to: a search in any vsys that finds an object of that name
+  lists the reference.
+
 ## Host names
 
 - **Only the first IPv4 address is checked.** A source or destination given as a
   host name is resolved with this machine's DNS. proteus checks the first IPv4
-  address in the answer; IPv6 is not simulated. `simulate routing` and
-  `simulate nat` name the other addresses in a note.
+  address in the answer; IPv6 is not simulated. `simulate policy`,
+  `simulate routing` and `simulate nat` name the other addresses in a note.
 - **The canonical name is this machine's view.** A note gives the name's
   canonical name as this machine's resolver reports it. Resolvers differ: one
   reports the first name of a CNAME chain, another the last.
@@ -105,9 +124,9 @@ hop's firewall the same question with `test security-policy-match`. On fw02,
 - **Data is as fresh as the fetch schedule.** The server reads the store and never
   contacts a firewall. A note says when a snapshot is older than
   `max_snapshot_age`.
-- **Application and predefined services stay undecidable.** A rule that names an
-  application, `application-default` or a predefined service can leave a flow
-  undecided, and no input can decide it (`needs: []`).
+- **Applications stay undecidable.** A rule that names an application or
+  `application-default` can leave a flow undecided, and no input can decide it
+  (`needs: []`). So can a predefined service in a snapshot that does not hold it.
 - **Configuration text reaches the model unchanged.** Rule names, descriptions
   and object names go into the answer as the configuration holds them.
 - **An inventory change needs a restart.** The device enum of the tools comes from

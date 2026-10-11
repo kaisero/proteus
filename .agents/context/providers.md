@@ -109,6 +109,7 @@ comment. `scripts/capture-zones.sh` captures one.
 ```go
 type Edges struct{ ... }
 type Field int
+type Group struct{ ... }
 type Hit struct{ ... }
 type Index struct{ ... }
 type Interner struct{ ... }
@@ -130,15 +131,11 @@ type ZoneSnapshot struct{ ... }
 
 func (f Field) String() string
 func (i *Index) Candidates(f Field, value string) (*roaring.Bitmap, Report)
-func (i *Index) CandidatesFor(f Field, addr netip.Addr) *roaring.Bitmap
-func (i *Index) CandidatesForName(f Field, name string) *roaring.Bitmap
-func (i *Index) CandidatesForPrefix(f Field, p netip.Prefix) *roaring.Bitmap
 func (i *Index) Containing(addr netip.Addr) []Match
-func (i *Index) DirectGroupsOf(name string) []string
 func (i *Index) Disabled() *roaring.Bitmap
-func (i *Index) GroupsOf(name string) []string
+func (i *Index) GroupsHolding(kind, name string, direct bool) []Group
 func (i *Index) Interner() *Interner
-func (i *Index) MembersOf(group string) []string
+func (i *Index) MatchWildcards(prefixes []netip.Prefix, single bool) ([]Hit, []Unresolved)
 func (i *Index) Overlapping(p netip.Prefix) []Match
 func (i *Index) ProfileUses(value string) []ProfileUse
 func (i *Index) Refs(name string) []Ref

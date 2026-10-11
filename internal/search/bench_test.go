@@ -21,7 +21,7 @@ func BenchmarkRun(b *testing.B) {
 	}
 	b.ReportAllocs()
 	for b.Loop() {
-		if _, err := Run(cfg, idx, Query{Term: "10.124.0.0/24"}); err != nil {
+		if _, _, err := Run(cfg, idx, Query{Term: "10.124.0.0/24"}); err != nil {
 			b.Fatal(err)
 		}
 	}

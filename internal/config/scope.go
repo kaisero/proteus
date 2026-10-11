@@ -14,11 +14,18 @@ const (
 	ScopeShared ScopeSort = iota
 	ScopeVsys
 	ScopeConfig // outside any vsys, e.g. mgt-config
+	// ScopePredefined holds what the device itself defines, such as the
+	// predefined services. Every scope sees it below shared.
+	ScopePredefined
 )
 
 var scopePrefix = map[ScopeSort]string{
-	ScopeShared: "shared", ScopeVsys: "vsys", ScopeConfig: "config",
+	ScopeShared: "shared", ScopeVsys: "vsys", ScopeConfig: "config", ScopePredefined: "predefined",
 }
+
+// scopeParsable reports whether ParseScope reads a scope of this sort. The
+// predefined scope is what the device defines; no question is asked in it.
+func scopeParsable(s ScopeSort) bool { return s != ScopePredefined }
 
 // scopeNeedsName reports whether a scope of this sort is named.
 func scopeNeedsName(s ScopeSort) bool { return s == ScopeVsys }
@@ -43,7 +50,7 @@ func (s Scope) String() string {
 func ParseScope(s string) (Scope, error) {
 	head, name, hasName := strings.Cut(s, ":")
 	for sort, prefix := range scopePrefix {
-		if prefix != head {
+		if prefix != head || !scopeParsable(sort) {
 			continue
 		}
 		switch {
@@ -61,6 +68,9 @@ func ParseScope(s string) (Scope, error) {
 func knownScopes() []string {
 	out := make([]string, 0, len(scopePrefix))
 	for s, p := range scopePrefix {
+		if !scopeParsable(s) {
+			continue
+		}
 		if scopeNeedsName(s) {
 			p += ":<name>"
 		}

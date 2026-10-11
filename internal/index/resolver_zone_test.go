@@ -90,8 +90,10 @@ func TestZoneResolverUsesStaticRoutesWithAnInterface(t *testing.T) {
 	if got["inside"] == "" {
 		t.Errorf("a static route out ethernet1/1 did not place the destination in inside: %v", got)
 	}
-	if !strings.Contains(got["inside"], "to-branch") {
-		t.Errorf("the path does not name the route: %q", got["inside"])
+	// It ends with the prefix, as a forwarding table's placement does, so a
+	// default route can be told from the others.
+	if !strings.HasSuffix(got["inside"], "static route to-branch 172.16.0.0/16") {
+		t.Errorf("the path does not name the route and its prefix: %q", got["inside"])
 	}
 
 	// The next-hop-only route places nothing.

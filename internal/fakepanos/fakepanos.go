@@ -1,6 +1,7 @@
 // Package fakepanos is a stand-in PAN-OS XML API for tests. It answers keygen, a
-// fixed set of show commands and a configuration export over TLS on 127.0.0.1, and
-// records every request so a test can check what was sent and what was not.
+// fixed set of show commands, the predefined services and a configuration export
+// over TLS on 127.0.0.1, and records every request so a test can check what was
+// sent and what was not.
 package fakepanos
 
 import (
@@ -39,6 +40,16 @@ type Device struct {
 type Request struct {
 	Method, Type, Cmd, Key, RawQuery, Body string
 }
+
+// PredefinedCmd asks a device for its predefined services.
+const PredefinedCmd = "<show><predefined><xpath>/predefined/service</xpath></predefined></show>"
+
+// PredefinedServices is a device's answer to PredefinedCmd, as fw02 gave it on
+// PAN-OS 12.2.3 (L4). Every fake device answers it unless Ops names the command.
+const PredefinedServices = `<response status="success"><result><service>` +
+	`<entry name="service-http"><protocol><tcp><port>80,8080</port></tcp></protocol></entry>` +
+	`<entry name="service-https"><protocol><tcp><port>443</port></tcp></protocol></entry>` +
+	`</service></result></response>`
 
 // Success wraps a result the way PAN-OS does.
 func Success(inner string) string {
@@ -127,6 +138,9 @@ func (d *Device) serve(w http.ResponseWriter, r *http.Request) {
 	switch r.Form.Get("type") {
 	case "op":
 		resp, ok := d.Ops[r.Form.Get("cmd")]
+		if !ok && r.Form.Get("cmd") == PredefinedCmd {
+			resp, ok = PredefinedServices, true
+		}
 		if !ok {
 			_, _ = io.WriteString(w, Refusal("17", "show -> invalid syntax"))
 			return

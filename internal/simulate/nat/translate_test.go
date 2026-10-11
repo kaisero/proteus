@@ -222,3 +222,71 @@ func TestABadTranslatedPortIsUnresolved(t *testing.T) {
 		t.Errorf("port = %d, want the original 8443", r.Flow.DestPort)
 	}
 }
+
+// A static group may hold itself through another group; the configuration file
+// allows it. Each group on the path adds its addresses once, so the pool of a rule
+// whose groups form a cycle holds both addresses and the translation ends.
+func TestAPoolGroupCycleEnds(t *testing.T) {
+	t.Parallel()
+	doc := `<config version="11.2.0" urldb="paloaltonetworks"><devices>` +
+		`<entry name="localhost.localdomain"><vsys><entry name="vsys1"><address>` +
+		`<entry name="pool-0"><ip-netmask>198.18.0.1</ip-netmask></entry>` +
+		`<entry name="pool-1"><ip-netmask>198.18.0.2</ip-netmask></entry>` +
+		`</address><address-group>` +
+		`<entry name="grp-a"><static><member>pool-0</member><member>grp-b</member></static></entry>` +
+		`<entry name="grp-b"><static><member>pool-1</member><member>grp-a</member></static></entry>` +
+		`</address-group><rulebase><nat><rules>` +
+		`<entry name="snat-pool"><from><member>trust</member></from><to><member>untrust</member></to>` +
+		`<source><member>any</member></source><destination><member>any</member></destination>` +
+		`<service>any</service><source-translation><dynamic-ip-and-port>` +
+		`<translated-address><member>grp-a</member></translated-address>` +
+		`</dynamic-ip-and-port></source-translation></entry>` +
+		`</rules></nat></rulebase></entry></vsys></entry></devices></config>`
+	path := filepath.Join(t.TempDir(), "firewall.xml")
+	if err := os.WriteFile(path, []byte(doc), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, _, err := config.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	in := Input{
+		Target: withIndexes(cfg, "vsys1"), Vsys: "vsys1",
+		Flow: simulate.Flow{
+			Source:      simulate.Addr(netip.MustParseAddr("10.88.250.1")),
+			Destination: simulate.Addr(netip.MustParseAddr("198.19.0.1")),
+			Protocol:    "tcp", DestPort: 443,
+		},
+		In:     simulate.Port{Device: "fw", Router: "default", Zone: "trust"},
+		PreNAT: &simulate.Forward{Out: simulate.Port{Zone: "untrust", Interface: "ethernet1/1"}},
+	}
+	r := Translate(in, Match(in))
+	if r.Source == nil || strings.Join(r.Source.Candidates, " ") != "198.18.0.1 198.18.0.2" {
+		t.Errorf("source = %+v", r.Source)
+	}
+}
+
+// As observed on fw02, PAN-OS 12.2.3 (L10): an address name resolves by scope
+// first and kind second. The pool rv-adr2 is vsys1's group (10.88.6.6), which
+// hides shared's address rv-adr2 (10.88.7.7).
+func TestAPoolNameResolvesByScopeFirst(t *testing.T) {
+	t.Parallel()
+	cfg, _, err := config.Load("../../../testdata/config/firewall-address-cross-kind.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	in := Input{
+		Target: withIndexes(cfg, "vsys1"), Vsys: "vsys1",
+		Flow: simulate.Flow{
+			Source:      simulate.Addr(netip.MustParseAddr("10.88.250.1")),
+			Destination: simulate.Addr(netip.MustParseAddr("198.19.0.1")),
+			Protocol:    "tcp", DestPort: 443,
+		},
+		In:     simulate.Port{Device: "fw", Router: "default", Zone: "home"},
+		PreNAT: &simulate.Forward{Out: simulate.Port{Zone: "wan", Interface: "ethernet1/1"}},
+	}
+	r := Translate(in, Match(in))
+	if r.Source == nil || strings.Join(r.Source.Candidates, " ") != "10.88.6.6/32" {
+		t.Errorf("source = %+v", r.Source)
+	}
+}

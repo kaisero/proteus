@@ -1,0 +1,47 @@
+<config version="11.2.0" urldb="paloaltonetworks" detail-version="11.2.5">
+  <!-- A default static route out of the outside zone. inside holds
+       ethernet1/1 (10.1.0.1/24), outside ethernet1/3 (203.0.113.1/24), and the
+       route internet sends 0.0.0.0/0 out of ethernet1/3. The configuration places
+       an address no interface holds, such as 198.51.100.7, in outside only
+       through that route. No security rule. -->
+  <shared/>
+  <devices>
+    <entry name="localhost.localdomain">
+      <network>
+        <interface>
+          <ethernet>
+            <entry name="ethernet1/1"><layer3><ip><entry name="10.1.0.1/24"/></ip></layer3></entry>
+            <entry name="ethernet1/3"><layer3><ip><entry name="203.0.113.1/24"/></ip></layer3></entry>
+          </ethernet>
+        </interface>
+        <virtual-router>
+          <entry name="default">
+            <interface>
+              <member>ethernet1/1</member>
+              <member>ethernet1/3</member>
+            </interface>
+            <routing-table>
+              <ip>
+                <static-route>
+                  <entry name="internet">
+                    <destination>0.0.0.0/0</destination>
+                    <interface>ethernet1/3</interface>
+                    <nexthop><ip-address>203.0.113.254</ip-address></nexthop>
+                  </entry>
+                </static-route>
+              </ip>
+            </routing-table>
+          </entry>
+        </virtual-router>
+      </network>
+      <vsys>
+        <entry name="vsys1">
+          <zone>
+            <entry name="inside"><network><layer3><member>ethernet1/1</member></layer3></network></entry>
+            <entry name="outside"><network><layer3><member>ethernet1/3</member></layer3></network></entry>
+          </zone>
+        </entry>
+      </vsys>
+    </entry>
+  </devices>
+</config>

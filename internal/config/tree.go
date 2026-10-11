@@ -138,7 +138,15 @@ func (e *Element) segments(named bool) []string {
 // <response><result>, from the XML API. Parsing starts at the first config
 // element either way. A nested config element is kept as an ordinary child, so
 // it never ends the parse.
-func parseTree(r io.Reader) (*Element, error) {
+func parseTree(r io.Reader) (*Element, error) { return parseTreeAt(r, "config") }
+
+// errNoElement says a well-formed document holds no element of the name asked.
+var errNoElement = errors.New("no such element")
+
+// parseTreeAt reads a document and returns the first element of the name, in
+// either shape parseTree reads. A well-formed document without one gives an
+// error that matches errNoElement.
+func parseTreeAt(r io.Reader, rootName string) (*Element, error) {
 	dec := xml.NewDecoder(r)
 	var root *Element
 	var stack []*Element
@@ -153,7 +161,7 @@ func parseTree(r io.Reader) (*Element, error) {
 		}
 		switch tv := tok.(type) {
 		case xml.StartElement:
-			if root == nil && tv.Name.Local != "config" {
+			if root == nil && tv.Name.Local != rootName {
 				continue
 			}
 			e := &Element{Name: tv.Name.Local}
@@ -182,12 +190,12 @@ func parseTree(r io.Reader) (*Element, error) {
 			}
 			stack = stack[:len(stack)-1]
 			if len(stack) == 0 {
-				return root, nil // the outermost config closed
+				return root, nil // the outermost root element closed
 			}
 		}
 	}
 	if root == nil {
-		return nil, fmt.Errorf("no <config> element found")
+		return nil, fmt.Errorf("no <%s> element found: %w", rootName, errNoElement)
 	}
 	return root, nil
 }

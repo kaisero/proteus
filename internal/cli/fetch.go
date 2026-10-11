@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"slices"
 	"strings"
 	"sync"
 
@@ -67,13 +68,15 @@ func (a *app) runFetch(ctx context.Context, o fetchOptions) (answer, error) {
 	if err != nil {
 		return nil, err
 	}
-	names := o.names
-	if len(names) > 0 {
-		if _, err := s.inv.Select(names, nil); err != nil {
-			return nil, usageErr("%w", err)
-		}
-	} else if names, err = s.inv.Select(nil, o.labels); err != nil {
+	names, err := s.inv.Select(o.names, o.labels)
+	if err != nil {
 		return nil, usageErr("%w", err)
+	}
+	if len(o.names) > 0 {
+		// Select gives the inventory's order. Named devices are fetched and reported
+		// in the order named, and each once: two fetches of one device in the same
+		// second would write the same snapshot.
+		names = unique(o.names)
 	}
 	if len(names) == 0 {
 		return nil, usageErr("the selection matches no device")
@@ -93,6 +96,18 @@ func (a *app) runFetch(ctx context.Context, o fetchOptions) (answer, error) {
 		}
 	}
 	return ans, nil
+}
+
+// unique returns names without repeats, in the order of their first appearance.
+func unique(names []string) []string {
+	seen := map[string]bool{}
+	return slices.DeleteFunc(slices.Clone(names), func(n string) bool {
+		if seen[n] {
+			return true
+		}
+		seen[n] = true
+		return false
+	})
 }
 
 // fetcher fetches devices into one store.

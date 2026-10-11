@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"encoding/json"
 	"errors"
 	"io/fs"
 	"os"
@@ -71,5 +72,29 @@ func TestAQuestionCreatesNoStore(t *testing.T) {
 	c.want(3, "search", "10.0.0.1")
 	if _, err := os.Stat(c.env["PROTEUS_STORE"]); !errors.Is(err, fs.ErrNotExist) {
 		t.Errorf("the store was created: %v", err)
+	}
+}
+
+// One address decides a wildcard object, however it is written: as an address, a
+// /32 or a range of one address, search finds the same objects, groups and rules
+// and exits 0 (decision C1).
+func TestOneAddressInEverySpellingDecidesAWildcard(t *testing.T) {
+	t.Parallel()
+	answer := func(term string) (string, string) {
+		out := newCLI(t).want(0, "search", term, "--file", fixture("firewall-wildcard.xml"), "--output", "json")
+		var doc map[string]json.RawMessage
+		if err := json.Unmarshal([]byte(out), &doc); err != nil {
+			t.Fatalf("%s: %v\n%s", term, err, out)
+		}
+		return string(doc["results"]), string(doc["unresolved"])
+	}
+	want, _ := answer("10.88.7.1")
+	if !strings.Contains(want, `"name": "wc"`) || !strings.Contains(want, `"name": "to-g-wc"`) {
+		t.Fatalf("10.88.7.1 must find wc and the rules naming it:\n%s", want)
+	}
+	for _, term := range []string{"10.88.7.1/32", "10.88.7.1-10.88.7.1"} {
+		if got, un := answer(term); got != want || un != "" && un != "[]" {
+			t.Errorf("%s: results\n%s\nunresolved %s\nwant the results of 10.88.7.1:\n%s", term, got, un, want)
+		}
 	}
 }

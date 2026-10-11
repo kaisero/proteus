@@ -2,6 +2,7 @@ package resolve
 
 import (
 	"net/netip"
+	"slices"
 	"testing"
 
 	"github.com/okaiser/proteus/internal/config"
@@ -121,5 +122,18 @@ func TestZonesInScopeOnAVsysWithNone(t *testing.T) {
 	zones := ZonesInScope(vsysLab(t), config.Scope{Sort: config.ScopeVsys, Name: "vsys3"})
 	if len(zones) != 0 {
 		t.Errorf("got %d zones in vsys3, want none: %+v", len(zones), zones)
+	}
+}
+
+// ZoneNames lists a scope's zones by name, sorted: the one list of the zones a
+// vsys defines that every check reads.
+func TestZoneNames(t *testing.T) {
+	t.Parallel()
+	cfg := loadT(t, "../../testdata/config/firewall-ruletype.xml")
+	if got := ZoneNames(cfg, config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}); !slices.Equal(got, []string{"dmz", "inside", "out"}) {
+		t.Errorf("vsys1: %v", got)
+	}
+	if got := ZoneNames(vsysLab(t), config.Scope{Sort: config.ScopeVsys, Name: "vsys3"}); len(got) != 0 {
+		t.Errorf("a vsys without zones: %v", got)
 	}
 }

@@ -1,17 +1,16 @@
 package index
 
 import (
-	"net/netip"
 	"testing"
 
 	"github.com/RoaringBitmap/roaring/v2"
 )
 
-// CandidatesFor unions the four ways a rule field can reach a value: the object
+// Candidates unions the four ways a rule field can reach a value: the object
 // covering it, any group holding that object, a literal in the field, and the
 // field being "any". Forgetting one of the four is the mistake this exists to
 // prevent.
-func TestCandidatesForCoversAllFourPaths(t *testing.T) {
+func TestCandidatesCoversAllFourPaths(t *testing.T) {
 	t.Parallel()
 	idx := indexOf(t, "../../testdata/config/firewall-paths.xml", "vsys1")
 	rules := idx.Rules()
@@ -23,7 +22,7 @@ func TestCandidatesForCoversAllFourPaths(t *testing.T) {
 		return out
 	}
 
-	got := names(idx.CandidatesFor(Source, netip.MustParseAddr("10.1.1.1")))
+	got := names(candidates(idx, Source, "10.1.1.1"))
 	for _, want := range []string{
 		"by-object",  // source names h-1 directly
 		"by-group",   // source names g-hosts, which holds h-1
@@ -31,7 +30,7 @@ func TestCandidatesForCoversAllFourPaths(t *testing.T) {
 		"by-any",     // source is any
 	} {
 		if !got[want] {
-			t.Errorf("%s missing; CandidatesFor found %v", want, keys(got))
+			t.Errorf("%s missing; Candidates found %v", want, keys(got))
 		}
 	}
 	if got["unrelated"] {
@@ -41,12 +40,12 @@ func TestCandidatesForCoversAllFourPaths(t *testing.T) {
 
 // A name has three of the four paths: itself, its groups, and any. A literal
 // cannot apply, because a name is not an address.
-func TestCandidatesForNameCoversNameGroupsAndAny(t *testing.T) {
+func TestCandidatesOfANameCoversNameGroupsAndAny(t *testing.T) {
 	t.Parallel()
 	idx := indexOf(t, "../../testdata/config/firewall-paths.xml", "vsys1")
 	rules := idx.Rules()
 	got := map[string]bool{}
-	for it := idx.CandidatesForName(Source, "h-1").Iterator(); it.HasNext(); {
+	for it := candidates(idx, Source, "h-1").Iterator(); it.HasNext(); {
 		got[rules[it.Next()].Name] = true
 	}
 	for _, want := range []string{"by-object", "by-group", "by-any"} {
@@ -78,8 +77,8 @@ func TestRulesReachingIsTheNameAndItsGroups(t *testing.T) {
 func TestComposingSidesGivesTheDeviceAnswer(t *testing.T) {
 	t.Parallel()
 	idx := indexOf(t, "../../testdata/config/firewall-anyrule.xml", "vsys1")
-	src := idx.CandidatesFor(Source, netip.MustParseAddr("198.18.0.5"))
-	dst := idx.CandidatesFor(Destination, netip.MustParseAddr("198.18.1.5"))
+	src := candidates(idx, Source, "198.18.0.5")
+	dst := candidates(idx, Destination, "198.18.1.5")
 	cand := roaring.And(src, dst)
 	cand.AndNot(idx.Disabled())
 	if cand.IsEmpty() {
@@ -92,12 +91,12 @@ func TestComposingSidesGivesTheDeviceAnswer(t *testing.T) {
 	}
 }
 
-func TestCandidatesForUnknownAddressIsEmptyExceptAny(t *testing.T) {
+func TestCandidatesOfAnUnknownAddressIsEmptyExceptAny(t *testing.T) {
 	t.Parallel()
 	idx := indexOf(t, "../../testdata/config/firewall-paths.xml", "vsys1")
 	rules := idx.Rules()
 	got := map[string]bool{}
-	for it := idx.CandidatesFor(Destination, netip.MustParseAddr("203.0.113.1")).Iterator(); it.HasNext(); {
+	for it := candidates(idx, Destination, "203.0.113.1").Iterator(); it.HasNext(); {
 		got[rules[it.Next()].Name] = true
 	}
 	// Nothing names that address, so only a destination of "any" can reach it.
@@ -113,6 +112,12 @@ func TestCandidatesForUnknownAddressIsEmptyExceptAny(t *testing.T) {
 	}
 }
 
+// candidates is the rule set Candidates returns, without its report.
+func candidates(idx *Index, f Field, value string) *roaring.Bitmap {
+	b, _ := idx.Candidates(f, value)
+	return b
+}
+
 func keys(m map[string]bool) []string {
 	out := make([]string, 0, len(m))
 	for k := range m {
@@ -123,18 +128,18 @@ func keys(m map[string]bool) []string {
 
 // A prefix reaches a rule through an overlapping object, a group holding one, an
 // overlapping literal, or a field of any.
-func TestCandidatesForPrefix(t *testing.T) {
+func TestCandidatesOfAPrefix(t *testing.T) {
 	t.Parallel()
 	idx := indexOf(t, "../../testdata/config/firewall-paths.xml", "vsys1")
 	rules := idx.Rules()
 	got := map[string]bool{}
 	// 10.1.1.0/24 contains h-1 at 10.1.1.1 and overlaps the literal 10.1.0.0/16.
-	for it := idx.CandidatesForPrefix(Source, netip.MustParsePrefix("10.1.1.0/24")).Iterator(); it.HasNext(); {
+	for it := candidates(idx, Source, "10.1.1.0/24").Iterator(); it.HasNext(); {
 		got[rules[it.Next()].Name] = true
 	}
 	for _, want := range []string{"by-object", "by-group", "by-literal", "by-any"} {
 		if !got[want] {
-			t.Errorf("%s missing; CandidatesForPrefix found %v", want, keys(got))
+			t.Errorf("%s missing; Candidates found %v", want, keys(got))
 		}
 	}
 	if got["unrelated"] {
@@ -144,12 +149,12 @@ func TestCandidatesForPrefix(t *testing.T) {
 
 // A prefix covering nothing but reached by an any-rule still finds that rule, and
 // nothing else.
-func TestCandidatesForPrefixOnlyAny(t *testing.T) {
+func TestCandidatesOfAPrefixOnlyAny(t *testing.T) {
 	t.Parallel()
 	idx := indexOf(t, "../../testdata/config/firewall-paths.xml", "vsys1")
 	rules := idx.Rules()
 	got := map[string]bool{}
-	for it := idx.CandidatesForPrefix(Source, netip.MustParsePrefix("203.0.113.0/24")).Iterator(); it.HasNext(); {
+	for it := candidates(idx, Source, "203.0.113.0/24").Iterator(); it.HasNext(); {
 		got[rules[it.Next()].Name] = true
 	}
 	if !got["by-any"] {
@@ -164,13 +169,13 @@ func TestCandidatesForPrefixOnlyAny(t *testing.T) {
 
 // A name that does not exist reaches only the any-rules, and interning it must not
 // corrupt the table for later lookups.
-func TestCandidatesForUnknownName(t *testing.T) {
+func TestCandidatesOfAnUnknownName(t *testing.T) {
 	t.Parallel()
 	idx := indexOf(t, "../../testdata/config/firewall-paths.xml", "vsys1")
 	before := idx.Interner().Len()
 	rules := idx.Rules()
 	got := map[string]bool{}
-	for it := idx.CandidatesForName(Source, "no-such-object").Iterator(); it.HasNext(); {
+	for it := candidates(idx, Source, "no-such-object").Iterator(); it.HasNext(); {
 		got[rules[it.Next()].Name] = true
 	}
 	if !got["by-any"] {
@@ -181,7 +186,7 @@ func TestCandidatesForUnknownName(t *testing.T) {
 	}
 	// A known name still resolves afterwards.
 	after := map[string]bool{}
-	for it := idx.CandidatesForName(Source, "h-1").Iterator(); it.HasNext(); {
+	for it := candidates(idx, Source, "h-1").Iterator(); it.HasNext(); {
 		after[rules[it.Next()].Name] = true
 	}
 	if !after["by-object"] {

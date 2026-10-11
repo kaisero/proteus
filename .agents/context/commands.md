@@ -58,7 +58,9 @@ simulate nat <src> <dst> --device <fw>      the NAT rule and the translated pack
   `--all-devices` are not registered. An FQDN traces its first IPv4 address; with
   `--no-dns` or no address, exit 2. The loader opens the snapshot each routing hop
   used (HA: the active member). **`--file`**: one configuration, `--vsys`, zones
-  given (both) or derived, no NAT; `--device`, `--label`, `--at`, `--router` exit 2.
+  given (both) or derived, no NAT, the first address of an FQDN checked with a
+  `dns.other-addresses` note for the rest; `--device`, `--label`, `--at`,
+  `--router` exit 2.
   Its text ends with `first match: <rule> (<action>)` or `first certain match:` and
   `undecided:`. Both modes share one JSON security block (`securityJSON`).
   `scripts/device-probe.sh <config> <vsys>` reads the `--file` text;
@@ -91,9 +93,20 @@ simulate nat <src> <dst> --device <fw>      the NAT rule and the translated pack
   reporting.md); the text output does not change with it. Each result of a
   question (simulate, search, lookup, snapshot diff) carries `answer`, one line
   of its text output that a `query` builder makes and the renderer prints
-  (`TestGoldenAnswersAreTextLines`); search and lookup add `summary` with the
-  count line as its `answer`. Search prints its findings' answers only with
-  `--why`.
+  (`TestGoldenAnswersAreTextLines`); search, lookup and snapshot diff add
+  `summary` with the count line as its `answer`. Search prints its findings'
+  answers only with `--why`.
+- **`--limit N`** (search, lookup, snapshot diff; MCP `limit`): one field,
+  `query.ResultLimit`, embedded in the query inputs and the MCP arguments. No
+  default. `query.cut` keeps the first N findings or cards of the whole,
+  sorted answer; snapshot diff counts single changes (`cutChanges`): the scope
+  where the limit falls keeps its first changes and an answer with its whole
+  counts plus `(n of m changes shown)`, later scopes drop out, and
+  `DiffResult.Summary` still counts every change. `summary.omitted` counts the
+  rest and the count line ends `; N of M shown, narrow by …` (`leftOut`).
+  Holes, unresolved entries and notes are never cut; text prints the notes of
+  a target with no result left below the answer (`leftNotes`). `--limit 0` is
+  a usage error (`checkLimit`); the MCP input schema has `minimum: 1`.
 - **Colour:** `--color auto|always|never` (also `PROTEUS_COLOR`, inventory `color:`),
   default `auto`. JSON and YAML are never coloured. `NO_COLOR`, `CLICOLOR_FORCE` and
   `TERM=dumb` act on `auto` only; `auto` colours a terminal and nothing else.
@@ -120,7 +133,8 @@ simulate nat <src> <dst> --device <fw>      the NAT rule and the translated pack
 - **Settings**, rising precedence default < inventory `defaults:` < `PROTEUS_*` <
   flag: inventory path, store root, `max_snapshot_age`, output, color, and the run log's
   `log_level`, `log_dir`, `log_keep` (plus `--verbose`). `PROTEUS_USERS` names a user
-  snapshot; a stored forwarding table supplies zones.
+  snapshot, read per command run, and once at start by `proteus mcp` (a bad file
+  exits 2); a stored forwarding table supplies zones.
 - **Run log:** one file per run under `log_dir`, `<time> [<LEVEL>] [<TAG>] <msg>`,
   tags `RUN`, `API`, `SNAP`, `FIND`, `STEP`; secrets redacted; the path is printed
   when a run exits non-zero. Help, completion and a bare group write no log and
@@ -191,6 +205,7 @@ type PathSummary struct{ ... }
 type Point struct{ ... }
 type PolicyFileInput struct{ ... }
 type PolicyInput struct{ ... }
+type ResultLimit struct{ ... }
 type RoutingEcho struct{ ... }
 type RoutingInput struct{ ... }
 type RoutingResult struct{ ... }

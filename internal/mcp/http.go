@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"cmp"
 	"context"
 	"crypto/sha256"
 	"crypto/subtle"
@@ -29,6 +30,10 @@ type HTTPOptions struct {
 	// makes DNS rebinding useless, so the check is defence in depth
 	// (spec 2026-10-10 F6).
 	AllowedHosts []string
+	// slack is added to the call timeout and the maximum wait: the write
+	// timeout, and the deadline of the whole stop. Zero is writeSlack; a
+	// test shortens it.
+	slack time.Duration
 }
 
 // The HTTP limits of spec §4.4.
@@ -47,8 +52,8 @@ const (
 // Every request but /healthz must carry the token (401) and, when allowed
 // hosts are set, name one of them (403). Refusals are not audited: the
 // process log counts them by status once a minute. When ctx ends (SIGTERM),
-// new calls answer call.busy, the running calls get up to the call timeout
-// to answer, the server shuts down, and ServeHTTP returns.
+// new calls answer call.busy, the running calls answer, the server shuts
+// down, and ServeHTTP returns: within the write timeout, whatever still runs.
 func ServeHTTP(ctx context.Context, o Options, h HTTPOptions, ln net.Listener) error {
 	if h.Token == "" {
 		_ = ln.Close()
@@ -80,12 +85,15 @@ func ServeHTTP(ctx context.Context, o Options, h HTTPOptions, ln net.Listener) e
 			stopping = true
 		}
 	}
-	lim.stop()
-	// Shutdown waits for every response in flight to be written, then closes
-	// the connections: no timed grace as over stdio. The call timeout bounds
-	// the wait for a call that stop gave up on.
-	sctx, cancel := context.WithTimeout(context.Background(), lim.timeout)
+	// One deadline bounds the whole stop: the write timeout, by which every
+	// answer to a request read before the stop is written. The limiter waits
+	// for the running work, then Shutdown for every response in flight, and
+	// closes the connections: no timed grace as over stdio. Work that does
+	// not return, or a client that keeps its request open, cannot hold the
+	// stop past the deadline.
+	sctx, cancel := context.WithTimeout(context.Background(), srv.WriteTimeout)
 	defer cancel()
+	lim.stopBy(sctx)
 	if srv.Shutdown(sctx) != nil {
 		// The deadline passed: close the connections still open.
 		_ = srv.Close()
@@ -124,7 +132,7 @@ func newHTTPServer(s *sdk.Server, o Options, h HTTPOptions, lim *limiter) *http.
 		Handler:           g,
 		ReadHeaderTimeout: readHeaderTimeout,
 		MaxHeaderBytes:    maxHeader,
-		WriteTimeout:      lim.timeout + lim.maxWait + writeSlack,
+		WriteTimeout:      lim.timeout + lim.maxWait + cmp.Or(h.slack, writeSlack),
 		IdleTimeout:       idleTimeout,
 	}
 }

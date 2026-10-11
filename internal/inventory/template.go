@@ -16,14 +16,14 @@ version: 1
 defaults:
   # TLS certificate verification is OFF. Lab firewalls present self-signed
   # certificates, which verification would reject. The cost: anyone on the network
-  # path can feed proteus a false configuration, and every answer drawn from
-  # it is then false. Once your devices present certificates this machine trusts,
-  # opt in with:
+  # path can read the password at login and feed proteus a false configuration,
+  # and every answer drawn from it is then false. Once your devices present
+  # certificates this machine trusts, opt in with:
   #   insecure_tls: false
   # A device can also set insecure_tls on its own entry.
   insecure_tls: true
   timeout: 60                    # seconds per API call
-  snapshot_keep: 20              # snapshots kept per device
+  snapshot_keep: 20              # snapshots kept per device, with and without a configuration
   username: admin                # the login used to fetch an API key
   password_env: PANOS_PASSWORD   # the environment variable holding its password
   max_snapshot_age: 24h          # answers from older snapshots carry a note

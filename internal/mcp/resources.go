@@ -25,7 +25,8 @@ const limits = `# What proteus cannot know
 
 - Answers are static analysis of stored snapshots, not live tests. A note says when a snapshot is older than the freshness limit.
 - Only PAN-OS 11.2 digests ship; another version reads with the nearest one, and the answer says so.
-- Predefined applications, services, regions and PAN-DB URL categories live in content the firewall downloads. A rule that names one stays in doubt, and the answer can be undecided.
+- Predefined applications, regions and PAN-DB URL categories live in content the firewall downloads. A rule that names one stays in doubt, and the answer can be undecided.
+- Predefined services (service-http, service-https) are fetched from the device into each snapshot. A snapshot stored before they were fetched, or from a device that refused them, keeps a rule that names one in doubt.
 - Application, user, HIP, schedule, external dynamic lists and dynamic address groups are not evaluated. The application input is recorded only; it does not change the answer.
 - Only the forward path is checked; asymmetric routing is not detected. IPv4 only.
 - Policy-based forwarding is named, not followed. ECMP follows the lowest next hop. A path ends where it leaves the inventory.

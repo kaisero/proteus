@@ -54,7 +54,12 @@ incomplete one:
 
 1. the field names an object whose value matches — the resolvers
 2. the field names a group holding such an object, at any depth, static membership
-   or tag filter alike — the closure
+   or tag filter alike — the closure. Each group kind (address, service,
+   application group) has its own closure, and a field asks only the group kinds
+   the schema lets it name: an address group and a service group may share a name.
+   The closure is built in one pass: groups that hold each other (a cycle) are
+   joined into one component first, and the components are built in the order
+   they hold each other (`settle`, `components` in `closure.go`)
 3. the field holds a matching value directly — `literalRules`
 4. the field is `any` — `RulesWithAny`
 
@@ -116,6 +121,7 @@ already answers it.
 ```go
 type Edges struct{ ... }
 type Field int
+type Group struct{ ... }
 type Hit struct{ ... }
 type Index struct{ ... }
 type Interner struct{ ... }
@@ -137,15 +143,11 @@ type ZoneSnapshot struct{ ... }
 
 func (f Field) String() string
 func (i *Index) Candidates(f Field, value string) (*roaring.Bitmap, Report)
-func (i *Index) CandidatesFor(f Field, addr netip.Addr) *roaring.Bitmap
-func (i *Index) CandidatesForName(f Field, name string) *roaring.Bitmap
-func (i *Index) CandidatesForPrefix(f Field, p netip.Prefix) *roaring.Bitmap
 func (i *Index) Containing(addr netip.Addr) []Match
-func (i *Index) DirectGroupsOf(name string) []string
 func (i *Index) Disabled() *roaring.Bitmap
-func (i *Index) GroupsOf(name string) []string
+func (i *Index) GroupsHolding(kind, name string, direct bool) []Group
 func (i *Index) Interner() *Interner
-func (i *Index) MembersOf(group string) []string
+func (i *Index) MatchWildcards(prefixes []netip.Prefix, single bool) ([]Hit, []Unresolved)
 func (i *Index) Overlapping(p netip.Prefix) []Match
 func (i *Index) ProfileUses(value string) []ProfileUse
 func (i *Index) Refs(name string) []Ref

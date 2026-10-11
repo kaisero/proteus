@@ -15,7 +15,7 @@ make hooks     # run `make gate` before every commit
 | `make build` | builds a static linux/amd64 `bin/proteus` |
 | `make test` | runs the unit tests |
 | `make gate` | tidy check, lint, unit tests; the pre-commit hook |
-| `make ci` | everything CI runs: race detector, coverage floors, context check, build, vulnerability scan |
+| `make ci` | everything CI runs: race detector, coverage floors, one run of every benchmark, context check, build, vulnerability scan |
 | `make fmt` | formats the code |
 | `make help` | lists every target |
 
@@ -112,7 +112,8 @@ firewall's own `test security-policy-match`.
 ## Add a fetched document
 
 Add a `Document` to `internal/fetch/documents.go` and list it in `Documents`. The
-run, the store and the snapshot metadata take it from there.
+run, the store and the snapshot metadata take it from there. Mark it `Optional`,
+with the note a refusal adds, when a release may not know the command.
 
 ## Rules
 

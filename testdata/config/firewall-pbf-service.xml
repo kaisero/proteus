@@ -1,0 +1,118 @@
+<config version="11.2.0" urldb="paloaltonetworks" detail-version="11.2.5">
+  <!-- PBF rules that differ by service (lab fact L3). From home: ssh-no-pbf
+       (tcp/22) above home-out (any). From lab: lab-app-no-pbf names an
+       application, so it only may match, above lab-out. From dmz: dmz-https names
+       a service the configuration does not define. From bare: bare-no-pbf names
+       no service, application or source user, so each holds its schema
+       default, any. From sched: sched-no-pbf has a schedule, so it only may
+       match, above sched-out. From night: night-fwd has a schedule. -->
+  <shared/>
+  <devices>
+    <entry name="localhost.localdomain">
+      <vsys>
+        <entry name="vsys1">
+          <zone>
+            <entry name="home"/>
+            <entry name="lab"/>
+            <entry name="dmz"/>
+            <entry name="wan"/>
+            <entry name="bare"/>
+            <entry name="sched"/>
+            <entry name="night"/>
+          </zone>
+          <service>
+            <entry name="svc-ssh"><protocol><tcp><port>22</port></tcp></protocol></entry>
+          </service>
+          <schedule>
+            <entry name="office-hours"><schedule-type><recurring><daily><member>08:00-17:00</member></daily></recurring></schedule-type></entry>
+          </schedule>
+          <rulebase>
+            <pbf>
+              <rules>
+                <entry name="ssh-no-pbf">
+                  <from><zone><member>home</member></zone></from>
+                  <source><member>10.88.3.0/24</member></source>
+                  <destination><member>10.88.9.0/24</member></destination>
+                  <service><member>svc-ssh</member></service>
+                  <action><no-pbf/></action>
+                </entry>
+                <entry name="home-out">
+                  <from><zone><member>home</member></zone></from>
+                  <source><member>10.88.3.0/24</member></source>
+                  <destination><member>10.88.9.0/24</member></destination>
+                  <service><member>any</member></service>
+                  <action><forward><egress-interface>ethernet1/4</egress-interface><nexthop><ip-address>198.18.0.1</ip-address></nexthop></forward></action>
+                </entry>
+                <entry name="lab-app-no-pbf">
+                  <from><zone><member>lab</member></zone></from>
+                  <source><member>any</member></source>
+                  <destination><member>any</member></destination>
+                  <application><member>ssh</member></application>
+                  <service><member>any</member></service>
+                  <action><no-pbf/></action>
+                </entry>
+                <entry name="lab-out">
+                  <from><zone><member>lab</member></zone></from>
+                  <source><member>any</member></source>
+                  <destination><member>any</member></destination>
+                  <service><member>any</member></service>
+                  <action><forward><egress-interface>ethernet1/4</egress-interface></forward></action>
+                </entry>
+                <entry name="dmz-https">
+                  <from><zone><member>dmz</member></zone></from>
+                  <source><member>any</member></source>
+                  <destination><member>any</member></destination>
+                  <service><member>service-https</member></service>
+                  <action><discard/></action>
+                </entry>
+                <entry name="dmz-default">
+                  <from><zone><member>dmz</member></zone></from>
+                  <source><member>any</member></source>
+                  <destination><member>any</member></destination>
+                  <service><member>application-default</member></service>
+                  <action><discard/></action>
+                </entry>
+                <entry name="bare-no-pbf">
+                  <from><zone><member>bare</member></zone></from>
+                  <source><member>any</member></source>
+                  <destination><member>any</member></destination>
+                  <action><no-pbf/></action>
+                </entry>
+                <entry name="bare-out">
+                  <from><zone><member>bare</member></zone></from>
+                  <source><member>any</member></source>
+                  <destination><member>any</member></destination>
+                  <service><member>any</member></service>
+                  <action><forward><egress-interface>ethernet1/4</egress-interface></forward></action>
+                </entry>
+                <entry name="sched-no-pbf">
+                  <from><zone><member>sched</member></zone></from>
+                  <source><member>any</member></source>
+                  <destination><member>any</member></destination>
+                  <service><member>any</member></service>
+                  <schedule>office-hours</schedule>
+                  <action><no-pbf/></action>
+                </entry>
+                <entry name="sched-out">
+                  <from><zone><member>sched</member></zone></from>
+                  <source><member>any</member></source>
+                  <destination><member>any</member></destination>
+                  <service><member>any</member></service>
+                  <action><forward><egress-interface>ethernet1/4</egress-interface></forward></action>
+                </entry>
+                <entry name="night-fwd">
+                  <from><zone><member>night</member></zone></from>
+                  <source><member>any</member></source>
+                  <destination><member>any</member></destination>
+                  <service><member>any</member></service>
+                  <schedule>office-hours</schedule>
+                  <action><forward><egress-interface>ethernet1/4</egress-interface></forward></action>
+                </entry>
+              </rules>
+            </pbf>
+          </rulebase>
+        </entry>
+      </vsys>
+    </entry>
+  </devices>
+</config>

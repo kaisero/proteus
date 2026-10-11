@@ -7,8 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/RoaringBitmap/roaring/v2"
-
+	"github.com/okaiser/proteus/internal/config"
 	"github.com/okaiser/proteus/internal/index"
 	"github.com/okaiser/proteus/internal/reason"
 	"github.com/okaiser/proteus/internal/resolve"
@@ -96,10 +95,15 @@ func Match(in Input) MatchResult {
 	src, dst, un := v.Sides(resolve.NAT, sourceAddr(in.Flow.Source.Addrs), in.Flow.Destination.Addrs[0], noNegation)
 	out.Unresolved = append(out.Unresolved, un...)
 	out.Fidelity = simulate.Weakest(out.Fidelity, rulebase.Certainty(resolve.NAT, un))
-	svc := services(v)
+	env := matchEnv{vsys: v, svc: services(v)}
+	// Only an implicit rule asks which address an object holds: read the
+	// objects once, and only for a rulebase that has one.
+	if slices.ContainsFunc(rules, func(r Rule) bool { return r.explicit < 0 }) {
+		env.addrs = v.Addresses()
+	}
 	for i := range rules {
 		r := &rules[i]
-		why, doubts := r.fits(in, out.PreNAT, src, dst, v, svc)
+		why, doubts := r.fits(in, out.PreNAT, src, dst, env)
 		switch {
 		case why != "":
 			out.Excluded = append(out.Excluded, Excluded{Rule: r.label(), Field: why})
@@ -147,9 +151,17 @@ func (r *Rule) label() string {
 	return r.Name
 }
 
+// matchEnv is what every rule of one match reads: the vsys, its services and
+// service groups by kind and name, and its address objects.
+type matchEnv struct {
+	vsys  rulebase.Vsys
+	svc   map[string]string
+	addrs rulebase.Addresses
+}
+
 // fits decides one rule: a field that excludes it, or a doubt, or neither (a sure
 // match).
-func (r *Rule) fits(in Input, pre simulate.Forward, src, dst *roaring.Bitmap, v rulebase.Vsys, svc map[string]string) (string, simulate.Reasons) {
+func (r *Rule) fits(in Input, pre simulate.Forward, src, dst rulebase.Side, env matchEnv) (string, simulate.Reasons) {
 	if r.Disabled {
 		return "disabled", nil
 	}
@@ -174,7 +186,7 @@ func (r *Rule) fits(in Input, pre simulate.Forward, src, dst *roaring.Bitmap, v 
 	if r.ToInterface != "any" && r.ToInterface != "" && r.ToInterface != pre.Out.Interface {
 		return "to-interface " + r.ToInterface + " ≠ " + pre.Out.Interface, nil
 	}
-	if why, doubt := serviceFits(r.Service, in.Flow, svc); why != "" {
+	if why, doubt := serviceFits(r.Service, in.Flow, env.svc, env.vsys.Config); why != "" {
 		return why, nil
 	} else if doubt.Text != "" {
 		doubts = append(doubts, doubt)
@@ -185,24 +197,28 @@ func (r *Rule) fits(in Input, pre simulate.Forward, src, dst *roaring.Bitmap, v 
 	}
 	if r.explicit >= 0 {
 		pos := uint32(r.explicit) //nolint:gosec // a rulebase position fits in 32 bits
-		if !src.Contains(pos) {
+		if !src.Holds(pos) {
 			return "source", nil
 		}
-		if !dst.Contains(pos) {
+		if !dst.Holds(pos) {
 			return "destination", nil
 		}
-	} else if !v.Holds(first(r.Fields["destination"]), in.Flow.Destination.Addrs[0]) {
+		// A side naming an external list, a region or a dynamic group only
+		// may hold the address, as in PBF and the security check (spec E23).
+		doubts = append(doubts, src.May[pos]...)
+		doubts = append(doubts, dst.May[pos]...)
+	} else if !env.addrs.Holds(first(r.Fields["destination"]), in.Flow.Destination.Addrs[0]) {
 		return "destination", nil
 	}
 	return "", doubts
 }
 
 // services maps each service and service group name of the vsys to its value:
-// "tcp/443,8443" for a service, "a, b" for a group.
+// "tcp/443,8443" for a service, "a, b" for a group. A name means the object of
+// the nearest scope that defines it, whatever its kind (L9).
 func services(v rulebase.Vsys) map[string]string {
 	out := map[string]string{}
-	for _, kind := range []string{"service", "service-group"} {
-		objs := resolve.ObjectsInScope(v.Config, v.Scope, kind)
+	for kind, objs := range resolve.ObjectsOfKindsInScope(v.Config, v.Scope, "service", "service-group") {
 		for _, o := range objs {
 			out[kind+":"+o.Name] = o.Value
 		}
@@ -211,27 +227,40 @@ func services(v rulebase.Vsys) map[string]string {
 }
 
 // serviceFits matches a NAT rule's single service against the flow's protocol and
-// destination port. A service the configuration does not define, such as the
-// predefined service-http, and a flow without a port are doubts. A service object's
-// source port is not read (spec §18, the probe flows set none).
-func serviceFits(name string, f simulate.Flow, svc map[string]string) (string, reason.Reason) {
+// destination port. A service no scope defines, such as service-http in a
+// snapshot without the predefined services, a flow without a port, and a flow
+// without a protocol whose port the service holds are doubts. A protocol given
+// by number compares by its name. A service object's source port is not read
+// (spec §18, the probe flows set none).
+func serviceFits(name string, f simulate.Flow, svc map[string]string, cfg *config.Config) (string, reason.Reason) {
 	if name == "" || name == "any" {
 		return "", reason.Reason{}
 	}
 	// A port decides only a service the configuration defines: when neither
 	// the service nor any group member is defined, no port helps.
 	if !anyDefined(name, svc, 0) {
-		return "", reason.New("doubt.service-predefined", "service "+name+" is not defined in the configuration (a predefined service?)")
+		return "", rulebase.UndefinedService(cfg, "service "+name+" is not defined in the configuration (a predefined service?)")
 	}
-	if f.DestPort == 0 {
-		return "", reason.New("path.nat-no-port", "service "+name+" not known without a port: give the destination port")
+	proto := rulebase.Protocol(f.Protocol)
+	// A service names tcp or udp and its ports (schemas/schema.xml,
+	// service/entry/protocol, 11.2.0), so a flow of another protocol, such as
+	// icmp, has no port to give: no service holds it.
+	switch proto {
+	case "", "tcp", "udp", "sctp":
+		if f.DestPort == 0 {
+			return "", reason.New("path.nat-no-port", "service "+name+" not known without a port: give the destination port")
+		}
 	}
-	matched, known := serviceHolds(name, strings.ToLower(f.Protocol), int(f.DestPort), svc, 0)
+	matched, known := serviceHolds(name, proto, int(f.DestPort), svc, 0)
 	switch {
 	case !known:
-		return "", reason.New("doubt.service-predefined", "service "+name+" is not defined in the configuration (a predefined service?)")
+		return "", rulebase.UndefinedService(cfg, "service "+name+" is not defined in the configuration (a predefined service?)")
 	case !matched:
 		return "service " + name, reason.Reason{}
+	case proto == "":
+		// The port fits a protocol of the service; without the flow's own, the
+		// rule only may match.
+		return "", reason.New("path.nat-no-protocol", "service "+name+" not known without a protocol: give the protocol")
 	}
 	return "", reason.Reason{}
 }
@@ -254,17 +283,23 @@ func anyDefined(name string, svc map[string]string, depth int) bool {
 	return ok
 }
 
+// serviceHolds reports whether a service or group holds the port, and whether
+// that is known. A group holds it when one member does, whatever the others
+// are; it is unknown only when no member holds it and one is unknown.
 func serviceHolds(name, proto string, port int, svc map[string]string, depth int) (matched, known bool) {
 	if depth > 8 {
 		return false, false
 	}
 	if members, ok := svc["service-group:"+name]; ok {
+		known = true
 		for m := range strings.SplitSeq(members, ", ") {
-			if mm, mk := serviceHolds(m, proto, port, svc, depth+1); mm || !mk {
-				return mm, mk
+			mm, mk := serviceHolds(m, proto, port, svc, depth+1)
+			if mm {
+				return true, true
 			}
+			known = known && mk
 		}
-		return false, true
+		return false, known
 	}
 	value, ok := svc["service:"+name]
 	if !ok {

@@ -24,7 +24,7 @@ GOFUMPT     := $(GOBIN)/gofumpt
 GOVULNCHECK := $(GOBIN)/govulncheck
 
 .PHONY: help tools fmt fmt-check vet lint test test-race cover test-cov \
-        vuln vuln-tool tidy-check gate ci build build-local schema-digest context context-check \
+        bench-check vuln vuln-tool tidy-check gate ci build build-local schema-digest context context-check \
         schema-pull hooks clean
 
 help: ## Show this help
@@ -67,6 +67,9 @@ cover: ## Run tests and print a coverage summary (report-only, no gate)
 test-cov: ## Run tests and fail if a package drops below its coverage floor
 	@bash scripts/coverage-gate.sh coverage-floors.txt
 
+bench-check: ## Run every benchmark once, so a broken one fails (R7)
+	go test -run '^$$' -bench . -benchtime 1x ./...
+
 vuln: ## Scan dependencies for known vulnerabilities
 	$(GOVULNCHECK) ./...
 
@@ -77,7 +80,7 @@ tidy-check: ## Fail if go.mod/go.sum are not tidy
 
 gate: tidy-check lint test ## Fast pre-commit gate (tidy + lint + unit tests)
 
-ci: tidy-check lint test-race test-cov context-check build vuln ## Everything CI runs
+ci: tidy-check lint test-race test-cov bench-check context-check build vuln ## Everything CI runs
 
 ## --- schema / build ---
 

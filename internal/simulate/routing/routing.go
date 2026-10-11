@@ -86,6 +86,10 @@ type Hop struct {
 	PBF             []string           `json:"pbf,omitempty"`              // PBF rules that can redirect the flow here
 	ZonePlaceholder bool               `json:"zone_placeholder,omitempty"` // a zone name is a placeholder
 	Fidelity        simulate.Fidelity  `json:"fidelity"`
+	// PBFDoubts are why the PBF rule in PBF may not take the flow, each with
+	// its own code: the rule's doubts, and those of the no-pbf rules above it
+	// that may match first. The PBF note and stage name them as text.
+	PBFDoubts simulate.Reasons `json:"-"`
 	// NATDoubts are the NAT rules that may match instead of the one the hop
 	// applies, each with its reasons; the notes name them as text.
 	NATDoubts []natsim.Doubt `json:"-"`
@@ -122,7 +126,7 @@ func (Simulation) Run(ctx context.Context, env *simulate.Env, in simulate.Input)
 		return run, &simulate.ChoiceError{Question: "the source must be an IPv4 address; IPv6 is not simulated yet"}
 	}
 	s := newState(env, in)
-	s.path.Notes = append(s.path.Notes, simulate.DNSNotes(in.Flow, true)...)
+	s.path.Notes = append(s.path.Notes, simulate.DNSNotes(in.Flow, "traced")...)
 	stages, err := simulate.Execute(ctx, Kind, s, []simulate.Step[state]{{Name: "place the start", Slug: "place", Do: place}}, false, env.Log)
 	run.Stages = append(run.Stages, stages...)
 	for err == nil && !s.done {

@@ -45,11 +45,19 @@ Eight stages, each ANDing into the running candidate set:
 | `order` | exact; sets `Verdict.Doubts` per candidate (spec 2026-10-07 §4.7) |
 | `first-match` | exact; overmatch when earlier doubtful candidates share the action; undermatch (undecided) when one has another action, or no rule and the zones are not single and known; not evaluated: application or user only when a candidate up to the decision names one |
 
-`derive-zones` also applies `rule-type` when both zones are given and defined in the
-vsys; otherwise typed rules stay with an overmatch reason. The decision (§4.7): the
-first candidate without doubt decides; with none, the default rule
-(`intrazone-default`/`interzone-default`; local, then pushed override, else the
-built-in action; local and pushed that disagree are undecided). Doubts come from
+`derive-zones` also applies `rule-type` when both zones are given, or derived with
+one defined zone on each side and no NAT rule in doubt (inferred, C5); that pair is
+`state.from`/`state.to`. `Run` refuses a given zone the vsys does not define with a
+`*simulate.ChoiceError` of kind `simulate.ChoiceZone` that lists its zones
+(`rulebase.UndefinedZones`, C15); `query.PolicyFile` checks the same first
+(`givenZones`): a usage error, or a hole per vsys when another selected vsys defines
+the zone; and path mode leaves the check not evaluated (the hop has its
+`zone.undefined` doubt). With several derived zones on a side, none, or a NAT rule
+in doubt, typed rules stay and each gets a `zone.derived` doubt
+(`state.ruleTypeOpen`). The decision (§4.7): the first candidate without doubt
+decides; with none, the default rule chosen by the known pair, given or derived
+(C16) (`intrazone-default`/`interzone-default`; local, then pushed override, else
+the built-in action; local and pushed that disagree are undecided). Doubts come from
 `doubt.go` (`ruleFields` classifies every schema child of the rule entry, guarded by
 a test): application, user, HIP, schedule, `application-default`, predefined or
 absent service, a URL category without `--url` or not defined, and an EDL, region or
@@ -103,20 +111,21 @@ with interfaces without a router).
 ### pathpolicy
 
 `pathpolicy.Run(ctx, env, in)` answers a flow along its path (spec 2026-10-07 §4,
-§5). It is a function package, not a registered kind. It runs routing once, then
-per hop: the path's doubts (ECMP, a PBF rule, PBF or NAT undermatch, a start by a
-default route), zone validity (both zones named, defined in the hop's vsys, not a
-placeholder), and each `Check` in list order. Today the one check is `Security`:
-securitypolicy with the hop's zones given and each endpoint trimmed to the traced
-address. Its fidelity is the weakest of the address, zone and `first-match` stages,
-capped by a routed start or inferred NAT; a version gap is inferred. A hop that
-routing drops runs no check. The fold: the first undecided or stopping hop sets
-`At`; undecided wins over stop on one hop; a later stop after an undecided point is
-a note; hops after a stop carry `AfterDeny`; with no point, routing's end decides
-(delivered or local: allowed; dropped: denied; any other end: undecided). Routing's
-`ChoiceError` and `UnavailableError` return unchanged; an unreadable hop
-configuration is a hole. `internal/simulate/pathlab` is the two-firewall fixture
-its tests share with the CLI's.
+§5). It is a function package, not a registered kind. It runs routing once, then per
+hop: the path's doubts (ECMP, a PBF rule and each reason it only may match, with
+its own code, PBF or NAT undermatch, each NAT rule in doubt, a start by a default
+route), zone validity (both zones named, defined in the
+hop's vsys, not a placeholder), and each `Check` in list order. Today the one check
+is `Security`: securitypolicy with the hop's zones given and each endpoint trimmed
+to the traced address. Its fidelity is the weakest of the address, zone and
+`first-match` stages, capped by a routed start or inferred NAT; a version gap is
+inferred. A hop that routing drops runs no check. The fold: the first undecided or
+stopping hop sets `At`; undecided wins over stop on one hop; a later stop after an
+undecided point is a note; hops after a stop carry `AfterDeny`; with no point,
+routing's end decides (delivered or local: allowed; dropped: denied; any other end:
+undecided). Routing's `ChoiceError` and `UnavailableError` return unchanged; an
+unreadable hop configuration is a hole. `internal/simulate/pathlab` is the
+two-firewall fixture its tests share with the CLI's.
 
 ## Build / run pointers
 
@@ -173,6 +182,7 @@ func (f Fidelity) SkippedReasons() Reasons
 func (f Fidelity) String() string
 func (f Fidelity) UnderMatchGroups() []Reasons
 func (f Fidelity) UnderMatchReasons() Reasons
+func (f Flow) FirstAddresses() Flow
 func (m Match) First() resolve.FIBRoute
 func (m Missing) Why() reason.Reason
 func (p Port) Link() netip.Prefix
@@ -182,7 +192,7 @@ func (rs Reasons) Text() string
 func (rs Reasons) Texts() []string
 func (t Target) Index(rb resolve.Rulebase, vsys string) (*index.Index, error)
 func Addr(a netip.Addr) Endpoint
-func DNSNotes(f Flow, traced bool) Reasons
+func DNSNotes(f Flow, used string) Reasons
 func Execute[S any](ctx context.Context, kind string, state *S, steps []Step[S], keepBitmaps bool, log *runlog.Logger) ([]Stage, error)
 func NewMissing(device string, r reason.Reason) Missing
 func NotEvaluated(dimensions ...string) Fidelity
@@ -225,6 +235,7 @@ func (Simulation) Describe() string
 func (Simulation) Kind() string
 func (Simulation) Run(ctx context.Context, env *simulate.Env, in simulate.Input) (simulate.Run, error)
 func (Simulation) Stages() []string
+func NATDoubt(d natsim.Doubt) reason.Reason
 ```
 <!-- /GENERATED:api -->
 
@@ -286,20 +297,35 @@ func (t *Topology) Place(src netip.Addr) (Placement, error)
 func (t *Topology) Routers(node string) []string
 func (t *Topology) Start(node, router string, src netip.Addr) (simulate.Port, netip.Prefix, bool, error)
 func NewTopology(devs []simulate.DeviceData) *Topology
+func UnknownNextHopType(node string, m simulate.Match) (reason.Reason, bool)
 ```
 <!-- /GENERATED:api -->
 
 <!-- GENERATED:api ./internal/simulate/rulebase -->
 ```go
+type Addresses map[string]string
 type PBFMatch struct{ ... }
+type PBFPassed struct{ ... }
+type Side struct{ ... }
 type Vsys struct{ ... }
+type ZoneRefusal struct{ ... }
 
-func (v Vsys) Holds(value string, a netip.Addr) bool
-func (v Vsys) PBF(src, dst netip.Addr, in simulate.Port) PBFMatch
+func (m Addresses) Holds(value string, a netip.Addr) bool
+func (p PBFPassed) String() string
+func (s Side) Holds(i uint32) bool
+func (v Vsys) Addresses() Addresses
+func (v Vsys) PBF(src, dst netip.Addr, proto string, port uint16, in simulate.Port) PBFMatch
 func (v Vsys) Sides(rb resolve.Rulebase, src, dst netip.Addr, negated func(int) (bool, bool)) (
 func Certainty(rb resolve.Rulebase, unresolved []index.Unresolved) simulate.Fidelity
+func Defined(cfg *config.Config, sc config.Scope, rb resolve.Rulebase, field string) map[string]bool
 func FromFits(r resolve.PBFRule, in simulate.Port) bool
 func Load(load func(device, vsys string) (simulate.Target, error), device, vsys string) (Vsys, bool)
+func PassedText(ps []PBFPassed) string
+func Protocol(p string) string
+func ServiceTerm(proto string, port uint16) (string, bool)
+func Undecidable(values []string, defined map[string]bool, keywords ...string) bool
+func UndefinedService(cfg *config.Config, text string) reason.Reason
+func UndefinedZones(cfg *config.Config, sc config.Scope, from, to string) *ZoneRefusal
 ```
 <!-- /GENERATED:api -->
 
@@ -327,7 +353,6 @@ func (l *Logger) Persist() error
 func (l *Logger) Warnf(tag Tag, format string, args ...any)
 func (lv Level) String() string
 func Buffered(o Options) *Logger
-func Discard() *Logger
 func Open(o Options) (*Logger, error)
 func ParseLevel(s string) (Level, error)
 ```
@@ -339,7 +364,9 @@ func ParseLevel(s string) (Level, error)
   the arrival interface's zone, which a table only predicts (PAN-OS "Packet Flow
   Sequence").
 - **A default route does not place a source.** A source placed only by a default
-  route leaves the source zone open (not evaluated). Measured on fw01 on 2026-09-29:
+  route leaves the source zone open (not evaluated), from the forwarding table and
+  from a default static route in the configuration alike: each placement ends with
+  the route's prefix, which `viaDefault` reads. Measured on fw01 on 2026-09-29:
   derived zones agreed with the device for 3 of 7 probe flows (given zones: 7 of 7).
   The misses came from overlay routing the forwarding table does not show: traffic
   arriving on a tunnel zone whose source a specific route places elsewhere, and a

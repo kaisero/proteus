@@ -16,11 +16,11 @@ import (
 
 	"github.com/RoaringBitmap/roaring/v2"
 
-	"github.com/okaiser/proteus/internal/config"
 	"github.com/okaiser/proteus/internal/index"
 	"github.com/okaiser/proteus/internal/reason"
 	"github.com/okaiser/proteus/internal/resolve"
 	"github.com/okaiser/proteus/internal/simulate"
+	"github.com/okaiser/proteus/internal/simulate/rulebase"
 )
 
 // Kind is the registry key and the command name.
@@ -144,17 +144,26 @@ type state struct {
 	view   *index.View
 	rules  []resolve.Rule
 	cand   *roaring.Bitmap
-	// known is whether the flow's zones are single and known: given, one name
-	// each, and defined in the vsys. Only then do rule-type and the default rules
-	// decide (spec §4.6).
-	known bool
+	// known is whether the flow's zones are single and known: given, or derived
+	// with one zone on each side, and defined in the vsys. Only then do
+	// rule-type and the default rules decide (spec §4.6, C5, C16). from and to
+	// are that pair; the flow's own zones are empty when they are derived.
+	known    bool
+	from, to string
+	// ruleTypeOpen holds the intrazone and interzone rules derived zones could
+	// not judge: several zones, or none, on a side. Each candidate in it has a
+	// zone.derived doubt.
+	ruleTypeOpen *roaring.Bitmap
 	// opaque holds, per address field, the candidates kept because they name
 	// addresses the configuration does not hold, and why, by rule position.
 	opaque map[string]map[uint32][]reason.Reason
 	// fqdn holds, per address field, the candidates that matched the flow's
 	// FQDN only through an FQDN object, by rule position (spec 2026-10-09 §3.8).
-	fqdn    map[string]fqdnMatch
-	verdict Verdict
+	fqdn map[string]fqdnMatch
+	// serviceHits holds the rules whose service holds the flow's port through
+	// an object the configuration defines, or any; nil without a port.
+	serviceHits *roaring.Bitmap
+	verdict     Verdict
 }
 
 // fqdnMatch is the rules an FQDN reached only through an FQDN object, and the
@@ -176,6 +185,11 @@ func (Simulation) Run(ctx context.Context, env *simulate.Env, in simulate.Input)
 	idx, err := t.Index(resolve.Security, in.Vsys)
 	if err != nil {
 		return run, fmt.Errorf("%s: %s/%s: %w", Kind, in.Device, in.Vsys, err)
+	}
+	// A given zone the vsys does not define is a question the check cannot
+	// take (C15): the caller is told the vsys's zones.
+	if r := rulebase.UndefinedZones(t.Config, idx.Scope(), in.Flow.FromZone, in.Flow.ToZone); r != nil {
+		return run, r.Choice
 	}
 	s := &state{env: env, in: in, target: t, idx: idx, view: idx.With(t.Providers), rules: idx.Rules()}
 	s.verdict.Relevance = relevance(t.Providers.Zones, in.Flow)
@@ -228,17 +242,4 @@ func relevance(zl index.ZoneLocator, f simulate.Flow) Relevance {
 func isDefault(route string) bool {
 	p, err := netip.ParsePrefix(route)
 	return err == nil && p.Bits() == 0
-}
-
-// definedIn returns the names a configuration defines for the kinds a rule field
-// may name, so a value outside them is known to be predefined or unknown here.
-func definedIn(cfg *config.Config, sc config.Scope, field string) map[string]bool {
-	out := map[string]bool{}
-	for _, kind := range cfg.FieldKinds("rulebase/security/rules")[field] {
-		objs := resolve.ObjectsInScope(cfg, sc, kind)
-		for _, o := range objs {
-			out[o.Name] = true
-		}
-	}
-	return out
 }

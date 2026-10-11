@@ -1,0 +1,75 @@
+<config version="11.2.0" urldb="paloaltonetworks" detail-version="11.2.5">
+  <!-- A service group that holds a predefined service. web holds service-https,
+       which only the device's predefined services define, and svc-8443. Without
+       predefined.xml next to this file, web is not wholly defined: the security
+       rule web-deny above allow-all, from home to wan, and the PBF rule
+       web-discard from dmz only may match tcp/443. nested holds web through
+       inner-web. ssh-set holds only defined services, through inner-ssh. loop-a
+       and loop-b hold each other and svc-ssh; ring-a and ring-b hold only each
+       other. empty holds nothing. -->
+  <shared/>
+  <devices>
+    <entry name="localhost.localdomain">
+      <vsys>
+        <entry name="vsys1">
+          <zone>
+            <entry name="home"/>
+            <entry name="wan"/>
+            <entry name="dmz"/>
+          </zone>
+          <service>
+            <entry name="svc-8443"><protocol><tcp><port>8443</port></tcp></protocol></entry>
+            <entry name="svc-ssh"><protocol><tcp><port>22</port></tcp></protocol></entry>
+          </service>
+          <service-group>
+            <entry name="web"><members><member>service-https</member><member>svc-8443</member></members></entry>
+            <entry name="inner-web"><members><member>web</member></members></entry>
+            <entry name="nested"><members><member>svc-ssh</member><member>inner-web</member></members></entry>
+            <entry name="inner-ssh"><members><member>svc-ssh</member></members></entry>
+            <entry name="ssh-set"><members><member>inner-ssh</member><member>svc-8443</member></members></entry>
+            <entry name="loop-a"><members><member>loop-b</member><member>svc-ssh</member></members></entry>
+            <entry name="loop-b"><members><member>loop-a</member></members></entry>
+            <entry name="ring-a"><members><member>ring-b</member></members></entry>
+            <entry name="ring-b"><members><member>ring-a</member></members></entry>
+            <entry name="empty"><members/></entry>
+          </service-group>
+          <rulebase>
+            <security>
+              <rules>
+                <entry name="web-deny">
+                  <from><member>home</member></from>
+                  <to><member>wan</member></to>
+                  <source><member>any</member></source>
+                  <destination><member>any</member></destination>
+                  <application><member>any</member></application>
+                  <service><member>web</member></service>
+                  <action>deny</action>
+                </entry>
+                <entry name="allow-all">
+                  <from><member>home</member></from>
+                  <to><member>wan</member></to>
+                  <source><member>any</member></source>
+                  <destination><member>any</member></destination>
+                  <application><member>any</member></application>
+                  <service><member>any</member></service>
+                  <action>allow</action>
+                </entry>
+              </rules>
+            </security>
+            <pbf>
+              <rules>
+                <entry name="web-discard">
+                  <from><zone><member>dmz</member></zone></from>
+                  <source><member>any</member></source>
+                  <destination><member>any</member></destination>
+                  <service><member>web</member></service>
+                  <action><discard/></action>
+                </entry>
+              </rules>
+            </pbf>
+          </rulebase>
+        </entry>
+      </vsys>
+    </entry>
+  </devices>
+</config>

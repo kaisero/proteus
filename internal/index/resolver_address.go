@@ -10,15 +10,18 @@ import (
 	"github.com/okaiser/proteus/internal/resolve"
 )
 
-// addressResolver answers the address value space: prefixes, ranges and FQDNs.
+// addressResolver answers the address value space: prefixes, ranges, wildcards and
+// FQDNs.
 //
 // A prefix trie is the right structure for containment and stays. What changed is
 // where it sits: it used to be a field of the index, which made every reachability
-// question address-shaped.
+// question address-shaped. A wildcard object is no prefix, so it is kept apart and
+// matched by its mask.
 type addressResolver struct {
-	cidr  *cidrIndex
-	fqdn  map[string][]Hit
-	rules *rulesIndex
+	cidr      *cidrIndex
+	wildcards []wildcard
+	fqdn      map[string][]Hit
+	rules     *rulesIndex
 }
 
 func newAddressResolver(objs []resolve.Object, rules *rulesIndex) *addressResolver {
@@ -32,9 +35,16 @@ func newAddressResolver(objs []resolve.Object, rules *rulesIndex) *addressResolv
 		if v == "" || prefixesOf(v) != nil {
 			continue
 		}
-		// What is left is an FQDN or a wildcard. The firewall resolves an FQDN at
-		// runtime, so the configuration holds no addresses for it, but the name
-		// itself is still a value a caller can ask about.
+		if o.Wildcard {
+			if w, ok := parseWildcard(o); ok {
+				r.wildcards = append(r.wildcards, w)
+				continue
+			}
+		}
+		// What is left is an FQDN, or a wildcard this build cannot read. The
+		// firewall resolves an FQDN at runtime, so the configuration holds no
+		// addresses for it, but the name itself is still a value a caller can ask
+		// about.
 		key := strings.ToLower(v)
 		r.fqdn[key] = append(r.fqdn[key], Hit{Name: o.Name, Kind: o.Kind, Scope: o.Scope, Via: v})
 	}
@@ -44,11 +54,22 @@ func newAddressResolver(objs []resolve.Object, rules *rulesIndex) *addressResolv
 func (r *addressResolver) kinds() []string { return []string{"address", "address-group"} }
 
 func (r *addressResolver) resolve(value string, _ Providers) ([]Hit, []Unresolved, bool) {
-	if addr, err := netip.ParseAddr(value); err == nil {
-		return r.hitsOf(r.covering(addr)), nil, true
+	if p, ok := addressOrPrefix(value); ok {
+		// A /32 is one address, and is asked as the address is.
+		single := p.IsSingleIP()
+		var hits []Hit
+		if single {
+			hits = r.hitsOf(r.covering(p.Addr()))
+		} else {
+			hits = r.hitsOf(r.overlapping(p))
+		}
+		wild, un := r.matchWildcards([]netip.Prefix{p}, single)
+		return append(hits, wild...), un, true
 	}
-	if p, err := netip.ParsePrefix(value); err == nil {
-		return r.hitsOf(r.overlapping(p)), nil, true
+	for _, w := range r.wildcards {
+		if strings.EqualFold(w.Value, value) {
+			return []Hit{w.hit()}, nil, true
+		}
 	}
 	if hits, ok := r.fqdn[strings.ToLower(value)]; ok {
 		// The object is found by its FQDN, but the addresses behind that name are
@@ -61,13 +82,24 @@ func (r *addressResolver) resolve(value string, _ Providers) ([]Hit, []Unresolve
 }
 
 func (r *addressResolver) literalRules(f Field, value string) *roaring.Bitmap {
+	p, ok := addressOrPrefix(value)
+	switch {
+	case !ok:
+		return roaring.New()
+	case p.IsSingleIP():
+		return r.rules.withAddr(f, p.Addr())
+	}
+	return r.rules.withPrefix(f, p)
+}
+
+// addressOrPrefix reads a value as an address, which is a prefix of one
+// address, or as a prefix.
+func addressOrPrefix(value string) (netip.Prefix, bool) {
 	if addr, err := netip.ParseAddr(value); err == nil {
-		return r.rules.withAddr(f, addr)
+		return netip.PrefixFrom(addr, addr.BitLen()), true
 	}
-	if p, err := netip.ParsePrefix(value); err == nil {
-		return r.rules.withPrefix(f, p)
-	}
-	return roaring.New()
+	p, err := netip.ParsePrefix(value)
+	return p, err == nil
 }
 
 // covering returns every object whose value covers the address, most specific
@@ -101,6 +133,11 @@ func (r *addressResolver) search(substr string) []Hit {
 		}
 		for _, m := range ms {
 			out = append(out, Hit{Name: m.Name, Kind: "address", Scope: m.Scope, Via: m.Prefix.String()})
+		}
+	}
+	for _, w := range r.wildcards {
+		if strings.Contains(strings.ToLower(w.Value), want) {
+			out = append(out, w.hit())
 		}
 	}
 	for value, hits := range r.fqdn {

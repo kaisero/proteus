@@ -27,7 +27,8 @@ Three packages, dependency order strictly one-way — `config` <- `resolve` <- `
   table. It exposes the lookups and the report that comes with them.
   The reference edges are read once per configuration into an edge list
   (`index.ReadEdges`, kept by an `index.Set`); a scope's index holds positions into it, never its own copies, and
-  still sees only its own scope and shared. The list is a materialisation of the
+  still sees only its own scope, shared and the device-level configuration outside
+  any vsys (scope `config`: static routes, IKE gateways). The list is a materialisation of the
   file, not an index — it answers no question and is keyed by nothing — so R10
   still holds, and `TestNoGlobalIndex` is what proves it.
 
@@ -51,9 +52,10 @@ rule-field bitmaps. The rules whose field is `any` join them. The result is a
 Repo map:
 
 - `internal/config/` — `load.go` (Load, Panorama refusal, digest cache), `tree.go` (element tree),
-  `walk.go` (reference walk, `FieldKinds`, `KindContainers`), `embed.go`,
+  `walk.go` (`Event`, `FieldKinds`, `KindContainers`), `walkpath.go` (`WalkPaths`),
+  `describe.go` (`SchemaNode`, `ChildNode`, the undescribed count), `embed.go`,
   `schemadigest/` (embedded digests).
-- `internal/resolve/` — `target.go`, `rules.go`, `objects.go`, `groups.go`,
+- `internal/resolve/` — `target.go`, `rules.go`, `objects.go`,
   `filter.go` (tag filters), `urlpattern.go`, `profiles.go`, `zones.go`.
 - `internal/index/` — `index.go` (build + cache), `candidates.go` (the driver),
   `resolver*.go` (one file per value space), `closure.go`, `cidr.go`, `rules.go`,
@@ -65,7 +67,7 @@ Repo map:
   each step's status, detail and time, logs them, and stops at the first error.
   `fetch` uses it per device.
 - `internal/query/` — the questions as typed inputs and envelopes, for the command line and the MCP server; no flags, no rendering.
-- `internal/mcp/` — the MCP server: six tools over `query`, schemas generated at start (the same generator writes `schemas/out/`, `go test ./internal/mcp -update`), device enum from the exported inventory, resources and instructions, and a receiving middleware that audits each call and turns a panic into `call.internal` (it panics on in a test binary). `Serve(ctx, Options, transport)`, `Stdio()`, `ServeHTTP` (bearer token, Host check when `allowed_hosts` is set, `/healthz`, refusals counted by status in the process log); every tool annotated read-only; a snapshot cache with a load semaphore, a call limiter, the audit (a file rotated by size and count, or a stream such as standard output) and per-call run logs buffered in memory and written only for `internal` and `timeout` calls, or every call at debug. The only importer of the SDK and jsonschema-go. User docs: `docs/guides/mcp.md`.
+- `internal/mcp/` — the MCP server: six tools over `query`, schemas generated at start (the same generator writes `schemas/out/`, `go test ./internal/mcp -update`), device enum from the exported inventory, resources and instructions, and a receiving middleware that audits each call and turns a panic into `call.internal` (it panics on in a test binary). `Serve(ctx, Options, transport)`, `Streams(r, w)` for stdio, `ServeHTTP` (bearer token, Host check when `allowed_hosts` is set, `/healthz`, refusals counted by status in the process log); every tool annotated read-only; a snapshot cache with a load semaphore, a call limiter, the audit (a file rotated by size and count, or a stream such as standard output) and per-call run logs buffered in memory and written only for `internal` and `timeout` calls, or every call at debug. The only importer of the SDK and jsonschema-go. User docs: `docs/guides/mcp.md`.
 - `internal/estate/` — selectors and a time to targets and holes; `internal/search/` — five-stage findings for one term; `internal/card/` — the whole element behind one name, for `lookup`; `internal/drift/` — changes between two configurations.
 - `internal/inventory/` — the YAML device list and credentials; `internal/fetch/` — the read-only XML
   API client and the `Document` list; `internal/store/` — timestamped snapshots, `latest`.

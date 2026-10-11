@@ -21,7 +21,7 @@ type envelope struct {
 	Detail     string         `json:"detail,omitempty"` // the questions only
 	Input      any            `json:"input"`
 	Results    any            `json:"results"`
-	Summary    *query.Summary `json:"summary,omitempty"` // search and lookup
+	Summary    *query.Summary `json:"summary,omitempty"` // search, lookup and snapshot diff
 	Holes      []estate.Hole  `json:"holes"`
 	Unresolved []unresolved   `json:"unresolved"`
 	Notes      []note         `json:"notes"`

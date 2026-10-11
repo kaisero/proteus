@@ -1,12 +1,16 @@
 package card
 
 import (
+	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/okaiser/proteus/internal/config"
 	"github.com/okaiser/proteus/internal/index"
 	"github.com/okaiser/proteus/internal/resolve"
+	"github.com/okaiser/proteus/internal/testconfig"
 )
 
 func find(t *testing.T, fixture, name, kind string) []Card {
@@ -223,5 +227,202 @@ func TestAddressValue(t *testing.T) {
 	}
 	if plural(1, "entry", "entries") != "1 entry" || plural(12, "entry", "entries") != "12 entries" || itoa(0) != "0" {
 		t.Error("plural")
+	}
+}
+
+// A dynamic group whose filter starts with a parenthesis shows its filter, not
+// the filter text as a fake member (L1).
+func TestDynamicGroupWithAParenthesisedFilter(t *testing.T) {
+	t.Parallel()
+	d := one(t, "firewall-dynamic-filter.xml", "dag-paren")
+	if got := row(d, "members", "").Text; got != "dynamic, filter ('t-a' or 't-b')" {
+		t.Errorf("members = %q, sections %+v", got, d.Sections)
+	}
+}
+
+// A wildcard address object shows its address and mask (L2).
+func TestWildcardAddressShowsItsValue(t *testing.T) {
+	t.Parallel()
+	a := one(t, "firewall-wildcard.xml", "wc")
+	if got := row(a, "value", "").Text; got != "wildcard 10.88.2.1/0.0.255.0" {
+		t.Errorf("value = %q, sections %+v", got, a.Sections)
+	}
+}
+
+// lookup shows a predefined service stored next to the configuration (L4) with
+// its ports and scope predefined, and a rule naming it with the ports. A
+// configured service of the same name hides it (L7).
+func TestAPredefinedServiceCard(t *testing.T) {
+	t.Parallel()
+	s := one(t, "../predefined/config.xml", "service-https")
+	if s.Kind != "service" || s.Scope.String() != "predefined" || row(s, "value", "").Text != "tcp/443" || s.Shadows != "" {
+		t.Errorf("service-https = %+v", s)
+	}
+	g := one(t, "../predefined/config.xml", "g-web")
+	if flat(row(g, "members", "").Items) != "service-http(tcp/80,8080)" {
+		t.Errorf("g-web = %+v", g.Sections)
+	}
+	r := one(t, "../predefined/config.xml", "web-https")
+	if got := flat(row(r, "service", "").Items); got != "service-https(tcp/443)" {
+		t.Errorf("web-https service = %s", got)
+	}
+	c := one(t, "../predefined-configured/config.xml", "service-https")
+	if c.Scope.String() != "vsys:vsys1" || row(c, "value", "").Text != "tcp/8443" || c.Shadows != "predefined" {
+		t.Errorf("configured service-https = %+v", c)
+	}
+}
+
+// As observed on fw02, PAN-OS 12.2.3 (L9): a service name resolves by scope
+// first, kind second. vsys1's service group service-https hides the predefined
+// service, and vsys1's service web hides shared's service group web, so the
+// cards and a rule's service show only the vsys objects.
+func TestAServiceNameResolvesByScopeFirst(t *testing.T) {
+	t.Parallel()
+	for name, want := range map[string]string{"service-https": "service-group vsys:vsys1", "web": "service vsys:vsys1"} {
+		cs := find(t, "../predefined-cross-kind/config.xml", name, "")
+		var got []string
+		for _, c := range cs {
+			got = append(got, c.Kind+" "+c.Scope.String())
+		}
+		if strings.Join(got, "; ") != want {
+			t.Errorf("%s: cards %v, want %s", name, got, want)
+		}
+	}
+	for rule, want := range map[string]string{"sec-https": "service-https{svc-8443(tcp/8443)}", "sec-web": "web(tcp/8081)"} {
+		if got := flat(row(one(t, "../predefined-cross-kind/config.xml", rule), "service", "").Items); got != want {
+			t.Errorf("%s service = %s, want %s", rule, got, want)
+		}
+	}
+}
+
+// A group opens at its shallowest place on a card. The rule's source names all
+// and web, and all holds web as its seventh member, where a rendered card cuts
+// the list; so web opens where the rule names it, and inside all it says its
+// members are shown elsewhere.
+func TestAGroupOpensAtItsShallowestPlace(t *testing.T) {
+	t.Parallel()
+	var addrs, members strings.Builder
+	for i := range 6 {
+		fmt.Fprintf(&addrs, `<entry name="a%d"><ip-netmask>10.88.0.%d</ip-netmask></entry>`, i, i+1)
+		fmt.Fprintf(&members, `<member>a%d</member>`, i)
+	}
+	doc := `<config version="11.2.0" urldb="paloaltonetworks"><devices><entry name="localhost.localdomain"><vsys><entry name="vsys1">` +
+		`<address>` + addrs.String() + `<entry name="w1"><ip-netmask>10.88.1.1</ip-netmask></entry></address>` +
+		`<address-group><entry name="all"><static>` + members.String() + `<member>web</member></static></entry>` +
+		`<entry name="web"><static><member>w1</member></static></entry></address-group>` +
+		`<rulebase><security><rules><entry name="r1"><from><member>any</member></from><to><member>any</member></to>` +
+		`<source><member>all</member><member>web</member></source><destination><member>any</member></destination>` +
+		`<application><member>any</member></application><service><member>any</member></service><action>allow</action>` +
+		`</entry></rules></security></rulebase></entry></vsys></entry></devices></config>`
+	path := filepath.Join(t.TempDir(), "firewall.xml")
+	if err := os.WriteFile(path, []byte(doc), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, _, err := config.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	idx, err := index.New(cfg, config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}, resolve.Security)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cs, err := Find(cfg, idx, "r1", KindRule)
+	if err != nil || len(cs) != 1 {
+		t.Fatalf("Find: %d cards, %v", len(cs), err)
+	}
+	want := "all{a0(10.88.0.1/32), a1(10.88.0.2/32), a2(10.88.0.3/32), a3(10.88.0.4/32), a4(10.88.0.5/32), a5(10.88.0.6/32), " +
+		"web(members shown elsewhere on this card)}, web{w1(10.88.1.1/32)}"
+	if got := flat(row(cs[0], "source", "addresses").Items); got != want {
+		t.Errorf("source = %s\nwant     %s", got, want)
+	}
+}
+
+// As observed on fw02, PAN-OS 12.2.3 (L10): addresses resolve by scope first,
+// kind second, as services do.
+func TestAnAddressNameResolvesByScopeFirst(t *testing.T) {
+	t.Parallel()
+	for rule, want := range map[string]string{"sec-a": "rv-adr(10.88.8.8/32)", "sec-b": "rv-adr2{rv-a6(10.88.6.6/32)}"} {
+		if got := flat(row(one(t, "firewall-address-cross-kind.xml", rule), "source", "addresses").Items); got != want {
+			t.Errorf("%s source = %s, want %s", rule, got, want)
+		}
+	}
+}
+
+// An address and a service may share a name; each card lists only the groups of
+// its own kind that hold it.
+func TestHeldByKeepsToTheObjectsKind(t *testing.T) {
+	t.Parallel()
+	held := map[string]string{}
+	for _, c := range find(t, "firewall-shared-names.xml", "dual", "") {
+		held[c.Kind] = flat(row(c, "held by", "").Items)
+	}
+	if held["address"] != "g-dual-addr" || held["service"] != "g-dual-svc" {
+		t.Errorf("held by = %v", held)
+	}
+	if got := flat(row(one(t, "firewall-shared-names.xml", "svc-web"), "held by", "").Items); got != "webgrp" {
+		t.Errorf("svc-web held by %s", got)
+	}
+}
+
+// A group that several groups hold opens once on a card: met again, it shows no
+// members and says so. A group met inside itself is still a cycle. So the card of
+// the first of 30 groups that each hold three others names each group's members
+// once; before, it opened a group on every path to it, and grew exponentially.
+func TestACardOpensEachGroupOnce(t *testing.T) {
+	t.Parallel()
+	cfg, _, err := config.Load(testconfig.Write(t, testconfig.Groups{Addrs: 100, Dense: 30}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	idx, err := index.New(cfg, config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}, resolve.Security)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cs, err := Find(cfg, idx, "d-0", "address-group")
+	if err != nil || len(cs) != 1 {
+		t.Fatalf("Find: %d cards, %v", len(cs), err)
+	}
+	opened := map[string]int{"d-0": 1}
+	marks := map[string]int{}
+	items := 0
+	var walk func([]Item)
+	walk = func(its []Item) {
+		for _, it := range its {
+			items++
+			if it.Kind != "address-group" {
+				continue
+			}
+			if len(it.Children) > 0 {
+				opened[it.Name]++
+				walk(it.Children)
+				continue
+			}
+			marks[it.Value]++
+		}
+	}
+	walk(row(cs[0], "members", "").Items)
+	for g, n := range opened {
+		if n != 1 {
+			t.Errorf("%s opened %d times, want once", g, n)
+		}
+	}
+	// Each of the 30 groups opens once and names three groups and an address.
+	if len(opened) != 30 || items != 30*4 || marks["cycle"] == 0 || marks["members shown elsewhere on this card"] == 0 ||
+		marks["cycle"]+marks["members shown elsewhere on this card"] != 30*3-29 {
+		t.Errorf("%d groups opened, %d items, marks %v", len(opened), items, marks)
+	}
+}
+
+// An application group lists its members by name, and an external list says what
+// it is: the configuration holds neither's contents.
+func TestApplicationGroupAndExternalListCards(t *testing.T) {
+	t.Parallel()
+	g := one(t, "firewall-apps.xml", "erp-bundle")
+	if g.Kind != "application-group" || flat(row(g, "members", "").Items) != "custom-erp, ssl" {
+		t.Errorf("application group = %+v", g)
+	}
+	e := one(t, "firewall-opaque.xml", "edl-bad")
+	if e.Kind != "external-list" || row(e, "value", "").Text != "external list, ip" {
+		t.Errorf("external list = %+v", e)
 	}
 }

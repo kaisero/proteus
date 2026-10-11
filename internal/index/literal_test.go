@@ -185,7 +185,7 @@ func idsFor(idx *Index, addr netip.Addr) []uint32 {
 	var ids []uint32
 	for _, m := range idx.Containing(addr) {
 		ids = append(ids, in.ID(m.Name))
-		for _, g := range idx.GroupsOf(m.Name) {
+		for _, g := range groupsOf(idx, m.Name) {
 			ids = append(ids, in.ID(g))
 		}
 	}

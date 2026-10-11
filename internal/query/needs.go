@@ -9,6 +9,7 @@ import (
 	"github.com/okaiser/proteus/internal/simulate/nat"
 	"github.com/okaiser/proteus/internal/simulate/pathpolicy"
 	"github.com/okaiser/proteus/internal/simulate/routing"
+	"github.com/okaiser/proteus/internal/simulate/rulebase"
 	"github.com/okaiser/proteus/internal/simulate/securitypolicy"
 )
 
@@ -17,7 +18,7 @@ import (
 // its name as a tool takes it, and Text says what to give and which rules it
 // decides, in the tool's words.
 type Need struct {
-	Code  reason.Code `json:"code" jsonschema:"the input's code: input.port, input.protocol or input.url"`
+	Code  reason.Code `json:"code" jsonschema:"the input's code: input.port, input.protocol, input.url, input.from-zone or input.to-zone"`
 	Input string      `json:"input" jsonschema:"the input to give in a second call"`
 	Text  string      `json:"text" jsonschema:"what to give and which rules it decides"`
 }
@@ -41,12 +42,17 @@ var needKinds = []struct {
 	{"input.protocol", "protocol", "give the protocol: tcp, udp or sctp", "the service"},
 	{"input.port", "port", "give the destination port", "the service"},
 	{"input.url", "url", "give the URL", "the URL category"},
+	{"input.from-zone", "from_zone", "give the source zone, with to_zone", "the rule-type"},
+	{"input.to-zone", "to_zone", "give the destination zone, with from_zone", "the rule-type"},
 }
 
 // needsOf is what the causes need from a second call, given the flow asked.
 // A service judged without a port needs the port only for tcp, udp or sctp,
 // and the protocol too when none was given (the tools have no protocol
-// default); icmp or another protocol never needs a port. Every other code
+// default); icmp or another protocol never needs a port. A protocol given by
+// number counts by its name. A NAT service whose port fits without a protocol
+// needs the protocol. Derived zones that leave rule-type or the default rule
+// open need both zones. Every other code
 // needs nothing a second call can give: a predefined category, an
 // application, a user, a gap, a path, a zone or a default rule. The result is
 // never nil, so an undecided answer prints [] when nothing helps.
@@ -62,12 +68,23 @@ func needsOf(flow simulate.Flow, causes []cause) []Need {
 	for _, c := range causes {
 		switch c.code {
 		case "doubt.service-no-port", "path.nat-no-port":
-			proto := strings.ToLower(flow.Protocol)
+			proto := rulebase.Protocol(flow.Protocol)
 			if proto == "" {
 				add("input.protocol", c.rule)
 			}
 			if flow.DestPort == 0 && (proto == "" || proto == "tcp" || proto == "udp" || proto == "sctp") {
 				add("input.port", c.rule)
+			}
+		case "path.nat-no-protocol":
+			if flow.Protocol == "" {
+				add("input.protocol", c.rule)
+			}
+		case "zone.derived", "default.zones-unknown":
+			// Given zones settle rule-type and the default rule; one
+			// configuration takes both or neither.
+			if flow.FromZone == "" {
+				add("input.from-zone", c.rule)
+				add("input.to-zone", c.rule)
 			}
 		case "doubt.category-no-url":
 			if flow.URL == "" {
@@ -199,11 +216,13 @@ func securityNeeds(flow simulate.Flow, verdict string, v *securitypolicy.Verdict
 
 // pathNeeds is a path answer's needs: each undecided check's doubts and each
 // hop's NAT doubts; the fidelity's reasons too unless a check or a NAT rule met
-// a doubt no input can fix.
+// a doubt no input can fix. The path gives each hop's zones, so no zone is
+// asked for.
 func pathNeeds(flow simulate.Flow, r pathpolicy.Result) []Need {
 	if !holdsBack(r.Verdict == pathpolicy.VerdictUndecided, r.Fidelity) {
 		return nil
 	}
+	flow.FromZone, flow.ToZone = "path", "path"
 	var causes []cause
 	blocked := false
 	for _, h := range r.Hops {
@@ -223,14 +242,19 @@ func pathNeeds(flow simulate.Flow, r pathpolicy.Result) []Need {
 }
 
 // routingNeeds is a routing answer's needs. A hop whose NAT rule another rule
-// may replace leaves the path undecided there.
+// may replace leaves the path undecided there. So does a hop whose PBF rule may
+// or may not take the flow: why it may not, such as a service without the
+// port, is a cause an input can settle.
 func routingNeeds(flow simulate.Flow, p routing.Path, f simulate.Fidelity) []Need {
 	var causes []cause
 	doubted, blocked := false, false
 	for _, h := range p.Hops {
 		cs, b := natCauses(flow, h.NATDoubts)
 		causes, blocked = append(causes, cs...), blocked || b
-		doubted = doubted || len(h.NATDoubts) > 0
+		for _, r := range h.PBFDoubts {
+			causes = append(causes, cause{code: r.Code})
+		}
+		doubted = doubted || len(h.NATDoubts) > 0 || len(h.PBFDoubts) > 0
 	}
 	if !holdsBack(doubted, f) {
 		return nil

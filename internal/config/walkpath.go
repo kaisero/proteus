@@ -52,12 +52,18 @@ func buildPathTable(root *schema.Node) pathTable {
 }
 
 // WalkPaths yields every reference value in the configuration, scoped, locating
-// each by its path below the entry that holds it.
+// each by its path below the entry that holds it. It returns when the tree is
+// exhausted or the callback returns false.
 //
-// It replaces Walk. Walk sees one shape, entry/<field>/member, which is 397 of
-// the firewall schema's 1,991 reference leaves: it cannot see a leaf that is an
-// element's text, such as a rule's log-setting, nor one below a named union,
-// such as a rule's profile-setting/group/member.
+// It sees every shape of reference leaf: a member list such as a rule's source,
+// an element's text such as a rule's log-setting, and a leaf below a named
+// union such as a rule's profile-setting/group/member.
+//
+// The tree is already parsed, so this walks memory rather than the file. Two
+// details still matter and are covered by tests. A nested config element is an
+// ordinary child, so nothing here treats one as a boundary. And an event's
+// EntryPath names its entries, because two vsys can each hold an object of the
+// same name.
 func (c *Config) WalkPaths(fn func(Event) bool) error {
 	stop := false
 	walkPathElement(c.root, c.schema.paths, Scope{Sort: ScopeConfig}, fn, &stop)
@@ -90,10 +96,9 @@ func walkPathElement(e *Element, pt pathTable, scope Scope, fn func(Event) bool,
 // fieldName names a leaf for display and for the reference key.
 //
 // A member list's path ends at member, which says nothing a reader wants, so it
-// is dropped: source/member is source, exactly what Walk reported. What remains
-// is a path only where the leaf really is nested, as in profile-setting/group.
-// Trimming cannot collide, because an element is either a member list or a text
-// leaf and never both.
+// is dropped: source/member is source. What remains is a path only where the
+// leaf really is nested, as in profile-setting/group. Trimming cannot collide,
+// because an element is either a member list or a text leaf and never both.
 func fieldName(path []string) string {
 	if n := len(path); n > 1 && path[n-1] == "member" {
 		path = path[:n-1]
@@ -127,7 +132,6 @@ func emitPaths(entry *Element, trie *pathNode, schemaPath string, scope Scope, f
 						epath = entry.InstancePath()
 					}
 					if !fn(Event{
-						Kind:       EventReference,
 						Scope:      scope,
 						EntryPath:  epath,
 						SchemaPath: schemaPath,

@@ -6,7 +6,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
+	"maps"
 	"net"
 	"net/http"
 	"os"
@@ -367,50 +369,18 @@ func TestMCPOverStdio(t *testing.T) {
 	c := mcpLab(t, "")
 	auditPath := filepath.Join(c.dir, "audit.jsonl")
 	c.env["PROTEUS_MCP_AUDIT_LOG"] = auditPath
-	in, client := io.Pipe()
-	out := &syncBuffer{}
-	done := make(chan int, 1)
-	go func() { done <- c.serveMCP(context.Background(), in, out, io.Discard, "--log-level", "debug") }()
-	send := func(line string) {
-		t.Helper()
-		if _, err := io.WriteString(client, line+"\n"); err != nil {
-			t.Fatal(err)
-		}
-	}
-	waitFor := func(id string) map[string]any {
-		t.Helper()
-		for range 1000 {
-			for line := range strings.SplitSeq(out.String(), "\n") {
-				var msg map[string]any
-				if json.Unmarshal([]byte(line), &msg) == nil && mustJSON(t, msg["id"]) == id {
-					return msg
-				}
-			}
-			time.Sleep(5 * time.Millisecond)
-		}
-		t.Fatalf("no answer %s; stdout:\n%s", id, out.String())
-		return nil
-	}
-	send(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"t","version":"1"}}}`)
-	waitFor("1")
-	send(`{"jsonrpc":"2.0","method":"notifications/initialized"}`)
-	send(`{"jsonrpc":"2.0","id":2,"method":"tools/list"}`)
-	if tools := mustJSON(t, waitFor("2")); !strings.Contains(tools, `"enum":["fw01"]`) || !strings.Contains(tools, `"simulate_policy"`) {
+	s := c.stdio(t, "--log-level", "debug")
+	s.send(`{"jsonrpc":"2.0","id":2,"method":"tools/list"}`)
+	if tools := mustJSON(t, s.wait("2")); !strings.Contains(tools, `"enum":["fw01"]`) || !strings.Contains(tools, `"simulate_policy"`) {
 		t.Errorf("tools/list: %s", tools)
 	}
-	send(`{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"search","arguments":{"value":"198.18.10.100"}}}`)
-	res := waitFor("3")
+	s.send(`{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"search","arguments":{"value":"198.18.10.100"}}}`)
+	res := s.wait("3")
 	if r := mustJSON(t, res["result"]); !strings.Contains(r, `"envelope"`) || strings.Contains(r, `"isError":true`) {
 		t.Errorf("tools/call: %s", r)
 	}
-	_ = client.Close()
-	select {
-	case code := <-done:
-		if code != 0 {
-			t.Errorf("exit %d after the client went", code)
-		}
-	case <-time.After(10 * time.Second):
-		t.Fatal("the server did not end with its input")
+	if code := s.end(); code != 0 {
+		t.Errorf("exit %d after the client went", code)
 	}
 	line := strings.TrimSpace(read(t, auditPath))
 	var audited map[string]any
@@ -427,6 +397,132 @@ func TestMCPOverStdio(t *testing.T) {
 	// The command's own run log is the CLI's, apart from the calls' logs.
 	if l := c.logFile(); !strings.Contains(l, "proteus dev: mcp") || !strings.Contains(l, "[RUN] exit 0") {
 		t.Errorf("command log:\n%s", l)
+	}
+}
+
+// stdioServer is proteus mcp over stdio, initialized.
+type stdioServer struct {
+	t      *testing.T
+	client *io.PipeWriter
+	out    *syncBuffer
+	done   chan int
+}
+
+// stdio starts proteus mcp over stdio with args and initializes the session.
+func (c *cli) stdio(t *testing.T, args ...string) *stdioServer {
+	t.Helper()
+	in, client := io.Pipe()
+	s := &stdioServer{t: t, client: client, out: &syncBuffer{}, done: make(chan int, 1)}
+	go func() { s.done <- c.serveMCP(context.Background(), in, s.out, io.Discard, args...) }()
+	s.send(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"t","version":"1"}}}`)
+	s.wait("1")
+	s.send(`{"jsonrpc":"2.0","method":"notifications/initialized"}`)
+	return s
+}
+
+// send writes one JSON-RPC message.
+func (s *stdioServer) send(line string) {
+	s.t.Helper()
+	if _, err := io.WriteString(s.client, line+"\n"); err != nil {
+		s.t.Fatal(err)
+	}
+}
+
+// wait is the answer with id.
+func (s *stdioServer) wait(id string) map[string]any {
+	s.t.Helper()
+	for range 1000 {
+		for line := range strings.SplitSeq(s.out.String(), "\n") {
+			var msg map[string]any
+			if json.Unmarshal([]byte(line), &msg) == nil && mustJSON(s.t, msg["id"]) == id {
+				return msg
+			}
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	s.t.Fatalf("no answer %s; stdout:\n%s", id, s.out.String())
+	return nil
+}
+
+// end closes the input and returns the exit code.
+func (s *stdioServer) end() int {
+	s.t.Helper()
+	_ = s.client.Close()
+	select {
+	case code := <-s.done:
+		return code
+	case <-time.After(10 * time.Second):
+		s.t.Fatal("the server did not end with its input")
+		return -1
+	}
+}
+
+// The server reads PROTEUS_USERS once at start: every call answers from that
+// snapshot, also after the file changed (spec C12). A file that does not
+// read stops the start with exit 2, naming the variable and the file.
+func TestMCPReadsTheUsersOnce(t *testing.T) {
+	t.Parallel()
+	c := newCLI(t)
+	d := lab(t)
+	d.Config = read(t, "../../testdata/config/firewall-users.xml")
+	c.inventory(exporting(inventoryFor(d.Start(t))))
+	c.want(0, "fetch", "fw01")
+	if err := os.Remove(c.cfgPath); err != nil {
+		t.Fatal(err)
+	}
+	c.env["PROTEUS_MCP_LOG_DIR"] = filepath.Join(c.dir, "mcp-log")
+	users := filepath.Join(c.dir, "users.json")
+	write := func(body string) {
+		t.Helper()
+		if err := os.WriteFile(users, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write(read(t, "../../testdata/users-snapshot.json"))
+	c.env["PROTEUS_USERS"] = users
+	s := c.stdio(t)
+	call := `{"jsonrpc":"2.0","id":%d,"method":"tools/call","params":{"name":"search","arguments":{"value":"ACME\\carol"}}}`
+	s.send(fmt.Sprintf(call, 2))
+	if r := mustJSON(t, s.wait("2")["result"]); !strings.Contains(r, "engineering-allowed") || strings.Contains(r, `"isError":true`) {
+		t.Errorf("with the users file: %s", r)
+	}
+	// A changed file does not reach the running server.
+	write("not json")
+	s.send(fmt.Sprintf(call, 3))
+	if r := mustJSON(t, s.wait("3")["result"]); !strings.Contains(r, "engineering-allowed") || strings.Contains(r, `"isError":true`) {
+		t.Errorf("after the file changed: %s", r)
+	}
+	if code := s.end(); code != 0 {
+		t.Errorf("exit %d", code)
+	}
+	// A bad file stops the start: missing, unreadable or invalid.
+	dir := filepath.Join(c.dir, "users-dir")
+	if err := os.Mkdir(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	cases := []struct {
+		name, path, msg string
+	}{
+		{"missing", filepath.Join(c.dir, "none.json"), "PROTEUS_USERS: open " + filepath.Join(c.dir, "none.json")},
+		{"a directory", dir, "PROTEUS_USERS: " + dir + ": user snapshot"},
+		{"invalid", users, "PROTEUS_USERS: " + users + ": user snapshot"},
+	}
+	if os.Geteuid() != 0 {
+		// root reads a file of mode 0000.
+		locked := filepath.Join(c.dir, "locked.json")
+		if err := os.WriteFile(locked, []byte(read(t, "../../testdata/users-snapshot.json")), 0o000); err != nil {
+			t.Fatal(err)
+		}
+		cases = append(cases, struct{ name, path, msg string }{"unreadable", locked, "PROTEUS_USERS: open " + locked + ": permission denied"})
+	}
+	for _, tc := range cases {
+		cc := *c
+		cc.env = maps.Clone(c.env)
+		cc.env["PROTEUS_USERS"] = tc.path
+		var errOut bytes.Buffer
+		if code := cc.serveMCP(context.Background(), strings.NewReader(""), io.Discard, &errOut); code != 2 || !strings.Contains(errOut.String(), tc.msg) {
+			t.Errorf("%s: exit %d, stderr:\n%s", tc.name, code, errOut.String())
+		}
 	}
 }
 

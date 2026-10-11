@@ -94,7 +94,7 @@ one of them at a time.
 
 | Flag | Keeps |
 | --- | --- |
-| `--within` | values that lie inside the term (addresses, prefixes, ranges) |
+| `--within` | values that lie wholly inside the term (addresses, prefixes, ranges) |
 | `--exact` | values equal to the term |
 | `--contains` | names and values that hold the term as text |
 
@@ -109,6 +109,10 @@ file / vsys1   testdata/config/firewall-multivsys.xml
   reference  security rule        Corp DC Access           destination -> corp-dc
 1 with results, 0 without, 0 holes
 ```
+
+`--within` and `--exact` compare an address's whole value, in an object or written
+into a rule. The range `10.0.0.2-10.0.0.9` is not within `10.0.0.0/29`, because
+two of its addresses lie outside it, and it is not exactly `10.0.0.4/30`.
 
 `--contains` is a text search. It is not matching. Use it to find a long URL in a
 custom URL category, because a category name cannot hold it:
@@ -194,3 +198,31 @@ The snapshot format is:
 | `--direct` | keeps groups one level up |
 | `--why` | adds each finding's answer line under its row |
 | `--device`, `--label k=v`, `--vsys` | narrow the devices and vsys |
+| `--limit N` | keeps the first N findings (see below) |
+
+## Keep the first findings
+
+A broad term can find thousands of places across an estate. `--limit N` keeps
+the first N findings, in the usual order, over all devices and vsys together.
+There is no default: without `--limit`, search returns every finding.
+
+```
+$ proteus search 10.124.0.1 --limit 2 --file testdata/config/firewall-multivsys.xml
+search 10.124.0.1 (covers)
+
+file / vsys1   testdata/config/firewall-multivsys.xml
+  object address corp-dc-vienna       10.124.0.1/32
+  object address corp-location-vienna 10.124.0.0/16
+1 with results, 2 without, 0 holes; 2 of 6 shown, narrow by device, vsys or kind
+```
+
+The counts on the summary line are for the whole answer. The end of the line
+says how many findings it shows and what narrows the search. In JSON and YAML,
+`summary.found` counts every finding and `summary.omitted` counts the findings
+that the limit left out. `omitted` is 0 when nothing is left out. Holes,
+unresolved entries and notes are never cut. In text, the notes of a vsys whose
+findings are all left out print below the findings, as
+`note: fw02/vsys1: <text>`.
+
+`--limit` takes 1 or more. `--limit 0` is a usage error (exit 2).
+`proteus lookup` and `proteus snapshot diff` take `--limit` too.

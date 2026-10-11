@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -27,7 +28,13 @@ type Config struct {
 	digestVersion string
 	schema        *loadedSchema
 	root          *Element
+	predefined    *Element
+	untyped       int // elements the digest does not describe, AGENTS.md R3
 }
+
+// PredefinedFile is the file next to a configuration that holds the device's
+// predefined services. fetch stores it as the document "predefined".
+const PredefinedFile = "predefined.xml"
 
 // Version returns the schema version from the config root, e.g. 11.2.0.
 func (c *Config) Version() string { return c.version }
@@ -44,11 +51,23 @@ func (c *Config) Digest() *schema.Node { return c.schema.root }
 // Root returns the parsed config element. It is read-only.
 func (c *Config) Root() *Element { return c.root }
 
+// Predefined returns the device's predefined objects as a <predefined> element
+// holding a <service> element, or nil when the configuration came without them.
+// It is read-only, and it is not part of Root: a walk of the configuration never
+// sees it.
+func (c *Config) Predefined() *Element { return c.predefined }
+
 // Load reads a configuration file and the schema digest that describes it.
 //
 // A configuration arrives in two shapes. type=export&category=configuration
 // yields a bare <config>; type=config&action=show wraps it in
 // <response><result>. Both load.
+//
+// When PredefinedFile sits next to the configuration, Load reads it too, so a
+// stored snapshot and --file on its config.xml see the same predefined services.
+// No file, or a well-formed file without a <service> element: the configuration
+// loads without them, and rules that name them stay in doubt. A file that cannot
+// be read or parsed fails the load, because skipping it would hide data.
 func Load(path string) (*Config, Report, error) {
 	var rep Report
 	f, err := os.Open(path)
@@ -78,12 +97,48 @@ func Load(path string) (*Config, Report, error) {
 	if err != nil {
 		return nil, rep, err
 	}
+	pre, err := loadPredefined(filepath.Join(filepath.Dir(path), PredefinedFile))
+	if err != nil {
+		return nil, rep, err
+	}
 	cfg := &Config{
 		path: path, version: version, detailVersion: root.Attr("detail-version"),
-		digestVersion: dv, schema: sch, root: root,
+		digestVersion: dv, schema: sch, root: root, predefined: pre,
 	}
+	rep.Untyped = cfg.undescribed()
+	cfg.untyped = len(rep.Untyped)
 	rep.VersionGap = cfg.VersionGap()
 	return cfg, rep, nil
+}
+
+// loadPredefined reads the device's predefined services, or returns nil when the
+// file is absent or holds no <service> element.
+//
+// The device answers <show><predefined><xpath>/predefined/service</xpath></predefined></show>
+// with <response status="success"><result><service> and one entry per service, in
+// the shape of a configured service (as observed on fw02, PAN-OS 12.2.3, L4). The
+// file is read bare or wrapped, as a configuration is. The <service> element is
+// kept under a <predefined> element, so its path is /predefined/service, as on the
+// device.
+func loadPredefined(path string) (*Element, error) {
+	f, err := os.Open(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("config: open %s: %w", path, err)
+	}
+	defer func() { _ = f.Close() }()
+	svc, err := parseTreeAt(f, "service")
+	if errors.Is(err, errNoElement) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("config: %s: %w", path, err)
+	}
+	pre := &Element{Name: "predefined", Children: []*Element{svc}}
+	svc.Parent = pre
+	return pre, nil
 }
 
 // DigestVersion returns the PAN-OS version of the schema the configuration was read
@@ -96,13 +151,23 @@ func (c *Config) DigestVersion() string { return c.digestVersion }
 // A configuration read with another release's schema can be under-read silently: a
 // field that was added or moved yields no reference, so a lookup misses rules and
 // looks complete. Spec §9 requires the gap to travel with every answer.
+//
+// When that schema does not describe some elements of the configuration, the
+// gap says how many (AGENTS.md R3), so the reader sees what the gap holds.
 func (c *Config) VersionGap() string {
 	if c.version == c.digestVersion {
 		return ""
 	}
-	return fmt.Sprintf("the configuration is PAN-OS %s but was read with the %s schema, "+
+	gap := fmt.Sprintf("the configuration is PAN-OS %s but was read with the %s schema, "+
 		"the nearest this build carries; a field added or moved between them yields no "+
 		"reference, so this answer can miss rules", c.version, c.digestVersion)
+	switch {
+	case c.untyped == 1:
+		gap += "; that schema does not describe 1 element of the configuration"
+	case c.untyped > 1:
+		gap += fmt.Sprintf("; that schema does not describe %d elements of the configuration", c.untyped)
+	}
+	return gap
 }
 
 // digestVersions lists the PAN-OS versions a file system carries a firewall digest
@@ -207,6 +272,9 @@ type loadedSchema struct {
 	refs  refTable
 	paths pathTable
 	kinds kindTable
+	// shared and rulebase are the nodes of /config/shared and of a vsys
+	// rulebase, which also describes the shared pushed rulebases (ChildNode).
+	shared, rulebase *schema.Node
 }
 
 var (
@@ -234,6 +302,8 @@ func loadDigest(version string) (*loadedSchema, error) {
 	}
 	ls := &loadedSchema{
 		root: d.Root, refs: buildRefTable(d.Root), paths: buildPathTable(d.Root), kinds: buildKindTable(d.Root),
+		shared:   d.Root.Step("shared"),
+		rulebase: d.Root.Step("devices").Step("entry").Step("vsys").Step("entry").Step("rulebase"),
 	}
 	schemaCache[name] = ls
 	return ls, nil

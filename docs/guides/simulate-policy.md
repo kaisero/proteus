@@ -135,7 +135,9 @@ A hop is undecided for one of these causes:
 
 - **Doubts on a rule.** A candidate above the match names:
   - an application, or service `application-default`;
-  - a predefined service such as `service-https`, or no service;
+  - a predefined service such as `service-https` that the snapshot does not
+    hold (stored before this release, refused by the device, or `--file`
+    without `predefined.xml`), a service group that holds one, or no service;
   - a user, a HIP profile or a schedule;
   - a URL category, when no `--url` is given or the category is not in the
     configuration (a PAN-DB category);
@@ -144,7 +146,8 @@ A hop is undecided for one of these causes:
     at runtime.
 - **Doubts on the path.** ECMP (other next hops are not followed), a PBF rule that
   can redirect the flow, a NAT or PBF answer that can miss matches, or a start that
-  only a default route places.
+  only a default route places. When the PBF rule only may match, the hop also
+  says why, such as a service and no `--port`.
 - **Zones.** The hop's vsys is unknown, a zone is missing, a zone is the
   placeholder `external` of a vsys crossing, or the zone is not defined in the
   vsys.
@@ -200,12 +203,19 @@ they differ, the hop is undecided.
 A rule's `rule-type` is applied too. A `universal` rule needs both zones in its
 lists. An `intrazone` rule matches equal zones only, and an `interzone` rule
 different zones only. Path mode always knows both zones. With `--file`, rule-type
-and the default rules apply only when both zones are given and defined in the vsys.
+and the default rules apply when both zones are given, and when the zones are
+derived with one zone on each side; the answer is then inferred. With several
+derived zones on a side, or none, an `intrazone` or `interzone` rule stays in doubt
+(`zone.derived`), the answer is undecided when that rule could change it, and a flow
+that no rule matches is undecided.
 
 ## One configuration: `--file`
 
 `--file` checks one configuration file, with no inventory and no path. `--vsys`
-picks the vsys. Give the zones with `--from-zone` and `--to-zone`, both or neither:
+picks the vsys. Give the zones with `--from-zone` and `--to-zone`, both or neither.
+A zone the vsys does not define exits 2, and the message lists the zones of the
+vsys. When several vsys are selected, a vsys without the zone is a hole, and the
+command exits 2 only when no vsys defines it. With zones given:
 
 ```
 $ proteus simulate policy 10.2.0.5 10.1.0.5 --port 443 \
@@ -218,9 +228,10 @@ file / vsys1   testdata/config/firewall-zones.xml
 first match: interzone-default (deny), default rule (built-in)
 ```
 
-Without zones, proteus derives them from the configuration's interfaces and
-routes. A derived zone is always `inferred`, and no default rule can decide: a flow
-that no rule matches is then undecided, "the default rule depends on the zones".
+Without zones, proteus derives them from the configuration's interfaces and routes.
+A derived zone is always `inferred`. With one zone on each side the default rules
+decide; otherwise a flow that no rule matches is undecided, "the default rule
+depends on the zones".
 
 `--file` does not check NAT. The zones are the zones before NAT. Path mode applies
 NAT on each hop.
@@ -279,7 +290,8 @@ A check runs named stages. Each stage removes candidate rules and declares its
 
 `--url` matches custom URL categories. A rule that names a PAN-DB category stays a
 candidate, in doubt. An FQDN resolves with this machine's DNS. The name matches
-FQDN objects, and each address matches everything else.
+FQDN objects, and the first address matches everything else, as in path mode. A
+note names the other addresses.
 
 ## Flags that path mode refuses
 

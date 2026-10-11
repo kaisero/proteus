@@ -1,6 +1,7 @@
 package resolve
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/okaiser/proteus/internal/config"
@@ -19,6 +20,12 @@ type Object struct {
 	Tags         []string
 	Description  string
 	ShadowedFrom *config.Scope // the scope whose definition this one replaced
+	// Dynamic is set for an address group with a dynamic element. Its Value is
+	// then the tag filter, not a member list.
+	Dynamic bool
+	// Wildcard is set for an address with an ip-wildcard element. Its Value is
+	// then an address and a wildcard mask, a.b.c.d/m.m.m.m, not a prefix.
+	Wildcard bool
 }
 
 // Objects returns the objects of one kind visible to the target, with a
@@ -32,6 +39,52 @@ func (t *Target) Objects(kind string) []Object {
 func ObjectsInScope(cfg *config.Config, sc config.Scope, kind string) []Object {
 	chain := chainFor(sc)
 	return objectsInChain(cfg, chain, kind, nil)
+}
+
+// ObjectsOfKindsInScope returns, by kind, the objects of several kinds that one
+// name in a field can mean, visible in a scope and its ancestors. A name resolves
+// by scope first and kind second: only the nearest scope that defines the name in
+// any of the kinds counts, the vsys before shared before the predefined objects,
+// and a namesake in a farther scope is hidden, whatever its kind. Each kind keeps
+// the order ObjectsInScope gives it.
+//
+// As observed on fw02, PAN-OS 12.2.3 (L9): a vsys service group hides the
+// predefined service of its name, and a vsys service hides a shared service group
+// of its name, in NAT and security rules alike.
+func ObjectsOfKindsInScope(cfg *config.Config, sc config.Scope, kinds ...string) map[string][]Object {
+	chain := append([]config.Scope{predefinedScope}, chainFor(sc)...)
+	nearness := func(o Object) int { return slices.Index(chain, o.Scope) }
+	out := make(map[string][]Object, len(kinds))
+	nearest := map[string]int{}
+	for _, kind := range kinds {
+		objs := ObjectsInScope(cfg, sc, kind)
+		out[kind] = objs
+		for _, o := range objs {
+			nearest[o.Name] = max(nearest[o.Name], nearness(o))
+		}
+	}
+	for kind, objs := range out {
+		out[kind] = slices.DeleteFunc(objs, func(o Object) bool { return nearness(o) < nearest[o.Name] })
+	}
+	return out
+}
+
+// namesakes are the kinds whose names resolve together (L9, L10).
+var namesakes = map[string][]string{
+	"service": {"service", "service-group"}, "service-group": {"service", "service-group"},
+	"address": {"address", "address-group"}, "address-group": {"address", "address-group"},
+}
+
+// Namesakes returns the kinds a name of this kind resolves together with, by
+// scope first and kind second, the kind among them: a vsys service hides a shared
+// service group of its name, a vsys address group a shared address, and the other
+// way round (as observed on fw02, PAN-OS 12.2.3, L9 and L10). A kind with no
+// namesake kind comes back alone.
+func Namesakes(kind string) []string {
+	if ks, ok := namesakes[kind]; ok {
+		return ks
+	}
+	return []string{kind}
 }
 
 // ObjectsAt reads a kind from an explicit container path, for the kinds whose name
@@ -54,8 +107,18 @@ func chainFor(sc config.Scope) []config.Scope {
 	return chain
 }
 
+// predefinedScope is the scope of what the device itself defines. Every chain
+// starts there: a configured object of the same name hides it. It is read for
+// every kind, but only services are stored there today.
+var predefinedScope = config.Scope{Sort: config.ScopePredefined}
+
 // objectsInChain walks the chain shared first, so a later definition replaces an
 // earlier one and the replacement is recorded.
+//
+// The device's predefined services come before shared, when the configuration
+// came with them. As observed on fw02, PAN-OS 12.2.3: the device defines
+// service-http and service-https (L4), and a configured service of the same name
+// wins, the vsys's over shared's over the predefined one (L7).
 func objectsInChain(cfg *config.Config, chain []config.Scope, kind string, within []string) []Object {
 	// Where a kind sits under a scope comes from the schema: most are direct
 	// children, but a custom URL category and every security profile live under
@@ -69,8 +132,8 @@ func objectsInChain(cfg *config.Config, chain []config.Scope, kind string, withi
 	}
 	byName := map[string]Object{}
 	var order []string
-	for _, sc := range chain {
-		for _, o := range readObjects(cfg.Root(), sc, kind, within) {
+	for _, sc := range append([]config.Scope{predefinedScope}, chain...) {
+		for _, o := range readObjects(cfg, sc, kind, within) {
 			if prev, seen := byName[o.Name]; seen {
 				prevScope := prev.Scope
 				o.ShadowedFrom = &prevScope
@@ -100,20 +163,35 @@ func scopeContainer(sc config.Scope) ([]string, bool) {
 	}
 }
 
-// readObjects reads one scope's objects of one kind.
-//
-// The container path is matched exactly.
-func readObjects(root *config.Element, sc config.Scope, kind string, within []string) []Object {
+// scopeElements returns the elements a scope's objects sit under: the predefined
+// element, or the containers scopeContainer names, matched by the scope's name.
+func scopeElements(cfg *config.Config, sc config.Scope) []*config.Element {
+	if sc.Sort == config.ScopePredefined {
+		if p := cfg.Predefined(); p != nil {
+			return []*config.Element{p}
+		}
+		return nil
+	}
 	path, ok := scopeContainer(sc)
 	if !ok {
 		return nil
 	}
+	var out []*config.Element
+	for _, container := range cfg.Root().Find(path...) {
+		if sc.Name == "" || container.Attr("name") == sc.Name {
+			out = append(out, container)
+		}
+	}
+	return out
+}
+
+// readObjects reads one scope's objects of one kind.
+//
+// The container path is matched exactly.
+func readObjects(cfg *config.Config, sc config.Scope, kind string, within []string) []Object {
 	inner := append(append([]string{}, within...), "entry")
 	var out []Object
-	for _, container := range root.Find(path...) {
-		if sc.Name != "" && container.Attr("name") != sc.Name {
-			continue
-		}
+	for _, container := range scopeElements(cfg, sc) {
 		for _, e := range container.Find(inner...) {
 			out = append(out, Object{
 				Name:    e.Attr("name"),
@@ -122,6 +200,11 @@ func readObjects(root *config.Element, sc config.Scope, kind string, within []st
 				Value:   objectValue(e),
 				Subtype: objectSubtype(e),
 				Tags:    e.Child("tag").Members(),
+				// The element says a group is dynamic, not its filter text. As
+				// observed on fw02, PAN-OS 12.2.3: a filter may start with "(";
+				// "not" is refused (L1, L1b).
+				Dynamic:  kind == "address-group" && e.Child("dynamic") != nil,
+				Wildcard: kind == "address" && e.Child("ip-wildcard") != nil,
 
 				Description: e.Child("description").TextOr(""),
 			})

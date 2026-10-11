@@ -29,11 +29,15 @@ type refsIndex struct {
 }
 
 // newRefsIndex keeps the positions of the edges whose scope this index covers.
-// Shared edges are kept too, because every scope inherits shared.
+// Shared edges are kept too, because every scope inherits shared. So are the
+// edges of the device's own configuration, outside any vsys (scope config): a
+// static route or an IKE gateway can name an address object. Every scope keeps
+// them, because which vsys's object such a name means is not decided here; see
+// docs/limits.md.
 func newRefsIndex(in *Interner, all edgeList, sc config.Scope) *refsIndex {
 	r := &refsIndex{all: all, byTarget: map[uint32][]int32{}}
 	for i, e := range all {
-		if e.Scope != sc && e.Scope.Sort != config.ScopeShared {
+		if e.Scope != sc && e.Scope.Sort != config.ScopeShared && e.Scope.Sort != config.ScopeConfig {
 			continue
 		}
 		id := in.ID(e.Target)

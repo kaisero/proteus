@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Keep a broad answer short with `--limit`.** `search`, `lookup` and
+  `snapshot diff`, and their MCP tools with `limit`, can keep only the first N
+  findings, cards or changes; the summary says how many it left out and what
+  narrows the question. There is no default, so an answer without a limit is
+  whole as before. `snapshot diff` now ends with a count line and has a
+  `summary` in JSON and YAML, as `search` and `lookup` do.
 - **Let an AI agent ask proteus questions.** `proteus mcp` serves simulate,
   search, lookup and snapshot diff as MCP tools, over stdio or token-protected
   HTTP behind a TLS proxy, with an audit line per call and a container sample.
@@ -298,6 +304,211 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **NAT matches a service group through any member that holds the port.** A
+  group with a member the snapshot does not define, such as `service-https`
+  without the predefined services, now matches a port another member holds, as
+  the security check and PBF do. Before, NAT stopped at the undefined member and
+  left the rule in doubt.
+- **An address name that two scopes define now means the nearest one, whatever
+  its kind.** A vsys address hides a shared address group of the same name, and a
+  vsys address group hides a shared address, in security policy, NAT, `lookup`
+  and `search` alike, as for services. Before, a rule reached both objects, and
+  NAT took the address first from any scope, so an answer could be wrong and
+  marked exact.
+- **A NAT rule whose source or destination is an external list, a region or a
+  dynamic group is a doubt.** Such a rule may hold an address without the
+  configuration saying so, so a flow it may take now lists it as a doubt, as
+  PBF and the security check do. Before, NAT skipped the rule as a sure miss and
+  a later rule answered, marked exact.
+- **A NAT pool whose address groups hold each other no longer stops the
+  program.** Each group of a translated address now adds its members once, so a
+  cycle ends and a group held twice adds its addresses once. Before, such a pool
+  recursed until the stack ran out, which ended `simulate` and the MCP server
+  with a fatal error.
+- **A search finding names the scope that defines the object.** An object found
+  by its name, and a group holding an object found, now carry their own `scope`
+  in JSON, YAML and MCP answers, such as `shared` or `predefined`. Before, they
+  carried the vsys searched, as if that vsys defined them.
+- **NAT translates to a large address group quickly.** A source pool that is
+  a static group of 200 address objects, among 20,000, now takes about 6 ms and
+  26 MB per translation (`BenchmarkTranslatePoolGroup`). Before, each name and
+  each group member read every address object again, which took 0.9 s and
+  4.7 GB per translation.
+- **A service name that two scopes define now means the nearest one, whatever
+  its kind.** A vsys service hides a shared service group of the same name, and
+  a vsys service group hides the predefined service, in NAT, security policy, PBF,
+  `lookup` and `search` alike. Before, NAT took the service group first from any
+  scope, the security policy matched both objects, and a rule's card could show
+  the hidden one, so each could give a wrong answer marked exact.
+- **The MCP server's cache counts what a loaded snapshot really keeps.** A cached
+  snapshot now counts 32 MiB plus 13 times its file size, as measured. Before, it
+  counted 13 times the file size alone, so the cache could grow past `max_cache`.
+  A `max_cache` sized by the old rule can now be too small, and the server then
+  loads snapshots again.
+- **`snapshot diff` tells pushed pre-rules from post-rules.** A rule pushed from
+  Panorama now reads `pre-rulebase security rule` or `post-rulebase security
+  rule`, and a vsys's own rule still reads `security rule`. Before, both pushed
+  rulebases read `security rule`, so two pushed rules of one name looked the same.
+- **`snapshot diff` compares the settings of a vsys and of shared.** A setting
+  outside any object or rule, such as the interfaces a vsys imports, its captive
+  portal or the trusted root CAs, now shows as a change of kind `setting`, named
+  by its path; a vsys user group's members show as kind `user-group`. Before,
+  the diff said "no changes" when only such a setting changed.
+- **A path held back by a PBF rule's service now asks for the port.** Asked
+  without a port, a PBF rule that names a service left the path undecided with
+  `needs: []`. The hop now says why the rule only may match, and `needs` asks
+  for the port, in `simulate_policy` and `simulate_routing` alike.
+- **A PBF rule from an external list, a region or a dynamic group now may
+  match.** Only the addresses the configuration places in them counted, so such
+  a rule was skipped for every other address and the path was called exact. A
+  forward or discard rule now leaves the path undecided, and a no-pbf rule is
+  passed over with its doubt.
+- **A PBF rule with a schedule now only may match.** The schedule was not
+  read, so a scheduled no-pbf rule always left the packet to routing and hid
+  the forward rule below it, and a scheduled forward rule counted as certain.
+- **`simulate policy --file` no longer takes a default static route as the
+  source zone.** With no zones given, a source that only a `0.0.0.0/0` static
+  route reaches was placed in that route's zone, so the rules were matched on a
+  zone the packet may not arrive in. The source zone now stays open, as it does
+  with a forwarding table.
+- **A rule that names a service group holding an unknown service is now in
+  doubt.** In a snapshot without the predefined services, a group such as `web`
+  with `service-https` and `tcp/8443` counted as known, so a security rule
+  naming it was ruled out for `tcp/443` and a later rule answered, marked
+  exact.
+- **The version-gap note counts what the older schema does not know.** When a
+  configuration is read with an older release's schema, the `gap.version` note now
+  says how many of its elements that schema does not describe, such as fields a
+  newer release added. Before, it warned of the gap but not whether this
+  configuration held anything the schema missed.
+- **`--at` and `snapshot diff` pass over a damaged snapshot.** They read the
+  next older snapshot that can be read, and a `note.snapshot-skipped` note names
+  the one passed over; when none can be read, the hole is `gap.load-failed` and
+  names the damaged ones. Before, `--at` stopped at it with a hole, and
+  `snapshot diff` said there was only one snapshot to compare.
+- **NAT answers quickly on a configuration with many bi-directional rules.**
+  One flow against 300 bi-directional rules among 20,000 address objects now
+  takes about 6.5 ms and 28 MB (`BenchmarkMatchBidirectional`). Before, each
+  implicit rule read every address object again, which took 1.4 s and 7 GB.
+- **Long group cycles and large group trees no longer stall a question.** Each
+  group's members and doubts are worked out once per index build, and groups
+  that hold each other are joined first. Before, one cycle of 5,000 address
+  groups took 29 s to index and one of 2,000 took 11 s; now they take about 75
+  and 65 ms (`BenchmarkIndexBuildGroupCycle`). 30 groups that each hold three
+  others took 41 s; 40 such groups now take 58 ms
+  (`BenchmarkIndexBuildDenseGroups`). The `lookup` card of a rule whose group
+  tree holds 364 groups took 290 ms and 1.2 GB; now 10 ms and 37 MB
+  (`BenchmarkRuleCardNestedGroups`). A card now opens each group once, at its
+  place nearest the top, and marks it `members shown elsewhere on this card`
+  at every other place. The card of one of 24 groups that each hold three
+  others took 1.1 s and 1.8 GB; one of 30 now takes 17 ms and 66 MB
+  (`BenchmarkObjectCardDenseGroups`). The card of a rule on a cycle of 5,000
+  groups took 0.53 s and 1.2 GB; now 16 ms and 47 MB
+  (`BenchmarkRuleCardGroupRing`).
+- **The sample containers stop cleanly, and the proxy log keeps no identity
+  claims.** `docker compose down` now lets proteus-mcp finish its running calls,
+  and proteus-fetch stops its fetch at once and exits 143. The server's whole
+  stop ends within `call_timeout` + `max_wait` + 10 s, also when a call hangs.
+  Caddy drops the `X-User-Claims` header from every log line, also from the
+  error line of a request that fails while proteus-mcp restarts. Before, the
+  fetch container ignored SIGTERM until Docker killed it after 10 seconds, the
+  server's running calls got only those 10 seconds, and each proxy log line held
+  the user's claims.
+- **`snapshot list` shows the good snapshots when one is damaged.** A snapshot
+  whose `meta.json` is missing or unreadable becomes a hole, and the list goes
+  on. Before, one such snapshot stopped the command with an error and no list.
+  Questions that read such a snapshot through `latest` or `device@id` now give
+  the hole code `gap.load-failed`, not `gap.snapshot-missing`.
+- **A device named twice in `fetch` is fetched once.** Before, both fetches
+  ran together and wrote the same snapshot, so one failed and the run exited 3.
+  Two runs that store one device in the same second now fail the second one at
+  once, and it no longer removes the first one's files.
+- **A run of failed fetches no longer removes the last good snapshots.**
+  `snapshot_keep` now keeps the newest N snapshots with a configuration and the
+  newest N without one. Before, it counted both together, so N failed exports in
+  a row removed every snapshot but the one `latest` names.
+- **`proteus mcp` reads the `PROTEUS_USERS` file once, at start.** A missing or
+  invalid file stops the start with exit 2 and names the file; a change needs a
+  restart. Before, every call read the file again: the server started with a bad
+  file and failed each call that needed it, and calls could answer from
+  different versions of the file.
+- **The run log of an MCP call that timed out now keeps what came late.** It
+  records what the work did after the timeout, when it returned, and the stack
+  of a panic. Before, the log closed at the timeout, so a later panic was lost.
+- **A broad MCP answer now writes a short audit line.** The `verdict` keeps the
+  summary line and the first 20 result lines, and `verdict_count` holds the full
+  count. Before, a search with thousands of findings wrote all of them into one
+  audit line.
+- **A bad `--from` or `--to` in `snapshot diff` is now a usage error.** It exits
+  2 and names the flag, as a bad `--at` does; the MCP tool names `from` or `to`.
+  Before, every device became a hole that blamed `--at`, and the command exited 3.
+- **`snapshot diff` now reports every changed setting of objects and rules.** A
+  changed entry lists each setting that differs, such as
+  `negate-destination: (unset) -> yes`. Secrets, and values the schema does not
+  describe, show only that they changed; such values are common on a newer
+  PAN-OS, which proteus reads with the 11.2 schema. Secrets include credentials
+  the schema keeps in clear text: an SNMP v2c trap community, a SCEP fixed
+  challenge, the URL, payload, header and parameter values of an HTTP server
+  profile and the values of an MFA server profile. An added or removed object
+  that holds such a value shows no short line. Before, it missed negation, NAT
+  translations, profiles, zones and the PBF and other rulebases.
+- **A zone the vsys does not define is now refused.** `--from-zone` and `--to-zone`
+  of `simulate policy --file`, and `--from-zone` of `simulate nat`, exit 2 with the
+  vsys's zones listed. Before, a typo in a zone name could still let an intrazone
+  rule decide the answer.
+- **`search` now lists references from the device's own configuration.** A static
+  route or an IKE gateway that names an address object shows as a reference with
+  scope `config`. Before, only rules and objects inside a vsys or shared were
+  found, so such an object looked unused.
+- **`search --within` and `--exact` now compare an address's whole value.** An
+  address range, as an object or written into a rule, matched when one part of it
+  did: `10.0.0.2-10.0.0.9` was found within `10.0.0.0/29` and exactly
+  `10.0.0.4/30`, and so were the rules that use it.
+- **A name used by several kinds of object now counts as each of them.** When a
+  tag and an address group, or an address group and a service group, shared a
+  name, `search` kept only one kind: it missed the references to the other and
+  could give a group the wrong kind, and a service group could pass as holding an
+  address. A reference to such a name now says which kind its field names.
+- **Groups that hold each other now give the same answer on every run.** When
+  address groups formed a cycle, which groups held an address depended on the order
+  the index was built in, so a rule on one of them was found on some runs and
+  missed on others.
+- **`search` now refuses a kind it does not know.** `--kind adress` (or `kind` in the
+  MCP tool) exits 2 and lists the kinds the configuration can hold. Before, a
+  misspelt kind found nothing, which read like an answer.
+- **`simulate policy --file` now checks the first address of a host name.** It
+  matched every address the name resolved to, so a rule for the second address
+  could answer, unlike path mode. A note now names the other addresses.
+- **Intrazone and interzone rules and the default rules now check derived zones.**
+  With `--file` and no zones given, an intrazone rule from `inside` was a candidate
+  for a flow from `inside` to `out`, and the answer could name it. One derived zone
+  on each side now decides rule-type and the default rule; with several, such a
+  rule is in doubt, and `needs` asks for the zones.
+- **A NAT rule that names a service now waits for the protocol.** Asked with a
+  port and no protocol, a NAT rule for `udp/443` took a `tcp/443` flow for sure.
+  It is now in doubt, and `needs` asks for the protocol. A protocol given as `6`,
+  `17` or `132` counts as tcp, udp or sctp.
+- **A path with a NAT rule in doubt is now undecided.** When a NAT rule above the
+  one applied might match instead, `simulate policy` answered allowed or denied as
+  if the applied rule were certain, and a derived destination zone could lose the
+  zone the flow has without that NAT.
+- **Rules that name `service-http` or `service-https` now decide after the next
+  fetch.** `fetch` stores the firewall's predefined services with each snapshot.
+  Before, proteus did not know their ports, so every rule naming one stayed in doubt
+  and could leave a NAT or policy answer undecided.
+- **A PBF rule now matches only the services it names, and a no-pbf rule that
+  names an application no longer ends the search.** A no-pbf rule for `tcp/22`
+  also took `tcp/443`, so a later forward rule was never found and the path was
+  called exact.
+- **A wildcard address object now matches the addresses its mask allows.** An
+  object such as `10.88.2.1/0.0.255.0` matched no address, so a simulation skipped
+  the rules using it and a later rule answered. A search for a prefix or a range
+  wider than one address, or with `--within` or `--exact`, now lists such an
+  object as unresolved (`gap.address-wildcard`) and exits 3, because a prefix
+  cannot decide a mask.
+- **A dynamic group whose filter starts with a parenthesis now counts as dynamic.**
+  A filter such as `('web' or 'db')` was read as one member name, so no address
+  reached the group and the rules using it were skipped.
 - **A custom URL category entry now covers the paths below its host.** An entry
   such as `shop.example.com` matched only that exact URL, so `shop.example.com/cart`
   reached no category and the rules using it were missed.

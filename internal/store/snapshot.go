@@ -14,16 +14,13 @@ type Snapshot struct {
 	ID     string
 	Dir    string
 	Meta   Meta
+	// Skipped names the damaged snapshots, newest first, that AtOrBefore passed
+	// over to pick this one. Every other lookup leaves it empty.
+	Skipped []string
 }
 
 // Path returns where a document of this snapshot is stored.
 func (sn Snapshot) Path(doc string) string { return filepath.Join(sn.Dir, doc+".xml") }
-
-// Has reports whether a document arrived in this snapshot.
-func (sn Snapshot) Has(doc string) bool {
-	_, err := os.Stat(sn.Path(doc))
-	return err == nil
-}
 
 // ConfigPath returns where this snapshot's configuration is stored, or an error
 // that matches ErrNoConfig when the configuration did not arrive.

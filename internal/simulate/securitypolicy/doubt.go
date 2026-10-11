@@ -6,7 +6,9 @@ import (
 	"strings"
 
 	"github.com/okaiser/proteus/internal/reason"
+	"github.com/okaiser/proteus/internal/resolve"
 	"github.com/okaiser/proteus/internal/simulate"
+	"github.com/okaiser/proteus/internal/simulate/rulebase"
 )
 
 // Doubt names a candidate the check cannot decide, and why. It does not change
@@ -104,8 +106,8 @@ var doubtCodes = map[string]reason.Code{
 // candidate, the fields it sets that no stage evaluates (spec §4.7).
 func (s *state) doubts() []Doubt {
 	var out []Doubt
-	services := definedIn(s.target.Config, s.idx.Scope(), "service")
-	categories := definedIn(s.target.Config, s.idx.Scope(), "category")
+	services := rulebase.Defined(s.target.Config, s.idx.Scope(), resolve.Security, "service")
+	categories := rulebase.Defined(s.target.Config, s.idx.Scope(), resolve.Security, "category")
 	for _, r := range s.verdict.Candidates {
 		add := func(why ...reason.Reason) {
 			out = append(out, Doubt{Position: r.Position, Rule: r.Name, Reasons: why})
@@ -113,12 +115,22 @@ func (s *state) doubts() []Doubt {
 		for _, f := range ruleFields {
 			switch {
 			case f.name == "service":
+				//nolint:gosec // a rule position cannot reach 2^32; a rulebase is capped far below that
+				if s.serviceHits != nil && s.serviceHits.Contains(uint32(r.Position-1)) {
+					break // the port matched through a defined object
+				}
 				if why := s.serviceDoubt(r.Fields["service"], services); why.Text != "" {
 					add(why)
 				}
 			case f.name == "category":
 				if why := s.categoryDoubt(r.Fields["category"], categories); why.Text != "" {
 					add(why)
+				}
+			case f.name == "rule-type":
+				//nolint:gosec // a rule position cannot reach 2^32; a rulebase is capped far below that
+				if s.ruleTypeOpen != nil && s.ruleTypeOpen.Contains(uint32(r.Position-1)) {
+					add(reason.New("zone.derived", fmt.Sprintf(
+						"rule-type %s not compared: the derived zones are not one on each side", r.RuleType)))
 				}
 			case f.name == "source" || f.name == "destination":
 				//nolint:gosec // a rule position cannot reach 2^32; a rulebase is capped far below that
@@ -169,7 +181,7 @@ func (s *state) serviceDoubt(vs []string, defined map[string]bool) reason.Reason
 	// doubt comes first and the answer asks for no port.
 	judged := slices.ContainsFunc(vs, func(v string) bool { return v != "application-default" && defined[v] })
 	f := s.in.Flow
-	if proto := strings.ToLower(f.Protocol); judged && (f.DestPort == 0 || (proto != "tcp" && proto != "udp" && proto != "sctp")) {
+	if proto := rulebase.Protocol(f.Protocol); judged && (f.DestPort == 0 || (proto != "tcp" && proto != "udp" && proto != "sctp")) {
 		return reason.New("doubt.service-no-port",
 			fmt.Sprintf("service not evaluated without a tcp, udp or sctp port (%s)", strings.Join(vs, ", ")))
 	}
@@ -183,7 +195,7 @@ func (s *state) serviceDoubt(vs []string, defined map[string]bool) reason.Reason
 		}
 	}
 	if len(unknown) > 0 {
-		return reason.New("doubt.service-predefined",
+		return rulebase.UndefinedService(s.target.Config,
 			fmt.Sprintf("service predefined or not defined in the configuration (%s)", strings.Join(unknown, ", ")))
 	}
 	return reason.Reason{}

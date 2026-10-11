@@ -12,6 +12,7 @@ import (
 	"cmp"
 	"errors"
 	"fmt"
+	"maps"
 	"net/netip"
 	"slices"
 	"strings"
@@ -75,18 +76,19 @@ type Finding struct {
 // address, a prefix or a range.
 var ErrWithinNeedsAddress = errors.New("search: within mode needs an address, a prefix or a range")
 
-// Run searches one scope.
-func Run(cfg *config.Config, idx *index.Index, q Query) ([]Finding, error) {
+// Run searches one scope. Unresolved lists the objects the term cannot decide:
+// a wildcard address object that may hold addresses of a prefix term.
+func Run(cfg *config.Config, idx *index.Index, q Query) ([]Finding, []index.Unresolved, error) {
 	s := &searcher{cfg: cfg, idx: idx, q: q, sc: idx.Scope()}
 	s.term = parseTerm(q.Term)
 	if q.Mode == Within && s.term.prefixes == nil {
-		return nil, ErrWithinNeedsAddress
+		return nil, nil, ErrWithinNeedsAddress
 	}
 	s.objects()
 	s.groups()
 	s.references()
 	s.literals()
-	return s.result(), nil
+	return s.result(), s.unresolved, nil
 }
 
 type searcher struct {
@@ -96,24 +98,47 @@ type searcher struct {
 	sc   config.Scope
 	term term
 
-	found  []Finding
-	names  map[string]string // an object or group found, to its kind
-	byName map[string][]string
+	found      []Finding
+	unresolved []index.Unresolved
+	// names maps an object or group found to the kinds it was found as. A name
+	// can have several: a tag and an address group, an address group and a
+	// service group.
+	names map[string]map[string]bool
 }
 
-// kindsByName maps every object name visible in the scope to its kinds, once.
-func (s *searcher) kindsByName() map[string][]string {
-	if s.byName != nil {
-		return s.byName
+// foundAs records a name as found with a kind.
+func (s *searcher) foundAs(name, kind string) {
+	if s.names == nil {
+		s.names = map[string]map[string]bool{}
 	}
-	s.byName = map[string][]string{}
+	if s.names[name] == nil {
+		s.names[name] = map[string]bool{}
+	}
+	s.names[name][kind] = true
+}
+
+// namesFound lists the names found, sorted.
+func (s *searcher) namesFound() []string {
+	return slices.Sorted(maps.Keys(s.names))
+}
+
+// kindsByName maps every object name visible in the scope to its kinds, each with
+// the scope that defines the object of that kind: shared, predefined or the vsys.
+// A namesake of another kind in a nearer scope hides an object (L9, L10).
+func (s *searcher) kindsByName() map[string][]kindIn {
+	out := map[string][]kindIn{}
 	for _, k := range resolve.ObjectKinds(s.cfg) {
-		objs := resolve.ObjectsInScope(s.cfg, s.sc, k)
-		for _, o := range objs {
-			s.byName[o.Name] = append(s.byName[o.Name], k)
+		for _, o := range resolve.ObjectsOfKindsInScope(s.cfg, s.sc, resolve.Namesakes(k)...)[k] {
+			out[o.Name] = append(out[o.Name], kindIn{kind: k, scope: o.Scope})
 		}
 	}
-	return s.byName
+	return out
+}
+
+// kindIn is a kind of object and the scope that defines the object.
+type kindIn struct {
+	kind  string
+	scope config.Scope
 }
 
 func (s *searcher) kindAllowed(kind string) bool {
@@ -129,10 +154,7 @@ func (s *searcher) addObject(kind, name string, scope config.Scope, via string) 
 	if !s.kindAllowed(kind) {
 		return
 	}
-	if s.names == nil {
-		s.names = map[string]string{}
-	}
-	s.names[name] = kind
+	s.foundAs(name, kind)
 	s.found = append(s.found, Finding{Stage: StageObject, Kind: kind, Name: name, Scope: scope, Via: via})
 }
 
@@ -171,99 +193,136 @@ func (s *searcher) objects() {
 			continue
 		}
 		for _, k := range kinds {
-			s.addObject(k, name, s.sc, "name")
+			s.addObject(k.kind, name, k.scope, "name")
 		}
 	}
 }
 
 // addressObjects matches an address, prefix or range term against address objects.
 func (s *searcher) addressObjects() {
+	if s.q.Mode == Exact || s.q.Mode == Within {
+		s.wholeObjects()
+		s.wildcards()
+		return
+	}
 	for _, p := range s.term.prefixes {
 		var ms []index.Match
-		if s.term.single && s.q.Mode == Auto {
+		if s.term.single {
 			ms = s.idx.Containing(p.Addr())
 		} else {
 			ms = s.idx.Overlapping(p)
 		}
 		for _, m := range ms {
-			switch s.q.Mode {
-			case Exact:
-				if m.Prefix != p {
-					continue
-				}
-			case Within:
-				if m.Prefix.Bits() < p.Bits() || !p.Contains(m.Prefix.Addr()) {
-					continue
-				}
-			}
 			s.addObject("address", m.Name, m.Scope, m.Prefix.String())
 		}
 	}
+	s.wildcards()
 }
 
-// groups is stage 3: every group holding an object found.
-func (s *searcher) groups() {
-	members := make([]string, 0, len(s.names))
-	for n := range s.names {
-		members = append(members, n)
+// wholeObjects is Exact and Within: they compare an object's whole value with
+// the term, not one piece of it. A range is stored as the prefixes that cover
+// it, and one of them can match the term while the others lie outside it.
+// Exact wants the same prefixes as the term; Within wants every prefix inside
+// the term. Both are written as the fewest aligned prefixes, so an aligned
+// prefix inside the term lies inside one of the term's.
+func (s *searcher) wholeObjects() {
+	pieces := map[string][]netip.Prefix{}
+	values := map[string]string{}
+	for _, o := range resolve.ObjectsInScope(s.cfg, s.sc, "address") {
+		pieces[o.Name], values[o.Name] = index.PrefixesOf(o.Value), o.Value
 	}
-	slices.Sort(members)
-	for _, m := range members {
-		var gs []string
-		if s.q.Direct {
-			gs = s.idx.DirectGroupsOf(m)
-		} else {
-			gs = s.idx.GroupsOf(m)
-		}
-		for _, g := range gs {
-			kind := s.groupKind(g)
-			if !s.kindAllowed(kind) {
+	seen := map[string]bool{}
+	for _, p := range s.term.prefixes {
+		for _, m := range s.idx.Overlapping(p) {
+			if seen[m.Name] {
 				continue
 			}
-			if _, seen := s.names[g]; !seen {
-				s.names[g] = kind
+			seen[m.Name] = true
+			whole := pieces[m.Name]
+			if !s.wholeMatch(whole) {
+				continue
 			}
-			s.found = append(s.found, Finding{Stage: StageGroup, Kind: kind, Name: g, Scope: s.sc, Via: "holds " + m})
+			via := m.Prefix.String()
+			if len(whole) > 1 {
+				via = values[m.Name]
+			}
+			s.addObject("address", m.Name, m.Scope, via)
 		}
 	}
 }
 
-// groupKind names the kind of a group by the kinds its name is defined as, preferring
-// a group kind.
-func (s *searcher) groupKind(name string) string {
-	kinds := s.kindsByName()[name]
-	for _, k := range kinds {
-		if strings.Contains(k, "group") {
-			return k
+// wholeMatch says whether a whole value, as its prefixes, matches the term in
+// Exact or Within mode: the same prefixes, or every prefix inside the term.
+func (s *searcher) wholeMatch(whole []netip.Prefix) bool {
+	if s.q.Mode == Exact {
+		return slices.Equal(whole, s.term.prefixes)
+	}
+	return s.term.holds(whole)
+}
+
+// wildcards matches the term against the wildcard address objects, which match by
+// mask. One address decides them. Any other term, or a mode that compares
+// values, cannot: an object that may hold an address of the term is unresolved
+// (owner decision C1).
+func (s *searcher) wildcards() {
+	if !s.kindAllowed("address") {
+		return
+	}
+	hits, un := s.idx.MatchWildcards(s.term.prefixes, s.term.single && s.q.Mode == Auto)
+	for _, h := range hits {
+		s.addObject(h.Kind, h.Name, h.Scope, h.Via)
+	}
+	s.unresolved = append(s.unresolved, un...)
+}
+
+// groups is stage 3: every group holding an object found. A name found as
+// several kinds is asked once per kind, and each kind finds only the groups that
+// can hold it: an address group holds addresses, a service group services.
+func (s *searcher) groups() {
+	for _, m := range s.namesFound() {
+		for _, k := range slices.Sorted(maps.Keys(s.names[m])) {
+			for _, g := range s.idx.GroupsHolding(k, m, s.q.Direct) {
+				if !s.kindAllowed(g.Kind) {
+					continue
+				}
+				s.foundAs(g.Name, g.Kind)
+				s.found = append(s.found, Finding{Stage: StageGroup, Kind: g.Kind, Name: g.Name, Scope: g.Scope, Via: "holds " + m})
+			}
 		}
 	}
-	if len(kinds) > 0 {
-		return kinds[0]
-	}
-	return "group"
 }
 
 // references is stage 4: every place that names an object or group found.
 //
-// A reference counts only when the field can name the found object's kind. A tag
-// and an address group can share a name, and a tag field naming the tag does not
-// name the group.
+// A reference counts only when the field can name a kind the name was found as.
+// A tag and an address group can share a name, and a tag field naming the tag
+// does not name the group. When the name was found as several kinds, the finding
+// says which kind the field names.
 func (s *searcher) references() {
-	names := make([]string, 0, len(s.names))
-	for n := range s.names {
-		names = append(names, n)
-	}
-	slices.Sort(names)
-	for _, n := range names {
-		kind := s.names[n]
+	for _, n := range s.namesFound() {
+		kinds := s.names[n]
 		for _, r := range s.idx.Refs(n) {
-			if !slices.Contains(r.Candidates, kind) || !s.fieldAllowed(r.Field) {
+			if !s.fieldAllowed(r.Field) {
 				continue
+			}
+			var named []string
+			for _, k := range r.Candidates {
+				if kinds[k] {
+					named = append(named, k)
+				}
+			}
+			if len(named) == 0 {
+				continue
+			}
+			via := r.Target
+			if len(kinds) > 1 {
+				slices.Sort(named)
+				via += " (" + strings.Join(named, ", ") + ")"
 			}
 			rk, rn := referrer(r.From)
 			s.found = append(s.found, Finding{
 				Stage: StageReference, Kind: rk, Name: rn, Scope: r.Scope,
-				Field: r.Field, Via: r.Target, Path: r.From,
+				Field: r.Field, Via: via, Path: r.From,
 			})
 		}
 	}
@@ -299,6 +358,7 @@ func referrer(path string) (string, string) {
 }
 
 // literals is stage 5: rules that write the term into a field, with no object.
+// In Exact and Within mode a written value counts only as a whole.
 func (s *searcher) literals() {
 	if s.term.prefixes == nil || s.q.Mode == Contains {
 		return
@@ -315,6 +375,12 @@ func (s *searcher) literals() {
 			}
 			for it := b.Iterator(); it.HasNext(); {
 				r := rules[it.Next()]
+				// Exact and Within take a written value whole, as for objects.
+				if (s.q.Mode == Exact || s.q.Mode == Within) && !slices.ContainsFunc(r.Fields[f.String()], func(v string) bool {
+					return s.wholeMatch(index.PrefixesOf(v))
+				}) {
+					continue
+				}
 				s.found = append(s.found, Finding{
 					Stage: StageLiteral, Kind: "security rule", Name: r.Name, Scope: r.Scope,
 					Field: f.String(), Via: strings.Join(r.Fields[f.String()], ", "),
@@ -362,15 +428,25 @@ func (s *searcher) result() []Finding {
 // term is the search term, read once.
 type term struct {
 	prefixes []netip.Prefix // an address, prefix or range; nil otherwise
-	single   bool           // one address
+	single   bool           // one address: an address, a /32 or a range of one address
+}
+
+// holds says whether every prefix lies inside one of the term's.
+func (t term) holds(ps []netip.Prefix) bool {
+	for _, q := range ps {
+		if !slices.ContainsFunc(t.prefixes, func(p netip.Prefix) bool {
+			return p.Bits() <= q.Bits() && p.Contains(q.Addr())
+		}) {
+			return false
+		}
+	}
+	return len(ps) > 0
 }
 
 func parseTerm(s string) term {
-	if a, err := netip.ParseAddr(s); err == nil {
-		return term{prefixes: []netip.Prefix{netip.PrefixFrom(a, a.BitLen())}, single: true}
+	ps := index.PrefixesOf(s)
+	if len(ps) == 0 {
+		return term{}
 	}
-	if ps := index.PrefixesOf(s); len(ps) > 0 {
-		return term{prefixes: ps}
-	}
-	return term{}
+	return term{prefixes: ps, single: len(ps) == 1 && ps[0].IsSingleIP()}
 }

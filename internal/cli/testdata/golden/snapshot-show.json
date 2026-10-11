@@ -43,6 +43,11 @@
           "name": "ha",
           "file": "ha.xml",
           "bytes": 163
+        },
+        {
+          "name": "predefined",
+          "file": "predefined.xml",
+          "bytes": 245
         }
       ]
     },
@@ -86,6 +91,11 @@
           "name": "ha",
           "file": "ha.xml",
           "bytes": 163
+        },
+        {
+          "name": "predefined",
+          "file": "predefined.xml",
+          "bytes": 245
         }
       ]
     }

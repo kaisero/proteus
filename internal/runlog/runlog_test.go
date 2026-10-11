@@ -125,7 +125,7 @@ func TestEchoAndNil(t *testing.T) {
 	if !strings.Contains(echo.String(), "[INFO] [RUN] hello") {
 		t.Errorf("echo = %q", echo.String())
 	}
-	none := Discard()
+	var none *Logger
 	none.Infof(TagRun, "nothing")
 	none.AddSecret("x")
 	if none.Path() != "" || none.Enabled(Error) || none.Close() != nil {

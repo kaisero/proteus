@@ -22,7 +22,7 @@ func run(t *testing.T, fixture, vsys string, q Query) []Finding {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := Run(cfg, idx, q)
+	got, _, err := Run(cfg, idx, q)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -130,11 +130,69 @@ func TestAddressModes(t *testing.T) {
 	}
 }
 
+// A wildcard object matches by mask (L2). One address decides it, so the object,
+// its group and the rules naming either are found. A prefix, or a mode that
+// compares values, cannot decide it: the object is unresolved (decision C1).
+func TestWildcardObjects(t *testing.T) {
+	t.Parallel()
+	cfg, _, err := config.Load("../../testdata/config/firewall-wildcard.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	idx, err := index.New(cfg, config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}, resolve.Security)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		term       string
+		mode       Mode
+		kinds      []string
+		found      bool
+		unresolved bool
+	}{
+		{"10.88.7.1", Auto, nil, true, false},
+		{"10.88.7.1/32", Auto, nil, true, false},
+		{"10.88.7.1-10.88.7.1", Auto, nil, true, false},
+		{"10.88.200.1", Auto, nil, true, false},
+		{"10.88.7.2", Auto, nil, false, false},
+		{"10.88.7.2/32", Auto, nil, false, false},
+		{"10.89.7.1", Auto, nil, false, false},
+		{"10.88.0.0/16", Auto, nil, false, true},
+		{"10.88.0.0/16", Within, nil, false, true},
+		{"10.88.7.1", Exact, nil, false, true},
+		{"10.88.7.0-10.88.7.1", Auto, nil, false, true},
+		{"10.89.0.0/16", Auto, nil, false, false},
+		{"10.88.0.0/16", Auto, []string{"service"}, false, false},
+		{"0.0.255", Contains, nil, true, false},
+	} {
+		fs, un, err := Run(cfg, idx, Query{Term: tc.term, Mode: tc.mode, Kinds: tc.kinds})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := has(fs, "object address wc  10.88.2.1/0.0.255.0"); got != tc.found {
+			t.Errorf("%s (%d): found %v, want %v:\n%s", tc.term, tc.mode, got, tc.found, dump(fs))
+		}
+		if tc.found && tc.mode == Auto {
+			for _, want := range []string{"group address-group g-wc  holds wc", "reference security rule from-wc source", "reference security rule to-g-wc destination"} {
+				if !has(fs, want) {
+					t.Errorf("%s: %q missing:\n%s", tc.term, want, dump(fs))
+				}
+			}
+		}
+		// The reason names the prefix of the term the object may hold an address of.
+		got := len(un) == 1 && un[0].Value == "wc" && un[0].Code == "gap.address-wildcard" &&
+			strings.HasSuffix(un[0].Reason, " for "+index.PrefixesOf(tc.term)[0].String())
+		if got != tc.unresolved || len(un) > 1 {
+			t.Errorf("%s (%d): unresolved %v, want %v", tc.term, tc.mode, un, tc.unresolved)
+		}
+	}
+}
+
 func TestWithinNeedsAnAddress(t *testing.T) {
 	t.Parallel()
 	cfg, _, _ := config.Load("../../testdata/config/firewall-multivsys.xml")
 	idx, _ := index.New(cfg, config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}, resolve.Security)
-	if _, err := Run(cfg, idx, Query{Term: "web", Mode: Within}); !errors.Is(err, ErrWithinNeedsAddress) {
+	if _, _, err := Run(cfg, idx, Query{Term: "web", Mode: Within}); !errors.Is(err, ErrWithinNeedsAddress) {
 		t.Errorf("got %v", err)
 	}
 }
@@ -219,6 +277,83 @@ func TestAPortFindsServices(t *testing.T) {
 	}
 }
 
+// A port finds a predefined service, stored next to the configuration (L4), in
+// scope predefined, with the groups and rules that use it.
+func TestAPortFindsAPredefinedService(t *testing.T) {
+	t.Parallel()
+	got := run(t, "../predefined/config.xml", "vsys1", Query{Term: "tcp/8080"})
+	for _, want := range []string{
+		"object service service-http  tcp/8080",
+		"group service-group g-web",
+		"reference nat rule dnat-http service service-http",
+	} {
+		if !has(got, want) {
+			t.Errorf("missing %q:\n%s", want, dump(got))
+		}
+	}
+	for _, f := range got {
+		if f.Name == "service-http" && f.Scope.String() != "predefined" {
+			t.Errorf("service-http in scope %s", f.Scope)
+		}
+	}
+	if has(got, "object service service-https") {
+		t.Errorf("tcp/8080 is not service-https:\n%s", dump(got))
+	}
+}
+
+// A finding by name and a group finding carry the object's own scope, as a
+// finding by value does, not the scope searched: from vsys1, a shared group is
+// shared and a predefined service is predefined.
+func TestFindingsCarryTheObjectsScope(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		fixture, term string
+		want          map[string]string // stage, kind and name -> scope
+	}{
+		{"firewall-multivsys.xml", "corp-location", map[string]string{
+			"object address-group corp-location": "shared",
+			"object tag corp-location":           "shared",
+		}},
+		{"firewall-multivsys.xml", "10.124.0.1", map[string]string{
+			"object address corp-dc-vienna":     "vsys:vsys1",
+			"group address-group corp-dc":       "shared",
+			"group address-group corp-location": "shared",
+		}},
+		{"../predefined/config.xml", "service-http", map[string]string{
+			"object service service-http": "predefined",
+			"group service-group g-web":   "vsys:vsys1",
+		}},
+	} {
+		got := map[string]string{}
+		for _, f := range run(t, tc.fixture, "vsys1", Query{Term: tc.term}) {
+			got[fmt.Sprintf("%s %s %s", f.Stage, f.Kind, f.Name)] = f.Scope.String()
+		}
+		for k, want := range tc.want {
+			if got[k] != want {
+				t.Errorf("%s: %s in scope %q, want %s (%v)", tc.term, k, got[k], want, got)
+			}
+		}
+	}
+}
+
+// As observed on fw02, PAN-OS 12.2.3 (L9, L10): a name resolves by scope first
+// and kind second. Search lists only the object the vsys sees: vsys1's address
+// rv-adr, not shared's group rv-adr; vsys1's group rv-adr2, not shared's address.
+func TestSearchListsTheNearestOfANamesKinds(t *testing.T) {
+	t.Parallel()
+	for term, want := range map[string]string{"rv-adr": "object address rv-adr vsys:vsys1", "rv-adr2": "object address-group rv-adr2 vsys:vsys1"} {
+		var got []string
+		for _, f := range run(t, "firewall-address-cross-kind.xml", "vsys1", Query{Term: term}) {
+			if f.Stage == StageObject {
+				got = append(got, fmt.Sprintf("%s %s %s %s", f.Stage, f.Kind, f.Name, f.Scope))
+			}
+		}
+		if strings.Join(got, "; ") != want {
+			t.Errorf("%s: %v, want %s", term, got, want)
+		}
+	}
+}
+
 func TestReferrer(t *testing.T) {
 	t.Parallel()
 	for path, want := range map[string]string{
@@ -257,17 +392,170 @@ func TestAUserSnapshotResolvesDirectoryGroups(t *testing.T) {
 	}
 }
 
-// groupKind prefers a group kind, falls back to the first kind a name has, and
-// to "group" for a name nothing defines.
-func TestGroupKindPrefersAGroupKind(t *testing.T) {
+// A name can be several kinds at once: tag web and address group web, address
+// group webgrp and service group webgrp. Each kind finds its own groups and its
+// own references, and a reference to a name found as several kinds says which
+// kind its field names.
+func TestANameWithSeveralKinds(t *testing.T) {
 	t.Parallel()
-	s := &searcher{byName: map[string][]string{
-		"both": {"tag", "address-group"},
-		"tag":  {"tag"},
-	}}
-	for name, want := range map[string]string{"both": "address-group", "tag": "tag", "nothing": "group"} {
-		if got := s.groupKind(name); got != want {
-			t.Errorf("groupKind(%q) = %q, want %q", name, got, want)
+	const fixture = "firewall-shared-names.xml"
+	for _, tc := range []struct {
+		term      string
+		want, not []string
+	}{
+		{"web", []string{
+			"object address-group web  name",
+			"object tag web  name",
+			"reference security rule to-web destination web (address-group)",
+			"reference security rule by-tag tag web (tag)",
+		}, nil},
+		{"10.88.4.10", []string{
+			"group address-group web  holds h-web",
+			"reference security rule to-web destination web",
+		}, []string{"reference security rule by-tag"}},
+		{"webgrp", []string{
+			"object address-group webgrp  name",
+			"object service-group webgrp  name",
+			"reference security rule src-webgrp source webgrp (address-group)",
+			"reference security rule svc-webgrp service webgrp (service-group)",
+		}, nil},
+		{"tcp/8443", []string{
+			"object service svc-web",
+			"group service-group webgrp  holds svc-web",
+			"reference security rule svc-webgrp service webgrp",
+		}, []string{"group address-group webgrp", "reference security rule src-webgrp"}},
+		{"10.88.4.20", []string{
+			"group address-group webgrp  holds h-api",
+			"reference security rule src-webgrp source webgrp",
+		}, []string{"group service-group webgrp", "reference security rule svc-webgrp"}},
+		{"10.88.4.30", []string{"group address-group g-dual-addr  holds dual"}, []string{"group service-group"}},
+		{"tcp/9000", []string{"group service-group g-dual-svc  holds dual"}, []string{"group address-group"}},
+	} {
+		got := run(t, fixture, "vsys1", Query{Term: tc.term})
+		for _, want := range tc.want {
+			if !has(got, want) {
+				t.Errorf("%s: missing %q in:\n%s", tc.term, want, dump(got))
+			}
+		}
+		for _, not := range tc.not {
+			if has(got, not) {
+				t.Errorf("%s: unexpected %q in:\n%s", tc.term, not, dump(got))
+			}
+		}
+		// A name found as one kind needs no kind in its reference.
+		if tc.term != "web" && tc.term != "webgrp" && strings.Contains(dump(got), "(") {
+			t.Errorf("%s: a kind named without need:\n%s", tc.term, dump(got))
+		}
+	}
+	// A kind filter keeps the tag and drops the group of the same name, with its
+	// references.
+	got := run(t, fixture, "vsys1", Query{Term: "web", Kinds: []string{"tag"}})
+	if !has(got, "object tag web") || has(got, "object address-group") || has(got, "reference security rule to-web") ||
+		!has(got, "reference security rule by-tag tag web") {
+		t.Errorf("kind tag:\n%s", dump(got))
+	}
+	// Direct asks one level up, by kind too.
+	got = run(t, fixture, "vsys1", Query{Term: "tcp/8443", Direct: true})
+	if !has(got, "group service-group webgrp  holds svc-web") || has(got, "group address-group") {
+		t.Errorf("direct:\n%s", dump(got))
+	}
+	// The order is stable: stage, kind, name, field.
+	a, b := dump(run(t, fixture, "vsys1", Query{Term: "webgrp"})), dump(run(t, fixture, "vsys1", Query{Term: "webgrp"}))
+	if a != b {
+		t.Errorf("two runs differ:\n%s\n--\n%s", a, b)
+	}
+}
+
+// Exact and within compare an object's whole value. The range 10.0.0.2-10.0.0.9
+// is stored as 10.0.0.2/31, 10.0.0.4/30 and 10.0.0.8/31: two of those lie inside
+// 10.0.0.0/29 and one equals 10.0.0.4/30, but the range is neither within the
+// first nor exactly the second. A wildcard stays unresolved in both modes.
+func TestExactAndWithinTestTheWholeObject(t *testing.T) {
+	t.Parallel()
+	cfg, _, err := config.Load("../../testdata/config/firewall-range.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	idx, err := index.New(cfg, config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}, resolve.Security)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		term string
+		mode Mode
+		want []string
+	}{
+		{"10.0.0.0/29", Within, []string{"h-5 10.0.0.5/32", "n-29 10.0.0.0/29", "n-30 10.0.0.4/30", "r-4-7 10.0.0.4/30"}},
+		{"10.0.0.4/30", Exact, []string{"n-30 10.0.0.4/30", "r-4-7 10.0.0.4/30"}},
+		{"10.0.0.0/28", Within, []string{"h-5 10.0.0.5/32", "n-29 10.0.0.0/29", "n-30 10.0.0.4/30", "r-2-9 10.0.0.2-10.0.0.9", "r-4-7 10.0.0.4/30"}},
+		{"10.0.0.2-10.0.0.9", Exact, []string{"r-2-9 10.0.0.2-10.0.0.9"}},
+		{"10.0.0.2-10.0.0.9", Within, []string{"h-5 10.0.0.5/32", "n-30 10.0.0.4/30", "r-2-9 10.0.0.2-10.0.0.9", "r-4-7 10.0.0.4/30"}},
+		{"10.0.0.5", Exact, []string{"h-5 10.0.0.5/32"}},
+		{"10.0.0.6/31", Within, nil},
+	} {
+		fs, un, err := Run(cfg, idx, Query{Term: tc.term, Mode: tc.mode, Show: []Stage{StageObject}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var got []string
+		for _, f := range fs {
+			got = append(got, f.Name+" "+f.Via)
+		}
+		if strings.Join(got, "|") != strings.Join(tc.want, "|") {
+			t.Errorf("%s %v: got %v, want %v", tc.term, tc.mode, got, tc.want)
+		}
+		if len(un) != 1 || un[0].Value != "wc" {
+			t.Errorf("%s %v: unresolved %+v, want the wildcard", tc.term, tc.mode, un)
+		}
+	}
+	// The rule on the range is not reached through an object the term does not hold.
+	if fs := run(t, "firewall-range.xml", "vsys1", Query{Term: "10.0.0.0/29", Mode: Within}); has(fs, "reference security rule to-range") {
+		t.Errorf("to-range reached:\n%s", dump(fs))
+	}
+}
+
+// A value written into a rule counts as a whole in exact and within mode too:
+// the literal range 10.0.0.2-10.0.0.9 is neither within 10.0.0.0/29 nor exactly
+// 10.0.0.4/30, though it overlaps both.
+func TestExactAndWithinTestTheWholeLiteral(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		term string
+		mode Mode
+		want []string
+	}{
+		{"10.0.0.0/29", Within, []string{"lit-30 destination", "lit-host source"}},
+		{"10.0.0.4/30", Exact, []string{"lit-30 destination"}},
+		{"10.0.0.2-10.0.0.9", Exact, []string{"lit-range destination"}},
+		{"10.0.0.5", Exact, []string{"lit-host source"}},
+		{"10.0.0.0/29", Auto, []string{"lit-30 destination", "lit-host source", "lit-range destination"}},
+	} {
+		var got []string
+		for _, f := range run(t, "firewall-range.xml", "vsys1", Query{Term: tc.term, Mode: tc.mode, Show: []Stage{StageLiteral}}) {
+			got = append(got, f.Name+" "+f.Field)
+		}
+		if strings.Join(got, "|") != strings.Join(tc.want, "|") {
+			t.Errorf("%s %v: got %v, want %v", tc.term, tc.mode, got, tc.want)
+		}
+	}
+}
+
+// A static route and an IKE gateway that name objects are references too, from
+// the scope config.
+func TestDeviceLevelReferences(t *testing.T) {
+	t.Parallel()
+	got := run(t, "firewall-device-refs.xml", "vsys1", Query{Term: "10.88.5.1"})
+	if !has(got, "reference static-route to-remote destination net-remote") ||
+		!has(got, "reference security rule to-remote destination net-remote") {
+		t.Errorf("10.88.5.1:\n%s", dump(got))
+	}
+	got = run(t, "firewall-device-refs.xml", "vsys1", Query{Term: "10.88.6.1"})
+	if !has(got, "reference gateway gw-1 peer-address/ip peer-1") {
+		t.Errorf("10.88.6.1:\n%s", dump(got))
+	}
+	for _, f := range got {
+		if f.Stage == StageReference && f.Scope.String() != "config" {
+			t.Errorf("scope %s for %s", f.Scope, line(f))
 		}
 	}
 }

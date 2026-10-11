@@ -1,0 +1,40 @@
+<config version="11.2.0" urldb="paloaltonetworks" detail-version="11.2.5">
+  <!-- NAT rules that differ only by protocol. From home to wan, destination
+       10.88.10.100: dnat-udp (svc-udp-443, udp/443) above dnat-tcp (svc-tcp-443,
+       tcp/443). Without a protocol, port 443 fits both, so neither is sure. -->
+  <shared/>
+  <devices>
+    <entry name="localhost.localdomain">
+      <vsys>
+        <entry name="vsys1">
+          <zone>
+            <entry name="home"/>
+            <entry name="wan"/>
+          </zone>
+          <service>
+            <entry name="svc-udp-443"><protocol><udp><port>443</port></udp></protocol></entry>
+            <entry name="svc-tcp-443"><protocol><tcp><port>443</port></tcp></protocol></entry>
+          </service>
+          <rulebase>
+            <nat>
+              <rules>
+                <entry name="dnat-udp">
+                  <from><member>home</member></from><to><member>wan</member></to>
+                  <source><member>any</member></source><destination><member>10.88.10.100</member></destination>
+                  <service>svc-udp-443</service>
+                  <destination-translation><translated-address>10.88.20.1</translated-address></destination-translation>
+                </entry>
+                <entry name="dnat-tcp">
+                  <from><member>home</member></from><to><member>wan</member></to>
+                  <source><member>any</member></source><destination><member>10.88.10.100</member></destination>
+                  <service>svc-tcp-443</service>
+                  <destination-translation><translated-address>10.88.20.2</translated-address></destination-translation>
+                </entry>
+              </rules>
+            </nat>
+          </rulebase>
+        </entry>
+      </vsys>
+    </entry>
+  </devices>
+</config>

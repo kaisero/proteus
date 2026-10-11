@@ -50,6 +50,27 @@ func TestParseLeafAttributes(t *testing.T) {
 	}
 }
 
+// The schema marks a secret encrypt="yes"; phash it does not, and it is a
+// hand-modelled secret (AGENTS.md R8).
+func TestParseEncrypted(t *testing.T) {
+	t.Parallel()
+	root := load(t)
+	cert := root.Child("shared").Child("certificate").EntrySequence()
+	if !cert.Child("private-key").Encrypted || !IsSecret(cert.Child("private-key")) {
+		t.Error("private-key must be encrypted and secret")
+	}
+	if cert.Child("common-name").Encrypted || IsSecret(cert.Child("common-name")) {
+		t.Error("common-name is not a secret")
+	}
+	user := root.Child("shared").Child("local-user-database").Child("user").EntrySequence()
+	if phash := user.Child("phash"); phash.Encrypted || !IsSecret(phash) {
+		t.Errorf("phash: encrypted %v, secret %v; want false, true", phash.Encrypted, IsSecret(phash))
+	}
+	if IsSecret(nil) {
+		t.Error("nil is not a secret")
+	}
+}
+
 func TestParseEnumValues(t *testing.T) {
 	t.Parallel()
 	root := load(t)

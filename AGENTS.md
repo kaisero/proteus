@@ -30,7 +30,7 @@ The fetcher is the one package that talks to a device. It asks for an API key, r
 `<show>` commands and exports the configuration; `fetch.Client` refuses any other
 op command before it reaches the device, and has no method for anything else.
 
-Check: `go test ./... -run TestPublicAPIIsReadOnly`
+Check: `go test ./internal/archtest -run TestPublicAPIIsReadOnly`
 Check: `go test ./internal/fetch -run TestOnlyReadCalls`
 
 ## R3 — Nothing is dropped silently
@@ -64,7 +64,7 @@ A shared dynamic address group resolves to different members in different vsys.
 A global resolution silently merges sibling vsys and returns answers that are
 wrong rather than incomplete.
 
-Check: `go test ./internal/config -run TestScopedResolution`
+Check: `go test ./internal/index -run TestScopedResolution`
 
 ## R6 — Retired
 
@@ -86,8 +86,20 @@ Check: `go test -bench . ./...`
 A node modelled by hand rather than read from the schema is registered in
 `internal/schema.HandModelled`, with the reason and the schema path.
 
-Today two nodes are registered: the built-in action of the default security rules,
-and the pushed default security rules under `shared/post-rulebase`.
+Today these nodes are registered:
+
+- the built-in action of the default security rules;
+- the pushed default security rules under `shared/post-rulebase`;
+- the matching fields of a security rule;
+- the pushed rulebases `shared/pre-rulebase` and `shared/post-rulebase`, which
+  `config` reads with a vsys rulebase's schema, for snapshot diff and for the
+  load's count of undescribed elements;
+- the device's predefined services under `predefined/service`;
+- `phash`, the password hash of a local user (shared and vsys) and of an
+  administrator: a secret the schema does not mark `encrypt="yes"`;
+- the credentials the schema keeps in clear text, in shared and in a vsys: the
+  SNMP v2c trap community, the SCEP fixed challenge, the URL, payload, header
+  and parameter values of an HTTP log server profile and the values of an MFA server profile.
 
 Check: `go test ./internal/schema -run TestHandModelledIsDeclared`
 
@@ -103,7 +115,11 @@ Check: review.
 ## R10 — Indexes are keyed by scope
 
 No index spans scopes, and no lookup resolves a name without one. A scope is
-`shared` or `vsys:<name>`, and a vsys inherits shared.
+`shared` or `vsys:<name>`, and a vsys inherits shared. Below shared, every scope
+sees the device's predefined services; a shared or vsys service or service group
+of the same name hides them. A service or address name resolves by scope first
+and kind second, so a vsys service also hides a shared service group of its
+name, and a vsys address group a shared address (lab facts L9, L10).
 
 A global index merges sibling scopes. First observed on a lab device: one shared
 dynamic address group resolved to `10.124.0.0/16` in one scope and
@@ -155,8 +171,9 @@ answers the questions for every front end: it may import the simulations, `estat
 `runlog` and `reason`, and reaches none of `fetch`, `cli`, `mcp`, Cobra or a
 terminal package; `cli` imports it. `internal/reason` names the reason codes answers
 carry. It imports only the standard library, and every package may import it: each
-rule above allows it. The test helpers `internal/fakepanos` and
-`internal/simulate/pathlab` import `testing`; only tests import them.
+rule above allows it. The test helpers `internal/fakepanos`,
+`internal/simulate/pathlab` and `internal/testconfig` import `testing`; only tests
+import them.
 `internal/reason` also imports `testing`, for `testing.Testing()` alone: its strict
 hook, which makes `reason.New` panic on an unregistered code in a test binary. It is
 not a test helper, and production code imports it. `internal/mcp` imports `testing`

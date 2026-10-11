@@ -53,6 +53,10 @@ jobs:
       # the same command a developer runs locally.
       - name: Coverage floors
         run: make test-cov
+      # Every benchmark runs once: a documented figure stays backed by one
+      # that still compiles and runs (AGENTS.md R7).
+      - name: Benchmarks run
+        run: make bench-check
 
   build:
     name: Build

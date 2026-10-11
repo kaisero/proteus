@@ -1,10 +1,13 @@
 package query
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/okaiser/proteus/internal/estate"
@@ -28,6 +31,7 @@ type SearchInput struct {
 	Direct bool     `json:"direct,omitempty" jsonschema:"follow groups one level up only"`
 	// Selection is what the search runs against.
 	Selection Selection `json:"selection" jsonschema:"the file or the devices to search"`
+	ResultLimit
 }
 
 // searchModes are the modes a search takes, by name.
@@ -39,8 +43,8 @@ var showNames = map[string]search.Stage{
 	"refs": search.StageReference, "literals": search.StageLiteral,
 }
 
-// Validate holds search's input rules: one known mode, known stages to show, and
-// a file without the store's selectors.
+// Validate holds search's input rules: one known mode, known stages to show, no
+// limit below zero, and a file without the store's selectors.
 func (in SearchInput) Validate() *UsageError {
 	if strings.TrimSpace(in.Term) == "" {
 		return usage("give a search term", "")
@@ -53,6 +57,9 @@ func (in SearchInput) Validate() *UsageError {
 			return usage(fmt.Sprintf("--show %q: want objects, groups, refs or literals", st),
 				fmt.Sprintf("show %q: want objects, groups, refs or literals", st))
 		}
+	}
+	if u := in.checkLimit(); u != nil {
+		return u
 	}
 	return in.Selection.validateFile()
 }
@@ -73,6 +80,78 @@ func (sel Selection) validateFile() *UsageError {
 		}
 	}
 	return nil
+}
+
+// checkKinds refuses a kind that no selected configuration can hold, before
+// any target runs: a misspelt kind would find nothing and read as an answer.
+// The kinds a configuration can hold come from its schema digest; with several
+// targets, a kind is valid when any of them knows it.
+func (in SearchInput) checkKinds(ts []estate.Target) *UsageError {
+	if len(in.Kinds) == 0 || len(ts) == 0 {
+		return nil
+	}
+	known := map[string]bool{}
+	for _, t := range ts {
+		for _, k := range resolve.ObjectKinds(t.Config) {
+			known[k] = true
+		}
+	}
+	var lines, toolLines []string
+	for _, k := range in.Kinds {
+		if known[k] {
+			continue
+		}
+		hint := "no kind is close"
+		if near := nearKinds(k, known); len(near) > 0 {
+			hint = "did you mean " + strings.Join(near, ", ") + "?"
+		}
+		lines = append(lines, fmt.Sprintf("--kind %q: %s", k, hint))
+		toolLines = append(toolLines, fmt.Sprintf("kind %q: %s", k, hint))
+	}
+	if len(lines) == 0 {
+		return nil
+	}
+	list := "known kinds: " + strings.Join(slices.Sorted(maps.Keys(known)), ", ")
+	return usage(strings.Join(append(lines, list), "\n"), strings.Join(append(toolLines, list), "\n"))
+}
+
+// nearKinds lists the known kinds closest to an unknown one, at most five: a
+// kind that starts with it or that it starts with, or one at most two edits
+// away. The closest come first.
+func nearKinds(k string, known map[string]bool) []string {
+	k = strings.ToLower(k)
+	dist := map[string]int{}
+	for c := range known {
+		d := editDistance(k, c)
+		if d <= 2 || strings.HasPrefix(c, k) || strings.HasPrefix(k, c) {
+			dist[c] = d
+		}
+	}
+	near := slices.SortedFunc(maps.Keys(dist), func(a, b string) int {
+		return cmp.Or(cmp.Compare(dist[a], dist[b]), cmp.Compare(a, b))
+	})
+	return near[:min(len(near), 5)]
+}
+
+// editDistance is the Levenshtein distance of two strings, by byte.
+func editDistance(a, b string) int {
+	prev := make([]int, len(b)+1)
+	for j := range prev {
+		prev[j] = j
+	}
+	for i := 1; i <= len(a); i++ {
+		cur := make([]int, len(b)+1)
+		cur[0] = i
+		for j := 1; j <= len(b); j++ {
+			cost := 1
+			if a[i-1] == b[j-1] {
+				cost = 0
+			}
+			cur[j] = min(prev[j]+1, cur[j-1]+1, prev[j-1]+cost)
+		}
+		prev = cur
+	}
+	return prev[len(b)]
 }
 
 // query is the search query the input asks.
@@ -126,7 +205,7 @@ func Detail(f search.Finding) string {
 
 // Search runs the query on each selected target. A target whose index cannot be
 // built becomes a hole. The summary counts the findings and the targets with
-// and without one.
+// and without one. A limit keeps the first findings over all targets.
 func Search(ctx context.Context, env Env, in SearchInput) (Envelope[SearchInput, Finding], error) {
 	var none Envelope[SearchInput, Finding]
 	if u := in.Validate(); u != nil {
@@ -136,6 +215,9 @@ func Search(ctx context.Context, env Env, in SearchInput) (Envelope[SearchInput,
 	ts, holes, err := Targets(ctx, env, in.Selection)
 	if err != nil {
 		return none, err
+	}
+	if u := in.checkKinds(ts); u != nil {
+		return none, u
 	}
 	users, err := env.users()
 	if err != nil {
@@ -160,7 +242,7 @@ func Search(ctx context.Context, env Env, in SearchInput) (Envelope[SearchInput,
 			e.Holes = append(e.Holes, estate.NewHole(t.Device, t.Vsys, reason.New("gap.load-failed", err.Error())))
 			continue
 		}
-		fs, err := search.Run(t.Config, idx, q)
+		fs, un, err := search.Run(t.Config, idx, q)
 		if err != nil {
 			// Only a term --within cannot read is the caller's to fix.
 			if errors.Is(err, search.ErrWithinNeedsAddress) {
@@ -176,11 +258,16 @@ func Search(ctx context.Context, env Env, in SearchInput) (Envelope[SearchInput,
 				Answer: FindingAnswer(tg, f.Kind, f.Name, f.Field), Target: tg, Finding: f, Scope: f.Scope.String(), TargetIndex: i,
 			})
 		}
+		for _, u := range un {
+			e.Unresolved = append(e.Unresolved, Unresolved{Device: t.Device, Vsys: t.Vsys, Value: u.Value, Reason: u.Reason, Code: u.Code})
+		}
 		e.Summary.count(len(fs))
 	}
 	e.Summary.Without = len(ts) - e.Summary.With
 	e.Summary.Answer = searchCount(e.Summary, len(e.Holes))
-	e.Unresolved, e.Notes = TargetQualifiers(ts)
+	un, notes := TargetQualifiers(ts)
+	e.Unresolved, e.Notes = append(un, e.Unresolved...), notes
+	cut(&e, in.ResultLimit, "device, vsys or kind")
 	return e, nil
 }
 

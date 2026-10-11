@@ -1,0 +1,1 @@
+<response status="success"><result><service><entry name="service-http"><protocol><tcp><port>80,8080</port></tcp></protocol></entry><entry name="service-https"><protocol><tcp><port>443</port></tcp></protocol></entry></service></result></response>

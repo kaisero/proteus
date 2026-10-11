@@ -186,7 +186,10 @@ func (a *app) root() *cobra.Command {
 		if err := c.ValidateFlagGroups(); err != nil {
 			return &exitErr{code: exitUsage, err: err}
 		}
-		return a.checkDetail(c)
+		if err := a.checkDetail(c); err != nil {
+			return err
+		}
+		return checkLimit(c)
 	}
 
 	inv := group("inventory", "Manage the device inventory", a.inventoryInitCmd())

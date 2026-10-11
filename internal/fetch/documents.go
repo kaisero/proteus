@@ -1,11 +1,14 @@
 package fetch
 
 import (
+	"bytes"
 	"context"
 	"encoding/xml"
 	"errors"
 	"fmt"
+	"io"
 
+	"github.com/okaiser/proteus/internal/reason"
 	"github.com/okaiser/proteus/internal/runlog"
 )
 
@@ -16,6 +19,21 @@ import (
 type Document struct {
 	Name  string
 	Fetch func(ctx context.Context, c *Client) ([]byte, error)
+	// Optional is set for a document a device may refuse, such as one an older
+	// release does not know; nil makes the document required.
+	Optional *Optional
+}
+
+// Optional says what a device's refusal of an optional document means.
+//
+// A refusal, or an answer that fails Check, adds the Refused note: nothing is
+// stored and no outcome is recorded, so it is not a failed document. A transport
+// failure still is.
+type Optional struct {
+	Refused reason.Reason
+	// Check tests an answer the device accepted; nil accepts every answer. An
+	// answer that fails it is not stored, so a reader never meets it.
+	Check func([]byte) error
 }
 
 // OpDocument is a document read by show commands. The first command the device
@@ -64,6 +82,47 @@ var (
 		"<show><routing><fib/></routing></show>")
 )
 
+// Predefined is the device's predefined services, which no configuration holds.
+// The device answers with service-http and service-https, each in the shape of a
+// configured service (as observed on fw02, PAN-OS 12.2.3, L4). The command was
+// checked on that release only, so a refusal is a note, not a failure. An answer
+// without a <service> element, such as an empty result or a proxy's page, counts
+// as a refusal.
+var Predefined = Document{
+	Name:  "predefined",
+	Fetch: OpDocument("predefined", predefinedCmd).Fetch,
+	Optional: &Optional{
+		Refused: reason.New("note.fetch-predefined-missing",
+			"the device did not return its predefined services; rules that use them stay in doubt"),
+		Check: holdsService,
+	},
+}
+
+const predefinedCmd = "<show><predefined><xpath>/predefined/service</xpath></predefined></show>"
+
+// holdsService returns why an answer is not well-formed XML with a <service>
+// element, or nil when it is.
+func holdsService(b []byte) error {
+	dec := xml.NewDecoder(bytes.NewReader(b))
+	found := false
+	for {
+		tok, err := dec.Token()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			return fmt.Errorf("the answer is not XML: %w", err)
+		}
+		if se, ok := tok.(xml.StartElement); ok && se.Name.Local == "service" {
+			found = true
+		}
+	}
+	if !found {
+		return errors.New("the answer holds no <service> element")
+	}
+	return nil
+}
+
 // The routing and HA documents.
 var (
 	// RoutingRIB is the routing table, installed or not. Advanced Routing answers
@@ -84,7 +143,7 @@ const haStateCmd = "<show><high-availability><state/></high-availability></show>
 
 // Documents is what every fetch collects, in order. The configuration comes first
 // because nothing can be analysed without it.
-var Documents = []Document{RunningConfig, SystemInfo, Interfaces, RoutingFIB, RoutingRIB, HAState}
+var Documents = []Document{RunningConfig, SystemInfo, Interfaces, RoutingFIB, RoutingRIB, HAState, Predefined}
 
 // System is what a snapshot records from show system info.
 type System struct {

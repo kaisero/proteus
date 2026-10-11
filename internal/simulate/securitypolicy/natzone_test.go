@@ -1,11 +1,15 @@
 package securitypolicy
 
 import (
+	"bytes"
 	"errors"
 	"os"
+	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
+	"github.com/okaiser/proteus/internal/config"
 	"github.com/okaiser/proteus/internal/resolve"
 	"github.com/okaiser/proteus/internal/simulate"
 )
@@ -59,6 +63,83 @@ func TestThePostNATZone(t *testing.T) {
 	}
 	if rs := stage(r, "derive-zones").Fidelity.Reasons(); len(rs) == 0 || rs[0].Code != "doubt.nat-rule" {
 		t.Errorf("the NAT summary has its own code: %v", rs)
+	}
+}
+
+// A NAT rule in doubt above the destination NAT may match first and leave the
+// destination alone, so the derived zones keep the pre-NAT zone with the
+// post-NAT one. nat-https names service-https, which only the device's
+// predefined services define; with them stored, it cannot match tcp/8443 and the
+// post-NAT zone stands alone (lab L4b).
+func TestANATDoubtKeepsThePreNATZone(t *testing.T) {
+	t.Parallel()
+	b, err := os.ReadFile("../../../testdata/config/firewall-nat.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	doubted := `<entry name="nat-https"><from><member>any</member></from><to><member>transport</member></to>` +
+		`<source><member>any</member></source><destination><member>198.18.250.10</member></destination>` +
+		`<service>service-https</service></entry><entry name="t-dnat-port">`
+	b = bytes.Replace(b, []byte(`<entry name="t-dnat-port">`), []byte(doubted), 1)
+	ask := func(predefined, zones bool) (simulate.Run, Verdict) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "firewall-nat.xml")
+		if err := os.WriteFile(path, b, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if predefined {
+			p, err := os.ReadFile("../../../testdata/predefined/predefined.xml")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(dir, config.PredefinedFile), p, 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}
+		e := envPath(t, path, zones)
+		e.Network = fw01Network(t)
+		return run(t, e, simulate.Flow{Source: ep("198.19.0.1"), Destination: ep("198.18.250.10"), DestPort: 8443})
+	}
+	r, v := ask(false, true)
+	st := stage(r, "derive-zones")
+	if strings.Join(v.Zones.To, ",") != "server,transport" || !strings.Contains(st.Detail, "to server (after NAT rule t-dnat-port)") ||
+		!strings.Contains(st.Fidelity.String(), "nat rule nat-https: service service-https is not defined") {
+		t.Errorf("in doubt: zones %+v, detail %q, fidelity %s", v.Zones, st.Detail, st.Fidelity)
+	}
+	if !slices.ContainsFunc(v.Candidates, func(r resolve.Rule) bool { return r.Name == "t-allow-8443" }) {
+		t.Errorf("the post-NAT rule stays a candidate: %v", v.Candidates)
+	}
+	_, v = ask(true, true)
+	if strings.Join(v.Zones.To, ",") != "server" || first(v) != "t-allow-8443" {
+		t.Errorf("with the predefined services: zones %+v, first %s", v.Zones, first(v))
+	}
+	// Zones from the configuration, which places no zone on the destination:
+	// the side does not narrow, and NAT's zone is only named, not claimed.
+	r, v = ask(false, false)
+	st = stage(r, "derive-zones")
+	if len(v.Zones.To) != 0 || strings.Contains(v.Zones.Source, "after NAT") || strings.Contains(st.Detail, "(after NAT rule") ||
+		!strings.Contains(v.Zones.Detail, "NAT may give to server (after NAT rule t-dnat-port), but a NAT rule is in doubt") {
+		t.Errorf("no pre-NAT zone: zones %+v, detail %q", v.Zones, st.Detail)
+	}
+}
+
+// While a NAT rule is in doubt, one derived zone on each side is not a known
+// pair: the doubted rule may give another destination zone, so no default rule
+// decides (C16 under S12). Without a port t-dnat-port is in doubt and the
+// pre-NAT zone transport stays alone; with the port it decides, and the pair
+// server chooses again.
+func TestANATDoubtLeavesTheDefaultRuleOpen(t *testing.T) {
+	t.Parallel()
+	f := simulate.Flow{Source: ep("198.19.0.1"), Destination: ep("198.18.250.10"), Protocol: "udp", DestPort: 0}
+	_, v := run(t, natEnv(t), f)
+	o, why := v.Decision()
+	if strings.Join(v.Zones.To, ",") != "transport" || v.Default != "" || o != Undecided || why[0].Code != "default.zones-unknown" {
+		t.Errorf("in doubt: zones %+v, %s %v", v.Zones, o, why)
+	}
+	f.Protocol, f.DestPort = "tcp", 8443
+	_, v = run(t, natEnv(t), f)
+	if o, why := v.Decision(); strings.Join(v.Zones.To, ",") != "server" || o == Undecided {
+		t.Errorf("decided: zones %+v, %s %v", v.Zones, o, why)
 	}
 }
 

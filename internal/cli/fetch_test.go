@@ -182,10 +182,73 @@ func TestStoreAndFetchAgreeOnDocumentNames(t *testing.T) {
 		store.ConfigDoc:     fetch.RunningConfig.Name,
 		store.InterfacesDoc: fetch.Interfaces.Name,
 		store.FIBDoc:        fetch.RoutingFIB.Name,
+		store.RIBDoc:        fetch.RoutingRIB.Name,
+		store.HADoc:         fetch.HAState.Name,
 	} {
 		if got != want {
 			t.Errorf("store says %q, fetch says %q", got, want)
 		}
+	}
+	// config reads the predefined services next to the configuration by file name.
+	if config.PredefinedFile != fetch.Predefined.Name+".xml" {
+		t.Errorf("config reads %q, fetch stores %q", config.PredefinedFile, fetch.Predefined.Name+".xml")
+	}
+}
+
+// The predefined services are stored with the snapshot, and the stored
+// configuration sees them (L4).
+func TestFetchStoresThePredefinedServices(t *testing.T) {
+	t.Parallel()
+	inv, st := setup(t, lab(t).Start(t))
+	if _, err := fetchText(context.Background(), fetcher{inv: inv, st: st, getenv: getenv}, "fw01"); err != nil {
+		t.Fatal(err)
+	}
+	sn, err := st.Resolve("fw01")
+	if _, statErr := os.Stat(sn.Path(fetch.Predefined.Name)); err != nil || statErr != nil {
+		t.Fatalf("predefined.xml not stored: %v", err)
+	}
+	cfg, _, err := config.Load(sn.Path(store.ConfigDoc))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for _, o := range resolve.ObjectsInScope(cfg, config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}, "service") {
+		if o.Scope.Sort == config.ScopePredefined {
+			names = append(names, o.Name+" "+o.Value)
+		}
+	}
+	if got := strings.Join(names, ", "); got != "service-http tcp/80,8080, service-https tcp/443" {
+		t.Errorf("predefined services = %s", got)
+	}
+}
+
+// A device that refuses the predefined services gives a note and a complete
+// fetch; the snapshot records the note and no failed document.
+func TestFetchWithoutThePredefinedServicesIsComplete(t *testing.T) {
+	t.Parallel()
+	d := lab(t)
+	d.Ops[fakepanos.PredefinedCmd] = fakepanos.Refusal("17", "show -> predefined is unexpected")
+	inv, st := setup(t, d.Start(t))
+	f := fetcher{inv: inv, st: st, getenv: getenv}
+	ans := fetchAnswer{results: f.each(context.Background(), []string{"fw01"})}
+	if err := ans.Status(); err != nil {
+		t.Errorf("a refused optional document is a complete fetch, got %v", err)
+	}
+	q := ans.Qualifiers()
+	if len(q.Notes) != 2 || q.Notes[1].Code != "note.fetch-predefined-missing" {
+		t.Errorf("notes = %+v", q.Notes)
+	}
+	var out bytes.Buffer
+	_ = ans.Text(&textOut{w: &out})
+	if !strings.Contains(out.String(), "note: the device did not return its predefined services") || strings.Contains(out.String(), "FAILED") {
+		t.Errorf("text:\n%s", out.String())
+	}
+	sn, err := st.Resolve("fw01")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, statErr := os.Stat(sn.Path(fetch.Predefined.Name)); statErr == nil || len(sn.Meta.Documents) != 6 || len(sn.Meta.Notes) != 1 {
+		t.Errorf("meta = %+v", sn.Meta)
 	}
 }
 
@@ -292,7 +355,7 @@ func TestHousekeeping(t *testing.T) {
 	c.want(0, "fetch", "--label", "site=s1")
 	c.want(2, "snapshot", "list", "../x")
 	out := c.want(0, "snapshot", "list", "fw01")
-	if !strings.HasPrefix(out, "* ") || !strings.Contains(out, "6 documents, 0 failed") {
+	if !strings.HasPrefix(out, "* ") || !strings.Contains(out, "7 documents, 0 failed") {
 		t.Errorf("snapshot list:\n%s", out)
 	}
 	var env struct{ Results []struct{ Latest bool } }
@@ -307,6 +370,83 @@ func TestHousekeeping(t *testing.T) {
 	}
 }
 
+// A damaged snapshot becomes a hole in snapshot list, and the good ones still show.
+func TestSnapshotListGoesOnPastADamagedSnapshot(t *testing.T) {
+	t.Parallel()
+	c := newCLI(t)
+	c.inventory(inventoryFor(lab(t).Start(t)))
+	for range 3 {
+		c.want(0, "fetch", "fw01")
+	}
+	type listed struct {
+		Results []struct {
+			ID     string
+			Latest bool
+		}
+		Holes []struct{ Device, Code, Text string }
+	}
+	var before listed
+	if err := json.Unmarshal([]byte(c.want(0, "snapshot", "list", "fw01", "--output", "json")), &before); err != nil || len(before.Results) != 3 {
+		t.Fatalf("snapshot list json: %v %+v", err, before)
+	}
+	damaged := before.Results[1].ID
+	if err := os.Remove(filepath.Join(c.env["PROTEUS_STORE"], "fw01", damaged, "meta.json")); err != nil {
+		t.Fatal(err)
+	}
+	out := c.want(3, "snapshot", "list", "fw01")
+	for _, want := range []string{
+		"* " + before.Results[0].ID, "  " + before.Results[2].ID,
+		"hole: fw01: store: fw01@" + damaged + ": meta.json: ",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q in:\n%s", want, out)
+		}
+	}
+	var after listed
+	if err := json.Unmarshal([]byte(c.want(3, "snapshot", "list", "fw01", "--output", "json")), &after); err != nil {
+		t.Fatal(err)
+	}
+	if len(after.Results) != 2 || after.Results[0].ID != before.Results[0].ID || !after.Results[0].Latest ||
+		after.Results[1].ID != before.Results[2].ID {
+		t.Errorf("results = %+v", after.Results)
+	}
+	if len(after.Holes) != 1 || after.Holes[0].Device != "fw01" || after.Holes[0].Code != "gap.load-failed" ||
+		!strings.Contains(after.Holes[0].Text, damaged) {
+		t.Errorf("holes = %+v", after.Holes)
+	}
+	// --at passes over the damaged snapshot to the older one, with a note.
+	at, _ := time.Parse("2006-01-02T15-04-05Z", damaged)
+	atFlag := at.Add(30 * time.Second).Format(time.RFC3339)
+	note := "note: snapshot " + damaged + " skipped: its meta.json cannot be read; " + before.Results[2].ID + " answers"
+	if out := c.want(0, "snapshot", "show", "--device", "fw01", "--at", atFlag); !strings.Contains(out, note) {
+		t.Errorf("snapshot show --at: missing %q in:\n%s", note, out)
+	}
+	var shown struct{ Notes []struct{ Code, Text string } }
+	if err := json.Unmarshal([]byte(c.want(0, "snapshot", "show", "--device", "fw01", "--at", atFlag, "--output", "json")), &shown); err != nil ||
+		len(shown.Notes) == 0 || shown.Notes[0].Code != "note.snapshot-skipped" {
+		t.Errorf("snapshot show --at json: %v %+v", err, shown)
+	}
+}
+
+// A snapshot pruned between List and Get no longer exists: it is left out, with
+// no hole.
+func TestSnapshotRowsSkipAPrunedSnapshot(t *testing.T) {
+	t.Parallel()
+	st, err := store.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	st = st.WithClock(func() time.Time { return time.Date(2026, 9, 28, 10, 0, 0, 0, time.UTC) })
+	sn, err := st.Write(store.Meta{Device: "fw01"}, map[string][]byte{store.ConfigDoc: []byte("<config/>")}, 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows, holes := snapshotRows(st, "fw01", []string{"2026-09-28T11-00-00Z", sn.ID})
+	if len(rows) != 1 || rows[0].ID != sn.ID || !rows[0].Latest || len(holes) != 0 {
+		t.Errorf("rows = %+v, holes = %+v", rows, holes)
+	}
+}
+
 // Parallel fetch stores every device and reports them in the order named.
 func TestParallelFetchKeepsOrder(t *testing.T) {
 	t.Parallel()
@@ -316,6 +456,26 @@ func TestParallelFetchKeepsOrder(t *testing.T) {
 	i3, i1, i2 := strings.Index(out, "stored fw03@"), strings.Index(out, "stored fw01@"), strings.Index(out, "stored fw02@")
 	if i3 < 0 || i1 < 0 || i2 < 0 || i3 > i1 || i1 > i2 {
 		t.Errorf("reports out of order:\n%s", out)
+	}
+}
+
+// A device named twice is fetched once: two fetches in one second would write the
+// same snapshot, and one of them would fail.
+func TestFetchNamesADeviceOnce(t *testing.T) {
+	t.Parallel()
+	c := newCLI(t)
+	c.inventory(inventoryFor(lab(t).Start(t), lab(t).Start(t)))
+	out := c.want(0, "fetch", "fw02", "fw01", "fw02", "fw01")
+	if n := strings.Count(out, "stored fw01@"); n != 1 {
+		t.Errorf("fw01 stored %d times:\n%s", n, out)
+	}
+	if i2, i1 := strings.Index(out, "stored fw02@"), strings.Index(out, "stored fw01@"); i2 < 0 || i2 > i1 {
+		t.Errorf("reports out of order:\n%s", out)
+	}
+	var env struct{ Results []struct{ Device string } }
+	if err := json.Unmarshal([]byte(c.want(0, "fetch", "fw01", "fw01", "--output", "json")), &env); err != nil ||
+		len(env.Results) != 1 || env.Results[0].Device != "fw01" {
+		t.Errorf("fetch fw01 fw01 json: %v %+v", err, env)
 	}
 }
 
@@ -408,6 +568,92 @@ func TestSettingsPrecedence(t *testing.T) {
 	}
 }
 
+// A secret's value never reaches the diff's output, in any format.
+func TestSnapshotDiffHidesSecrets(t *testing.T) {
+	t.Parallel()
+	c := newCLI(t)
+	d := lab(t)
+	d.Config = read(t, "../../testdata/drift/before.xml")
+	c.inventory(inventoryFor(d.Start(t)))
+	c.want(0, "fetch", "fw01")
+	d.Config = read(t, "../../testdata/drift/secrets.xml")
+	c.want(0, "fetch", "fw01")
+	raw := []string{"DUMMYKEYBEFORE0000", "DUMMYKEYAFTER00000", "DUMMYBINDBEFORE000", "DUMMYBINDAFTER0000", "DUMMYHASHBEFORE0000", "DUMMYHASHAFTER00000"}
+	text := c.want(0, "snapshot", "diff", "--vsys", "vsys1")
+	for _, want := range []string{
+		"private-key: changed (secret, not shown)", "bind-password: changed (secret, not shown)", "phash: changed (secret, not shown)",
+	} {
+		if !strings.Contains(text, want) {
+			t.Errorf("missing %q in:\n%s", want, text)
+		}
+	}
+	for _, format := range []string{"text", "json", "yaml"} {
+		out := c.want(0, "snapshot", "diff", "--vsys", "vsys1", "--output", format)
+		for _, v := range raw {
+			if strings.Contains(out, v) {
+				t.Errorf("%s output shows %s:\n%s", format, v, out)
+			}
+		}
+		if format != "text" && !strings.Contains(out, "(secret)") {
+			t.Errorf("%s output must mark the secrets:\n%s", format, out)
+		}
+	}
+	// Lookup and search read no secret either.
+	file := "../../testdata/drift/before.xml"
+	for _, args := range [][]string{
+		{"lookup", "cert-web", "--file", file, "--output", "json"},
+		{"lookup", "ldap-corp", "--file", file, "--output", "json"},
+		{"search", "--contains", "AQ==", "--file", file, "--output", "json"},
+		{"search", "--contains", "$5$", "--file", file, "--output", "json"},
+	} {
+		out, errOut, code := c.run(args...)
+		if code != 0 && code != 1 {
+			t.Errorf("%v: exit %d: %s", args, code, errOut)
+		}
+		for _, v := range raw {
+			if strings.Contains(out+errOut, v) {
+				t.Errorf("%v shows %s:\n%s", args, v, out)
+			}
+		}
+	}
+}
+
+// A value the schema does not describe never reaches the diff's output: it
+// may be a secret a newer release added.
+func TestSnapshotDiffHidesUndescribedValues(t *testing.T) {
+	t.Parallel()
+	c := newCLI(t)
+	d := lab(t)
+	d.Config = read(t, "../../testdata/drift/before.xml")
+	c.inventory(inventoryFor(d.Start(t)))
+	c.want(0, "fetch", "fw01")
+	d.Config = read(t, "../../testdata/drift/undescribed.xml")
+	c.want(0, "fetch", "fw01")
+	text := c.want(0, "snapshot", "diff", "--vsys", "vsys1")
+	if want := "new-secret: changed (not described by the schema; values not shown)"; !strings.Contains(text, want) {
+		t.Errorf("missing %q in:\n%s", want, text)
+	}
+	for _, format := range []string{"text", "json", "yaml"} {
+		if out := c.want(0, "snapshot", "diff", "--vsys", "vsys1", "--output", format); strings.Contains(out, "s3cr3t") {
+			t.Errorf("%s output shows the value:\n%s", format, out)
+		}
+	}
+	out, errOut, _ := c.run("lookup", "ldap-corp", "--file", "../../testdata/drift/undescribed.xml", "--output", "json")
+	if strings.Contains(out+errOut, "s3cr3t") {
+		t.Errorf("lookup shows the value:\n%s", out)
+	}
+	// An added object that holds an undescribed value has no short line: here
+	// a zone's tag list, which the schema does not describe.
+	d.Config = strings.Replace(read(t, "../../testdata/drift/before.xml"), "<zone>",
+		`<zone><entry name="dmz"><tag><member>DUMMYTAGA</member><member>DUMMYTAGB</member></tag></entry>`, 1)
+	c.want(0, "fetch", "fw01")
+	for _, format := range []string{"text", "json", "yaml"} {
+		if out := c.want(0, "snapshot", "diff", "--vsys", "vsys1", "--output", format); !strings.Contains(out, "dmz") || strings.Contains(out, "DUMMYTAG") {
+			t.Errorf("%s output must name the zone and none of its tags:\n%s", format, out)
+		}
+	}
+}
+
 func TestSnapshotDiff(t *testing.T) {
 	t.Parallel()
 	c := newCLI(t)
@@ -421,7 +667,7 @@ func TestSnapshotDiff(t *testing.T) {
 	c.want(0, "fetch", "fw01")
 	out := c.want(0, "snapshot", "diff")
 	for _, want := range []string{
-		"changed address       net-home   198.18.1.0/24 -> 198.18.2.0/24",
+		"changed address       net-home\n      ip-netmask: 198.18.1.0/24 -> 198.18.2.0/24\n",
 		"added   security rule new-rule", "vsys:vsys2 no changes",
 	} {
 		if !strings.Contains(out, want) {
@@ -443,7 +689,12 @@ func TestSnapshotDiff(t *testing.T) {
 	c.want(2, "snapshot", "diff", "--file", "x.xml")
 	c.want(0, "snapshot", "diff", "--from", "2026-09-28T10:00:30Z", "--to", "2026-09-28T23:00:00Z")
 	c.want(3, "snapshot", "diff", "--from", "2026-01-01")
-	c.want(3, "snapshot", "diff", "--to", "garbage")
+	// A time that does not read is a usage error that names its flag.
+	for _, flag := range []string{"--from", "--to"} {
+		if _, errOut, code := c.run("snapshot", "diff", flag, "garbage"); code != exitUsage || !strings.Contains(errOut, flag+` "garbage": want a snapshot id`) {
+			t.Errorf("%s garbage: exit %d, stderr %q", flag, code, errOut)
+		}
+	}
 }
 
 func TestSimulatePolicy(t *testing.T) {
@@ -759,6 +1010,18 @@ func TestSearchModeFlags(t *testing.T) {
 	if !strings.Contains(out, "(contains)") || !strings.Contains(out, "custom-azuresite-group") {
 		t.Errorf("--contains:\n%s", out)
 	}
+}
+
+// A misspelt --kind is a usage error that lists the kinds, not an empty answer.
+func TestSearchRefusesAnUnknownKind(t *testing.T) {
+	t.Parallel()
+	c := newCLI(t)
+	out, errOut, code := c.run("search", "web", "--kind", "addr", "--file", "../../testdata/config/firewall-lab.xml")
+	if code != 2 || out != "" || !strings.Contains(errOut, `--kind "addr": did you mean address, address-group?`) ||
+		!strings.Contains(errOut, "\nknown kinds: address, address-group") {
+		t.Errorf("exit %d\nstdout:\n%s\nstderr:\n%s", code, out, errOut)
+	}
+	c.want(0, "search", "web", "--kind", "address-group", "--file", "../../testdata/config/firewall-lab.xml")
 }
 
 // A fan-out cancelled while one device hangs returns at once with the other

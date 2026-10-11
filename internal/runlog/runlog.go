@@ -198,9 +198,6 @@ func (l *Logger) Persist() error {
 	return nil
 }
 
-// Discard returns a logger that writes nothing.
-func Discard() *Logger { return nil }
-
 // Path is the file this run logs to; empty for a discarding logger.
 func (l *Logger) Path() string {
 	if l == nil {

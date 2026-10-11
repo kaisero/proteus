@@ -8,7 +8,7 @@ Validated against 133ba4a on 2026-09-27 · Purpose: what must pass before a comm
 pre-commit hook runs it, which is why it has to stay fast enough to tolerate.
 
 ```
-ci: tidy-check lint test-race test-cov context-check build vuln
+ci: tidy-check lint test-race test-cov bench-check context-check build vuln
 ```
 
 ## The gates
@@ -19,14 +19,17 @@ ci: tidy-check lint test-race test-cov context-check build vuln
 | `lint` | golangci-lint v2, zero issues tolerated |
 | `test-race` | the shared-index data race class |
 | `test-cov` | coverage falling below the recorded floor |
+| `bench-check` | a benchmark behind a documented figure (R7) that no longer compiles or runs; each runs once |
 | `build` | proteus still cross-compiles for linux/amd64 |
 | `vuln` | govulncheck |
 | `context-check` | these agent docs drifting from the real API |
 
 `go test ./internal/archtest -run TestImportDirection` is R12: the read-only core
 imports no I/O, and the packages above it point one way. `TestTestHelpersStayInTests`
-keeps the test helpers `internal/fakepanos` and `internal/simulate/pathlab`, which
-import `testing`, out of every package's non-test code. It runs in `test-race`.
+keeps the test helpers `internal/fakepanos`, `internal/simulate/pathlab` and
+`internal/testconfig`, which import `testing`, out of every package's non-test code.
+It runs in `test-race`. `internal/testconfig` writes the generated group-tree
+configuration the index and card benchmarks share.
 
 ### The coverage ratchet
 
@@ -56,6 +59,8 @@ The fetcher's tests run against `internal/fakepanos`, a fake XML API over TLS on
 | `firewall-siblings.xml` | one name, two vsys, two values: R10 |
 | `firewall-shadow.xml`, `firewall-urlprofile-shadow.xml` | a vsys definition shadowing a shared one |
 | `firewall-nested-groups.xml`, `firewall-cyclic-groups.xml` | closure depth and cycles |
+| `firewall-shared-names.xml` | one name, several kinds: tag and address group, address group and service group |
+| `firewall-device-refs.xml` | references from outside any vsys: a static route and an IKE gateway |
 | `firewall-badfilter.xml` | a tag filter the parser refuses |
 | `firewall-literals.xml` | addresses written directly into rule fields |
 | `firewall-lab.xml`, `firewall-paths.xml` | shared pre/post around vsys rulebases, disabled rules |

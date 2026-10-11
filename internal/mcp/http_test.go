@@ -37,11 +37,12 @@ const testToken = "0123456789abcdef0123456789abcdef"
 // server and returns ServeHTTP's error.
 func httpLab(t *testing.T, o Options) (string, *recorder, func() error) {
 	t.Helper()
-	return httpLabOn(t, o, nil)
+	return httpLabOn(t, o, 0, nil)
 }
 
-// httpLabOn is httpLab with the listener passed through wrap first, when set.
-func httpLabOn(t *testing.T, o Options, wrap func(net.Listener) net.Listener) (string, *recorder, func() error) {
+// httpLabOn is httpLab with the listener passed through wrap first, when
+// set, and the write slack, when not zero.
+func httpLabOn(t *testing.T, o Options, slack time.Duration, wrap func(net.Listener) net.Listener) (string, *recorder, func() error) {
 	t.Helper()
 	rec := &recorder{}
 	if o.Env.Inventory == nil {
@@ -60,7 +61,7 @@ func httpLabOn(t *testing.T, o Options, wrap func(net.Listener) net.Listener) (s
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() {
-		done <- ServeHTTP(ctx, o, HTTPOptions{Token: testToken, AllowedHosts: []string{"127.0.0.1", "Proteus.Example.Org"}}, ln)
+		done <- ServeHTTP(ctx, o, HTTPOptions{Token: testToken, AllowedHosts: []string{"127.0.0.1", "Proteus.Example.Org"}, slack: slack}, ln)
 	}()
 	var once sync.Once
 	var served error
@@ -423,12 +424,13 @@ func TestServeHTTPDrainsOnShutdown(t *testing.T) {
 	}
 }
 
-// A request still open when the shutdown deadline (the call timeout) passes
-// is cut: the server closes its connection and ServeHTTP returns.
+// A request still open when the stop deadline (the write timeout) passes is
+// cut: the server closes its connection and ServeHTTP returns.
 func TestServeHTTPClosesWhatOutlivesTheShutdown(t *testing.T) {
 	t.Parallel()
 	waiting := make(chan struct{})
-	url, _, stop := httpLabOn(t, Options{Limits: Limits{CallTimeout: 100 * time.Millisecond}}, func(ln net.Listener) net.Listener {
+	limits := Limits{CallTimeout: 100 * time.Millisecond, MaxWait: 10 * time.Millisecond}
+	url, _, stop := httpLabOn(t, Options{Limits: limits}, 10*time.Millisecond, func(ln net.Listener) net.Listener {
 		return &secondRead{Listener: ln, waiting: waiting}
 	})
 	conn, err := net.Dial("tcp", strings.TrimSuffix(strings.TrimPrefix(url, "http://"), "/"))
@@ -461,6 +463,68 @@ func TestServeHTTPClosesWhatOutlivesTheShutdown(t *testing.T) {
 	// Closed: the read ends at once, with EOF or a reset, not the deadline.
 	if _, err := io.ReadAll(conn); errors.Is(err, os.ErrDeadlineExceeded) {
 		t.Errorf("the connection was not closed: %v", err)
+	}
+}
+
+// One deadline bounds the whole stop, the write timeout (call timeout + max
+// wait + slack): work that never returns and a client that keeps its request
+// open do not each get a call timeout of their own.
+func TestServeHTTPStopsByOneDeadline(t *testing.T) {
+	t.Parallel()
+	env := labEnv(t, snap{pathlab.FW01, pathlab.ConfigFile(pathlab.FW01)}, snap{pathlab.FW02, pathlab.ConfigFile(pathlab.FW02)})
+	started, stuck := make(chan struct{}), make(chan struct{})
+	var once sync.Once
+	// The work ignores its context: it returns only when the test ends.
+	env.Resolve = func(context.Context, string) ([]netip.Addr, error) {
+		once.Do(func() { close(started) })
+		<-stuck
+		return nil, errors.New("gone")
+	}
+	const timeout, wait, slack = time.Second, 10 * time.Millisecond, 10 * time.Millisecond
+	waiting := make(chan struct{})
+	url, _, stop := httpLabOn(t, Options{Env: env, Limits: Limits{CallTimeout: timeout, MaxWait: wait}}, slack, func(ln net.Listener) net.Listener {
+		return &secondRead{Listener: ln, waiting: waiting}
+	})
+	t.Cleanup(func() { close(stuck) }) // runs before the lab's stop
+	// The slow client: a body that never arrives in full.
+	conn, err := net.Dial("tcp", strings.TrimSuffix(strings.TrimPrefix(url, "http://"), "/"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	if _, err := fmt.Fprintf(conn, "POST / HTTP/1.1\r\nHost: 127.0.0.1\r\nAuthorization: Bearer %s\r\n"+
+		"Content-Type: application/json\r\nAccept: application/json, text/event-stream\r\nContent-Length: 1000\r\n\r\n{", testToken); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-waiting:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the server never read the body")
+	}
+	// The stuck work: a call whose work never returns holds its slot.
+	cs := httpClient(t, url, nil)
+	go func() {
+		_, _ = cs.CallTool(context.Background(), &sdk.CallToolParams{
+			Name:      "simulate_routing",
+			Arguments: map[string]any{"source": pathlab.Source, "destination": "stuck.example.test", "port": 443},
+		})
+	}()
+	<-started
+	begin := time.Now()
+	stopped := make(chan error, 1)
+	go func() { stopped <- stop() }()
+	select {
+	case err := <-stopped:
+		if !errors.Is(err, context.Canceled) {
+			t.Errorf("ServeHTTP returned %v", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("the stop never ended")
+	}
+	// Each phase with its own call timeout would take 2 s.
+	deadline := timeout + wait + slack
+	if took := time.Since(begin); took < deadline || took > deadline+timeout/2 {
+		t.Errorf("the stop took %v, want about %v", took, deadline)
 	}
 }
 
@@ -634,7 +698,7 @@ func TestTheAuditLog(t *testing.T) {
 	when := time.Date(2026, 10, 10, 9, 0, 0, 0, time.FixedZone("x", 3600))
 	a.Audit(Call{
 		Time: when, Tool: "search", Input: json.RawMessage(`{"value":"dc01"}`), Status: StatusOK,
-		Answers: []string{"found"}, Codes: []reason.Code{"note.stale"}, Snapshots: []string{"fw01@1"},
+		Answers: []string{"found"}, AnswerCount: 1, Codes: []reason.Code{"note.stale"}, Snapshots: []string{"fw01@1"},
 		Duration: 1500 * time.Millisecond, Identity: Identity{Auth: AuthToken, Source: SourceHeader, Claims: map[string]string{"sub": "alice"}},
 	})
 	a.Audit(Call{Time: when, Tool: "search", Status: StatusBusy, Code: "call.busy", Identity: Identity{Auth: AuthToken, Source: SourceNone}})
@@ -662,12 +726,12 @@ func TestTheAuditLog(t *testing.T) {
 		}
 	}
 	want := `{"time":"2026-10-10T08:00:00Z","auth":"token","identity_source":"header","identity":{"sub":"alice"},"tool":"search",` +
-		`"input":{"value":"dc01"},"verdict":["found"],"codes":["note.stale"],"snapshots":["fw01@1"],"duration_ms":1500,"status":"ok"}`
+		`"input":{"value":"dc01"},"verdict":["found"],"verdict_count":1,"codes":["note.stale"],"snapshots":["fw01@1"],"duration_ms":1500,"status":"ok"}`
 	if lines[1] != want {
 		t.Errorf("line\n%s\nwant\n%s", lines[1], want)
 	}
 	want = `{"time":"2026-10-10T08:00:00Z","auth":"token","identity_source":"none","identity":"unknown","tool":"search",` +
-		`"input":null,"verdict":[],"codes":[],"snapshots":[],"duration_ms":0,"status":"busy","code":"call.busy"}`
+		`"input":null,"verdict":[],"verdict_count":0,"codes":[],"snapshots":[],"duration_ms":0,"status":"busy","code":"call.busy"}`
 	if lines[2] != want {
 		t.Errorf("line\n%s\nwant\n%s", lines[2], want)
 	}

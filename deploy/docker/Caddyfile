@@ -4,6 +4,22 @@
 # of compose.yaml: Caddy passes the Host on, and proteus answers 403 to any
 # other.
 
+# No log line keeps the identity: the filter drops the claims header that the
+# gateway forwards. This global block covers Caddy's default log, where the
+# error lines of a failed request (a 502 while proteus-mcp restarts) write the
+# request headers; the site's log block below covers the access log. Caddy
+# already redacts Authorization.
+{
+	log default {
+		format filter {
+			wrap json
+			fields {
+				request>headers>X-User-Claims delete
+			}
+		}
+	}
+}
+
 proteus.example.org {
 	# Allow only the gateway's egress addresses, when it publishes them.
 	# Placeholders from the documentation range: replace them.
@@ -22,8 +38,14 @@ proteus.example.org {
 		health_interval 30s
 	}
 
+	# The access log keeps no identity either: the same filter as above.
 	log {
 		output stdout
-		format json
+		format filter {
+			wrap json
+			fields {
+				request>headers>X-User-Claims delete
+			}
+		}
 	}
 }

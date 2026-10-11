@@ -1,0 +1,58 @@
+<config version="11.2.0" urldb="paloaltonetworks" detail-version="11.2.5">
+  <!-- A wildcard address object (lab fact L2): 10.88.2.1/0.0.255.0 matches every
+       10.88.x.1. g-wc holds it. wc-v6 is not an IPv4 wildcard and stays
+       unread, as before. -->
+  <shared/>
+  <devices>
+    <entry name="localhost.localdomain">
+      <vsys>
+        <entry name="vsys1">
+          <zone>
+            <entry name="inside"/>
+            <entry name="outside"/>
+          </zone>
+          <address>
+            <entry name="wc"><ip-wildcard>10.88.2.1/0.0.255.0</ip-wildcard></entry>
+            <entry name="wc-v6"><ip-wildcard>2001:db8::1/::ff00</ip-wildcard></entry>
+          </address>
+          <address-group>
+            <entry name="g-wc"><static><member>wc</member></static></entry>
+          </address-group>
+          <rulebase>
+            <security>
+              <rules>
+                <entry name="from-wc">
+                  <from><member>inside</member></from>
+                  <to><member>outside</member></to>
+                  <source><member>wc</member></source>
+                  <destination><member>any</member></destination>
+                  <application><member>any</member></application>
+                  <service><member>any</member></service>
+                  <action>allow</action>
+                </entry>
+                <entry name="to-g-wc">
+                  <from><member>outside</member></from>
+                  <to><member>inside</member></to>
+                  <source><member>any</member></source>
+                  <destination><member>g-wc</member></destination>
+                  <application><member>any</member></application>
+                  <service><member>any</member></service>
+                  <action>allow</action>
+                </entry>
+                <entry name="later">
+                  <from><member>inside</member></from>
+                  <to><member>outside</member></to>
+                  <source><member>any</member></source>
+                  <destination><member>any</member></destination>
+                  <application><member>any</member></application>
+                  <service><member>any</member></service>
+                  <action>deny</action>
+                </entry>
+              </rules>
+            </security>
+          </rulebase>
+        </entry>
+      </vsys>
+    </entry>
+  </devices>
+</config>

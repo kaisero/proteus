@@ -2,6 +2,7 @@ package resolve
 
 import (
 	"net/netip"
+	"slices"
 	"strings"
 
 	"github.com/okaiser/proteus/internal/config"
@@ -55,6 +56,16 @@ func ZonesInScope(cfg *config.Config, sc config.Scope) []Zone {
 		out = append(out, z)
 	}
 	return out
+}
+
+// ZoneNames are the names of the zones a scope defines, sorted.
+func ZoneNames(cfg *config.Config, sc config.Scope) []string {
+	var out []string
+	for _, z := range ZonesInScope(cfg, sc) {
+		out = append(out, z.Name)
+	}
+	slices.Sort(out)
+	return slices.Compact(out)
 }
 
 // InterfaceAddresses returns every address configured on an interface.

@@ -84,6 +84,12 @@ services:
       - store:/var/lib/proteus/store:ro
       - mcp-logs:/var/log/proteus
     networks: [backend]
+    # On SIGTERM the server lets the running calls answer. An answer is
+    # written at most call_timeout + max_wait + 10s after its request, and
+    # the whole stop ends by then, whatever still runs. So the grace is
+    # call_timeout + max_wait + 20s: 60s + 10s + 20s with the defaults.
+    # Raise it with either setting.
+    stop_grace_period: 90s
     # No ports: only caddy reaches it. The server starts once the store holds
     # the inventory export; until the first fetch it exits 2 ("run proteus
     # fetch first") and restarts.

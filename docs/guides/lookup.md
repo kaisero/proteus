@@ -53,6 +53,10 @@ How to read it:
 - A literal address has no parentheses.
 - `(predefined)` marks a value the configuration does not define, such as
   `service-https`.
+- A card opens each group once, at its place nearest the top of the card. At
+  every other place, the group shows `(members shown elsewhere on this card)`
+  and no members. A group that holds itself through its members shows
+  `(cycle)`.
 - A list stops at five items. `--full` shows every item.
 
 ## An object
@@ -80,6 +84,11 @@ proteus infers the kind from the name. In `firewall-lookup.xml`, `dc-mgmt` is a
 tag and an address group. `lookup dc-mgmt` then exits with code 2 and names both.
 Pick one with `--kind address-group`.
 
-A name that proteus finds nowhere exits with code 1.
+A name that proteus finds nowhere is an empty answer: it prints
+`no element named "x" in the selection` and exits 0.
 
 `--output json` returns the whole element. It never cuts a list.
+
+When a name is on many devices, `--limit N` keeps the first N cards. The summary
+line then ends `; 1 of 2 shown, narrow by device or vsys`, and JSON and YAML give
+the count of cards left out in `summary.omitted`. There is no default.

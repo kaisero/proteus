@@ -7,7 +7,7 @@
     },
     "kind": {
       "type": "string",
-      "description": "an object kind to search; left out, every kind"
+      "description": "an object kind to search, such as address or service; left out, every kind"
     },
     "device": {
       "type": [
@@ -44,6 +44,11 @@
         "summary",
         "full"
       ]
+    },
+    "limit": {
+      "type": "integer",
+      "description": "keep only the first N results, in the answer's usual order: findings for search, cards for lookup, single changes for snapshot_diff; the summary's omitted counts the rest. No default: left out, every result is returned",
+      "minimum": 1
     }
   },
   "required": [

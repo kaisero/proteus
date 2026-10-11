@@ -27,6 +27,7 @@ $ proteus search 10.124.0.1 --vsys vsys1 --show objects --output json \
     "direct": false,
     "fields": null,
     "kinds": null,
+    "limit": 0,
     "mode": "covers",
     "selection": {
       "file": "testdata/config/firewall-multivsys.xml",
@@ -65,7 +66,8 @@ $ proteus search 10.124.0.1 --vsys vsys1 --show objects --output json \
     "answer": "1 with results, 0 without, 0 holes",
     "found": 2,
     "with": 1,
-    "without": 0
+    "without": 0,
+    "omitted": 0
   },
   "holes": [],
   "unresolved": [],
@@ -78,22 +80,27 @@ meaning or is removed.
 
 Each result of `simulate`, `search`, `lookup` and `snapshot diff` has an
 `answer`: one line of the text output that says what the result found, such as
-`denied at hop 2: fw01 / vsys1, rule block-servers (deny)`. `search` and
-`lookup` also print a `summary` with the counts and the count line as its
-`answer`.
+`denied at hop 2: fw01 / vsys1, rule block-servers (deny)`. `search`,
+`lookup` and `snapshot diff` also print a `summary` with the counts and the
+count line as its `answer`. With `--limit N`, `results` holds the first N
+results, and `summary.omitted` counts the ones left out; it is 0 when nothing
+is left out. For `snapshot diff`, N counts single changes: `results` holds the
+scopes up to the one where the limit falls, and `summary.omitted` counts the
+changes left out.
 
 A simulate result that is undecided, or whose fidelity is `undermatch`, has a
 `needs` list: the inputs that, given in a second question, can change the
-answer. Each entry has a `code` (`input.port`, `input.protocol`, `input.url`),
-the `input` name and a `text` that names the rules it decides. The list stops at
-the first rule in doubt that no input can settle, such as a rule that names only
-an application or a user: past that rule, no input changes the verdict. A rule
-in doubt for a port and for a user still lists the port, which can rule it out.
-An empty list means no input can help. A result that is decided and not
+answer. Each entry has a `code` (`input.port`, `input.protocol`, `input.url`,
+and for `--file` with derived zones `input.from-zone` and `input.to-zone`), the
+`input` name and a `text` that names the rules it decides. The list stops at the
+first rule in doubt that no input can settle, such as a rule that names only an
+application or a user: past that rule, no input changes the verdict. A rule in
+doubt for a port and for a user still lists the port, which can rule it out. An
+empty list means no input can help. A result that is decided and not
 `undermatch` has no `needs` key; a decided result with fidelity `undermatch` can
-have one.
-`simulate nat` asked without a protocol lists `input.protocol` beside
-`input.port`.
+have one. `simulate nat` asked without a protocol lists `input.protocol` beside
+`input.port`; asked with a port but no protocol, it lists `input.protocol` for
+each NAT rule whose service holds that port.
 
 The questions also take `--detail summary`. The envelope then says
 `"detail": "summary"`, and each result keeps the answer, the verdict, the

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/okaiser/proteus/internal/config"
@@ -186,6 +187,10 @@ func openSnapshot(d string, sn store.Snapshot, err error, vsys []string, w When)
 	w.Log.Infof(runlog.TagSnap, "%s: snapshot %s taken %s, PAN-OS %s read with the %s schema",
 		d, sn.ID, sn.Meta.TakenAt.Format(time.RFC3339), cfg.Version(), cfg.DigestVersion())
 	var notes simulate.Reasons
+	if n, ok := SkipNote(sn); ok {
+		w.Log.Warnf(runlog.TagSnap, "%s: %s", d, n.Text)
+		notes = append(notes, n)
+	}
 	if age := w.Now.Sub(sn.Meta.TakenAt); w.MaxAge > 0 && age > w.MaxAge {
 		notes = append(notes, reason.New("note.snapshot-stale", StaleNote(sn.ID, age, w.MaxAge)))
 	}
@@ -254,13 +259,28 @@ func scopes(device string, sn *store.Snapshot, cfg *config.Config, rep config.Re
 	return out, holes
 }
 
+// SkipNote is the note on a snapshot picked by time past damaged newer ones, and
+// false when none was passed over.
+func SkipNote(sn store.Snapshot) (reason.Reason, bool) {
+	if len(sn.Skipped) == 0 {
+		return reason.Reason{}, false
+	}
+	text := fmt.Sprintf("snapshot %s skipped: its meta.json cannot be read; %s answers", sn.Skipped[0], sn.ID)
+	if len(sn.Skipped) > 1 {
+		text = fmt.Sprintf("snapshots %s skipped: their meta.json files cannot be read; %s answers",
+			strings.Join(sn.Skipped, ", "), sn.ID)
+	}
+	return reason.New("note.snapshot-skipped", text), true
+}
+
 // StaleNote is the note on a target whose snapshot is older than the limit.
 func StaleNote(id string, age, limit time.Duration) string {
 	return fmt.Sprintf("snapshot %s is %s old, past the %s limit", id, age.Round(time.Minute), limit)
 }
 
-// ParseAt reads a --at time: a snapshot id (2026-09-28T07-15-37Z), an RFC 3339 time,
-// or a date, which means the end of that day in UTC.
+// ParseAt reads a point in time, as --at, --from and --to take it: a snapshot id
+// (2026-09-28T07-15-37Z), an RFC 3339 time, or a date, which means the end of
+// that day in UTC. Its error names the value; the caller names the input.
 func ParseAt(s string) (time.Time, error) {
 	if t, err := time.Parse("2006-01-02T15-04-05Z", s); err == nil {
 		return t, nil
@@ -271,5 +291,5 @@ func ParseAt(s string) (time.Time, error) {
 	if t, err := time.Parse("2006-01-02", s); err == nil {
 		return t.Add(24*time.Hour - time.Second), nil
 	}
-	return time.Time{}, fmt.Errorf("--at %q: want a snapshot id, an RFC 3339 time, or a date like 2026-09-23", s)
+	return time.Time{}, fmt.Errorf("%q: want a snapshot id, an RFC 3339 time, or a date like 2026-09-23", s)
 }

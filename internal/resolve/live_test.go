@@ -56,7 +56,7 @@ func TestLiveConfigLoads(t *testing.T) {
 		}
 		for _, o := range objs {
 			refs := idx.Refs(o.Name)
-			groups := idx.GroupsOf(o.Name)
+			groups := idx.GroupsHolding("address", o.Name, false)
 			if len(refs) == 0 && len(groups) == 0 {
 				continue
 			}

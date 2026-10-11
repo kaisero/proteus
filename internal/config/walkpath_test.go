@@ -1,6 +1,7 @@
 package config
 
 import (
+	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -32,27 +33,6 @@ func testConfigs(t testing.TB) []string {
 		t.Fatalf("no test configurations: %v", err)
 	}
 	return g
-}
-
-// WalkPaths must lose nothing Walk found. Walk sees one shape and WalkPaths sees
-// every shape, so the old edge set is a subset of the new one — with the trailing
-// "/member" trimmed, which is the only naming difference between them.
-func TestWalkPathsLosesNothingWalkFound(t *testing.T) {
-	t.Parallel()
-	for _, p := range testConfigs(t) {
-		c, _, err := Load(p)
-		if err != nil {
-			continue // a fixture for an unsupported version
-		}
-		old := edgesFrom(t, c, c.Walk)
-		got := edgesFrom(t, c, c.WalkPaths)
-		for e := range old {
-			if !got[e] {
-				t.Errorf("%s: WalkPaths lost %s %s=%s",
-					filepath.Base(p), e.entry, e.field, e.value)
-			}
-		}
-	}
 }
 
 // A second implementation of the same question, sharing no code with the trie:
@@ -258,6 +238,54 @@ func TestWalkPathsOnAConfigWithNoKnownArrays(t *testing.T) {
 		t.Skip(err)
 	}
 	if err := c.WalkPaths(func(Event) bool { return true }); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// The walk emits only reference leaves, and no secret is one: a key or a
+// password never reaches search or an index as a value.
+func TestNoSecretIsAReference(t *testing.T) {
+	t.Parallel()
+	cfg, _, err := Load("../../testdata/drift/before.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	secrets := 0
+	cfg.Digest().Walk(func(n *schema.Node) {
+		if schema.IsSecret(n) {
+			secrets++
+			if len(n.MemberOf) > 0 {
+				t.Errorf("%s is a secret and a reference", n.Path())
+			}
+		}
+	})
+	if secrets == 0 {
+		t.Fatal("the digest marks no secret")
+	}
+	// Each hand-modelled secret names a node of the digest, and IsSecret
+	// marks it: a typo in a registered path would hide nothing.
+	for _, h := range schema.HandModelled() {
+		if !h.Secret {
+			continue
+		}
+		found := 0
+		cfg.Digest().Walk(func(n *schema.Node) {
+			if ok, _ := path.Match(h.Path, n.Path()); ok && n.Kind == schema.KindElement && schema.IsSecret(n) {
+				found++
+			}
+		})
+		if found == 0 {
+			t.Errorf("%s names no secret of the digest", h.Path)
+		}
+	}
+	if err := cfg.WalkPaths(func(e Event) bool {
+		for _, v := range e.Values {
+			if strings.Contains(v, "DUMMY") {
+				t.Errorf("%s %s emits a secret", e.EntryPath, e.Field)
+			}
+		}
+		return true
+	}); err != nil {
 		t.Fatal(err)
 	}
 }

@@ -46,8 +46,14 @@ a URL. A transport error is retried once; a refusal (HTTP 4xx, or
 `status="error"` with HTTP 200) is not.
 
 A `Document` is a name and a fetch function. `Documents` lists them:
-`config` (export), `system-info`, `interfaces`, `fib`, `rib`, `ha`. **Adding a
-fetcher is adding one `Document` value and listing it.** `OpDocument(name, cmds...)`
+`config` (export), `system-info`, `interfaces`, `fib`, `rib`, `ha`, `predefined`.
+**Adding a fetcher is adding one `Document` value and listing it.** A document with
+`Optional` set is one a release may refuse: an API refusal, or an answer that fails
+`Optional.Check`, adds the `Optional.Refused` note to `Result.Notes`, stores
+nothing, records no outcome and leaves the step complete; a transport failure fails
+it as any other. `predefined` is optional: it was checked on PAN-OS 12.2.3 only
+(L4), its check needs a `<service>` element, and its note is
+`note.fetch-predefined-missing`. `OpDocument(name, cmds...)`
 tries each show command in order until the device accepts one; `fib` and `rib` use
 this to fall back from the Advanced Routing command to the legacy one. On an
 Advanced Routing device the legacy route command answers success with a deprecation
@@ -79,12 +85,24 @@ unreadable".
 
 The root is `$PROTEUS_STORE`, else `~/.local/share/proteus`. `Write` fills a
 hidden directory and renames it into place, so a reader never sees half a snapshot.
+It makes that directory with `os.Mkdir`, so a second writer of the same id fails at
+once, and checks again for the id after the Mkdir. Only the creator removes the
+directory, and only before its rename. Each file is synced before the rename; the
+snapshot and device directories are synced after it and before `latest` moves, and
+the device directory again after `latest`. A sync failure after the rename says
+the snapshot is stored but not synced; a `latest` that cannot move, that it is
+stored but `latest` does not name it.
 `latest` moves only when `config` arrived. Retention keeps the newest
-`snapshot_keep` snapshots and never removes the one `latest` names.
+`snapshot_keep` snapshots with `config.xml` and the newest `snapshot_keep` without
+it (an unreadable `meta.json` counts as without), and never removes the one
+`latest` names. It also removes `.<id>.partial` and `.latest-<id>` entries, where
+`<id>` is a snapshot id, whose modification time is more than an hour old: what a
+crashed write left.
 
 `Resolve("fw01")` is the latest snapshot, `Resolve("fw01@<id>")` one in particular.
 `Snapshot.Zones()` builds the index's `ZoneSnapshot` from the stored `interfaces`
-and `fib`. `estate.NewNetwork` reads `interfaces`, `fib`, `rib` and `ha` of every
+and `fib`. `config.Load` on the stored `config.xml` reads `predefined.xml` beside
+it; a snapshot stored before that document existed loads without it. `estate.NewNetwork` reads `interfaces`, `fib`, `rib` and `ha` of every
 device for `simulate routing`, pairing HA members by serial into one node.
 
 A lookup failure matches one kind with `errors.Is`: `ErrNoSnapshot` (nothing to
@@ -93,7 +111,14 @@ configuration; `Snapshot.ConfigPath`), `ErrUnreadable` (a stored file is there b
 cannot be read or parsed). `Latest` and `AtOrBefore` on a device whose snapshots
 all lack a configuration match both `ErrNoSnapshot` and `ErrNoConfig`; test
 `ErrNoConfig` first. The message text stays as it was. An absent zone document
-matches `fs.ErrNotExist`, not `ErrUnreadable`.
+matches `fs.ErrNotExist`, not `ErrUnreadable`. `Get` of a snapshot directory
+without `meta.json` matches `ErrUnreadable` (damaged), not `ErrNoSnapshot` or
+`fs.ErrNotExist`; `snapshot list` shows it as a `gap.load-failed` hole and lists
+the rest. `AtOrBefore` passes over damaged snapshots and names them in
+`Snapshot.Skipped`; `estate.SkipNote` turns that into `note.snapshot-skipped`
+on the targets, the routing data and `snapshot diff`. When it skipped damaged
+snapshots and none is readable, its error matches `ErrUnreadable` only
+(`gap.load-failed`) and names them. `Latest` and `Get` never fall back.
 
 ## Build / run pointers
 
@@ -109,6 +134,7 @@ type APIError struct{ ... }
 type ActiveOptions struct{ ... }
 type Client struct{ ... }
 type Document struct{ ... }
+type Optional struct{ ... }
 type Outcome struct{ ... }
 type Result struct{ ... }
 type State struct{ ... }
@@ -118,7 +144,6 @@ func (c *Client) ExportConfig(ctx context.Context) ([]byte, error)
 func (c *Client) Keygen(ctx context.Context, user, password string) error
 func (c *Client) Op(ctx context.Context, cmd string) ([]byte, error)
 func (e *APIError) Error() string
-func (r Result) OK(name string) bool
 func NewClient(t inventory.Target, log *runlog.Logger) *Client
 func NewState(t inventory.Target, docs []Document, opts ActiveOptions, log *runlog.Logger) State
 func OpDocument(name string, cmds ...string) Document
@@ -142,7 +167,6 @@ func (s *Store) Resolve(ref string) (Snapshot, error)
 func (s *Store) WithClock(now func() time.Time) *Store
 func (s *Store) Write(meta Meta, docs map[string][]byte, keep int) (Snapshot, error)
 func (sn Snapshot) ConfigPath() (string, error)
-func (sn Snapshot) Has(doc string) bool
 func (sn Snapshot) Path(doc string) string
 func (sn Snapshot) Zones() (*index.ZoneSnapshot, error)
 func At(root string) *Store

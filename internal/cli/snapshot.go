@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/spf13/cobra"
@@ -25,6 +26,7 @@ type snapshotShowOptions struct{ sel selection }
 type snapshotDiffOptions struct {
 	sel      selection
 	from, to string
+	limit    int
 }
 
 func (a *app) snapshotListCmd() *cobra.Command {
@@ -76,11 +78,25 @@ func (a *app) runSnapshotList(_ context.Context, o snapshotListOptions) (answer,
 		ans.holes = []estate.Hole{estate.NewHole(o.device, "", reason.New(estate.GapOf(err), err.Error()))}
 		return ans, nil
 	}
-	latest, _ := st.Latest(o.device)
+	ans.rows, ans.holes = snapshotRows(st, o.device, ids)
+	return ans, nil
+}
+
+// snapshotRows reads the listed snapshots of a device. A damaged snapshot becomes a
+// hole and the list goes on; one pruned since it was listed no longer exists and is
+// left out.
+func snapshotRows(st *store.Store, device string, ids []string) ([]snapshotRow, []estate.Hole) {
+	rows := []snapshotRow{}
+	var holes []estate.Hole
+	latest, _ := st.Latest(device)
 	for _, id := range ids {
-		sn, err := st.Get(o.device, id)
-		if err != nil {
-			return nil, err
+		sn, err := st.Get(device, id)
+		switch {
+		case errors.Is(err, store.ErrNoSnapshot):
+			continue
+		case err != nil:
+			holes = append(holes, estate.NewHole(device, "", reason.New(estate.GapOf(err), err.Error())))
+			continue
 		}
 		r := snapshotRow{ID: id, Latest: id == latest.ID, SWVersion: sn.Meta.SWVersion, Documents: len(sn.Meta.Documents)}
 		for _, d := range sn.Meta.Documents {
@@ -88,9 +104,9 @@ func (a *app) runSnapshotList(_ context.Context, o snapshotListOptions) (answer,
 				r.Failed++
 			}
 		}
-		ans.rows = append(ans.rows, r)
+		rows = append(rows, r)
 	}
-	return ans, nil
+	return rows, holes
 }
 
 func (l snapshotListAnswer) Command() string        { return "snapshot list" }
@@ -237,6 +253,7 @@ func (a *app) snapshotDiffCmd() *cobra.Command {
 	o.sel.bind(cmd, selectOpts{})
 	cmd.Flags().StringVar(&o.from, "from", "", "compare from the newest snapshot at or before this time (default: the one before --to)")
 	cmd.Flags().StringVar(&o.to, "to", "", "compare to the newest snapshot at or before this time (default: latest)")
+	bindLimit(cmd, &o.limit)
 	a.bindDetail(cmd)
 	return cmd
 }
@@ -247,7 +264,7 @@ type snapshotDiffAnswer struct {
 }
 
 func (a *app) runSnapshotDiff(ctx context.Context, o snapshotDiffOptions) (answer, error) {
-	in := query.DiffInput{Selection: o.sel.input(), From: o.from, To: o.to}
+	in := query.DiffInput{Selection: o.sel.input(), From: o.from, To: o.to, ResultLimit: query.ResultLimit{Limit: o.limit}}
 	if u := in.Validate(); u != nil {
 		return nil, u
 	}
@@ -265,6 +282,8 @@ func (a *app) runSnapshotDiff(ctx context.Context, o snapshotDiffOptions) (answe
 	}
 	return snapshotDiffAnswer{enveloped[query.DiffInput, query.DiffResult]{e}}, nil
 }
+
+func (d snapshotDiffAnswer) Summary() *query.Summary { return d.e.Summary }
 
 func (d snapshotDiffAnswer) SummaryResults() any {
 	return query.Summarize(d.e, query.DiffResult.Summary).Results
@@ -305,24 +324,61 @@ func (d snapshotDiffAnswer) Text(t *textOut) error {
 			case drift.Changed:
 				op.style = t.pal.warn
 			}
+			if c.Op == drift.Changed {
+				tb.row(op, plain(c.Kind), plain(c.Name))
+				for _, f := range c.Fields {
+					tb.row(plain("  " + fieldLine(f)))
+				}
+				continue
+			}
 			tb.row(op, plain(c.Kind), plain(c.Name), plain(changeDetail(c)))
 		}
 		_ = tb.write(t, "    ", 1)
 	}
-	printQualifiers(t, qualifiers{Holes: d.e.Holes})
+	// A device with no result left prints no header, so its notes go below.
+	shown := map[string]bool{}
+	for _, r := range d.e.Results {
+		shown[r.Device] = true
+	}
+	var left []note
+	for _, n := range d.e.Notes {
+		if !shown[n.Device] {
+			left = append(left, n)
+		}
+	}
+	printQualifiers(t, qualifiers{Holes: d.e.Holes}, left...)
+	fmt.Fprintln(t, d.e.Summary.Answer)
 	return t.err
 }
 
-// changeDetail is a diff row's last column: the new value, the old one for a
-// removal, or both for a change.
+// changeDetail is an added or removed row's last column: the new entry's short
+// line, or the old one's for a removal.
 func changeDetail(c drift.Change) string {
-	switch c.Op {
-	case drift.Removed:
+	if c.Op == drift.Removed {
 		return c.Old
-	case drift.Changed:
-		return c.Old + " -> " + c.New
 	}
 	return c.New
+}
+
+// fieldLine is one changed setting of a changed entry, on its own line below
+// it: negate-destination: no -> yes. An absent side reads (unset). A secret
+// changed on both sides reads "changed (secret, not shown)", and a setting
+// the schema does not describe "changed (not described by the schema; values
+// not shown)"; neither value is ever printed.
+func fieldLine(f drift.FieldChange) string {
+	if f.Undescribed {
+		return f.Path + ": changed (not described by the schema; values not shown)"
+	}
+	if f.Secret && f.Old != "" && f.New != "" {
+		return f.Path + ": changed (secret, not shown)"
+	}
+	side := func(v string) string {
+		if v == "" {
+			return "(unset)"
+		}
+		return v
+	}
+	return f.Path + ": " + side(f.Old) + " -> " + side(f.New)
 }
 
 // firstDevice is the device entry a firewall configuration's vsys sit under.

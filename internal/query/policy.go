@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/netip"
 	"slices"
+	"strings"
 
 	"github.com/okaiser/proteus/internal/estate"
 	"github.com/okaiser/proteus/internal/index"
@@ -17,6 +18,7 @@ import (
 	"github.com/okaiser/proteus/internal/simulate"
 	"github.com/okaiser/proteus/internal/simulate/pathpolicy"
 	"github.com/okaiser/proteus/internal/simulate/routing"
+	"github.com/okaiser/proteus/internal/simulate/rulebase"
 	"github.com/okaiser/proteus/internal/simulate/securitypolicy"
 	"github.com/okaiser/proteus/internal/simulate/topology"
 )
@@ -195,6 +197,11 @@ func PolicyFile(ctx context.Context, env Env, in PolicyFileInput) (Envelope[Poli
 		return none, err
 	}
 	e.Holes = holes
+	ts, zoneHoles, u := givenZones(ts, flow)
+	if u != nil {
+		return none, u
+	}
+	e.Holes = append(e.Holes, zoneHoles...)
 	switch {
 	case len(ts) == 0 && len(holes) > 0:
 		return e, nil // the holes say what is missing
@@ -210,7 +217,9 @@ func PolicyFile(ctx context.Context, env Env, in PolicyFileInput) (Envelope[Poli
 		return none, err
 	}
 	env.Log.Infof(runlog.TagStep, "%s %s -> %s on %s/%s", securitypolicy.Kind, flow.Source, flow.Destination, t.Device, t.Vsys)
-	run, err := securitypolicy.Simulation{}.Run(ctx, sim, simulate.Input{Flow: flow, Device: t.Device, Vsys: t.Vsys})
+	// The first address of each endpoint is checked, as path mode checks it
+	// (spec 2026-10-07 D1b); a note names the others.
+	run, err := securitypolicy.Simulation{}.Run(ctx, sim, simulate.Input{Flow: flow.FirstAddresses(), Device: t.Device, Vsys: t.Vsys})
 	if err != nil {
 		return none, err
 	}
@@ -224,12 +233,37 @@ func PolicyFile(ctx context.Context, env Env, in PolicyFileInput) (Envelope[Poli
 	for _, n := range t.Notes {
 		e.Notes = append(e.Notes, NoteOf(t.Device, t.Vsys, n))
 	}
-	// Every address is matched, so only an alias is worth a note.
-	for _, n := range simulate.DNSNotes(flow, false) {
+	for _, n := range simulate.DNSNotes(flow, "checked") {
 		e.Notes = append(e.Notes, NoteOf(t.Device, t.Vsys, n))
 	}
 	e.Unresolved = dedupeUnresolved(runUnresolved(run, t.Device, t.Vsys, true))
 	return e, nil
+}
+
+// givenZones keeps the targets that define the flow's given zones (C15). A
+// target without one is a hole; when no target defines them, the question is a
+// usage error that names, per vsys, the zone it lacks and the zones it has.
+func givenZones(ts []estate.Target, flow simulate.Flow) ([]estate.Target, []estate.Hole, *UsageError) {
+	var kept []estate.Target
+	var holes []estate.Hole
+	var texts, toolTexts []string
+	for _, t := range ts {
+		r := rulebase.UndefinedZones(t.Config, t.Scope, flow.FromZone, flow.ToZone)
+		if r == nil {
+			kept = append(kept, t)
+			continue
+		}
+		texts, toolTexts = append(texts, r.Choice.Question), append(toolTexts, r.Choice.ToolText)
+		holes = append(holes, estate.NewHole(t.Device, t.Vsys, reason.New("zone.undefined", "not checked: "+r.Text)))
+	}
+	switch {
+	case len(kept) > 0 || len(texts) == 0:
+		return kept, holes, nil
+	case len(texts) == 1:
+		return nil, nil, usage(texts[0], toolTexts[0])
+	}
+	const lead = "no selected vsys defines the given zones: "
+	return nil, nil, usage(lead+strings.Join(texts, "; "), lead+strings.Join(toolTexts, "; "))
 }
 
 // fileEnv is the simulation environment for one target read from a file: its

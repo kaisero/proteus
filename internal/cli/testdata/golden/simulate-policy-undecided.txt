@@ -27,7 +27,7 @@ file / vsys1   ../../testdata/config/firewall-doubt.xml
   10. dmz-custom     deny  [local vsys:vsys1]
       doubt: url category not evaluated without a URL (my-cat)
   11. dmz-predefined deny  [local vsys:vsys1]
-      doubt: service predefined or not defined in the configuration (service-https)
+      doubt: service predefined or not defined in the configuration (service-https); the snapshot holds no predefined services; a fetch with this release stores them when the device returns them
   12. dmz-no-service deny  [local vsys:vsys1]
       doubt: service absent
   13. dmz-plain      allow [local vsys:vsys1]

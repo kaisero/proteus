@@ -6,6 +6,7 @@
     "expand": false,
     "full": false,
     "kind": "",
+    "limit": 0,
     "name": "branch-to-dc",
     "selection": {
       "file": "../../testdata/config/firewall-lookup.xml"
@@ -25,7 +26,8 @@
     "answer": "1 with it, 0 without, 0 holes",
     "found": 1,
     "with": 1,
-    "without": 0
+    "without": 0,
+    "omitted": 0
   },
   "holes": [],
   "unresolved": [],

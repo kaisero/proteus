@@ -2,7 +2,9 @@ package digest
 
 import (
 	"bytes"
+	"compress/gzip"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/okaiser/proteus/internal/schema"
@@ -106,6 +108,23 @@ func TestRoundTripPreservesAnnotations(t *testing.T) {
 	}
 	if h := rules.Child("disabled").Help; h != "Disable the rule" {
 		t.Errorf("help: got %q, want Disable the rule", h)
+	}
+	cert := got.Root.Child("shared").Child("certificate").EntrySequence()
+	if !cert.Child("private-key").Encrypted || cert.Child("common-name").Encrypted {
+		t.Error("encrypted: the mark must survive on private-key only")
+	}
+}
+
+// A digest written before the encrypted mark existed is refused, not read as
+// one without secrets.
+func TestReadRefusesAnOlderFormat(t *testing.T) {
+	t.Parallel()
+	var buf bytes.Buffer
+	zw := gzip.NewWriter(&buf)
+	_, _ = zw.Write([]byte(`{"format":1,"platform":"firewall","version":"11.2.0","root":{"k":0,"n":"config"}}`))
+	_ = zw.Close()
+	if _, err := Read(&buf); err == nil || !strings.Contains(err.Error(), "format version 1") {
+		t.Errorf("want a format error, got %v", err)
 	}
 }
 

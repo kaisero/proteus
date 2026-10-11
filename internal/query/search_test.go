@@ -3,6 +3,7 @@ package query
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 
@@ -91,6 +92,70 @@ func TestSearchInputRules(t *testing.T) {
 	} {
 		_, err := Search(context.Background(), Env{}, tc.in)
 		usageOK(t, err, tc.want)
+	}
+}
+
+// An unknown kind is one usage error before any target runs, with the kinds the
+// configurations know, sorted; a kind any selected configuration knows passes.
+func TestSearchRefusesAnUnknownKind(t *testing.T) {
+	t.Parallel()
+	file := Selection{File: fixture("firewall-lab.xml")}
+	_, err := Search(context.Background(), Env{}, SearchInput{Term: "web", Kinds: []string{"addr", "servce", "zz-none"}, Selection: file})
+	usageOK(t, err, `--kind "addr": did you mean address, address-group?`)
+	u, _ := errors.AsType[*UsageError](err)
+	lines := strings.Split(u.Text, "\n")
+	if len(lines) != 4 || lines[1] != `--kind "servce": did you mean service?` ||
+		lines[2] != `--kind "zz-none": no kind is close` || !strings.HasPrefix(lines[3], "known kinds: ") {
+		t.Fatalf("text %q", u.Text)
+	}
+	kinds := strings.Split(strings.TrimPrefix(lines[3], "known kinds: "), ", ")
+	if !slices.IsSorted(kinds) || !slices.Contains(kinds, "address") || !slices.Contains(kinds, "service") {
+		t.Errorf("kinds %q", lines[3])
+	}
+	if want := strings.ReplaceAll(u.Text, "--kind", "kind"); u.ToolText != want {
+		t.Errorf("tool text %q, want %q", u.ToolText, want)
+	}
+	// The store has two targets on fw01 and a hole on fw02: still one error.
+	_, err = Search(context.Background(), labStore(t), SearchInput{Term: "web", Kinds: []string{"address", "addr"}})
+	usageOK(t, err, `--kind "addr"`)
+	e, err := Search(context.Background(), labStore(t), SearchInput{Term: "198.18.10.100", Kinds: []string{"address"}})
+	if err != nil || len(e.Results) == 0 {
+		t.Fatalf("a known kind: %v %+v", err, e.Summary)
+	}
+}
+
+// The closest kinds come first, at most five; a case slip is no edit.
+func TestNearKinds(t *testing.T) {
+	t.Parallel()
+	known := map[string]bool{"address": true, "address-group": true, "service": true, "tag": true, "zone": true}
+	for in, want := range map[string]string{
+		"Service": "service", "tags": "tag", "addr": "address, address-group", "xyz": "", "zon": "zone", "tg": "tag",
+	} {
+		if got := strings.Join(nearKinds(in, known), ", "); got != want {
+			t.Errorf("nearKinds(%q) = %q, want %q", in, got, want)
+		}
+	}
+	many := map[string]bool{"a1": true, "a2": true, "a3": true, "a4": true, "a5": true, "a6": true}
+	if got := nearKinds("a", many); len(got) != 5 || got[0] != "a1" {
+		t.Errorf("nearKinds(a) = %v, want five", got)
+	}
+}
+
+// A reference from the device's own configuration prints with scope config.
+func TestSearchShowsDeviceLevelReferences(t *testing.T) {
+	t.Parallel()
+	e, err := Search(context.Background(), Env{}, SearchInput{Term: "10.88.5.1", Selection: Selection{File: fixture("firewall-device-refs.xml")}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var found bool
+	for _, r := range e.Results {
+		if r.Kind == "static-route" && r.Name == "to-remote" {
+			found = r.Scope == "config" && r.Field == "destination"
+		}
+	}
+	if !found {
+		t.Errorf("no static-route reference with scope config: %+v", e.Results)
 	}
 }
 
@@ -187,5 +252,19 @@ func TestTargets(t *testing.T) {
 	}
 	if _, _, err := Targets(ctx, Env{}, Selection{File: fixture("absent.xml")}); err == nil || !strings.Contains(err.Error(), "absent.xml") {
 		t.Errorf("absent file: %v", err)
+	}
+}
+
+// A prefix search cannot decide a wildcard object; the envelope lists it as
+// unresolved for the target it came from (decision C1).
+func TestSearchListsAWildcardAsUnresolved(t *testing.T) {
+	t.Parallel()
+	e, err := Search(context.Background(), Env{}, SearchInput{Term: "10.88.0.0/16", Selection: Selection{File: fixture("firewall-wildcard.xml")}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(e.Unresolved) != 1 || e.Unresolved[0].Value != "wc" || e.Unresolved[0].Code != "gap.address-wildcard" ||
+		e.Unresolved[0].Vsys != "vsys1" {
+		t.Errorf("unresolved: %+v", e.Unresolved)
 	}
 }

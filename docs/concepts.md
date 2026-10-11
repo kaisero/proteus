@@ -25,6 +25,7 @@ with one XML file per document and a `meta.json`:
 | `fib.xml` | forwarding table | zones of an address, routing paths |
 | `rib.xml` | routing table | `simulate routing --rib` |
 | `ha.xml` | high-availability state | reading the active member of a pair |
+| `predefined.xml` | the device's predefined services | the ports of `service-http` and `service-https` |
 
 The **store** keeps the snapshots:
 
@@ -33,13 +34,14 @@ The **store** keeps the snapshots:
   fw01/
     2026-09-27T17-05-00Z/
       config.xml  system-info.xml  interfaces.xml  fib.xml  rib.xml  ha.xml
+      predefined.xml
       meta.json
     latest -> 2026-09-27T17-05-00Z
 ```
 
 Questions read `latest` by default. `--at <time>` reads the newest snapshot at or
-before that time. The store keeps 20 snapshots per device by default
-(`snapshot_keep`).
+before that time. The store keeps the newest 20 snapshots with a configuration
+and the newest 20 without one, per device, by default (`snapshot_keep`).
 
 A snapshot is written to a hidden directory first and then renamed. A reader
 never sees half a snapshot.

@@ -302,3 +302,129 @@ func TestConfigScopeHoldsNoObjectsOfItsOwn(t *testing.T) {
 		t.Errorf("zones = %v, want none", zones)
 	}
 }
+
+// serviceList is each service as name=value@scope, with the scope it hides.
+func serviceList(objs []Object) string {
+	var out []string
+	for _, o := range objs {
+		s := o.Name + "=" + o.Value + "@" + o.Scope.String()
+		if o.ShadowedFrom != nil {
+			s += " hides " + o.ShadowedFrom.String()
+		}
+		out = append(out, s)
+	}
+	return strings.Join(out, "; ")
+}
+
+// Every scope sees the device's predefined services below shared. As observed on
+// fw02, PAN-OS 12.2.3: the device defines service-http as tcp/80,8080 and
+// service-https as tcp/443 (L4), and a configured service of the same name wins,
+// vsys, then shared, then predefined (L7).
+func TestPredefinedServicesSitBelowShared(t *testing.T) {
+	t.Parallel()
+	vsys1 := config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}
+	shared := config.Scope{Sort: config.ScopeShared}
+	plain := loadT(t, "../../testdata/predefined/config.xml")
+	for _, sc := range []config.Scope{shared, vsys1} {
+		if got := serviceList(ObjectsInScope(plain, sc, "service")); got != "service-http=tcp/80,8080@predefined; service-https=tcp/443@predefined" {
+			t.Errorf("%s: %s", sc, got)
+		}
+	}
+	configured := loadT(t, "../../testdata/predefined-configured/config.xml")
+	if got := serviceList(ObjectsInScope(configured, vsys1, "service")); got != "service-http=tcp/8081@shared hides predefined; service-https=tcp/8443@vsys:vsys1 hides predefined" {
+		t.Errorf("vsys1: %s", got)
+	}
+	if got := serviceList(ObjectsInScope(configured, shared, "service")); got != "service-http=tcp/8081@shared hides predefined; service-https=tcp/443@predefined" {
+		t.Errorf("shared: %s", got)
+	}
+	// Only services are predefined; other kinds see nothing new.
+	if got := ObjectsInScope(plain, vsys1, "address"); len(got) != 0 {
+		t.Errorf("addresses: %+v", got)
+	}
+	// Without the file, the names are not defined.
+	if got := ObjectsInScope(loadT(t, "../../testdata/config/firewall-nat-cases.xml"), vsys1, "service"); strings.Contains(serviceList(got), "predefined") {
+		t.Errorf("no predefined.xml: %s", serviceList(got))
+	}
+}
+
+// A name resolves by scope first and kind second. As observed on fw02, PAN-OS
+// 12.2.3 (L9): vsys1's service group service-https hides the predefined service
+// of that name, and vsys1's service web hides shared's service group web. Shared
+// sees its own group and the predefined service.
+func TestANameResolvesByScopeFirstAcrossKinds(t *testing.T) {
+	t.Parallel()
+	cfg := loadT(t, "../../testdata/predefined-cross-kind/config.xml")
+	for _, tc := range []struct {
+		sc             config.Scope
+		service, group string
+	}{
+		{
+			config.Scope{Sort: config.ScopeVsys, Name: "vsys1"},
+			"service-http=tcp/80,8080@predefined; svc-9080=tcp/9080@shared; svc-8443=tcp/8443@vsys:vsys1; web=tcp/8081@vsys:vsys1",
+			"service-https=svc-8443@vsys:vsys1",
+		},
+		{
+			config.Scope{Sort: config.ScopeShared},
+			"service-http=tcp/80,8080@predefined; service-https=tcp/443@predefined; svc-9080=tcp/9080@shared",
+			"web=svc-9080@shared",
+		},
+	} {
+		got := ObjectsOfKindsInScope(cfg, tc.sc, "service", "service-group")
+		if s := serviceList(got["service"]); s != tc.service {
+			t.Errorf("%s services: %s", tc.sc, s)
+		}
+		if s := serviceList(got["service-group"]); s != tc.group {
+			t.Errorf("%s groups: %s", tc.sc, s)
+		}
+	}
+}
+
+// A dynamic group is known by its dynamic element, not by the first character of
+// its filter. As observed on fw02, PAN-OS 12.2.3, a filter may start with "("
+// (L1); read as a member list it held one fake member and no address.
+func TestDynamicGroupIsKnownByItsElement(t *testing.T) {
+	t.Parallel()
+	cfg := loadT(t, "../../testdata/config/firewall-dynamic-filter.xml")
+	sc := config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}
+	groups := ObjectsInScope(cfg, sc, "address-group")
+	if len(groups) == 0 {
+		t.Fatal("no address group")
+	}
+	for _, o := range groups {
+		if !o.Dynamic {
+			t.Errorf("%s: Dynamic = false", o.Name)
+		}
+		if o.Name == "dag-paren" && o.Value != "('t-a' or 't-b')" {
+			t.Errorf("dag-paren: Value = %q, want its filter", o.Value)
+		}
+	}
+	for _, o := range ObjectsInScope(cfg, sc, "address") {
+		if o.Dynamic {
+			t.Errorf("address %s: Dynamic = true", o.Name)
+		}
+	}
+	static := false
+	for _, o := range ObjectsInScope(fwLab(t), sc, "address-group") {
+		if o.Name == "g-servers" {
+			static = !o.Dynamic && o.Value == "dc01"
+		}
+	}
+	if !static {
+		t.Error("g-servers: want a static group holding dc01")
+	}
+}
+
+// Services and service groups resolve together, and so do addresses and
+// address groups (L9, L10); any other kind resolves alone.
+func TestNamesakes(t *testing.T) {
+	t.Parallel()
+	for kind, want := range map[string]string{
+		"service": "service service-group", "service-group": "service service-group",
+		"address": "address address-group", "address-group": "address address-group",
+		"tag": "tag",
+	} {
+		if got := strings.Join(Namesakes(kind), " "); got != want {
+			t.Errorf("%s: %s, want %s", kind, got, want)
+		}
+	}
+}

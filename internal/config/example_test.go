@@ -20,16 +20,16 @@ func Example() {
 	// untyped elements: 0
 }
 
-// Walk yields every reference the configuration makes, with the scope it was made
-// in. The same shared group means different things in different vsys, so the scope
-// is part of the answer.
-func ExampleConfig_Walk() {
+// WalkPaths yields every reference the configuration makes, with the scope it was
+// made in. The same shared group means different things in different vsys, so the
+// scope is part of the answer.
+func ExampleConfig_WalkPaths() {
 	cfg, _, err := config.Load("../../testdata/config/firewall-multivsys.xml")
 	if err != nil {
 		fmt.Println("load:", err)
 		return
 	}
-	_ = cfg.Walk(func(e config.Event) bool {
+	_ = cfg.WalkPaths(func(e config.Event) bool {
 		if e.Field != "source" {
 			return true
 		}

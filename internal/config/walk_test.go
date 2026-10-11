@@ -5,18 +5,18 @@ import (
 	"testing"
 )
 
-func TestWalkYieldsScopedReferenceEvents(t *testing.T) {
+func TestWalkPathsYieldsScopedReferenceEvents(t *testing.T) {
 	t.Parallel()
 	cfg, _, err := Load("../../testdata/config/firewall-multivsys.xml")
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
 	var events []Event
-	if err := cfg.Walk(func(e Event) bool {
+	if err := cfg.WalkPaths(func(e Event) bool {
 		events = append(events, e)
 		return true
 	}); err != nil {
-		t.Fatalf("Walk: %v", err)
+		t.Fatalf("WalkPaths: %v", err)
 	}
 	if len(events) == 0 {
 		t.Fatal("the walk yielded nothing")
@@ -49,11 +49,11 @@ func TestWalkYieldsScopedReferenceEvents(t *testing.T) {
 
 // Two vsys can hold an object of the same name, so an event's path must identify
 // the instance, not the schema location.
-func TestWalkEntryPathsAreInstancePaths(t *testing.T) {
+func TestWalkPathsEntryPathsAreInstancePaths(t *testing.T) {
 	t.Parallel()
 	cfg, _, _ := Load("../../testdata/config/firewall-multivsys.xml")
 	seen := map[string]bool{}
-	_ = cfg.Walk(func(e Event) bool {
+	_ = cfg.WalkPaths(func(e Event) bool {
 		seen[e.EntryPath] = true
 		return true
 	})
@@ -72,10 +72,10 @@ func TestWalkEntryPathsAreInstancePaths(t *testing.T) {
 }
 
 // any is a keyword, not an object, and must never be yielded as a reference.
-func TestWalkExcludesKeywords(t *testing.T) {
+func TestWalkPathsExcludesKeywords(t *testing.T) {
 	t.Parallel()
 	cfg, _, _ := Load("../../testdata/config/firewall-literals.xml")
-	_ = cfg.Walk(func(e Event) bool {
+	_ = cfg.WalkPaths(func(e Event) bool {
 		for _, v := range e.Values {
 			if Keywords[v] {
 				t.Errorf("keyword %q yielded as a reference from %s/%s", v, e.EntryPath, e.Field)
@@ -85,28 +85,14 @@ func TestWalkExcludesKeywords(t *testing.T) {
 	})
 }
 
-// Returning false from the callback stops the walk.
-func TestWalkStops(t *testing.T) {
-	t.Parallel()
-	cfg, _, _ := Load("../../testdata/config/firewall-multivsys.xml")
-	n := 0
-	_ = cfg.Walk(func(Event) bool {
-		n++
-		return false
-	})
-	if n != 1 {
-		t.Errorf("callback ran %d times, want 1", n)
-	}
-}
-
 // The walk reads the wrapped form too.
-func TestWalkHandlesTheWrappedForm(t *testing.T) {
+func TestWalkPathsHandlesTheWrappedForm(t *testing.T) {
 	t.Parallel()
 	bare, _, _ := Load("../../testdata/config/firewall-multivsys.xml")
 	wrapped, _, _ := Load("../../testdata/config/firewall-multivsys-wrapped.xml")
 	count := func(c *Config) int {
 		n := 0
-		_ = c.Walk(func(Event) bool { n++; return true })
+		_ = c.WalkPaths(func(Event) bool { n++; return true })
 		return n
 	}
 	if a, b := count(bare), count(wrapped); a != b {
@@ -121,14 +107,14 @@ func TestWalkHandlesTheWrappedForm(t *testing.T) {
 //
 // The fixture puts shared/log-settings/config before the vsys, so every vsys
 // event here arrives only if the walk continued.
-func TestWalkContinuesPastANestedConfigElement(t *testing.T) {
+func TestWalkPathsContinuesPastANestedConfigElement(t *testing.T) {
 	t.Parallel()
 	cfg, _, err := Load("../../testdata/config/firewall-multivsys.xml")
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
 	afterNestedConfig := 0
-	_ = cfg.Walk(func(e Event) bool {
+	_ = cfg.WalkPaths(func(e Event) bool {
 		if e.Scope.Sort == ScopeVsys {
 			afterNestedConfig++
 		}

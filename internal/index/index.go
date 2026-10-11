@@ -11,13 +11,16 @@ import (
 // Index is the lookup structures for one scope. It is immutable once built, so
 // concurrent readers need no lock.
 type Index struct {
-	scope     config.Scope
-	in        *Interner
-	closure   *closureIndex
-	refs      *refsIndex
-	rules     *rulesIndex
-	resolvers map[Field][]resolver
-	profiles  *profileIndex
+	scope config.Scope
+	in    *Interner
+	// families holds one membership closure per group kind, by kind: an
+	// address group and a service group may share a name.
+	families      []*groupFamily
+	fieldFamilies map[Field][]*groupFamily
+	refs          *refsIndex
+	rules         *rulesIndex
+	resolvers     map[Field][]resolver
+	profiles      *profileIndex
 	// addrRes is the address resolver, kept directly because address containment is
 	// also exposed on its own and every scope has one.
 	addrRes *addressResolver
@@ -69,9 +72,13 @@ func New(cfg *config.Config, sc config.Scope, rb resolve.Rulebase) (*Index, erro
 func build(cfg *config.Config, edges edgeList, sc config.Scope, rb resolve.Rulebase) (*Index, error) {
 	in := NewInterner()
 
-	addrs := resolve.ObjectsInScope(cfg, sc, "address")
-	groups := resolve.ObjectsInScope(cfg, sc, "address-group")
-	svcGroups := resolve.ObjectsInScope(cfg, sc, "service-group")
+	// A service or address name resolves by scope first, kind second: a vsys
+	// service hides a shared service group of its name, a vsys address group
+	// a shared address, and the other way round (L9, L10).
+	addrKinds := resolve.ObjectsOfKindsInScope(cfg, sc, "address", addressGroups)
+	addrs, groups := addrKinds["address"], addrKinds[addressGroups]
+	svcKinds := resolve.ObjectsOfKindsInScope(cfg, sc, "service", "service-group")
+	svcs, svcGroups := svcKinds["service"], svcKinds["service-group"]
 	appGroups := resolve.ObjectsInScope(cfg, sc, "application-group")
 	// Intern the addresses first, so their ids are dense and stable.
 	for _, o := range addrs {
@@ -92,7 +99,6 @@ func build(cfg *config.Config, edges edgeList, sc config.Scope, rb resolve.Ruleb
 	// the resolver that can answer for it. A kind with no resolver is not silently
 	// dropped; see opaque rule-field values.
 	cats := resolve.ObjectsInScope(cfg, sc, "custom-url-category")
-	svcs := resolve.ObjectsInScope(cfg, sc, "service")
 	// "user" is ambiguous in the schema, so the container is named rather than
 	// guessed: a vsys has both a local user database and a separate user array.
 	localUsers := resolve.ObjectsAt(cfg, sc, "user", []string{"local-user-database", "user"})
@@ -132,17 +138,28 @@ func build(cfg *config.Config, edges edgeList, sc config.Scope, rb resolve.Ruleb
 	profs := resolve.URLFilteringProfilesInScope(cfg, sc)
 	pgroups := resolve.ProfileGroupsInScope(cfg, sc)
 
+	families := []*groupFamily{
+		{kind: addressGroups, closure: newClosureIndex(in, groups, addrs)},
+		{kind: "application-group", closure: newClosureIndex(in, appGroups, nil)},
+		{kind: "service-group", closure: newClosureIndex(in, svcGroups, nil)},
+	}
+	for _, fam := range families {
+		fam.members = memberKinds(cfg, fam.kind)
+	}
+	fieldKinds := cfg.FieldKinds("rulebase/" + rb.String() + "/rules")
+
 	return &Index{
-		scope:     sc,
-		in:        in,
-		closure:   newClosureIndex(in, groups, addrs, svcGroups, appGroups),
-		refs:      refs,
-		rules:     ri,
-		resolvers: wireResolvers(cfg.FieldKinds("rulebase/"+rb.String()+"/rules"), byKind),
-		profiles:  newProfileIndex(rules, profs, pgroups),
-		addrRes:   addrRes,
-		opaque:    opaque,
-		gap:       cfg.VersionGap(),
+		scope:         sc,
+		in:            in,
+		families:      families,
+		fieldFamilies: fieldFamilies(fieldKinds, families),
+		refs:          refs,
+		rules:         ri,
+		resolvers:     wireResolvers(fieldKinds, byKind),
+		profiles:      newProfileIndex(rules, profs, pgroups),
+		addrRes:       addrRes,
+		opaque:        opaque,
+		gap:           cfg.VersionGap(),
 	}, nil
 }
 

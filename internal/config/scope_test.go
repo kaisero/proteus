@@ -10,6 +10,7 @@ func TestScopeString(t *testing.T) {
 	}{
 		{Scope{Sort: ScopeShared}, "shared"},
 		{Scope{Sort: ScopeVsys, Name: "vsys1"}, "vsys:vsys1"},
+		{Scope{Sort: ScopePredefined}, "predefined"},
 	} {
 		if got := tc.s.String(); got != tc.want {
 			t.Errorf("got %q, want %q", got, tc.want)
@@ -31,7 +32,7 @@ func TestParseScope(t *testing.T) {
 			t.Errorf("ParseScope(%q) = %+v, want %+v", in, got, want)
 		}
 	}
-	for _, bad := range []string{"", "nope", "vsys:", "shared:x", "dg:x", "tpl:x", "tplstack:x"} {
+	for _, bad := range []string{"", "nope", "vsys:", "shared:x", "dg:x", "tpl:x", "tplstack:x", "predefined"} {
 		if _, err := ParseScope(bad); err == nil {
 			t.Errorf("ParseScope(%q) must fail", bad)
 		}

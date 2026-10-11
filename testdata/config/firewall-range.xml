@@ -1,0 +1,45 @@
+<config version="11.2.0" urldb="paloaltonetworks" detail-version="11.2.5">
+  <shared/>
+  <devices>
+    <entry name="localhost.localdomain">
+      <vsys>
+        <entry name="vsys1">
+          <address>
+            <entry name="r-2-9"><ip-range>10.0.0.2-10.0.0.9</ip-range></entry>
+            <entry name="r-4-7"><ip-range>10.0.0.4-10.0.0.7</ip-range></entry>
+            <entry name="n-29"><ip-netmask>10.0.0.0/29</ip-netmask></entry>
+            <entry name="n-30"><ip-netmask>10.0.0.4/30</ip-netmask></entry>
+            <entry name="h-5"><ip-netmask>10.0.0.5</ip-netmask></entry>
+            <entry name="wc"><ip-wildcard>10.0.0.1/0.0.0.6</ip-wildcard></entry>
+          </address>
+          <rulebase><security><rules>
+            <entry name="to-range">
+              <source><member>any</member></source>
+              <destination><member>r-2-9</member></destination>
+              <service><member>any</member></service>
+              <action>allow</action>
+            </entry>
+            <entry name="lit-range">
+              <source><member>any</member></source>
+              <destination><member>10.0.0.2-10.0.0.9</member></destination>
+              <service><member>any</member></service>
+              <action>allow</action>
+            </entry>
+            <entry name="lit-30">
+              <source><member>any</member></source>
+              <destination><member>10.0.0.4/30</member></destination>
+              <service><member>any</member></service>
+              <action>allow</action>
+            </entry>
+            <entry name="lit-host">
+              <source><member>10.0.0.5</member></source>
+              <destination><member>any</member></destination>
+              <service><member>any</member></service>
+              <action>allow</action>
+            </entry>
+          </rules></security></rulebase>
+        </entry>
+      </vsys>
+    </entry>
+  </devices>
+</config>

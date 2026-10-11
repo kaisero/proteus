@@ -39,19 +39,45 @@ func pbf(_ context.Context, s *state) (simulate.Outcome, error) {
 		h.Notes = append(h.Notes, reason.New("gap.version", fmt.Sprintf("schema: PBF checked with the %s digest", v.Config.DigestVersion())))
 		out.Fidelity = simulate.Inferred
 	}
-	m := v.PBF(s.src, s.dst, h.In)
+	m := v.PBF(s.src, s.dst, s.cur.Protocol, s.cur.DestPort, h.In)
 	out.Unresolved = m.Unresolved
 	out.Fidelity = simulate.Weakest(out.Fidelity, rulebase.Certainty(resolve.PBF, m.Unresolved))
 	if m.Found {
 		if m.Note.Text != "" {
 			h.Notes = append(h.Notes, m.Note)
 			h.PBF = append(h.PBF, m.Rule.Name)
+			h.PBFDoubts = append(h.PBFDoubts, pbfDoubts(m)...)
 			out.Fidelity, out.Detail = simulate.Weakest(out.Fidelity, simulate.Inferred), m.Note.Text
 		} else {
-			out.Detail = "pbf rule " + m.Rule.Name + " leaves the packet to routing"
+			out.Detail = "no-pbf rule " + m.Rule.Name + " leaves the packet to routing"
 		}
 	}
+	out.Detail += rulebase.PassedText(m.Passed)
 	return out, nil
+}
+
+// pbfDoubts are why a PBF rule that can redirect the packet may not take it,
+// each with its own code, so an input that settles one, such as the port, can
+// be asked for: the rule's doubts, then those of the no-pbf rules above it that
+// may match first.
+func pbfDoubts(m rulebase.PBFMatch) simulate.Reasons {
+	var out simulate.Reasons
+	for _, d := range m.Doubts {
+		out = append(out, reason.Reason{Code: d.Code, Text: fmt.Sprintf("PBF rule %s may not match: %s", m.Rule.Name, d.Text)})
+	}
+	for _, p := range m.Passed {
+		for _, d := range p.Doubts {
+			out = append(out, reason.Reason{Code: d.Code, Text: fmt.Sprintf("no-pbf rule %s may match first: %s", p.Rule, d.Text)})
+		}
+	}
+	return out
+}
+
+// NATDoubt names a NAT rule that may match instead of the one a hop applies,
+// and why. The hop's notes carry it, and path policy reads it as a doubt that
+// leaves the hop undecided.
+func NATDoubt(d natsim.Doubt) reason.Reason {
+	return reason.New("path.nat-undermatch", "nat rule "+d.Rule+" may match instead: "+d.Text())
 }
 
 // nat runs the NAT engine on the hop (spec §18 N1, N5): the rule the packet hits
@@ -98,7 +124,7 @@ func nat(ctx context.Context, s *state) (simulate.Outcome, error) {
 	h.Notes = append(h.Notes, r.Notes...)
 	h.NATDoubts = append(h.NATDoubts, r.Doubts...)
 	for _, d := range r.Doubts {
-		h.Notes = append(h.Notes, reason.New("path.nat-undermatch", "nat rule "+d.Rule+" may match instead: "+d.Text()))
+		h.Notes = append(h.Notes, NATDoubt(d))
 	}
 	out.Unresolved = r.Unresolved
 	out.Fidelity = simulate.Weakest(out.Fidelity, r.Fidelity)

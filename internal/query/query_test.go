@@ -99,7 +99,7 @@ func TestDocOfPrintsEmptyLists(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := `{"format":2,"command":"snapshot diff","detail":"full","input":{"from":"","selection":{"device":["fw01"]},"to":"2026-09-28"},` +
+	want := `{"format":2,"command":"snapshot diff","detail":"full","input":{"from":"","limit":0,"selection":{"device":["fw01"]},"to":"2026-09-28"},` +
 		`"results":[],"holes":[],"unresolved":[],"notes":[]}`
 	if string(b) != want {
 		t.Errorf("got  %s\nwant %s", b, want)
@@ -120,7 +120,9 @@ func TestEchoes(t *testing.T) {
 		{RoutingInput{Device: "fw01", RIB: true, Simulated: flow}.Echo(), `"rib":true`},
 		{NATInput{Device: "fw01", FromZone: "z", FromInterface: "i", Simulated: flow}.Echo(), `"from_interface":"i","from_zone":"z"`},
 		{SearchInput{Term: "198.18.1.10", Selection: sel}.Echo(), `"mode":"covers"`},
-		{LookupInput{Name: "web", Kind: "address", Selection: sel}.Echo(), `"kind":"address","name":"web"`},
+		{LookupInput{Name: "web", Kind: "address", Selection: sel}.Echo(), `"kind":"address","limit":0,"name":"web"`},
+		{SearchInput{Term: "web", ResultLimit: ResultLimit{Limit: 5}}.Echo(), `"limit":5,`},
+		{DiffInput{ResultLimit: ResultLimit{Limit: 2}}.Echo(), `"limit":2,`},
 	} {
 		b, err := json.Marshal(tc.got)
 		if err != nil || !strings.Contains(string(b), tc.want) {

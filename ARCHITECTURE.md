@@ -124,7 +124,7 @@ detail and the measurements.
   The line runs between *reachability* and *decision*. The index answers "which
   rules could this value reach", because that is index knowledge and there are four
   separate paths to get it wrong: the object covering an address, a group holding
-  that object, a literal in the rule field, and a field of `any`. `CandidatesFor`
+  that object, a literal in the rule field, and a field of `any`. `Candidates`
   unions all four for one side of a match. Intersecting the sides, dropping
   disabled rules, and deciding what a first match means — including whether
   application, service and zone agree — is the consumer's.

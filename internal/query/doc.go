@@ -16,7 +16,7 @@ type Doc[Echo, Res any] struct {
 	Detail     string        `json:"detail" jsonschema:"summary or full: how much of each result the envelope holds"`
 	Input      Echo          `json:"input" jsonschema:"the question as answered, with the flow as simulated"`
 	Results    []Res         `json:"results" jsonschema:"the answers; empty when no target could be read"`
-	Summary    *Summary      `json:"summary,omitempty" jsonschema:"search and lookup only: the count of results over the targets read"`
+	Summary    *Summary      `json:"summary,omitempty" jsonschema:"search, lookup and snapshot diff only: the count of results over the targets read"`
 	Holes      []estate.Hole `json:"holes" jsonschema:"devices or snapshots the answer could not read; each one makes the answer incomplete"`
 	Unresolved []Unresolved  `json:"unresolved" jsonschema:"values the answer could not resolve; each one can hide matches"`
 	Notes      []Note        `json:"notes" jsonschema:"facts that qualify the answer without making it incomplete, such as a stale snapshot"`
@@ -94,6 +94,7 @@ type SearchEcho struct {
 	Direct    bool      `json:"direct" jsonschema:"whether groups are followed one level up only"`
 	Fields    []string  `json:"fields" jsonschema:"the rule fields searched; empty for every field"`
 	Kinds     []string  `json:"kinds" jsonschema:"the object kinds searched; empty for every kind"`
+	Limit     int       `json:"limit" jsonschema:"the most results kept; 0 for every result"`
 	Mode      string    `json:"mode" jsonschema:"how the term matches: the mode asked (exact, within or contains) or the one the term sets (covers, overlaps or matches)"`
 	Selection Selection `json:"selection" jsonschema:"the file or the devices searched"`
 	Show      []string  `json:"show" jsonschema:"the finding stages shown; empty for every stage"`
@@ -104,7 +105,7 @@ type SearchEcho struct {
 func (in SearchInput) Echo() SearchEcho {
 	return SearchEcho{
 		Term: in.Term, Mode: in.Matching(), Kinds: in.Kinds, Fields: in.Fields, Show: in.Show,
-		Direct: in.Direct, Selection: in.Selection,
+		Direct: in.Direct, Selection: in.Selection, Limit: in.Limit,
 	}
 }
 
@@ -113,23 +114,25 @@ type LookupEcho struct {
 	Expand    bool      `json:"expand" jsonschema:"whether the text card expands groups"`
 	Full      bool      `json:"full" jsonschema:"whether the text card shows every field"`
 	Kind      string    `json:"kind" jsonschema:"the kind asked for; empty for any kind"`
+	Limit     int       `json:"limit" jsonschema:"the most results kept; 0 for every result"`
 	Name      string    `json:"name" jsonschema:"the rule or object name looked up"`
 	Selection Selection `json:"selection" jsonschema:"the file or the devices read"`
 }
 
 // Echo is the input block.
 func (in LookupInput) Echo() LookupEcho {
-	return LookupEcho{Name: in.Name, Kind: in.Kind, Expand: in.Expand, Full: in.Full, Selection: in.Selection}
+	return LookupEcho{Name: in.Name, Kind: in.Kind, Expand: in.Expand, Full: in.Full, Selection: in.Selection, Limit: in.Limit}
 }
 
 // DiffEcho is snapshot diff's input block.
 type DiffEcho struct {
 	From      string    `json:"from" jsonschema:"the older point in time; empty for the snapshot before the newer one"`
+	Limit     int       `json:"limit" jsonschema:"the most results kept; 0 for every result"`
 	Selection Selection `json:"selection" jsonschema:"the devices compared"`
 	To        string    `json:"to" jsonschema:"the newer point in time; empty for the latest snapshot"`
 }
 
 // Echo is the input block.
 func (in DiffInput) Echo() DiffEcho {
-	return DiffEcho{Selection: in.Selection, From: in.From, To: in.To}
+	return DiffEcho{Selection: in.Selection, From: in.From, To: in.To, Limit: in.Limit}
 }

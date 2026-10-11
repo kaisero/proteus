@@ -51,7 +51,25 @@ func TestSnapshotDiff(t *testing.T) {
 	}
 }
 
-// From and To pick the snapshots; one that does not read is a hole.
+// A setting of the scope is a change like any other: the limit counts it.
+func TestSnapshotDiffLimitCountsSettings(t *testing.T) {
+	t.Parallel()
+	l := newLab(t)
+	vsys := func(body string) []byte {
+		return []byte(`<config version="11.2.0"><shared/><devices><entry name="localhost.localdomain"><vsys><entry name="vsys1">` +
+			body + `</entry></vsys></entry></devices></config>`)
+	}
+	l.write(store.Meta{Device: "fw01"}, vsys(`<display-name>one</display-name>`))
+	l.write(store.Meta{Device: "fw01"}, vsys(`<display-name>two</display-name><import><network><interface><member>ethernet1/3</member></interface></network></import>`))
+	fw01 := Selection{Device: []string{"fw01"}, Vsys: []string{"vsys1"}}
+	e, err := SnapshotDiff(context.Background(), l.env(), DiffInput{Selection: fw01, ResultLimit: ResultLimit{Limit: 1}})
+	if err != nil || e.Summary.Found != 2 || e.Summary.Omitted != 1 || len(e.Results) != 2 || len(e.Results[1].Changes) != 1 ||
+		e.Results[1].Changes[0].Kind != "setting" || e.Results[1].Changes[0].Name != "display-name" {
+		t.Errorf("%v %+v %+v", err, e.Summary, e.Results)
+	}
+}
+
+// From and To pick the snapshots; one before any snapshot is a hole.
 func TestSnapshotDiffFromAndTo(t *testing.T) {
 	t.Parallel()
 	env := diffLab(t)
@@ -59,11 +77,6 @@ func TestSnapshotDiffFromAndTo(t *testing.T) {
 	e, err := SnapshotDiff(context.Background(), env, DiffInput{Selection: fw01, From: "2026-09-28T10:00:00Z", To: "2026-09-28T10:00:30Z"})
 	if err != nil || len(e.Results) == 0 || e.Results[0].From != e.Results[0].To {
 		t.Errorf("same snapshot: %+v %v", e.Results, err)
-	}
-	for _, in := range []DiffInput{{Selection: fw01, To: "tuesday"}, {Selection: fw01, From: "tuesday"}} {
-		if e, err := SnapshotDiff(context.Background(), env, in); err != nil || len(e.Holes) != 1 || !strings.Contains(e.Holes[0].Reason, `"tuesday"`) {
-			t.Errorf("%+v: %+v %v", in, e.Holes, err)
-		}
 	}
 	if e, err := SnapshotDiff(context.Background(), env, DiffInput{Selection: fw01, To: "2020-01-01"}); err != nil || len(e.Holes) != 1 || e.Holes[0].Code != "gap.snapshot-missing" {
 		t.Errorf("before any: %+v %v", e.Holes, err)
@@ -82,6 +95,88 @@ func TestSnapshotDiffOfAnUnreadableConfiguration(t *testing.T) {
 	}
 }
 
+// Without From, a damaged snapshot before the newer one is passed over: the
+// diff compares the next older one that can be read, and a note names the
+// skipped one.
+func TestSnapshotDiffPassesOverADamagedSnapshot(t *testing.T) {
+	t.Parallel()
+	l := newLab(t)
+	l.write(store.Meta{Device: "fw01"}, pathlab.Read(t, fixture("firewall-lab.xml")))
+	l.write(store.Meta{Device: "fw01"}, pathlab.Read(t, fixture("firewall-lab.xml")))
+	l.write(store.Meta{Device: "fw01"}, pathlab.Read(t, fixture("firewall-lab-changed.xml")))
+	ids, err := l.st.List("fw01")
+	if err != nil || len(ids) != 3 {
+		t.Fatalf("ids %v, %v", ids, err)
+	}
+	sn, _ := l.st.Get("fw01", ids[1])
+	if err := os.Remove(filepath.Join(sn.Dir, "meta.json")); err != nil {
+		t.Fatal(err)
+	}
+	e, err := SnapshotDiff(context.Background(), l.env(), DiffInput{Selection: Selection{Device: []string{"fw01"}}})
+	if err != nil || len(e.Holes) != 0 || len(e.Results) == 0 {
+		t.Fatalf("%+v %v", e, err)
+	}
+	if r := e.Results[0]; r.From != ids[2] || r.To != ids[0] {
+		t.Errorf("compared %s with %s, want %s with %s", r.From, r.To, ids[2], ids[0])
+	}
+	if len(e.Notes) != 1 || e.Notes[0].Code != "note.snapshot-skipped" || e.Notes[0].Device != "fw01" ||
+		!strings.Contains(e.Notes[0].Note, ids[1]) {
+		t.Errorf("notes %+v", e.Notes)
+	}
+}
+
+// With --from and --to on one snapshot past a damaged one, the note shows once.
+// With every older snapshot damaged, the hole is a failed load that names them,
+// not "only one snapshot".
+func TestSnapshotDiffNamesDamagedSnapshotsOnce(t *testing.T) {
+	t.Parallel()
+	l := newLab(t)
+	for range 3 {
+		l.write(store.Meta{Device: "fw01"}, pathlab.Read(t, fixture("firewall-lab.xml")))
+	}
+	ids, _ := l.st.List("fw01")
+	sn, _ := l.st.Get("fw01", ids[0])
+	if err := os.Remove(filepath.Join(sn.Dir, "meta.json")); err != nil {
+		t.Fatal(err)
+	}
+	fw01 := Selection{Device: []string{"fw01"}}
+	e, err := SnapshotDiff(context.Background(), l.env(), DiffInput{Selection: fw01, From: "2026-09-28T10:02:30Z", To: "2026-09-28T10:02:30Z"})
+	if err != nil || len(e.Notes) != 1 || e.Notes[0].Code != "note.snapshot-skipped" {
+		t.Errorf("one snapshot on both sides: notes %+v, %v", e.Notes, err)
+	}
+	sn, _ = l.st.Get("fw01", ids[2])
+	if err := os.Remove(filepath.Join(sn.Dir, "meta.json")); err != nil {
+		t.Fatal(err)
+	}
+	e, err = SnapshotDiff(context.Background(), l.env(), DiffInput{Selection: fw01, To: "2026-09-28T10:01:30Z"})
+	if err != nil || len(e.Holes) != 1 || e.Holes[0].Code != "gap.load-failed" ||
+		!strings.Contains(e.Holes[0].Reason, "damaged: "+ids[2]) || strings.Contains(e.Holes[0].Reason, "only one") {
+		t.Errorf("every older one damaged: holes %+v, %v", e.Holes, err)
+	}
+}
+
+// An older configuration that is there but cannot be read is a failed load, not
+// "only one snapshot".
+func TestSnapshotDiffOfAnUnreadableOlderSnapshot(t *testing.T) {
+	t.Parallel()
+	l := newLab(t)
+	l.write(store.Meta{Device: "fw01"}, pathlab.Read(t, fixture("firewall-lab.xml")))
+	l.write(store.Meta{Device: "fw01"}, pathlab.Read(t, fixture("firewall-lab.xml")))
+	ids, _ := l.st.List("fw01")
+	sn, _ := l.st.Get("fw01", ids[1])
+	p := sn.Path(store.ConfigDoc)
+	if err := os.Remove(p); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Base(p), p); err != nil { // a link to itself cannot be read
+		t.Fatal(err)
+	}
+	e, err := SnapshotDiff(context.Background(), l.env(), DiffInput{Selection: Selection{Device: []string{"fw01"}}})
+	if err != nil || len(e.Holes) != 1 || e.Holes[0].Code != "gap.load-failed" || strings.Contains(e.Holes[0].Reason, "only one") {
+		t.Errorf("%+v %v", e.Holes, err)
+	}
+}
+
 // A diff reads the store: a file, a time or a fresh fetch is refused, as are an
 // unknown device and an env without the estate.
 func TestSnapshotDiffInputRules(t *testing.T) {
@@ -94,9 +189,20 @@ func TestSnapshotDiffInputRules(t *testing.T) {
 		{DiffInput{Selection: Selection{At: "2026-01-01"}}, "--at: snapshot diff"},
 		{DiffInput{Selection: Selection{Fresh: true}}, "--fresh: snapshot diff"},
 		{DiffInput{Selection: Selection{Device: []string{"fw09"}}}, `no device named "fw09"`},
+		// From and To read as at does; a bad one names its own input.
+		{DiffInput{To: "tuesday"}, `--to "tuesday": want a snapshot id, an RFC 3339 time, or a date`},
+		{DiffInput{From: "tuesday", To: "2026-09-28"}, `--from "tuesday": want a snapshot id`},
 	} {
 		_, err := SnapshotDiff(context.Background(), diffLab(t), tc.in)
 		usageOK(t, err, tc.want)
+	}
+	// The tool's words name the input without the dashes.
+	u := DiffInput{From: "tuesday"}.Validate()
+	if u == nil || u.ToolText != `from "tuesday": want a snapshot id, an RFC 3339 time, or a date like 2026-09-23` {
+		t.Errorf("tool text: %+v", u)
+	}
+	if u := (DiffInput{From: "2026-09-27", To: "2026-09-28T10-00-00Z"}).Validate(); u != nil {
+		t.Errorf("good times refused: %v", u)
 	}
 	if _, err := SnapshotDiff(context.Background(), Env{}, DiffInput{}); !errors.Is(err, errNoInventory) {
 		t.Errorf("no inventory: %v", err)

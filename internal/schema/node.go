@@ -47,6 +47,9 @@ type Node struct {
 	Help     string `json:"h,omitempty"`
 	Regex    string `json:"rx,omitempty"`
 	SubType  string `json:"st,omitempty"`
+	// Encrypted is set where the schema marks the element encrypt="yes": a key,
+	// password or secret the device stores encrypted. Its value is never shown.
+	Encrypted bool `json:"enc,omitempty"`
 
 	EnumValues []string `json:"ev,omitempty"` // permitted values, when Type is enum
 	MemberOf   []string `json:"mo,omitempty"` // reference targets declared here
@@ -98,6 +101,44 @@ func (n *Node) Child(name string) *Node {
 	return nil
 }
 
+// Step returns the node that describes a child element called name: the entry
+// of an entry list, the member of a member list, or a named field. Anonymous
+// choices and unions are pure grammar and are passed through; a named one is
+// an element of its own (PathFields). An attribute is not an element.
+//
+// An entry list's entry is its entry sequence. Not every array's entry is one:
+// a vsys user-group holds an array named entry, with a name attribute and
+// members, and that is found by name like any other field.
+//
+// It returns nil when the schema does not describe such a child. This is the
+// one definition of "described": config.Load counts what it does not describe
+// (AGENTS.md R3), and snapshot diff hides the values of the same elements.
+func (n *Node) Step(name string) *Node {
+	if n == nil {
+		return nil
+	}
+	if n.Kind == KindArray && name == "entry" {
+		if seq := n.EntrySequence(); seq != nil {
+			return seq
+		}
+	}
+	for _, c := range n.Children {
+		switch {
+		case (c.Kind == KindChoice || c.Kind == KindUnion) && c.Name == "":
+			if got := c.Step(name); got != nil {
+				return got
+			}
+		case c.Kind == KindAttrReq, c.Kind == KindEnum, c.Kind == KindMemberOf:
+			// An attribute, an enum value or a reference target names no
+			// element. The parser keeps the last two on their field, so
+			// this only guards a hand-built tree.
+		case c.Name == name:
+			return c
+		}
+	}
+	return nil
+}
+
 // Fields returns the node's children with choice and union wrappers flattened.
 func (n *Node) Fields() []*Node {
 	if n == nil {
@@ -120,9 +161,22 @@ func (n *Node) EntrySequence() *Node {
 	if n == nil || n.Kind != KindArray {
 		return nil
 	}
-	for _, c := range n.Fields() {
-		if c.Kind == KindSequence && c.Name == "entry" {
-			return c
+	return entrySequence(n)
+}
+
+// entrySequence finds the entry sequence among the fields of n, as Fields
+// flattens them, without building the list: a load asks it once per element.
+func entrySequence(n *Node) *Node {
+	for _, c := range n.Children {
+		switch c.Kind {
+		case KindChoice, KindUnion:
+			if s := entrySequence(c); s != nil {
+				return s
+			}
+		case KindSequence:
+			if c.Name == "entry" {
+				return c
+			}
 		}
 	}
 	return nil

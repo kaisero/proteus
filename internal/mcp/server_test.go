@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/netip"
+	"os"
 	"path/filepath"
 	"reflect"
 	"slices"
@@ -98,12 +99,12 @@ func (r *recorder) last(t *testing.T) Call {
 }
 
 // serve runs a server over env through in-memory transports and returns the
-// client's session and the audit. strict is New's: a panic fails the test.
+// client's session and the audit. strict is build's: a panic fails the test.
 func serve(t *testing.T, env query.Env, strict bool) (*sdk.ClientSession, *recorder) {
 	t.Helper()
 	ctx := context.Background()
 	rec := &recorder{}
-	s, err := newServer(Options{Env: env, Audit: rec, Version: "test"}, strict)
+	s, _, err := build(Options{Env: env, Audit: rec, Version: "test"}, strict)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -120,7 +121,7 @@ func serve(t *testing.T, env query.Env, strict bool) (*sdk.ClientSession, *recor
 	return cs, rec
 }
 
-// connect serves env as New does in a test binary.
+// connect serves env as Serve does in a test binary.
 func connect(t *testing.T, env query.Env) *sdk.ClientSession {
 	t.Helper()
 	cs, _ := serve(t, env, true)
@@ -683,14 +684,11 @@ func TestTheMiddleware(t *testing.T) {
 	callOf(ctx).set(func(*Call) { t.Error("set ran without a record") })
 }
 
-// New refuses an inventory without a device; Serve answers over a transport
+// Serve refuses an inventory without a device, and answers over a transport
 // until its context ends.
 func TestServe(t *testing.T) {
 	t.Parallel()
-	if _, err := New(Options{}); err == nil {
-		t.Error("New without an inventory")
-	}
-	if err := Serve(context.Background(), Options{}, Stdio()); err == nil {
+	if err := Serve(context.Background(), Options{}, &sdk.StdioTransport{}); err == nil {
 		t.Error("Serve without an inventory")
 	}
 	env := labEnv(t)
@@ -708,6 +706,28 @@ func TestServe(t *testing.T) {
 	cancel()
 	_ = cs.Close()
 	<-done
+}
+
+// search refuses an unknown kind in the tool's words, with the kinds it knows.
+func TestSearchRefusesAnUnknownKind(t *testing.T) {
+	t.Parallel()
+	cs, rec := serve(t, labEnv(t, snap{pathlab.FW01, fixture("firewall-nat.xml")}), true)
+	res, err := cs.CallTool(context.Background(), &sdk.CallToolParams{
+		Name: "search", Arguments: map[string]any{"value": pathlab.Destination, "kind": "addr"},
+	})
+	if err != nil || !res.IsError {
+		t.Fatalf("%v %+v", err, res)
+	}
+	got, _ := plain(t, res.StructuredContent).(map[string]any)
+	e, _ := got["error"].(map[string]any)
+	msg, _ := e["text"].(string)
+	if e["code"] != "call.usage" || !strings.HasPrefix(msg, "kind \"addr\": did you mean address, address-group?\nknown kinds: ") ||
+		!strings.Contains(msg, "address, address-group") || strings.Contains(msg, "--") {
+		t.Errorf("error %v", e)
+	}
+	if c := rec.last(t); c.Status != StatusUsage || c.Code != "call.usage" {
+		t.Errorf("audit %+v", c)
+	}
 }
 
 // text is a result's first text content.
@@ -762,5 +782,192 @@ func TestErrorOf(t *testing.T) {
 	}
 	if _, ok := shapeByTool(""); ok {
 		t.Error("the file shape has no tool")
+	}
+}
+
+// search, lookup and snapshot_diff take limit: the first findings, cards or
+// single changes, the rest counted in the summary and named on its answer
+// line, also in the text content. A limit below 1 is the SDK's input error.
+func TestResultLimit(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	lab := fixture("firewall-lab.xml")
+	cs, rec := serve(t, labEnv(t, snap{"fw01", lab}, snap{"fw02", lab}, snap{"fw01", fixture("firewall-lab-changed.xml")}), true)
+	// units counts what a limit counts: a result of search and lookup, a
+	// single change of snapshot_diff (asked in full, so its changes show).
+	results := func(rs []any) int { return len(rs) }
+	changes := func(rs []any) int {
+		n := 0
+		for _, r := range rs {
+			n += len(r.(map[string]any)["changes"].([]any))
+		}
+		return n
+	}
+	for _, tc := range []struct {
+		tool   string
+		args   map[string]any
+		narrow string
+		units  func([]any) int
+	}{
+		{"search", map[string]any{"value": "198.18.10.100"}, "device, vsys or kind", results},
+		{"lookup", map[string]any{"name": "dc01"}, "device or vsys", results},
+		{"snapshot_diff", map[string]any{"device": "fw01", "detail": "full"}, "device", changes},
+	} {
+		whole, err := cs.CallTool(ctx, &sdk.CallToolParams{Name: tc.tool, Arguments: tc.args})
+		if err != nil || whole.IsError {
+			t.Fatalf("%s: %v %s", tc.tool, err, text(whole))
+		}
+		all := plain(t, whole.StructuredContent).(map[string]any)["envelope"].(map[string]any)
+		found := tc.units(all["results"].([]any))
+		if s := all["summary"].(map[string]any); s["omitted"] != 0.0 || int(s["found"].(float64)) != found || found < 2 {
+			t.Fatalf("%s: whole summary %v, %d found", tc.tool, s, found)
+		}
+		tc.args["limit"] = 1
+		res, err := cs.CallTool(ctx, &sdk.CallToolParams{Name: tc.tool, Arguments: tc.args})
+		if err != nil || res.IsError {
+			t.Fatalf("%s: %v %s", tc.tool, err, text(res))
+		}
+		env := plain(t, res.StructuredContent).(map[string]any)["envelope"].(map[string]any)
+		s := env["summary"].(map[string]any)
+		line := fmt.Sprintf("; 1 of %d shown, narrow by %s", found, tc.narrow)
+		kept := env["results"].([]any)
+		if tc.units(kept) != 1 || s["omitted"] != float64(found-1) || !strings.HasSuffix(s["answer"].(string), line) ||
+			env["input"].(map[string]any)["limit"] != 1.0 || !reflect.DeepEqual(env["notes"], all["notes"]) || !reflect.DeepEqual(env["holes"], all["holes"]) {
+			t.Errorf("%s: %v", tc.tool, env)
+		}
+		if first, _, _ := strings.Cut(text(res), "\n"); !strings.HasSuffix(first, line) {
+			t.Errorf("%s: text %q", tc.tool, text(res))
+		}
+		if c := rec.last(t); c.Status != StatusOK || len(c.Answers) != 1+len(kept) || !strings.HasSuffix(c.Answers[0], line) {
+			t.Errorf("%s: audit %+v", tc.tool, c)
+		}
+		for _, bad := range []int{0, -1} {
+			tc.args["limit"] = bad
+			res, err := cs.CallTool(ctx, &sdk.CallToolParams{Name: tc.tool, Arguments: tc.args})
+			if err != nil || !res.IsError || !strings.Contains(text(res), "validating") {
+				t.Errorf("%s limit %d: %v %s", tc.tool, bad, err, text(res))
+			}
+			if c := rec.last(t); c.Status != StatusUsage {
+				t.Errorf("%s limit %d: audit %+v", tc.tool, bad, c)
+			}
+		}
+	}
+}
+
+// snapshot_diff reads from and to as at is read: a value that does not read is
+// call.usage in the tool's words, naming the input.
+func TestSnapshotDiffRefusesABadTime(t *testing.T) {
+	t.Parallel()
+	cs, rec := serve(t, labEnv(t, snap{"fw01", fixture("firewall-lab.xml")}, snap{"fw01", fixture("firewall-lab-changed.xml")}), true)
+	for _, name := range []string{"from", "to"} {
+		res, err := cs.CallTool(context.Background(), &sdk.CallToolParams{
+			Name: "snapshot_diff", Arguments: map[string]any{"device": "fw01", name: "tuesday"},
+		})
+		if err != nil || !res.IsError {
+			t.Fatalf("%s: %v %+v", name, err, res)
+		}
+		want := toolError{
+			Code: "call.usage", Text: name + ` "tuesday": want a snapshot id, an RFC 3339 time, or a date like 2026-09-23`,
+			Options: []string{}, Needs: []query.Need{},
+		}
+		if got, _ := plain(t, res.StructuredContent).(map[string]any); !reflect.DeepEqual(got["error"], plain(t, want)) {
+			t.Errorf("%s: %v", name, got)
+		}
+		if c := rec.last(t); c.Status != StatusUsage || c.Code != "call.usage" {
+			t.Errorf("%s: audit %+v", name, c)
+		}
+	}
+}
+
+// A broad answer keeps its audit line short: the verdict holds the summary
+// line and the first 20 result lines, verdict_count every answer line.
+func TestTheVerdictIsCut(t *testing.T) {
+	t.Parallel()
+	lab := fixture("firewall-lab.xml")
+	b := pathlab.Read(t, lab)
+	var bulk strings.Builder
+	for i := range 1000 {
+		fmt.Fprintf(&bulk, `<entry name="bulk-host-%04d"><ip-netmask>198.18.200.1/32</ip-netmask></entry>`, i)
+	}
+	shared := `<entry name="shared-dns"><ip-netmask>9.9.9.9/32</ip-netmask></entry>`
+	if !bytes.Contains(b, []byte(shared)) {
+		t.Fatal("the lab configuration changed")
+	}
+	broad := filepath.Join(t.TempDir(), "broad.xml")
+	if err := os.WriteFile(broad, bytes.Replace(b, []byte(shared), []byte(shared+bulk.String()), 1), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	s, _, err := build(Options{Env: labEnv(t, snap{"fw01", broad}), Audit: AuditTo(&out), Version: "test"}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	ct, st := sdk.NewInMemoryTransports()
+	ss, err := s.Connect(ctx, st, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cs, err := sdk.NewClient(&sdk.Implementation{Name: "client", Version: "test"}, nil).Connect(ctx, ct, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = cs.Close(); _ = ss.Wait() })
+	res, err := cs.CallTool(ctx, &sdk.CallToolParams{Name: "search", Arguments: map[string]any{"value": "198.18.200.1", "device": []string{"fw01"}}})
+	if err != nil || res.IsError {
+		t.Fatalf("%v %s", err, text(res))
+	}
+	env := plain(t, res.StructuredContent).(map[string]any)["envelope"].(map[string]any)
+	results := env["results"].([]any)
+	// Each shared object is a finding in vsys1 and in vsys2, and vsys1's
+	// net-labor holds the address: 2,001 findings.
+	if len(results) != 2001 {
+		t.Fatalf("%d results", len(results))
+	}
+	lines := strings.Split(strings.TrimSuffix(out.String(), "\n"), "\n")
+	if len(lines) != 1 || len(lines[0]) >= 16<<10 {
+		t.Fatalf("%d lines, the first %d bytes", len(lines), len(lines[0]))
+	}
+	var line struct {
+		Verdict      []string `json:"verdict"`
+		VerdictCount int      `json:"verdict_count"`
+	}
+	if err := json.Unmarshal([]byte(lines[0]), &line); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{env["summary"].(map[string]any)["answer"].(string)}
+	for _, r := range results[:20] {
+		want = append(want, r.(map[string]any)["answer"].(string))
+	}
+	if !slices.Equal(line.Verdict, want) || line.VerdictCount != 1+len(results) {
+		t.Errorf("verdict %q, count %d; want %q, count %d", line.Verdict, line.VerdictCount, want, 1+len(results))
+	}
+}
+
+// The verdict keeps the summary line and 20 result lines; an answer without
+// a summary keeps 20 result lines.
+func TestVerdictOf(t *testing.T) {
+	t.Parallel()
+	results := func(n int) []any {
+		var rs []any
+		for i := range n {
+			rs = append(rs, map[string]any{"answer": fmt.Sprint(i)})
+		}
+		return rs
+	}
+	for _, tc := range []struct {
+		doc         map[string]any
+		kept, count int
+	}{
+		{map[string]any{"summary": map[string]any{"answer": "s"}, "results": results(25)}, 21, 26},
+		{map[string]any{"summary": map[string]any{"answer": "s"}, "results": results(20)}, 21, 21},
+		{map[string]any{"results": results(25)}, 20, 25},
+		{map[string]any{"results": results(3)}, 3, 3},
+		{map[string]any{"results": []any{}}, 0, 0},
+	} {
+		got, n := viewOf(tc.doc).verdict()
+		if len(got) != tc.kept || n != tc.count || !slices.Equal(got, viewOf(tc.doc).answers()[:tc.kept]) {
+			t.Errorf("%v: kept %d of %d", tc.doc, len(got), n)
+		}
 	}
 }

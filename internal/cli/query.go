@@ -34,6 +34,24 @@ func (a *app) bindDetail(cmd *cobra.Command) {
 	cmd.Flags().StringVar(&a.detail, "detail", query.DetailFull, "with --output json or yaml: summary or full")
 }
 
+// bindLimit registers --limit on a question with many results: search, lookup
+// and snapshot diff. It has no default.
+func bindLimit(cmd *cobra.Command, n *int) {
+	cmd.Flags().IntVar(n, "limit", 0, "keep only the first N results (findings, cards or changes); the summary counts the rest (default: all)")
+}
+
+// checkLimit refuses a --limit below 1: zero would read as no limit.
+func checkLimit(c *cobra.Command) error {
+	f := c.Flags().Lookup("limit")
+	if f == nil || !f.Changed {
+		return nil
+	}
+	if n, _ := c.Flags().GetInt("limit"); n < 1 {
+		return usageErr("--limit %d: want 1 or more", n)
+	}
+	return nil
+}
+
 // checkDetail refuses a --detail the command cannot honour: a value other
 // than summary or full, or any with text output, which has one form.
 func (a *app) checkDetail(c *cobra.Command) error {

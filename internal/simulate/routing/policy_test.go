@@ -10,8 +10,10 @@ import (
 
 	"github.com/okaiser/proteus/internal/config"
 	"github.com/okaiser/proteus/internal/index"
+	"github.com/okaiser/proteus/internal/reason"
 	"github.com/okaiser/proteus/internal/resolve"
 	"github.com/okaiser/proteus/internal/simulate"
+	"github.com/okaiser/proteus/internal/simulate/rulebase"
 )
 
 // policyNet is one firewall carrying firewall-routing.xml's PBF and NAT rules, and
@@ -72,6 +74,26 @@ func TestPBFForwardAndSourceNAT(t *testing.T) {
 	}
 }
 
+// A PBF rule that may take the packet carries why it may not, and why a no-pbf
+// rule above it may match first, each with its own code.
+func TestPBFDoubtsKeepTheirCodes(t *testing.T) {
+	t.Parallel()
+	m := rulebase.PBFMatch{
+		Rule:   resolve.PBFRule{Rule: resolve.Rule{Name: "fwd"}},
+		Found:  true,
+		Doubts: []reason.Reason{reason.New("doubt.service-no-port", "no port")},
+		Passed: []rulebase.PBFPassed{{Rule: "keep", Doubts: []reason.Reason{reason.New("doubt.schedule", "schedule")}}},
+	}
+	got := pbfDoubts(m)
+	if len(got) != 2 || got[0] != reason.New("doubt.service-no-port", "PBF rule fwd may not match: no port") ||
+		got[1] != reason.New("doubt.schedule", "no-pbf rule keep may match first: schedule") {
+		t.Errorf("%v", got)
+	}
+	if got := pbfDoubts(rulebase.PBFMatch{Found: true}); got != nil {
+		t.Errorf("a sure match: %v", got)
+	}
+}
+
 // A PBF rule by interface, with a negated destination.
 func TestPBFByInterface(t *testing.T) {
 	t.Parallel()
@@ -114,7 +136,7 @@ func TestDestinationNAT(t *testing.T) {
 	t.Parallel()
 	n, load := policyNet(t, "firewall-routing.xml")
 	f := flow("10.30.0.7", "198.51.100.10")
-	f.DestPort = 3389
+	f.Protocol, f.DestPort = "tcp", 3389
 	run, err := Simulation{}.Run(context.Background(), &simulate.Env{Network: n, Load: load}, simulate.Input{Flow: f, Params: map[string]string{"device": "fw"}})
 	h := run.Output.(Path).Hops[0]
 	if err != nil || !strings.HasSuffix(notes(h), "; nat rule dnat-portal (sdwan -> datacenter): destination 198.51.100.10 -> 10.1.10.100") ||
@@ -196,7 +218,7 @@ func TestDestinationNATPortAndFQDN(t *testing.T) {
 		return []netip.Addr{netip.MustParseAddr("10.1.10.101")}, nil
 	}}
 	f := flow("10.1.5.5", "198.51.100.40")
-	f.DestPort = 3389
+	f.Protocol, f.DestPort = "tcp", 3389
 	run, _ := Simulation{}.Run(context.Background(), env, simulate.Input{Flow: f})
 	if h := run.Output.(Path).Hops[0]; !strings.Contains(notes(h), "destination 198.51.100.40 -> 10.1.10.100:3390") || h.PostNAT.DestPort != 3390 {
 		t.Errorf("port: %q", notes(h))
@@ -221,7 +243,7 @@ func TestTheTranslatedDestinationHasNoRoute(t *testing.T) {
 	))
 	load := func(_, vsys string) (simulate.Target, error) { return withIndexes(cfg, vsys), nil }
 	f := flow("10.1.5.5", "198.51.100.40")
-	f.DestPort = 3389
+	f.Protocol, f.DestPort = "tcp", 3389
 	run, _ := Simulation{}.Run(context.Background(), &simulate.Env{Network: n, Load: load},
 		simulate.Input{Flow: f, Params: map[string]string{"device": "fw", "router": "default"}})
 	p := run.Output.(Path)
@@ -235,4 +257,55 @@ func TestTheTranslatedDestinationHasNoRoute(t *testing.T) {
 func withIndexes(cfg *config.Config, vsys string) simulate.Target {
 	sc := config.Scope{Sort: config.ScopeVsys, Name: vsys}
 	return simulate.Target{Config: cfg, Indexes: index.NewSet(cfg).Provider(sc)}
+}
+
+// The PBF stage matches the flow's service (L3): on the same addresses, tcp/22
+// takes the no-pbf rule and routing decides; tcp/443 and udp/22 reach the
+// forward rule, which makes the hop inferred. A no-pbf rule that only may match is
+// named in the stage, and the scan goes on.
+func TestPBFStageMatchesTheService(t *testing.T) {
+	t.Parallel()
+	cfg, _, err := config.Load("../../../testdata/config/firewall-pbf-service.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	n := netOf(dev("fw", []resolve.InterfaceState{
+		iface("ethernet1/1", "home", "default", "10.88.3.1/24"),
+		iface("ethernet1/2", "wan", "default", "10.88.9.1/24"),
+		iface("ethernet1/3", "lab", "default", "10.88.4.1/24"),
+	},
+		route("default", "10.88.3.0/24", "ethernet1/1", "0.0.0.0"),
+		route("default", "10.88.9.0/24", "ethernet1/2", "0.0.0.0"),
+		route("default", "10.88.4.0/24", "ethernet1/3", "0.0.0.0"),
+	))
+	load := func(_, vsys string) (simulate.Target, error) { return withIndexes(cfg, vsys), nil }
+	for _, tc := range []struct {
+		src, proto string
+		port       uint16
+		pbf        []string
+		detail     string
+	}{
+		{"10.88.3.5", "tcp", 22, nil, "no-pbf rule ssh-no-pbf leaves the packet to routing"},
+		{"10.88.3.5", "tcp", 443, []string{"home-out"}, "pbf rule home-out may forward this packet to ethernet1/4 via 198.18.0.1"},
+		{"10.88.3.5", "udp", 22, []string{"home-out"}, "pbf rule home-out may forward this packet to ethernet1/4 via 198.18.0.1"},
+		{"10.88.4.5", "tcp", 22, []string{"lab-out"}, "pbf rule lab-out may forward this packet to ethernet1/4; " +
+			"no-pbf rule lab-app-no-pbf may match (the rule names an application, which is not evaluated)"},
+	} {
+		f := flow(tc.src, "10.88.9.5")
+		f.Protocol, f.DestPort = tc.proto, tc.port
+		run, err := Simulation{}.Run(context.Background(), &simulate.Env{Network: n, Load: load}, simulate.Input{Flow: f})
+		if err != nil {
+			t.Fatal(err)
+		}
+		h := run.Output.(Path).Hops[0]
+		var detail string
+		for _, st := range run.Stages {
+			if strings.HasSuffix(st.Slug, "pbf") {
+				detail = st.Detail
+			}
+		}
+		if !slices.Equal(h.PBF, tc.pbf) || detail != tc.detail {
+			t.Errorf("%s %s/%d: pbf %v, detail %q", tc.src, tc.proto, tc.port, h.PBF, detail)
+		}
+	}
 }

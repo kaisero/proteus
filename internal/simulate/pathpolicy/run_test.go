@@ -44,7 +44,7 @@ func (n network) Device(name string) (simulate.DeviceData, error) {
 
 // labNet is the fixture's operational data; fw01 loses its default route when
 // noDefault is set, so a destination beyond it has no route there.
-func labNet(t *testing.T, noDefault bool) network {
+func labNet(t testing.TB, noDefault bool) network {
 	t.Helper()
 	n := network{data: map[string]simulate.DeviceData{}}
 	for _, dev := range pathlab.Devices {
@@ -65,9 +65,12 @@ type lab struct {
 	net      simulate.Network
 	fail     string // a device whose configuration cannot be read
 	quiet    bool   // the loader gives no notes, not even a version gap
+	// predefined puts the device's predefined services (testdata/predefined)
+	// next to each configuration.
+	predefined bool
 }
 
-func (l lab) env(t *testing.T) *simulate.Env {
+func (l lab) env(t testing.TB) *simulate.Env {
 	t.Helper()
 	paths := map[string]string{}
 	for _, dev := range pathlab.Devices {
@@ -75,9 +78,16 @@ func (l lab) env(t *testing.T) *simulate.Env {
 		if !ok {
 			b = pathlab.Config(t, dev, l.defaults[dev])
 		}
-		paths[dev] = filepath.Join(t.TempDir(), dev+".xml")
+		dir := t.TempDir()
+		paths[dev] = filepath.Join(dir, dev+".xml")
 		if err := os.WriteFile(paths[dev], b, 0o600); err != nil {
 			t.Fatal(err)
+		}
+		if l.predefined {
+			p := pathlab.Read(t, filepath.Join(filepath.Dir(pathlab.ConfigFile(dev)), "..", "predefined", config.PredefinedFile))
+			if err := os.WriteFile(filepath.Join(dir, config.PredefinedFile), p, 0o600); err != nil {
+				t.Fatal(err)
+			}
 		}
 	}
 	if l.net == nil {
@@ -243,6 +253,59 @@ func TestThePathFixtureVariants(t *testing.T) {
 	// Undecided at 1 bounds the fidelity: hop 2's exact check does not raise it.
 	if r.Fidelity.Level() != "undermatch" || !strings.Contains(r.Fidelity.String(), disagree) {
 		t.Errorf("fidelity %s", r.Fidelity)
+	}
+}
+
+// withNAT is fw02 with the default rules allowing and two NAT rules from home
+// to labor that translate nothing: nat-https names service-https, which only
+// the device's predefined services define, above nat-any.
+func withNAT(t testing.TB) []byte {
+	t.Helper()
+	entry := func(name, service string) string {
+		return `<entry name="` + name + `"><from><member>home</member></from><to><member>labor</member></to>` +
+			`<source><member>any</member></source><destination><member>any</member></destination>` +
+			`<service>` + service + `</service></entry>`
+	}
+	b := pathlab.Config(t, pathlab.FW02, pathlab.Defaults{Local: pathlab.Entry(pathlab.Interzone, "allow")})
+	return bytes.Replace(b, []byte("<rulebase>"), []byte("<rulebase><nat><rules>"+entry("nat-https", "service-https")+entry("nat-any", "any")+"</rules></nat>"), 1)
+}
+
+// A NAT rule that may match instead of the one routing applied leaves the hop
+// undecided, as a security rule in doubt does (C3, E20); the hop's doubt names
+// the rule with routing's code and text. With the predefined services stored,
+// the rule matches for sure and the same flow decides (lab L4b).
+func TestANATDoubtLeavesThePathUndecided(t *testing.T) {
+	t.Parallel()
+	in := input(pathlab.Destination)
+	in.Flow.Protocol, in.Flow.DestPort = "tcp", 443
+	ask := func(predefined bool) Result {
+		l := lab{config: map[string][]byte{pathlab.FW02: withNAT(t)}, defaults: allowAll, predefined: predefined}
+		r, _, err := Run(context.Background(), l.env(t), in)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return r
+	}
+	r := ask(false)
+	doubt := "path.nat-undermatch: nat rule nat-https may match instead: " +
+		"service service-https is not defined in the configuration (a predefined service?); the snapshot holds no predefined services; " +
+		"a fetch with this release stores them when the device returns them"
+	if r.Verdict != VerdictUndecided || r.At == nil || r.At.Hop != 1 || r.At.Check != checkRouting ||
+		!slices.Equal(codeTexts(r.Hops[0].Doubts), []string{doubt}) || r.Fidelity.Level() != "undermatch" {
+		t.Errorf("without the predefined services: %s, doubts %v, fidelity %s", summary(r), codeTexts(r.Hops[0].Doubts), r.Fidelity)
+	}
+	if !slices.Contains(codeTexts(r.Hops[0].Routing.Notes), doubt) {
+		t.Errorf("routing's note: %v", codeTexts(r.Hops[0].Routing.Notes))
+	}
+	r = ask(true)
+	if want := "allowed | 1 fw02/vsys1 security=pass:interzone-default | 2 fw01/vsys1 security=pass:interzone-default"; summary(r) != want ||
+		len(r.Hops[0].Doubts) != 0 || len(r.Hops[0].Routing.NATDoubts) != 0 {
+		t.Errorf("with the predefined services:\ngot  %s\nwant %s", summary(r), want)
+	}
+	if !slices.ContainsFunc(r.Hops[0].Routing.Notes, func(n reason.Reason) bool {
+		return n.Code == "note.nat-applied" && strings.HasPrefix(n.Text, "nat rule nat-https ")
+	}) {
+		t.Errorf("nat-https applies: %v", codeTexts(r.Hops[0].Routing.Notes))
 	}
 }
 
@@ -412,6 +475,15 @@ func TestTheSecurityCheck(t *testing.T) {
 	if _, err := (Security{}).Evaluate(ctx, &cancelling, h, f); !errors.Is(err, context.Canceled) {
 		t.Errorf("a cancelled run: %v", err)
 	}
+	// A zone the hop's vsys does not define: the check cannot take it (C15), and
+	// the hop's zone doubt leaves the hop undecided.
+	undefined := f
+	undefined.ToZone = "wan"
+	r, err = Security{}.Evaluate(context.Background(), e, h, undefined)
+	if err != nil || r.Verdict != NotEvaluated || r.Fidelity.Level() != "exact" ||
+		!slices.Equal(r.Reason, simulate.Reasons{reason.New("zone.undefined", "a zone of the hop is not defined in vsys1")}) {
+		t.Errorf("undefined zone: %+v, %v", r, err)
+	}
 	nilCfg := *e
 	nilCfg.Load = func(string, string) (simulate.Target, error) { return simulate.Target{}, nil }
 	r, err = Security{}.Evaluate(context.Background(), &nilCfg, h, f)
@@ -421,15 +493,51 @@ func TestTheSecurityCheck(t *testing.T) {
 	}
 }
 
-// Each endpoint keeps the address routing traced, and its FQDN name.
-func TestTrimKeepsTheTracedAddress(t *testing.T) {
+// countingNet is a network that counts the devices asked of it.
+type countingNet struct {
+	simulate.Network
+	asked *int
+}
+
+func (n countingNet) Device(name string) (simulate.DeviceData, error) {
+	*n.asked++
+	return n.Network.Device(name)
+}
+
+// Routing applied the hop's NAT already: the security check of a path does not
+// read the network to run NAT again, and leaves the caller's environment as it
+// was.
+func TestTheSecurityCheckDoesNotRunNATAgain(t *testing.T) {
+	t.Parallel()
+	asked := 0
+	l := lab{
+		config: map[string][]byte{pathlab.FW02: withNAT(t)}, defaults: allowAll, predefined: true,
+		net: countingNet{Network: labNet(t, false), asked: &asked},
+	}
+	e := l.env(t)
+	f := input(pathlab.Destination).Flow
+	f.Protocol, f.DestPort, f.FromZone, f.ToZone = "tcp", 443, "home", "labor"
+	r, err := Security{}.Evaluate(context.Background(), e, routing.Hop{Device: pathlab.FW02, Vsys: "vsys1"}, f)
+	if err != nil || r.Verdict != Pass {
+		t.Fatalf("check: %+v, %v", r, err)
+	}
+	if asked != 0 {
+		t.Errorf("the check asked the network %d times, want none", asked)
+	}
+	if e.Network == nil {
+		t.Error("the check cleared the caller's network")
+	}
+}
+
+// Each endpoint keeps the address routing traced, the first, and its FQDN name.
+func TestTheCheckKeepsTheTracedAddress(t *testing.T) {
 	t.Parallel()
 	a, b := netip.MustParseAddr("198.18.10.100"), netip.MustParseAddr("203.0.113.9")
 	f := simulate.Flow{
 		Source:      simulate.Addr(netip.MustParseAddr(pathlab.Source)),
 		Destination: simulate.Endpoint{Name: "srv.example.com", Addrs: []netip.Addr{a, b}, Resolved: true},
 	}
-	got := trim(f)
+	got := f.FirstAddresses()
 	if d := got.Destination; d.Name != "srv.example.com" || !slices.Equal(d.Addrs, []netip.Addr{a}) || !d.Resolved {
 		t.Errorf("destination %+v", d)
 	}

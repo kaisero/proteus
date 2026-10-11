@@ -29,6 +29,10 @@
                   "type": "string",
                   "description": "the older point in time; empty for the snapshot before the newer one"
                 },
+                "limit": {
+                  "type": "integer",
+                  "description": "the most results kept; 0 for every result"
+                },
                 "selection": {
                   "type": "object",
                   "properties": {
@@ -86,6 +90,7 @@
               "description": "the question as answered, with the flow as simulated",
               "required": [
                 "from",
+                "limit",
                 "selection",
                 "to"
               ],
@@ -158,23 +163,28 @@
                 },
                 "found": {
                   "type": "integer",
-                  "description": "results over every target"
+                  "description": "results over every target, the omitted ones included; for snapshot diff, single changes"
                 },
                 "with": {
                   "type": "integer",
-                  "description": "targets with a result"
+                  "description": "targets with a result; for snapshot diff, devices with a change"
                 },
                 "without": {
                   "type": "integer",
-                  "description": "targets read without a result"
+                  "description": "targets read without a result; for snapshot diff, devices compared without a change"
+                },
+                "omitted": {
+                  "type": "integer",
+                  "description": "results the limit left out; for snapshot diff, single changes; 0 when every result is shown"
                 }
               },
-              "description": "search and lookup only: the count of results over the targets read",
+              "description": "search, lookup and snapshot diff only: the count of results over the targets read",
               "required": [
                 "answer",
                 "found",
                 "with",
-                "without"
+                "without",
+                "omitted"
               ],
               "additionalProperties": false
             },
@@ -319,6 +329,10 @@
                   "type": "string",
                   "description": "the older point in time; empty for the snapshot before the newer one"
                 },
+                "limit": {
+                  "type": "integer",
+                  "description": "the most results kept; 0 for every result"
+                },
                 "selection": {
                   "type": "object",
                   "properties": {
@@ -376,6 +390,7 @@
               "description": "the question as answered, with the flow as simulated",
               "required": [
                 "from",
+                "limit",
                 "selection",
                 "to"
               ],
@@ -418,19 +433,62 @@
                       "type": "object",
                       "properties": {
                         "op": {
-                          "type": "string"
+                          "type": "string",
+                          "description": "added, removed or changed"
                         },
                         "kind": {
-                          "type": "string"
+                          "type": "string",
+                          "description": "the object's container name, such as address or zone; the rulebase and rule, such as security rule, with pre-rulebase or post-rulebase in front for a rule pushed from Panorama; or setting, for a setting of the scope that is not an entry"
                         },
                         "name": {
-                          "type": "string"
+                          "type": "string",
+                          "description": "the object's or rule's name, or a setting's path below the scope, such as import/network/interface"
                         },
                         "old": {
-                          "type": "string"
+                          "type": "string",
+                          "description": "a removed entry in one line"
                         },
                         "new": {
-                          "type": "string"
+                          "type": "string",
+                          "description": "an added entry in one line"
+                        },
+                        "fields": {
+                          "type": [
+                            "null",
+                            "array"
+                          ],
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "path": {
+                                "type": "string",
+                                "description": "the setting's path below the entry, such as negate-destination or destination-translation/translated-address; an attribute's last segment starts with @"
+                              },
+                              "old": {
+                                "type": "string",
+                                "description": "the value before: empty when the setting was absent, (set) for an element present without a value; a member list's members are sorted"
+                              },
+                              "new": {
+                                "type": "string",
+                                "description": "the value after: empty when the setting is absent, (set) for an element present without a value; a member list's members are sorted"
+                              },
+                              "secret": {
+                                "type": "boolean",
+                                "description": "true for a key, password or other secret: its values read (secret) and are never shown"
+                              },
+                              "undescribed": {
+                                "type": "boolean",
+                                "description": "true for a setting the schema does not describe: it changed, but its values are never shown, as it may hold a secret"
+                              }
+                            },
+                            "required": [
+                              "path",
+                              "old",
+                              "new"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "description": "the settings of a changed entry that differ"
                         }
                       },
                       "required": [
@@ -440,7 +498,7 @@
                       ],
                       "additionalProperties": false
                     },
-                    "description": "what was added, removed or changed"
+                    "description": "what was added, removed or changed; with a limit, the scope where the limit falls holds only its first changes"
                   }
                 },
                 "required": [
@@ -467,23 +525,28 @@
                 },
                 "found": {
                   "type": "integer",
-                  "description": "results over every target"
+                  "description": "results over every target, the omitted ones included; for snapshot diff, single changes"
                 },
                 "with": {
                   "type": "integer",
-                  "description": "targets with a result"
+                  "description": "targets with a result; for snapshot diff, devices with a change"
                 },
                 "without": {
                   "type": "integer",
-                  "description": "targets read without a result"
+                  "description": "targets read without a result; for snapshot diff, devices compared without a change"
+                },
+                "omitted": {
+                  "type": "integer",
+                  "description": "results the limit left out; for snapshot diff, single changes; 0 when every result is shown"
                 }
               },
-              "description": "search and lookup only: the count of results over the targets read",
+              "description": "search, lookup and snapshot diff only: the count of results over the targets read",
               "required": [
                 "answer",
                 "found",
                 "with",
-                "without"
+                "without",
+                "omitted"
               ],
               "additionalProperties": false
             },
@@ -625,7 +688,7 @@
             "properties": {
               "code": {
                 "type": "string",
-                "description": "the input's code: input.port, input.protocol or input.url"
+                "description": "the input's code: input.port, input.protocol, input.url, input.from-zone or input.to-zone"
               },
               "input": {
                 "type": "string",

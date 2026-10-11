@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"errors"
+	"io/fs"
 	"os"
 	"runtime"
 	"strings"
@@ -102,7 +103,7 @@ func TestEvictionFrees(t *testing.T) {
 	t.Parallel()
 	l := newCacheLab(t, 0)
 	// Room for the digest and the larger of the two snapshots, not both.
-	one := configFactor * max(fileBytes(l.fw01.Path(store.ConfigDoc)), fileBytes(l.fw02.Path(store.ConfigDoc)))
+	one := configBytes(max(fileBytes(l.fw01.Path(store.ConfigDoc)), fileBytes(l.fw02.Path(store.ConfigDoc))))
 	l.cache.max = digestBytes + one
 	ref := func(sn store.Snapshot) weak.Pointer[config.Config] {
 		ld, err := l.cache.bind(context.Background()).Config(sn)
@@ -350,15 +351,80 @@ func TestAFullQueueIsBusy(t *testing.T) {
 	if err := none.settle(context.Canceled); !errors.Is(err, context.Canceled) {
 		t.Errorf("no view: %v", err)
 	}
-	// A failed load is not kept.
-	l.cache.load = func(string) (*config.Config, config.Report, error) {
-		return nil, config.Report{}, errors.New("unreadable")
+	// A file that does not open is not kept.
+	l.cache.load = func(path string) (*config.Config, config.Report, error) {
+		return nil, config.Report{}, &fs.PathError{Op: "open", Path: path, Err: fs.ErrPermission}
 	}
 	if _, err := cc.Config(l.fw01); err == nil {
 		t.Error("a failed load answered")
 	}
 	if _, ok := l.cache.get(itemKey{kind: "config", member: l.fw01.Device, id: l.fw01.ID}); ok {
-		t.Error("a failed load was kept")
+		t.Error("a file that did not open was kept")
+	}
+}
+
+// A configuration that does not parse is parsed once per snapshot: its error
+// is cached as a small item, and goes out with the least recently used. A
+// file that cannot be opened is tried again, as it may appear.
+func TestAFailedLoadIsNotParsedAgain(t *testing.T) {
+	t.Parallel()
+	l := newCacheLab(t, 1<<30)
+	k := itemKey{kind: "config", member: l.fw01.Device, id: l.fw01.ID}
+	// fw01's configuration file does not parse.
+	if err := os.WriteFile(l.fw01.Path(store.ConfigDoc), []byte("<config"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cc := l.cache.bind(context.Background())
+	first, err := cc.Config(l.fw01)
+	if err == nil || first.Config != nil {
+		t.Fatalf("a broken configuration loaded: %v", err)
+	}
+	again, err2 := cc.Config(l.fw01)
+	if err2 == nil || err2.Error() != err.Error() || again.Config != nil || l.loads.Load() != 1 {
+		t.Errorf("second call: %v, %d loads", err2, l.loads.Load())
+	}
+	if v, ok := l.cache.get(k); !ok {
+		t.Error("the parse error was not kept")
+	} else if _, failed := v.(failedLoad); !failed {
+		t.Errorf("kept %T", v)
+	}
+	l.cache.mu.Lock()
+	size := l.cache.size
+	l.cache.mu.Unlock()
+	if size != failedBytes {
+		t.Errorf("size %d, want %d", size, failedBytes)
+	}
+	if errors.Is(cc.settle(nil), err) {
+		t.Error("a snapshot's parse error became the call's")
+	}
+	// The error item goes out like any item.
+	small := newCacheLab(t, failedBytes)
+	small.cache.load = func(string) (*config.Config, config.Report, error) {
+		small.loads.Add(1)
+		return nil, config.Report{}, errors.New("config: no version")
+	}
+	scc := small.cache.bind(context.Background())
+	for _, sn := range []store.Snapshot{small.fw01, small.fw02, small.fw01, small.fw01} {
+		if _, err := scc.Config(sn); err == nil {
+			t.Fatal("a broken configuration loaded")
+		}
+	}
+	if small.loads.Load() != 3 {
+		t.Errorf("%d loads, want 3: fw02's error drops fw01's, which then stays", small.loads.Load())
+	}
+	// A file that does not open is tried again.
+	gone := l.fw02
+	gone.Dir = t.TempDir()
+	for range 2 {
+		if _, err := cc.Config(gone); err == nil {
+			t.Fatal("a missing configuration loaded")
+		}
+	}
+	if l.loads.Load() != 3 {
+		t.Errorf("%d loads, want 3: a missing file is opened each time", l.loads.Load())
+	}
+	if _, ok := l.cache.get(itemKey{kind: "config", member: gone.Device, id: gone.ID}); ok {
+		t.Error("a missing file was kept")
 	}
 }
 

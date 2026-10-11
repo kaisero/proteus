@@ -72,12 +72,14 @@ func newZoneResolver(
 	}
 	// Static routes that name an egress interface tie a destination to that
 	// interface's zone. A route with only a next hop resolves through another route,
-	// which the file cannot follow reliably, so it is left alone.
+	// which the file cannot follow reliably, so it is left alone. The placement
+	// ends with the route's prefix, as a forwarding table's does, so a reader can
+	// tell a default route.
 	for _, rt := range routes {
 		if rt.Interface == "" {
 			continue
 		}
-		r.insert(rt.Destination, rt.Interface, "static route "+rt.Name)
+		r.insert(rt.Destination, rt.Interface, "static route "+rt.Name+" "+rt.Destination.String())
 	}
 
 	for _, d := range dynamic {

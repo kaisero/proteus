@@ -51,6 +51,7 @@ var registry = []Entry{
 	{Code: "doubt.service-predefined", Class: Doubt, Description: "a rule names a predefined service, whose ports the configuration does not hold"},
 	{Code: "doubt.source-unknown", Class: Doubt, Description: "a NAT rule names a source and the question gives none"},
 
+	{Code: "gap.address-wildcard", Class: Gap, Description: "a wildcard address object matches by mask, and a prefix query cannot decide it"},
 	{Code: "gap.application-container", Class: Gap, Description: "an application container groups predefined applications, whose members the configuration does not hold"},
 	{Code: "gap.application-filter", Class: Gap, Description: "an application filter selects predefined applications by metadata the configuration does not hold"},
 	{Code: "gap.category-match", Class: Gap, Description: "a Category Match URL category lists PAN-DB categories, whose contents the configuration does not hold"},
@@ -76,9 +77,11 @@ var registry = []Entry{
 	{Code: "gap.vsys-missing", Class: Gap, Description: "the configuration has no vsys of the asked name"},
 
 	{Code: "input.device", Class: Input, Description: "give the device"},
+	{Code: "input.from-zone", Class: Input, Description: "give the source zone"},
 	{Code: "input.port", Class: Input, Description: "give the destination port"},
 	{Code: "input.protocol", Class: Input, Description: "give the protocol"},
 	{Code: "input.router", Class: Input, Description: "give the virtual router"},
+	{Code: "input.to-zone", Class: Input, Description: "give the destination zone"},
 	{Code: "input.url", Class: Input, Description: "give the URL"},
 
 	{Code: "note.dns-rewrite", Class: Note, Description: "a NAT rule also rewrites DNS answers, which is not simulated"},
@@ -87,6 +90,7 @@ var registry = []Entry{
 	{Code: "note.fetch-ha-state", Class: Note, Description: "the HA state is neither active nor passive, so the fetch stays on the device asked"},
 	{Code: "note.fetch-peer-unconfirmed", Class: Note, Description: "the device is passive and its peer does not confirm the pair, so the fetch stays on the device asked"},
 	{Code: "note.fetch-peer-unusable", Class: Note, Description: "the device is passive and its peer cannot be used, so the fetch stays on the device asked"},
+	{Code: "note.fetch-predefined-missing", Class: Note, Description: "the device did not return its predefined services, so rules that name them stay in doubt"},
 	{Code: "note.fresh-document-failed", Class: Note, Description: "a fresh fetch did not get one document"},
 	{Code: "note.fresh-failed", Class: Note, Description: "a fresh fetch failed, so the answer comes from the previous snapshot"},
 	{Code: "note.ha-binding", Class: Note, Description: "a NAT rule is bound to an HA device; the binding is ignored"},
@@ -101,6 +105,7 @@ var registry = []Entry{
 	{Code: "note.nat-pool", Class: Note, Description: "a NAT rule translates the source to one of several addresses; later hops match the first"},
 	{Code: "note.rib-unreadable", Class: Note, Description: "the device's routing table cannot be read, so route protocols and alternates are missing"},
 	{Code: "note.serial-changed", Class: Note, Description: "the snapshots come from different firewalls, as after an HA failover"},
+	{Code: "note.snapshot-skipped", Class: Note, Description: "a damaged snapshot was passed over at the asked time, and an older one answers"},
 	{Code: "note.snapshot-stale", Class: Note, Description: "the snapshot is older than the freshness limit"},
 	{Code: "note.tls-off", Class: Note, Description: "the device was fetched without TLS certificate verification"},
 
@@ -114,6 +119,7 @@ var registry = []Entry{
 	{Code: "path.loop", Class: Path, Description: "the path returns to a device it already crossed"},
 	{Code: "path.nat-distribution", Class: Path, Description: "a NAT rule distributes sessions over several addresses and the path follows one"},
 	{Code: "path.nat-no-port", Class: Path, Description: "a NAT rule depends on the port and the question gives none"},
+	{Code: "path.nat-no-protocol", Class: Path, Description: "a NAT rule depends on the protocol and the question gives none"},
 	{Code: "path.nat-undermatch", Class: Path, Description: "the NAT stage may miss a rule the device would match"},
 	{Code: "path.next-hop-type", Class: Path, Description: "a route has a next-hop type the answer does not read yet"},
 	{Code: "path.no-route", Class: Path, Description: "a hop has no route to the destination"},

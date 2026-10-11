@@ -58,12 +58,13 @@ type natArgs struct {
 
 type searchArgs struct {
 	Value  string   `json:"value" jsonschema:"the value or name to search for: an address, a prefix, a port or a name"`
-	Kind   string   `json:"kind,omitempty" jsonschema:"an object kind to search; left out, every kind"`
+	Kind   string   `json:"kind,omitempty" jsonschema:"an object kind to search, such as address or service; left out, every kind"`
 	Device []string `json:"device,omitempty" jsonschema:"the devices to search; left out, every device"`
 	Label  []string `json:"label,omitempty" jsonschema:"select devices by label, key=value"`
 	Vsys   string   `json:"vsys,omitempty" jsonschema:"the vsys to search; left out, every vsys"`
 	At     string   `json:"at,omitempty" jsonschema:"read each device's newest snapshot at or before this time; left out, the latest"`
 	Detail string   `json:"detail,omitempty" jsonschema:"summary or full: how much of each result to return; summary when left out"`
+	query.ResultLimit
 }
 
 type lookupArgs struct {
@@ -73,6 +74,7 @@ type lookupArgs struct {
 	Vsys   string   `json:"vsys,omitempty" jsonschema:"the vsys to read; left out, every vsys"`
 	At     string   `json:"at,omitempty" jsonschema:"read each device's newest snapshot at or before this time; left out, the latest"`
 	Detail string   `json:"detail,omitempty" jsonschema:"summary or full: how much of each result to return; summary when left out"`
+	query.ResultLimit
 }
 
 type diffArgs struct {
@@ -80,6 +82,7 @@ type diffArgs struct {
 	From   string `json:"from,omitempty" jsonschema:"the older point in time; left out, the snapshot before the newer one"`
 	To     string `json:"to,omitempty" jsonschema:"the newer point in time; left out, the latest"`
 	Detail string `json:"detail,omitempty" jsonschema:"summary or full: how much of each result to return; summary when left out"`
+	query.ResultLimit
 }
 
 // toolError is a call that did not answer (spec §4.5).
@@ -216,7 +219,7 @@ func answer[In query.Echoer[E], E, R, S any](ctx context.Context, e query.Envelo
 	v := viewOf(doc)
 	c.set(func(c *Call) {
 		c.Status = StatusOK
-		c.Answers = v.answers()
+		c.Answers, c.AnswerCount = v.verdict()
 		c.Codes = v.codes()
 		c.Snapshots = e.Read
 	})
@@ -293,7 +296,7 @@ func addTools(s *sdk.Server, c calls, devices []string) error {
 	add("search", func(t *sdk.Tool) {
 		sdk.AddTool(s, t, func(ctx context.Context, _ *sdk.CallToolRequest, a searchArgs) (*sdk.CallToolResult, output, error) {
 			env, cc := c.on(ctx)
-			in := query.SearchInput{Term: a.Value, Selection: query.Selection{Device: a.Device, Label: a.Label, At: a.At}}
+			in := query.SearchInput{Term: a.Value, Selection: query.Selection{Device: a.Device, Label: a.Label, At: a.At}, ResultLimit: a.ResultLimit}
 			if a.Kind != "" {
 				in.Kinds = []string{a.Kind}
 			}
@@ -307,7 +310,7 @@ func addTools(s *sdk.Server, c calls, devices []string) error {
 	add("lookup", func(t *sdk.Tool) {
 		sdk.AddTool(s, t, func(ctx context.Context, _ *sdk.CallToolRequest, a lookupArgs) (*sdk.CallToolResult, output, error) {
 			env, cc := c.on(ctx)
-			in := query.LookupInput{Name: a.Name, Kind: a.Kind, Selection: query.Selection{Device: a.Device, At: a.At}}
+			in := query.LookupInput{Name: a.Name, Kind: a.Kind, Selection: query.Selection{Device: a.Device, At: a.At}, ResultLimit: a.ResultLimit}
 			if a.Vsys != "" {
 				in.Selection.Vsys = []string{a.Vsys}
 			}
@@ -318,7 +321,9 @@ func addTools(s *sdk.Server, c calls, devices []string) error {
 	add("snapshot_diff", func(t *sdk.Tool) {
 		sdk.AddTool(s, t, func(ctx context.Context, _ *sdk.CallToolRequest, a diffArgs) (*sdk.CallToolResult, output, error) {
 			env, cc := c.on(ctx)
-			e, err := query.SnapshotDiff(ctx, env, query.DiffInput{Selection: query.Selection{Device: []string{a.Device}}, From: a.From, To: a.To})
+			e, err := query.SnapshotDiff(ctx, env, query.DiffInput{
+				Selection: query.Selection{Device: []string{a.Device}}, From: a.From, To: a.To, ResultLimit: a.ResultLimit,
+			})
 			return answer(ctx, e, cc.settle(err), a.Detail, query.DiffResult.Summary)
 		})
 	})
@@ -382,7 +387,7 @@ var toolDescriptions = map[string]string{
 	"simulate_policy":  "Simulate a flow along its path through the firewalls of the stored snapshots: the security rule each firewall matches, with routing and NAT on each hop. The answer is static analysis, not a live test.",
 	"simulate_routing": "Trace the path a packet takes across the firewalls of the stored snapshots: each hop's route, NAT and policy-based forwarding.",
 	"simulate_nat":     "Simulate NAT on one firewall: the NAT rule a packet matches and its translation.",
-	"search":           "Search the stored configurations for an address, a prefix, a port or a name: the objects and rules that hold it.",
+	"search":           "Search the stored configurations for an address, a prefix, a port or a name: the objects and rules that hold it. For a broad value, such as a large prefix, pass limit.",
 	"lookup":           "Show a rule or an object by name as the stored configurations define it, with its resolved members.",
 	"snapshot_diff":    "Compare two snapshots of one device: the rules and objects added, removed and changed.",
 }

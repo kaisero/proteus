@@ -27,7 +27,8 @@ snapshot older than `When.MaxAge` and a version gap become `Target.Notes`.
 `Run(cfg, idx, Query)` runs five stages in order: objects by value (address terms
 through `Containing`/`Overlapping`, any other term through every field's resolvers
 with the query's `Providers`), objects by name (every kind `resolve.ObjectKinds`
-lists), groups (`GroupsOf`, or `DirectGroupsOf` with `Direct`), references
+lists), groups (`GroupsHolding` per kind a name was found as, one level up with
+`Direct`), references
 (`Refs` and `ProfileUses`), literals (`RulesWithAddr`/`RulesWithPrefix`). Modes
 `Exact`, `Within`, `Contains` change stage one; `Kinds`, `Fields`, `Show` filter.
 
@@ -36,17 +37,43 @@ lists), groups (`GroupsOf`, or `DirectGroupsOf` with `Direct`), references
 `Find(cfg, idx, name, kind)` returns one `Card` per element of that name visible in
 the scope: a security rule (`idx.Rules()`) or an object of any kind
 `resolve.ObjectKinds` lists. `Rule` lays a rule out in the rule editor's sections;
-`Object` gives a value, members, profiles and the groups holding it
-(`DirectGroupsOf`). Every `Item` carries its value and children to full depth; a
+`Object` gives a value, members, profiles and the groups of its kind holding it
+(`GroupsHolding` with direct). A group's members come from the builder's object
+cache, read once per kind; a dynamic group shows its filter as written. Every `Item` carries its value and children to full depth; a
 name no object defines is `Literal` (an address or prefix) or `Predefined` (in
 source, destination, service, category). The command cuts trees at three levels
 and lists at five items; JSON carries the whole card.
 
 ### drift
 
-`Compare(before, after, scope)` renders every object of `ObjectKinds` defined in
-the scope itself, and every security and NAT rule, to one line each, and reports
-what was added, removed or changed. Position is not compared.
+`Compare(before, after, scope)` walks the scope's element (shared, or one vsys)
+with the schema digest and takes every entry of every entry list it meets as one
+entry to compare: objects of every kind, profiles, zones and schedules included,
+and the rules of every rulebase. It stops at an entry list; nested entries belong
+to their entry's form. A vsys `user-group`, an array of arrays named `entry`
+with a name, is read as an entry list too (`namedEntries`). Every other element
+or array below the scope, and an empty element set by its presence (an
+alternative of a choice, or a node with nothing to hold: `setByPresence`), is a
+setting: one entry of kind `setting`, named by its path below the scope, whose
+form paths start at its own name (`drift.TestCompareReadsScopeSettings`). A
+container the walk descends into keeps its own attributes as a setting. The shared `pre-rulebase` and
+`post-rulebase` are read with a vsys rulebase's node (hand-modelled, R8); their
+rules' kind names the rulebase, such as `pre-rulebase security rule`
+(`ruleKind`), and a vsys's own rule reads `security rule`. An element the digest does not
+describe is compared whole, its own text too, as one entry named by its path. Each entry becomes a
+canonical form: setting paths with text and attributes in document order; a
+member list (from the digest, R4) is one value with its members sorted; a
+nested entry list adds an order field (`<path> order`, names in document order;
+only the names both sides hold count); a secret or an undescribed value is
+compared but never shown; `uuid`,
+`admin`, `time` and `dirtyId` are ignored (`ignoredAttrs`). A changed entry
+carries `Fields` (`path`, `old`, `new`, `secret`, `undescribed`); an added or
+removed one a short line in
+`New` or `Old`: the object's value and tags as `resolve` reads them, or a rule's
+action and described member lists. `resolve` does not read the schema, so an
+object whose form holds a secret or an undescribed value has no short line.
+Position is not compared. Predefined services are never
+read.
 
 ## Build / run pointers
 
@@ -84,6 +111,7 @@ func Open(st *store.Store, devices, vsys []string, w When) ([]Target, []Hole)
 func OpenFile(path string, vsys []string, log *runlog.Logger) ([]Target, []Hole, error)
 func OpenSnapshot(st *store.Store, device, id string, vsys []string, w When) ([]Target, []Hole)
 func ParseAt(s string) (time.Time, error)
+func SkipNote(sn store.Snapshot) (reason.Reason, bool)
 func StaleNote(id string, age, limit time.Duration) string
 ```
 <!-- /GENERATED:api -->
@@ -95,7 +123,7 @@ type Mode int
 type Query struct{ ... }
 type Stage string
 
-func Run(cfg *config.Config, idx *index.Index, q Query) ([]Finding, error)
+func Run(cfg *config.Config, idx *index.Index, q Query) ([]Finding, []index.Unresolved, error)
 ```
 <!-- /GENERATED:api -->
 
@@ -116,6 +144,7 @@ func Rule(cfg *config.Config, idx *index.Index, r resolve.Rule, rules int) Card
 <!-- GENERATED:api ./internal/drift -->
 ```go
 type Change struct{ ... }
+type FieldChange struct{ ... }
 type Op string
 
 func Compare(before, after *config.Config, sc config.Scope) []Change
@@ -136,6 +165,22 @@ func Compare(before, after *config.Config, sc config.Scope) []Change
   exits 2 and asks for `--kind` (`card.TestFindInfersTheKind`).
 - **"Predefined" means only "not in the configuration".** No table of PAN-OS
   predefined values exists (spec §14 open item 6).
+- **A secret never shows.** A setting `schema.IsSecret` marks (the schema's
+  `encrypt="yes"`, or a hand-modelled one: `phash` and the credentials the schema
+  keeps in clear text, such as an SNMP v2c community) is compared, but its values read
+  `(secret)` (`drift.Hidden`) and `FieldChange.Secret` is set; the text line is
+  `<path>: changed (secret, not shown)` (`drift.TestCompareHidesSecrets`). A
+  rule's short line reads only described member lists; an object's short line
+  is dropped when its form holds a hidden value
+  (`drift.TestCompareObjectLineHoldsNoHiddenValue`).
+- **An undescribed value never shows.** An element the digest does not describe
+  (a whole one under the scope, or an unknown child of a known entry), an
+  attribute it does not declare (only `name`, `id` and `status` are declared) and
+  a member list whose members carry attributes are compared by raw value, but
+  `FieldChange.Undescribed` is set and `old`/`new` stay empty; the text line is
+  `<path>: changed (not described by the schema; values not shown)`. The lab's
+  12.2.3 configuration is read with the 11.2 digest, so this is common
+  (`drift.TestCompareHidesAnUndescribedChild`).
 - **R12:** `search`, `card` and `drift` import none of `fetch`, `store`, `estate`.
 
 ## See also

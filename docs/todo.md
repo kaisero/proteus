@@ -40,7 +40,7 @@ Every item names its **component** (the package or area it changes) and one **ta
 | 21 | feature | simulate, estate, cmd | Estate simulation for policy (M5): path mode done, fan-out open |
 | 22 | feature | simulate/securitypolicy, index | Evaluate application and user |
 | 23 | qa | simulate/securitypolicy, index | Derived zones on overlay networks |
-| 24 | feature | resolve, card, simulate/securitypolicy | Table of predefined services (high priority) |
+| 24 | done | resolve, card, simulate/securitypolicy | ~~Table of predefined services~~ (fetched from the device, no table) |
 | 25 | feature | card, cmd | NAT and PBF rules in `lookup` |
 | 26 | feature | search, drift, cmd | `--compare` across devices and time |
 | 27 | done | mcp, cmd | ~~MCP server~~ (`proteus mcp`, spec `docs/specs/2026-10-09-mcp-server.md`) |
@@ -63,9 +63,18 @@ Every item names its **component** (the package or area it changes) and one **ta
 | 44 | qa | mcp | Generate the `proteus://limits` resource from `docs/limits.md` |
 | 45 | qa | mcp | The caller's address behind a trusted proxy |
 | 46 | test | mcp | Run the model check through Portkey |
-| 47 | qa | mcp | Keep the stack of a panic after a timeout |
+| 47 | done | mcp | ~~Keep the stack of a panic after a timeout~~ (the call's run log keeps the late work) |
 | 48 | perf | mcp, query, search, drift | Let the timeout stop a load, a search and a diff |
 | 49 | perf | mcp, search | Cache the zone document for `search` |
+| 50 | feature | mcp | Ask the user for needs and choices with elicitation |
+| 51 | feature | mcp | Publish OAuth resource metadata if Portkey is dropped |
+| 52 | bug | simulate/routing, simulate/nat | NAT in the first vsys of an inter-vsys path sees the wrong egress zone |
+| 53 | qa | simulate/securitypolicy | A doubted NAT rule's own post-NAT zone is not a derived destination zone |
+| 54 | bug | simulate/routing | A hairpin through another firewall is reported as a loop |
+| 55 | qa | config, query | Undescribed elements of a configuration read with its own digest reach no answer |
+| 56 | qa | config, archtest | The read-only check sees setter names only, not writable exported fields |
+| 57 | done | resolve, index, simulate/nat | ~~Verify an address and an address group of one name in two scopes~~ (lab fact L10: as services) |
+| 58 | test | index | A hidden address's tags and a dynamic group in the vsys |
 
 ---
 
@@ -264,14 +273,11 @@ item 7, and delete the fetched data and API keys from the scratch directory.
 
 ### 24. Table of predefined services
 
-- **Tag:** feature · **Component:** resolve, card, simulate/securitypolicy · **Source:** spec §14 item 6, K6
-- A table of PAN-OS predefined services and their ports (`service-http`,
-  `service-https`, …), so `lookup --expand` shows their ports and the service stage
-  evaluates them. Hand-written data: needs an explicit exception to AGENTS.md R1.
-- **High priority.** A predefined, absent or `application-default` service puts a
-  rule in doubt, and a doubtful rule can leave a path hop undecided. In the first lab
-  run of the path probe (fw02, 2026-10-08), the one undecided hop came from a rule
-  with service `application-default`.
+- **Tag:** done · **Component:** resolve, card, simulate/securitypolicy · **Source:** spec §14 item 6, K6
+- Done without a table: `fetch` reads the predefined services from the device into
+  each snapshot (`predefined.xml`), and every service reader sees them in scope
+  `predefined`, below shared. A snapshot without them keeps the doubt.
+  `application-default` still puts a rule in doubt.
 
 ### 25. NAT and PBF rules in `lookup`
 
@@ -436,9 +442,10 @@ Source for each, unless it says otherwise: spec `docs/specs/2026-10-09-mcp-serve
 
 ### 47. Keep the stack of a panic after a timeout
 
-- **Tag:** qa · **Component:** mcp · **Source:** implementation of the MCP server
-- When a call's work panics after the call timed out, the late record is discarded
-  and the call log is closed, so the stack is lost. Write it to the server's log.
+- **Tag:** done · **Component:** mcp · **Source:** implementation of the MCP server
+- Done: a call that times out leaves its run log to its work. When the work
+  returns, the log gets what the work logged late, the time it returned and the
+  stack of a panic, and then closes.
 
 ### 48. Let the timeout stop a load, a search and a diff
 
@@ -466,3 +473,87 @@ Source for each, unless it says otherwise: spec `docs/specs/2026-10-09-mcp-serve
 - Portkey owns authentication, so proteus checks a static bearer token. Without the
   gateway, clients expect the MCP authorisation flow: publish OAuth protected
   resource metadata and verify the access tokens.
+
+## Audit follow-ups
+
+Source for each: the code audit of 2026-10-10 and the cleanup plan
+(`docs/plans/2026-10-10-cleanup.md`).
+
+### 52. NAT in the first vsys of an inter-vsys path sees the wrong egress zone
+
+- **Tag:** bug · **Component:** simulate/routing, simulate/nat · **Source:** audit finding 12
+- Each hop runs zones, then NAT, then next. `next()` puts the external zone in place
+  of the egress zone at the vsys boundary, after NAT has run. So a vsys1 NAT rule
+  from trust to the external zone `to-vsys2` is not found, and the answer says "no
+  NAT rule matches" with fidelity exact.
+- The fix moves the external-zone change into `zones()`, before NAT. It follows the
+  admin guide only. Do it only after a check on a firewall with multi-vsys and
+  external zones (item 5): the lab firewalls have one vsys.
+
+### 53. A doubted NAT rule's own post-NAT zone is not a derived destination zone
+
+- **Tag:** qa · **Component:** simulate/securitypolicy · **Source:** review of plan
+  `docs/plans/2026-10-10-cleanup.md` T5
+- With derived zones, the security check keeps the pre-NAT destination zone and the
+  zone after the NAT rule that applies. A NAT rule in doubt above it may translate
+  the destination to a third zone; that zone is not added, so a security rule whose
+  to zone is only that zone drops out. The stage says `doubt.nat-rule` (overmatch),
+  but the candidate set can be too narrow.
+- Only the fan-out kind reaches this: path mode gives the zones, and a NAT doubt
+  leaves its hop undecided. Fix: translate each doubted rule too, and add its
+  post-NAT zone.
+
+### 54. A hairpin through another firewall is reported as a loop
+
+- **Tag:** bug · **Component:** simulate/routing · **Source:** audit finding 13
+- The loop check keys on device, vsys and router. A path fw02 → fw01 → fw02, where
+  fw01 translates the destination to a host behind fw02, repeats that key and ends as
+  "loop", undecided, although the device delivers the packet.
+- The fix adds the current destination to the key; a real loop still repeats it. Do
+  it only after a check on fw01 and fw02 together (fw01 did not answer on 2026-10-10
+  and 2026-10-11): build the path with a DNAT on fw01 and confirm with the device
+  probes that the packet arrives.
+
+### 55. Undescribed elements of a configuration read with its own digest reach no answer
+
+- **Tag:** qa · **Component:** config, query · **Source:** cleanup plan T31 (R3)
+- `config.Load` counts the elements the digest does not describe, and the
+  `gap.version` note names the count. Without a version gap (a patch release read
+  with the digest of its own version) the count reaches no answer. A separate
+  `gap.undescribed` note would show it, but it marks the answer unresolved (exit 3).
+  Decide whether that is wanted.
+
+### 56. The read-only check sees setter names only, not writable exported fields
+
+- **Tag:** qa · **Component:** config, archtest · **Source:** cleanup plan T31 (R2)
+- `TestPublicAPIIsReadOnly` fails on an exported setter name. `config.Element` has
+  exported fields that a caller can still write. Make them read through methods, or
+  extend the check to exported, writable fields of model types.
+
+### 57. Verify an address and an address group of one name in two scopes
+
+- **Tag:** done · **Component:** resolve, index, simulate/nat · **Source:** cleanup
+  plan, lab fact L9
+- A service name resolves by scope first and kind second (L9), and the index and NAT
+  read services that way. Addresses are still read one kind at a time: the index
+  reads `address` and `address-group` each on its own, so a rule naming `x` reaches
+  both a vsys address `x` and a shared address group `x`. NAT's translation takes the
+  address of that name first, in any scope.
+- Check on fw02 which object a rule's `x` means. If the device resolves it as it does
+  a service, read both kinds through `resolve.ObjectsOfKindsInScope` in the index and
+  in NAT, and test the lab fact.
+- Done: on fw02, PAN-OS 12.2.3, an address name resolves as a service name does, by
+  scope first and kind second (lab fact L10). The index, NAT and lookup cards read
+  addresses and address groups through `resolve.ObjectsOfKindsInScope`.
+
+### 58. A hidden address's tags and a dynamic group in the vsys
+
+- **Tag:** test · **Component:** index · **Source:** cleanup plan, fix review
+- A vsys address group `x` hides a shared address `x` (lab fact L10). The index keys an
+  object by its name, so it reads only the group: the shared address's tags no longer
+  place its address in a dynamic group of the vsys. Before L10 the index read both,
+  and a dynamic group whose filter matched the address's tags took the group `x`
+  instead, which was wrong too.
+- Check on fw02 whether a vsys dynamic group holds a shared address whose name a vsys
+  group hides. If it does, the closure must hold the address by its value, not by its
+  name.

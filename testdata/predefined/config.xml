@@ -1,0 +1,82 @@
+<config version="11.2.0" urldb="paloaltonetworks" detail-version="11.2.5">
+  <!-- Rules that name the predefined services (lab facts L4, L4b). predefined.xml
+       next to this file is the device's answer to the predefined service command.
+       From home to wan, destination 10.88.10.100: dnat-https (service-https) above
+       dnat-http (service-http), and the security rule web-https above web-rest. From
+       dmz: the PBF rule dmz-https (service-https) above dmz-out. -->
+  <shared/>
+  <devices>
+    <entry name="localhost.localdomain">
+      <vsys>
+        <entry name="vsys1">
+          <zone>
+            <entry name="home"/>
+            <entry name="wan"/>
+            <entry name="dmz"/>
+          </zone>
+          <service-group>
+            <entry name="g-web"><members><member>service-http</member></members></entry>
+          </service-group>
+          <rulebase>
+            <security>
+              <rules>
+                <entry name="web-https">
+                  <from><member>home</member></from>
+                  <to><member>wan</member></to>
+                  <source><member>any</member></source>
+                  <destination><member>10.88.10.100</member></destination>
+                  <application><member>any</member></application>
+                  <service><member>service-https</member></service>
+                  <action>allow</action>
+                </entry>
+                <entry name="web-rest">
+                  <from><member>home</member></from>
+                  <to><member>wan</member></to>
+                  <source><member>any</member></source>
+                  <destination><member>any</member></destination>
+                  <application><member>any</member></application>
+                  <service><member>any</member></service>
+                  <action>deny</action>
+                </entry>
+              </rules>
+            </security>
+            <nat>
+              <rules>
+                <entry name="dnat-https">
+                  <from><member>home</member></from><to><member>wan</member></to>
+                  <source><member>any</member></source><destination><member>10.88.10.100</member></destination>
+                  <service>service-https</service>
+                  <destination-translation><translated-address>10.88.20.1</translated-address></destination-translation>
+                </entry>
+                <entry name="dnat-http">
+                  <from><member>home</member></from><to><member>wan</member></to>
+                  <source><member>any</member></source><destination><member>10.88.10.100</member></destination>
+                  <service>service-http</service>
+                  <destination-translation><translated-address>10.88.20.2</translated-address></destination-translation>
+                </entry>
+              </rules>
+            </nat>
+            <pbf>
+              <rules>
+                <entry name="dmz-https">
+                  <from><zone><member>dmz</member></zone></from>
+                  <source><member>any</member></source>
+                  <destination><member>any</member></destination>
+                  <service><member>service-https</member></service>
+                  <action><forward><egress-interface>ethernet1/4</egress-interface></forward></action>
+                </entry>
+                <entry name="dmz-out">
+                  <from><zone><member>dmz</member></zone></from>
+                  <source><member>any</member></source>
+                  <destination><member>any</member></destination>
+                  <service><member>any</member></service>
+                  <action><discard/></action>
+                </entry>
+              </rules>
+            </pbf>
+          </rulebase>
+        </entry>
+      </vsys>
+    </entry>
+  </devices>
+</config>

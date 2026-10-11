@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/netip"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -107,7 +109,7 @@ func TestDoubts(t *testing.T) {
 			"8 dmz-schedule: schedule not evaluated (work-hours)",
 			"9 dmz-pandb: url category not defined in the configuration, such as a PAN-DB category (news)",
 			"10 dmz-custom: url category not evaluated without a URL (my-cat)",
-			"11 dmz-predefined: service predefined or not defined in the configuration (service-https)",
+			"11 dmz-predefined: service predefined or not defined in the configuration (service-https); the snapshot holds no predefined services; a fetch with this release stores them when the device returns them",
 			"12 dmz-no-service: service absent",
 		}},
 		{"port and URL", flow(443, "tcp", "shop.example.com"), []string{
@@ -119,7 +121,7 @@ func TestDoubts(t *testing.T) {
 			"7 dmz-user: destination-hip not evaluated (hip-a)",
 			"8 dmz-schedule: schedule not evaluated (work-hours)",
 			"9 dmz-pandb: url category not defined in the configuration, such as a PAN-DB category (news)",
-			"11 dmz-predefined: service predefined or not defined in the configuration (service-https)",
+			"11 dmz-predefined: service predefined or not defined in the configuration (service-https); the snapshot holds no predefined services; a fetch with this release stores them when the device returns them",
 			"12 dmz-no-service: service absent",
 		}},
 		{"no port", flow(0, "icmp", ""), []string{
@@ -132,7 +134,7 @@ func TestDoubts(t *testing.T) {
 			"8 dmz-schedule: schedule not evaluated (work-hours)",
 			"9 dmz-pandb: url category not defined in the configuration, such as a PAN-DB category (news)",
 			"10 dmz-custom: url category not evaluated without a URL (my-cat)",
-			"11 dmz-predefined: service predefined or not defined in the configuration (service-https)",
+			"11 dmz-predefined: service predefined or not defined in the configuration (service-https); the snapshot holds no predefined services; a fetch with this release stores them when the device returns them",
 			"12 dmz-no-service: service absent",
 		}},
 	} {
@@ -312,5 +314,114 @@ func TestFQDNResolutionDoubt(t *testing.T) {
 	_, v = run(t, e, simulate.Flow{Source: ep("10.0.0.1"), Destination: ep("203.0.113.10")})
 	if len(v.Doubts) != 0 || first(v) != "allow-web" {
 		t.Errorf("an address: doubts %v, first %s", v.Doubts, first(v))
+	}
+}
+
+// A rule naming service-https decides once the predefined services are stored
+// (L4): tcp/443 hits it, tcp/80 goes on. A snapshot without them keeps the rule
+// in doubt and says that a fetch stores them.
+func TestPredefinedServicesDecideTheServiceStage(t *testing.T) {
+	t.Parallel()
+	flow := func(port uint16) simulate.Flow {
+		return simulate.Flow{Source: ep("10.88.1.5"), Destination: ep("10.88.10.100"), FromZone: "home", ToZone: "wan", DestPort: port}
+	}
+	e := envPath(t, "../../../testdata/predefined/config.xml", false)
+	r, v := run(t, e, flow(443))
+	if first(v) != "web-https" || len(v.Doubts) != 0 || len(v.Undecided) != 0 || stage(r, "match-service").Fidelity.Level() != "exact" {
+		t.Errorf("tcp/443: rule %s, doubts %s, undecided %v, service stage %s", first(v), doubtList(v), v.Undecided, stage(r, "match-service").Fidelity)
+	}
+	if _, v := run(t, e, flow(80)); first(v) != "web-rest" || len(v.Doubts) != 0 {
+		t.Errorf("tcp/80: rule %s, doubts %s", first(v), doubtList(v))
+	}
+	b, err := os.ReadFile("../../../testdata/predefined/config.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "config.xml")
+	if err := os.WriteFile(path, b, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, v = run(t, envPath(t, path, false), flow(443))
+	if got := doubtList(v); got != "1 web-https: service predefined or not defined in the configuration (service-https); the snapshot holds no predefined services; a fetch with this release stores them when the device returns them" {
+		t.Errorf("without predefined.xml: %s", got)
+	}
+}
+
+// As observed on fw02, PAN-OS 12.2.3 (L9): a service name resolves by scope
+// first and kind second, in the security policy as in NAT. vsys1's service
+// group service-https (tcp/8443) hides the predefined service-https (tcp/443),
+// and vsys1's service web (tcp/8081) hides shared's service group web
+// (tcp/9080).
+func TestAServiceNameResolvesByScopeFirst(t *testing.T) {
+	t.Parallel()
+	e := envPath(t, "../../../testdata/predefined-cross-kind/config.xml", false)
+	for _, tc := range []struct {
+		port uint16
+		rule string
+	}{
+		{8443, "sec-https"},
+		{443, "rest"},
+		{80, "rest"},
+		{8081, "sec-web"},
+		{9080, "rest"},
+	} {
+		r, v := run(t, e, simulate.Flow{Source: ep("10.88.1.5"), Destination: ep("10.88.10.100"), FromZone: "home", ToZone: "wan", DestPort: tc.port})
+		if first(v) != tc.rule || len(v.Doubts) != 0 || len(v.Undecided) != 0 || stage(r, "match-service").Fidelity.Level() != "exact" {
+			t.Errorf("tcp/%d: rule %s, want %s; doubts %s, undecided %v, service stage %s",
+				tc.port, first(v), tc.rule, doubtList(v), v.Undecided, stage(r, "match-service").Fidelity)
+		}
+	}
+}
+
+// As observed on fw02, PAN-OS 12.2.3 (L10): an address name resolves as a
+// service name does, by scope first and kind second. vsys1's address rv-adr
+// hides shared's group rv-adr, and vsys1's group rv-adr2 hides shared's address
+// rv-adr2.
+func TestAnAddressNameResolvesByScopeFirst(t *testing.T) {
+	t.Parallel()
+	e := envPath(t, "../../../testdata/config/firewall-address-cross-kind.xml", false)
+	for src, rule := range map[string]string{"10.88.8.8": "sec-a", "10.88.9.9": "rest", "10.88.6.6": "sec-b", "10.88.7.7": "rest"} {
+		_, v := run(t, e, simulate.Flow{Source: ep(src), Destination: ep("198.19.0.1"), FromZone: "home", ToZone: "wan", DestPort: 443})
+		if first(v) != rule || len(v.Doubts) != 0 || len(v.Undecided) != 0 {
+			t.Errorf("%s: rule %s, want %s; doubts %s, undecided %v", src, first(v), rule, doubtList(v), v.Undecided)
+		}
+	}
+}
+
+// A service group with a member the snapshot does not define, here
+// service-https without the predefined services, leaves its rule in doubt for
+// a flow the defined members miss: web-deny above allow-all is undecided for
+// tcp/443. A flow a defined member holds decides it, and so do the predefined
+// services.
+func TestAServiceGroupWithAnUndefinedMemberIsInDoubt(t *testing.T) {
+	t.Parallel()
+	fixture := "../../../testdata/config/firewall-service-group.xml"
+	dir := t.TempDir()
+	for src, dst := range map[string]string{fixture: "config.xml", "../../../testdata/predefined/predefined.xml": config.PredefinedFile} {
+		b, err := os.ReadFile(src)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, dst), b, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	flow := func(port uint16) simulate.Flow {
+		return simulate.Flow{Source: ep("10.88.1.5"), Destination: ep("10.88.10.100"), FromZone: "home", ToZone: "wan", DestPort: port}
+	}
+	without := envPath(t, fixture, false)
+	_, v := run(t, without, flow(443))
+	if out, why := v.Decision(); out != Undecided || why[0].Code != "doubt.service-predefined" ||
+		doubtList(v) != "1 web-deny: service predefined or not defined in the configuration (web); the snapshot holds no predefined services; a fetch with this release stores them when the device returns them" {
+		t.Errorf("tcp/443: %s %v, doubts %s", out, why, doubtList(v))
+	}
+	for _, tc := range []struct {
+		env  *simulate.Env
+		port uint16
+	}{{without, 8443}, {envPath(t, filepath.Join(dir, "config.xml"), false), 443}, {envPath(t, filepath.Join(dir, "config.xml"), false), 8443}} {
+		r, v := run(t, tc.env, flow(tc.port))
+		if out, _ := v.Decision(); out != Stop || first(v) != "web-deny" || len(v.Doubts) != 0 || stage(r, "match-service").Fidelity.Level() != "exact" {
+			t.Errorf("tcp/%d: %s %s, doubts %s, service stage %s", tc.port, out, first(v), doubtList(v), stage(r, "match-service").Fidelity)
+		}
 	}
 }

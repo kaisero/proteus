@@ -277,7 +277,7 @@ func TestFirstMatchThroughNestedGroups(t *testing.T) {
 
 	// h-1 is three groups deep. Expand it, then ask which rules name any of them.
 	ids := []uint32{in.ID("h-1")}
-	for _, g := range idx.GroupsOf("h-1") {
+	for _, g := range groupsOf(idx, "h-1") {
 		ids = append(ids, in.ID(g))
 	}
 	cand := idx.RulesWith(Source, ids...)
@@ -331,7 +331,7 @@ func TestIndexForAFirewallVsys(t *testing.T) {
 	ids := []uint32{}
 	for _, m := range ms {
 		ids = append(ids, in.ID(m.Name))
-		for _, g := range idx.GroupsOf(m.Name) {
+		for _, g := range groupsOf(idx, m.Name) {
 			ids = append(ids, in.ID(g))
 		}
 	}
@@ -387,5 +387,15 @@ func TestAnIndexPerRulebase(t *testing.T) {
 	sec, _ := New(cfg, sc, resolve.Security)
 	if len(sec.Rules()) != 2 || len(nat.Rules()) != 4 {
 		t.Errorf("rules: security %d, nat %d", len(sec.Rules()), len(nat.Rules()))
+	}
+}
+
+// A field names itself, and a value outside the known fields names nothing.
+func TestFieldString(t *testing.T) {
+	t.Parallel()
+	for f, want := range map[Field]string{Source: "source", SourceUser: "source-user", Field(-1): "", Field(len(fieldNames)): ""} {
+		if got := f.String(); got != want {
+			t.Errorf("Field(%d).String() = %q, want %q", int(f), got, want)
+		}
 	}
 }

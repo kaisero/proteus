@@ -6,6 +6,7 @@
     "direct": false,
     "fields": null,
     "kinds": null,
+    "limit": 0,
     "mode": "covers",
     "selection": {
       "file": "../../testdata/config/firewall-multivsys.xml"
@@ -42,7 +43,7 @@
       "kind": "address-group",
       "name": "corp-dc",
       "via": "holds corp-dc-vienna",
-      "scope": "vsys:vsys1"
+      "scope": "shared"
     },
     {
       "answer": "file/vsys1: address-group corp-location",
@@ -52,7 +53,7 @@
       "kind": "address-group",
       "name": "corp-location",
       "via": "holds corp-location-vienna",
-      "scope": "vsys:vsys1"
+      "scope": "shared"
     },
     {
       "answer": "file/vsys1: security rule Corp DC Access (destination)",
@@ -83,7 +84,8 @@
     "answer": "1 with results, 2 without, 0 holes",
     "found": 6,
     "with": 1,
-    "without": 2
+    "without": 2,
+    "omitted": 0
   },
   "holes": [],
   "unresolved": [],

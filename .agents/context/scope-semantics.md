@@ -36,8 +36,21 @@ So the lowest set bit is the first match.
 
 `ObjectsInScope(cfg, scope, kind)` walks the chain shared first, so a vsys
 definition replaces a shared one of the same name and records what it replaced in
-`ShadowedFrom`. `ObjectsAt` takes an explicit container path, for the kinds whose
+`ShadowedFrom`. Below shared sits the scope `predefined` (`config.ScopePredefined`):
+the device's predefined services, when the configuration came with
+`predefined.xml`. Every scope sees them, and a configured service of the same name
+hides them, the vsys's over shared's over the predefined one (lab facts L4, L7). `ObjectsAt` takes an explicit container path, for the kinds whose
 name is ambiguous in the schema.
+
+`ObjectsOfKindsInScope(cfg, scope, kinds...)` reads several kinds that one name
+in a field can mean. A name resolves by scope first and kind second: only the
+nearest scope that defines it in any of the kinds counts, so a vsys service hides a
+shared service group of its name, and a vsys service group hides the predefined
+service (lab fact L9). Addresses resolve the same way: a vsys address hides a
+shared address group of its name, and the other way round (lab fact L10). The
+security index, NAT, lookup cards, search and `rulebase.Defined` read services and
+service groups, and addresses and address groups, through it; `Namesakes(kind)`
+names the kinds that resolve together.
 
 `objectValue` reduces an object to the one value that identifies it, and PAN-OS
 spells that differently per kind: `ip-netmask`, `ip-range`, `fqdn`, `ip-wildcard`,
@@ -85,7 +98,6 @@ type HAState struct{ ... }
 type InterfaceAddress struct{ ... }
 type InterfaceState struct{ ... }
 type Layer int
-type Members struct{ ... }
 type NATRule struct{ ... }
 type Object struct{ ... }
 type PBFRule struct{ ... }
@@ -114,17 +126,17 @@ func (t *Target) DefaultRules() []DefaultRule
 func (t *Target) NATRules() []NATRule
 func (t *Target) Objects(kind string) []Object
 func (t *Target) PBFRules() []PBFRule
-func (t *Target) ResolveGroup(name string) (Members, error)
 func (t *Target) Rules(rb Rulebase) []Rule
 func (t *Target) Scope() config.Scope
 func (t *Target) Serial() string
 func (t *Target) Vsys() string
 func DynamicRoutingProtocols(cfg *config.Config) []string
-func GroupInScope(cfg *config.Config, sc config.Scope, name string) (Members, error)
 func InterfaceAddresses(cfg *config.Config) []InterfaceAddress
+func Namesakes(kind string) []string
 func ObjectKinds(cfg *config.Config) []string
 func ObjectsAt(cfg *config.Config, sc config.Scope, kind string, within []string) []Object
 func ObjectsInScope(cfg *config.Config, sc config.Scope, kind string) []Object
+func ObjectsOfKindsInScope(cfg *config.Config, sc config.Scope, kinds ...string) map[string][]Object
 func ParseTagFilter(raw string) (*TagFilter, error)
 func ParseURLPattern(member string) (URLPattern, error)
 func ProfileGroupsInScope(cfg *config.Config, sc config.Scope) []ProfileGroup
@@ -137,6 +149,7 @@ func TargetFor(cfg *config.Config, device, vsys string) (*Target, error)
 func Targets(cfg *config.Config) []*Target
 func URLFilteringProfilesInScope(cfg *config.Config, sc config.Scope) []URLFilteringProfile
 func Vsyses(cfg *config.Config) []string
+func ZoneNames(cfg *config.Config, sc config.Scope) []string
 func ZonesInScope(cfg *config.Config, sc config.Scope) []Zone
 ```
 <!-- /GENERATED:api -->
@@ -145,15 +158,17 @@ func ZonesInScope(cfg *config.Config, sc config.Scope) []Zone
 
 - **A scope is not optional.** A global index merges sibling vsys and returns
   answers that are wrong rather than incomplete. See R5 and R10.
-- **`group` reads address groups only.** Service and application groups take part
-  in the index closure but `GroupInScope` does not read them.
+- **Group membership lives in the index closure.** `resolve` reads a group as an
+  `Object`: `Dynamic` is set from the `<dynamic>` element, and `Value` is the tag
+  filter or the member list. `index` builds each group kind's membership per scope.
 - **Runtime group members are absent by design.** Addresses registered through
-  User-ID or VM monitoring are not in a file, and every group answer says so.
+  User-ID or VM monitoring are not in a file; a rule naming a dynamic group carries
+  the `doubt.dynamic-group` reason.
 
 ## See also
 
 - `internal/resolve/target.go`, `internal/resolve/rules.go`
-- `internal/resolve/objects.go`, `internal/resolve/groups.go`, `internal/resolve/filter.go`
+- `internal/resolve/objects.go`, `internal/resolve/filter.go`
 - `internal/resolve/zones.go`, `internal/resolve/profiles.go`
 - [config-loading](config-loading.md) — the tree and schema questions this builds on
 - [value-spaces](value-spaces.md) — what `index` does with these objects

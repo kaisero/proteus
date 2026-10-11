@@ -425,14 +425,20 @@ func TestPolicyPathInputErrors(t *testing.T) {
 	newCLI(t).want(1, "simulate", "policy", pathlab.Source, pathlab.Destination)
 }
 
-// --file keeps the single-target answer: no rule and no default rule, and a
-// vsys the file lacks.
+// --file keeps the single-target answer: no rule and no default rule, a zone
+// the vsys does not define, and a vsys the file lacks.
 func TestPolicyFileEdges(t *testing.T) {
 	t.Parallel()
 	c := newCLI(t)
-	out := c.want(3, "simulate", "policy", "10.2.0.5", "10.1.0.5", "--file", fixture("firewall-ruletype.xml"), "--vsys", "vsys1")
+	out := c.want(3, "simulate", "policy", "10.2.0.5", "8.8.8.8", "--file", fixture("firewall-ruletype.xml"), "--vsys", "vsys1")
 	if !strings.Contains(out, "no enabled rule matches\n") || !strings.Contains(out, "undecided: the default rule depends on the zones") {
 		t.Errorf("no match:\n%s", out)
+	}
+	// A zone the vsys does not define is a usage error that lists its zones (C15).
+	_, errOut, code := c.run("simulate", "policy", "10.2.0.5", "10.1.0.5", "--file", fixture("firewall-ruletype.xml"), "--vsys", "vsys1",
+		"--from-zone", "dmz", "--to-zone", "nowhere")
+	if code != 2 || !strings.Contains(errOut, "--to-zone nowhere is not a zone of vsys1 (its zones: dmz, inside, out)") {
+		t.Errorf("undefined zone: exit %d, %s", code, errOut)
 	}
 	out = c.want(3, "simulate", "policy", "1.1.1.1", "2.2.2.2", "--file", fixture("firewall-zones.xml"), "--vsys", "vsys9", "--output", "json")
 	if !strings.Contains(out, `"results": []`) {

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -155,6 +156,33 @@ func TestOpenReportsAnUnreadableConfiguration(t *testing.T) {
 	}
 }
 
+// A snapshot with predefined services loads with them; one stored before they
+// were fetched loads as before; a predefined.xml that cannot be read is a hole
+// that names the file.
+func TestOpenReadsThePredefinedServices(t *testing.T) {
+	t.Parallel()
+	st, _ := store.Open(t.TempDir())
+	cfg := fixture(t, "firewall-lab.xml")
+	for dev, pre := range map[string]string{"with": fakePredefined, "bad": "<response><result><service>"} {
+		if _, err := st.Write(store.Meta{Device: dev}, map[string][]byte{store.ConfigDoc: cfg, "predefined": []byte(pre)}, 20); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := st.Write(store.Meta{Device: "old"}, map[string][]byte{store.ConfigDoc: cfg}, 20); err != nil {
+		t.Fatal(err)
+	}
+	ts, holes := Open(st, []string{"with", "old", "bad"}, nil, When{Now: t0})
+	if names(ts) != "with/vsys1,with/vsys2,old/vsys1,old/vsys2" || len(holes) != 1 || holes[0].Code != "gap.load-failed" || !strings.Contains(holes[0].Reason, "predefined.xml") {
+		t.Fatalf("targets %s, holes %v", names(ts), holes)
+	}
+	if ts[0].Config.Predefined() == nil || ts[2].Config.Predefined() != nil {
+		t.Error("only the snapshot with predefined.xml has predefined services")
+	}
+}
+
+const fakePredefined = `<response status="success"><result><service>` +
+	`<entry name="service-https"><protocol><tcp><port>443</port></tcp></protocol></entry></service></result></response>`
+
 func TestParseAt(t *testing.T) {
 	t.Parallel()
 	for in, want := range map[string]time.Time{
@@ -168,8 +196,8 @@ func TestParseAt(t *testing.T) {
 			t.Errorf("ParseAt(%s) = %v, %v; want %v", in, got, err, want)
 		}
 	}
-	if _, err := ParseAt("tuesday"); err == nil {
-		t.Error("garbage must be an error")
+	if _, err := ParseAt("tuesday"); err == nil || !strings.HasPrefix(err.Error(), `"tuesday": want a snapshot id`) {
+		t.Errorf("garbage must be an error that names the value: %v", err)
 	}
 }
 
@@ -237,5 +265,82 @@ func TestGapOf(t *testing.T) {
 	}
 	if !errors.Is(coded("gap.fib-missing", inner), inner) {
 		t.Error("a coded error must keep its cause")
+	}
+}
+
+// damage removes the meta.json of fw01's newest snapshot in a storeWith store and
+// returns its id.
+func damage(t *testing.T, st *store.Store) string {
+	t.Helper()
+	sn, err := st.Latest("fw01")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(filepath.Join(sn.Dir, "meta.json")); err != nil {
+		t.Fatal(err)
+	}
+	return sn.ID
+}
+
+// --at passes over a damaged snapshot to the next one that can be read, with a
+// note that names it. latest and a pinned id never fall back: they are holes.
+func TestADamagedSnapshotIsSkippedOnlyByTime(t *testing.T) {
+	t.Parallel()
+	st := storeWith(t)
+	id := damage(t, st)
+	now := t0.Add(2 * time.Hour)
+	ts, holes := Open(st, []string{"fw01"}, nil, When{At: now, Now: now})
+	if got := names(ts); got != "fw01/vsys1,fw01/vsys2" || len(holes) != 0 {
+		t.Fatalf("at %s: %s, holes %v", now, got, holes)
+	}
+	want := "snapshot " + id + " skipped: its meta.json cannot be read; " + ts[0].Snapshot.ID + " answers"
+	for _, tg := range ts {
+		if len(tg.Notes) != 1 || tg.Notes[0].Code != "note.snapshot-skipped" || tg.Notes[0].Text != want {
+			t.Errorf("%s notes = %v", tg.Vsys, tg.Notes)
+		}
+	}
+	for name, open := range map[string]func() ([]Target, []Hole){
+		"latest": func() ([]Target, []Hole) { return Open(st, []string{"fw01"}, nil, When{Now: now}) },
+		"@id":    func() ([]Target, []Hole) { return OpenSnapshot(st, "fw01", id, nil, When{Now: now}) },
+	} {
+		ts, holes := open()
+		if len(ts) != 0 || len(holes) != 1 || holes[0].Code != "gap.load-failed" || !strings.Contains(holes[0].Reason, id) {
+			t.Errorf("%s: %v, holes %+v", name, names(ts), holes)
+		}
+	}
+}
+
+// The routing data read at a time carries the same note.
+func TestNetworkNotesASkippedSnapshot(t *testing.T) {
+	t.Parallel()
+	st := networkStore(t,
+		snap{dev: "fw01", serial: "S1", at: t0, docs: routingDocs(t, "fw01", nil)},
+		snap{dev: "fw01", serial: "S1", at: t0.Add(time.Hour), docs: routingDocs(t, "fw01", nil)},
+	)
+	id := damage(t, st)
+	n := NewNetwork(st, []string{"fw01"}, When{At: t0.Add(2 * time.Hour), Now: t0.Add(2 * time.Hour)})
+	d, err := n.Device("fw01")
+	if err != nil || d.TakenAt != t0 {
+		t.Fatalf("fw01 = %+v, %v", d, err)
+	}
+	if len(d.Notes) != 1 || d.Notes[0].Code != "note.snapshot-skipped" || !strings.Contains(d.Notes[0].Text, id) {
+		t.Errorf("notes = %v", d.Notes)
+	}
+}
+
+// The note names one skipped snapshot or several, in words that fit.
+func TestSkipNote(t *testing.T) {
+	t.Parallel()
+	if _, ok := SkipNote(store.Snapshot{ID: "c"}); ok {
+		t.Error("a snapshot that skipped none has no note")
+	}
+	for skipped, want := range map[string]string{
+		"b":   "snapshot b skipped: its meta.json cannot be read; a answers",
+		"c,b": "snapshots c, b skipped: their meta.json files cannot be read; a answers",
+	} {
+		n, ok := SkipNote(store.Snapshot{ID: "a", Skipped: strings.Split(skipped, ",")})
+		if !ok || n.Code != "note.snapshot-skipped" || n.Text != want {
+			t.Errorf("%s: %+v %v", skipped, n, ok)
+		}
 	}
 }

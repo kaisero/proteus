@@ -195,7 +195,8 @@ func addHoles(holes []simulate.Missing, ms ...simulate.Missing) []simulate.Missi
 // pathDoubts reads the routing facts that leave hop n undecided, and the caps
 // they put on its checks' fidelity (spec §4.5, E21). The hop's PBF list names at
 // most the first rule that can redirect the flow, so an empty one does not prove
-// that none applies: an undermatch PBF stage leaves the hop undecided too.
+// that none applies: an undermatch PBF stage leaves the hop undecided too. Each
+// NAT rule in doubt is one doubt, with the code and text of routing's note.
 func pathDoubts(p routing.Path, n int, stages []simulate.Stage) (simulate.Reasons, []simulate.Fidelity) {
 	h := p.Hops[n-1]
 	var doubts simulate.Reasons
@@ -206,8 +207,17 @@ func pathDoubts(p routing.Path, n int, stages []simulate.Stage) (simulate.Reason
 	for _, r := range h.PBF {
 		doubts = append(doubts, reason.New("path.pbf", fmt.Sprintf("PBF rule %s can redirect the flow", r)))
 	}
+	// Why that rule may not take the flow, each with its own code: an input
+	// that settles one, such as the port, is what a second call can give.
+	doubts = append(doubts, h.PBFDoubts...)
 	if f, ok := stageFidelity(stages, n, "pbf"); ok && f.Level() == "undermatch" {
 		doubts = append(doubts, f.UnderMatchReasons()...)
+	}
+	// A NAT rule that may match instead of the one routing applied leaves the
+	// hop undecided, as a security rule in doubt does (spec E20): the device
+	// may translate the flow otherwise, or not at all.
+	for _, d := range h.NATDoubts {
+		doubts = append(doubts, routing.NATDoubt(d))
 	}
 	if f, ok := stageFidelity(stages, n, "nat"); ok {
 		switch f.Level() {
@@ -263,13 +273,10 @@ func zoneDoubts(env *simulate.Env, h routing.Hop) (simulate.Reasons, []simulate.
 	if miss != nil {
 		return simulate.Reasons{miss.Why()}, []simulate.Missing{*miss}
 	}
-	defined := map[string]bool{}
-	for _, z := range resolve.ZonesInScope(t.Config, config.Scope{Sort: config.ScopeVsys, Name: h.Vsys}) {
-		defined[z.Name] = true
-	}
+	defined := resolve.ZoneNames(t.Config, config.Scope{Sort: config.ScopeVsys, Name: h.Vsys})
 	for _, z := range []string{h.Flow.FromZone, h.Flow.ToZone} {
 		why := reason.New("zone.undefined", fmt.Sprintf("zone %s is not defined in %s", z, h.Vsys))
-		if !defined[z] && !slices.Contains(out, why) {
+		if !slices.Contains(defined, z) && !slices.Contains(out, why) {
 			out = append(out, why)
 		}
 	}

@@ -27,6 +27,7 @@
                   <source><member>any</member></source>
                   <destination><member>any</member></destination>
                   <application><member>any</member></application>
+                  <service><member>any</member></service>
                   <rule-type>intrazone</rule-type>
                   <action>allow</action>
                 </entry>
@@ -36,6 +37,7 @@
                   <source><member>any</member></source>
                   <destination><member>any</member></destination>
                   <application><member>any</member></application>
+                  <service><member>any</member></service>
                   <rule-type>interzone</rule-type>
                   <action>deny</action>
                 </entry>
@@ -45,6 +47,7 @@
                   <source><member>any</member></source>
                   <destination><member>any</member></destination>
                   <application><member>any</member></application>
+                  <service><member>any</member></service>
                   <action>allow</action>
                 </entry>
               </rules>

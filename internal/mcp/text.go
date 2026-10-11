@@ -57,6 +57,21 @@ func (v view) answers() []string {
 	return out
 }
 
+// maxVerdict is how many result lines the audit's verdict keeps after the
+// summary line: a broad answer keeps its audit line short.
+const maxVerdict = 20
+
+// verdict is the audit's verdict: the summary line and the first 20 result
+// lines, and the number of answer lines before the cut.
+func (v view) verdict() ([]string, int) {
+	all := v.answers()
+	keep := maxVerdict
+	if v.Summary != nil {
+		keep++
+	}
+	return all[:min(keep, len(all))], len(all)
+}
+
 // codes are the reason codes of the holes, the unresolved entries and the
 // notes, each once, in that order.
 func (v view) codes() []reason.Code {

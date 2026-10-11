@@ -332,6 +332,17 @@ func (t *Topology) Start(node, router string, src netip.Addr) (simulate.Port, ne
 // Next-hop types a lookup knows (spec §17.2, verified on fw01 and fw02).
 var knownNextHopTypes = map[string]bool{"": true, "0": true, resolve.NextHopLocal: true}
 
+// UnknownNextHopType is the doubt of a route on node whose first next hop has a
+// type the lookup does not read yet. It is false for a type the lookup reads.
+func UnknownNextHopType(node string, m simulate.Match) (reason.Reason, bool) {
+	t := m.First().NextHopType
+	if knownNextHopTypes[t] {
+		return reason.Reason{}, false
+	}
+	return reason.New("path.next-hop-type",
+		fmt.Sprintf("route %s on %s has next-hop type %s, which is not read yet", m.Destination, node, t)), true
+}
+
 // Forward is one lookup's whole answer in a router: the egress, or the interface
 // owning a local address, the route, the end when nothing is forwarded, and ECMP as
 // UnderMatch. A local end takes the zone of the interface owning the address (spec
@@ -350,14 +361,15 @@ func (t *Topology) Forward(node, router string, a netip.Addr) simulate.Forward {
 			return f
 		}
 	}
-	switch {
-	case first.NextHopType == resolve.NextHopLocal:
+	if first.NextHopType == resolve.NextHopLocal {
 		f.End = simulate.EndLocal
-	case !knownNextHopTypes[first.NextHopType]:
-		f.End = simulate.EndUnknownType
-		f.Fidelity = simulate.UnderMatch(reason.New("path.next-hop-type",
-			fmt.Sprintf("route %s on %s has next-hop type %s, which is not read yet", m.Destination, node, first.NextHopType)))
-	case len(m.NextHops) > 1:
+		return f
+	}
+	if why, unknown := UnknownNextHopType(node, m); unknown {
+		f.End, f.Fidelity = simulate.EndUnknownType, simulate.UnderMatch(why)
+		return f
+	}
+	if len(m.NextHops) > 1 {
 		f.Fidelity = simulate.UnderMatch(reason.New("path.ecmp",
 			fmt.Sprintf("ECMP on %s: %d other next hops not followed", node, len(m.NextHops)-1)))
 	}

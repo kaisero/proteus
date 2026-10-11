@@ -227,7 +227,7 @@
           "reasons": [
             {
               "code": "doubt.service-predefined",
-              "text": "service predefined or not defined in the configuration (service-https)"
+              "text": "service predefined or not defined in the configuration (service-https); the snapshot holds no predefined services; a fetch with this release stores them when the device returns them"
             }
           ]
         },

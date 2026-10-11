@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"runtime/debug"
+	"sync"
 	"testing"
 	"time"
 
@@ -99,8 +100,12 @@ type Call struct {
 	Status string          // StatusOK, StatusUsage, ...
 	// Code is the error's code; empty when the call answered.
 	Code reason.Code
-	// Answers are the answer lines, the summary's first.
+	// Answers are the answer lines, the summary's first, cut after the
+	// first 20 results' lines.
 	Answers []string
+	// AnswerCount is the number of answer lines the client received,
+	// before the cut to 20 results; with limit, those of the cut answer.
+	AnswerCount int
 	// Codes are the reason codes of the holes, unresolved entries and notes.
 	Codes []reason.Code
 	// Snapshots are the snapshots read, as device@id.
@@ -145,21 +150,11 @@ const instructions = "Report each result's verdict together with its fidelity le
 	"When a note says a snapshot is stale, state the snapshot's age. " +
 	"On the error call.choice, ask the user to pick one of the options and call again with it."
 
-// New is the MCP server: the six tools, the resources and the instructions,
-// with the receiving middleware that audits and recovers every call.
-func New(o Options) (*sdk.Server, error) {
-	return newServer(o, testing.Testing())
-}
-
-// newServer is New. strict re-panics a recovered panic, as a test binary
-// does: there an unregistered reason code or a bug fails the test instead of
-// hiding as call.internal.
-func newServer(o Options, strict bool) (*sdk.Server, error) {
-	s, _, err := build(o, strict)
-	return s, err
-}
-
-// build is newServer, with the limiter that Serve stops.
+// build is the MCP server: the six tools, the resources and the instructions,
+// with the receiving middleware that audits and recovers every call. It also
+// returns the limiter that Serve stops. strict re-panics a recovered panic, as
+// a test binary does: there an unregistered reason code or a bug fails the
+// test instead of hiding as call.internal.
 func build(o Options, strict bool) (*sdk.Server, *limiter, error) {
 	if o.Env.Inventory == nil || len(o.Env.Inventory.Devices) == 0 {
 		return nil, nil, errors.New("mcp: the inventory has no device")
@@ -220,9 +215,6 @@ func Serve(ctx context.Context, o Options, t sdk.Transport) error {
 // answerGrace is how long Serve waits, after the last call returned, for its
 // answer to be written before it closes the session.
 const answerGrace = 100 * time.Millisecond
-
-// Stdio is the transport over standard input and output.
-func Stdio() sdk.Transport { return &sdk.StdioTransport{} }
 
 // Streams is the stdio transport over r and w, one JSON-RPC message per
 // line. Serve does not close them.
@@ -285,12 +277,24 @@ func (m middleware) receive(next sdk.MethodHandler) sdk.MethodHandler {
 			defer m.lim.end()
 		}
 		var log *runlog.Logger
+		// handed is set when the call timed out: its work, still running,
+		// closes the log once it returns, and waits until handed is closed.
+		var handed chan struct{}
 		defer func() {
 			c.Duration = m.now().Sub(c.Time)
+			// The run log is ended, and handed closed, also when the audit
+			// panics: the work of a timed-out call waits for handed.
+			defer func() {
+				if handed == nil {
+					m.closeLog(log, c)
+					return
+				}
+				defer close(handed)
+				m.endLog(log, c)
+			}()
 			if m.audit != nil {
 				m.audit.Audit(*c)
 			}
-			m.closeLog(log, c)
 		}()
 		if m.lim != nil {
 			if err := m.lim.enter(ctx); err != nil {
@@ -303,7 +307,8 @@ func (m middleware) receive(next sdk.MethodHandler) sdk.MethodHandler {
 		if m.lim == nil {
 			return m.handle(ctx, next, method, req, c)
 		}
-		return m.bounded(ctx, next, method, req, c)
+		res, handed, err = m.bounded(ctx, next, method, req, c, log)
+		return res, err
 	}
 }
 
@@ -343,26 +348,56 @@ func (m middleware) openLog(c *Call) *runlog.Logger {
 }
 
 // closeLog records how call c ended in its run log, a panic's stack
-// included, and closes the log. A buffered log is written only when the call
-// ended internal or timeout: a fault or a slow call keeps its detail, and an
-// answer explains itself in its reasons and codes (spec 2026-10-10 F4).
+// included, and closes the log.
 func (m middleware) closeLog(l *runlog.Logger, c *Call) {
+	m.endLog(l, c)
+	_ = l.Close()
+}
+
+// endLog records how call c ended in its run log, a panic's stack included.
+// A buffered log is written only when the call ended internal or timeout: a
+// fault or a slow call keeps its detail, and an answer explains itself in
+// its reasons and codes (spec 2026-10-10 F4).
+func (m middleware) endLog(l *runlog.Logger, c *Call) {
 	if l == nil {
 		return
 	}
-	if c.Status == StatusInternal || c.Status == StatusTimeout {
-		if err := l.Persist(); err != nil {
-			// The call stays without its log; the process log says so.
-			m.proc.Warnf(runlog.TagRun, "mcp: the run log of a call to %s (status %s) was not written: %v", cut(c.Tool, maxLogTool), c.Status, err)
-		}
+	m.persist(l, c.Tool, c.Status)
+	m.detail(l, c)
+	l.Infof(runlog.TagRun, "status %s %s after %s", c.Status, c.Code, c.Duration.Round(time.Millisecond))
+}
+
+// persist writes a buffered log of a call that ended internal or timeout.
+func (m middleware) persist(l *runlog.Logger, tool, status string) {
+	if status != StatusInternal && status != StatusTimeout {
+		return
 	}
+	if err := l.Persist(); err != nil {
+		// The call stays without its log; the process log says so.
+		m.proc.Warnf(runlog.TagRun, "mcp: the run log of a call to %s (status %s) was not written: %v", cut(tool, maxLogTool), status, err)
+	}
+}
+
+// detail writes the error the SDK returned and a recovered panic's stack.
+func (m middleware) detail(l *runlog.Logger, c *Call) {
 	if c.Err != "" {
 		l.Warnf(runlog.TagRun, "%s", c.Err)
 	}
 	if len(c.Stack) > 0 {
 		l.Errorf(runlog.TagRun, "%s", c.Stack)
 	}
-	l.Infof(runlog.TagRun, "status %s %s after %s", c.Status, c.Code, c.Duration.Round(time.Millisecond))
+}
+
+// lateLog records, in the run log of a call that timed out, that its work
+// returned and what it left: the SDK's error and a panic's stack. Then it
+// closes the log. The caller wrote its own lines first.
+func (m middleware) lateLog(l *runlog.Logger, c *Call, start time.Time) {
+	if l == nil {
+		return
+	}
+	l.Infof(runlog.TagRun, "work returned after %s", m.now().Sub(start).Round(time.Millisecond))
+	m.detail(l, c)
+	m.persist(l, c.Tool, StatusTimeout)
 	_ = l.Close()
 }
 
@@ -390,54 +425,79 @@ type outcome struct {
 // timeout: past it the caller gets call.timeout, and the work keeps the slot
 // until it returns. The work fills its own record; the caller's takes it
 // when the work answers in time.
-func (m middleware) bounded(ctx context.Context, next sdk.MethodHandler, method string, req sdk.Request, c *Call) (sdk.Result, error) {
+//
+// After a timeout, bounded returns handed, and the work owns the call's run
+// log: once the caller has written its own lines and closed handed, the
+// work writes that it returned, its error and a panic's stack, and closes
+// the log. So a slow call's log keeps what came late.
+//
+// The slot is freed once on every path: before the outcome is handed over
+// when the work answers in time, so the caller that has its answer finds the
+// slot free; after the log is closed when the call timed out.
+func (m middleware) bounded(ctx context.Context, next sdk.MethodHandler, method string, req sdk.Request, c *Call, log *runlog.Logger) (res sdk.Result, handed chan struct{}, err error) {
 	work, cancel := context.WithTimeout(ctx, m.lim.timeout)
 	done := make(chan outcome, 1)
-	left := make(chan struct{})
+	handed = make(chan struct{})
+	// late is set when the caller timed out and left. Under mu, either the
+	// work hands its outcome over or the caller leaves, never both.
+	var (
+		mu   sync.Mutex
+		late bool
+	)
 	o := outcome{call: *c}
 	go func() {
-		defer m.lim.leave()
-		defer cancel()
 		func() {
 			// Only a strict server's panic gets here: handle recovers the rest.
 			defer func() {
 				if p := recover(); p != nil {
 					o.panicked, o.panic = true, p
+					o.call.Stack = fmt.Appendf(nil, "panic: %v\n\n%s", p, debug.Stack())
 				}
 			}()
 			o.res, o.err = m.handle(work, next, method, req, &o.call)
 		}()
-		if o.panicked {
-			select {
-			case <-left:
-				// Nobody waits to panic on. Only a strict server, in a test
-				// binary, gets here: it crashes the test binary on purpose,
-				// so the bug is not lost with the caller that timed out.
-				panic(o.panic)
-			default:
-			}
+		mu.Lock()
+		if !late {
+			cancel()
+			m.lim.leave()
+			done <- o
+			mu.Unlock()
+			return
 		}
-		done <- o
+		mu.Unlock()
+		defer m.lim.leave()
+		defer cancel()
+		<-handed
+		m.lateLog(log, &o.call, o.call.Time)
+		if o.panicked {
+			// Nobody waits to panic on. Only a strict server, in a test
+			// binary, gets here: it crashes the test binary on purpose, so
+			// the bug is not lost with the caller that timed out.
+			panic(o.panic)
+		}
 	}()
-	take := func(o outcome) (sdk.Result, error) {
+	take := func(o outcome) (sdk.Result, chan struct{}, error) {
 		if o.panicked {
 			panic(o.panic)
 		}
 		*c = o.call
-		return o.res, o.err
+		return o.res, nil, o.err
 	}
 	select {
 	case o := <-done:
 		return take(o)
 	case <-work.Done():
 	}
+	mu.Lock()
 	select {
 	case o := <-done:
+		mu.Unlock()
 		return take(o) // it answered at the deadline
 	default:
 	}
-	close(left)
-	return refused(c, work.Err()), nil
+	late = true
+	mu.Unlock()
+	return refused(c, work.Err()), handed, nil
 }
 
 // handle runs a call's handler with c as its record, recovers a panic into
@@ -451,7 +511,7 @@ func (m middleware) handle(ctx context.Context, next sdk.MethodHandler, method s
 			c.Status, c.Code = StatusInternal, "call.internal"
 			// The handler may have filled the record before it failed; the
 			// call gave no answer.
-			c.Answers, c.Codes, c.Snapshots = nil, nil, nil
+			c.Answers, c.AnswerCount, c.Codes, c.Snapshots = nil, 0, nil, nil
 			c.Stack = fmt.Appendf(nil, "panic: %v\n\n%s", p, debug.Stack())
 			res, err = refused(&Call{}, errInternal), nil
 		}

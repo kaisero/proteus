@@ -2,8 +2,10 @@ package query
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
+	"time"
 
 	"github.com/okaiser/proteus/internal/config"
 	"github.com/okaiser/proteus/internal/drift"
@@ -23,21 +25,35 @@ type DiffInput struct {
 	// To, and To "" is the latest.
 	From string `json:"from,omitempty" jsonschema:"the older point in time; empty for the snapshot before the newer one"`
 	To   string `json:"to,omitempty" jsonschema:"the newer point in time; empty for the latest"`
+	ResultLimit
 }
 
 // Validate holds the diff's input rules: the store's devices only, picked by
-// From and To rather than one time.
+// From and To rather than one time, each read as at is, and no limit below
+// zero.
 func (in DiffInput) Validate() *UsageError {
+	_, _, u := in.validate()
+	return u
+}
+
+// validate holds Validate's rules and gives From and To as read.
+func (in DiffInput) validate() (from, to time.Time, u *UsageError) {
 	for _, f := range []struct {
 		given bool
 		flag  string
 	}{{in.Selection.File != "", "file"}, {in.Selection.At != "", "at"}, {in.Selection.Fresh, "fresh"}} {
 		if f.given {
-			return usage(fmt.Sprintf("--%s: snapshot diff compares stored snapshots; pick them with --from and --to", f.flag),
+			return from, to, usage(fmt.Sprintf("--%s: snapshot diff compares stored snapshots; pick them with --from and --to", f.flag),
 				f.flag+": snapshot diff compares stored snapshots; pick them with from and to")
 		}
 	}
-	return nil
+	if from, u = parseTime("from", in.From); u != nil {
+		return from, to, u
+	}
+	if to, u = parseTime("to", in.To); u != nil {
+		return from, to, u
+	}
+	return from, to, in.checkLimit()
 }
 
 // DiffResult is what changed in one scope of one device.
@@ -47,15 +63,21 @@ type DiffResult struct {
 	From    string         `json:"from" jsonschema:"the older snapshot ID"`
 	To      string         `json:"to" jsonschema:"the newer snapshot ID"`
 	Scope   string         `json:"scope" jsonschema:"the configuration scope the result came from"`
-	Changes []drift.Change `json:"changes" jsonschema:"what was added, removed or changed"`
+	Changes []drift.Change `json:"changes" jsonschema:"what was added, removed or changed; with a limit, the scope where the limit falls holds only its first changes"`
+
+	// whole is every change of a scope the limit shortened; nil when Changes
+	// is whole. The summary form counts it.
+	whole []drift.Change
 }
 
 // SnapshotDiff compares two snapshots of each selected device, per scope. A
 // device without two snapshots to compare, or whose configuration cannot be
-// read, is a hole.
+// read, is a hole. The summary counts the changes and the devices with and
+// without a change. A limit keeps the first changes over all devices.
 func SnapshotDiff(ctx context.Context, env Env, in DiffInput) (Envelope[DiffInput, DiffResult], error) {
 	var none Envelope[DiffInput, DiffResult]
-	if u := in.Validate(); u != nil {
+	from, to, u := in.validate()
+	if u != nil {
 		return none, u
 	}
 	if env.Inventory == nil {
@@ -69,17 +91,27 @@ func SnapshotDiff(ctx context.Context, env Env, in DiffInput) (Envelope[DiffInpu
 		return none, errNoStore
 	}
 	e := envelope[DiffInput, DiffResult]("snapshot diff", in)
-	e.Results = []DiffResult{}
+	e.Results, e.Summary = []DiffResult{}, &Summary{}
+	compared := 0
 	for _, d := range names {
 		if err := ctx.Err(); err != nil {
 			return none, err
 		}
-		older, newer, err := pair(env.Store, d, in.From, in.To)
+		older, newer, err := pair(env.Store, d, from, to)
 		if err != nil {
 			e.Holes = append(e.Holes, estate.NewHole(d, "", reason.New(estate.GapOf(err), err.Error())))
 			continue
 		}
 		e.Read = append(e.Read, d+"@"+older.ID, d+"@"+newer.ID)
+		sides := []store.Snapshot{newer, older}
+		if older.ID == newer.ID { // --from at or after the snapshot --to picks
+			sides = sides[:1]
+		}
+		for _, sn := range sides {
+			if n, ok := estate.SkipNote(sn); ok {
+				e.Notes = append(e.Notes, NoteOf(d, "", n))
+			}
+		}
 		// After an HA failover the entry's snapshots come from the other member,
 		// whose configuration is synced but not identical.
 		if was, now := older.Meta.Serial, newer.Meta.Serial; was != "" && now != "" && was != now {
@@ -93,45 +125,80 @@ func SnapshotDiff(ctx context.Context, env Env, in DiffInput) (Envelope[DiffInpu
 			continue
 		}
 		before, after := was.Config, now.Config
+		changed := false
 		for _, sc := range diffScopes(before, after, in.Selection.Vsys) {
 			ch := drift.Compare(before, after, sc)
 			if ch == nil {
 				ch = []drift.Change{}
 			}
+			changed = changed || len(ch) > 0
+			e.Summary.Found += len(ch)
 			e.Results = append(e.Results, DiffResult{Answer: DiffAnswer(d, sc.String(), ch), Device: d, From: older.ID, To: newer.ID, Scope: sc.String(), Changes: ch})
+		}
+		compared++
+		if changed {
+			e.Summary.With++
 		}
 	}
 	slices.Sort(e.Read)
+	e.Summary.Without = compared - e.Summary.With
+	e.Summary.Answer = diffCount(e.Summary, len(e.Holes))
+	cutChanges(&e, in.ResultLimit)
 	return e, nil
 }
 
-// pair picks the two snapshots of a device to compare.
-func pair(st *store.Store, device, from, to string) (store.Snapshot, store.Snapshot, error) {
+// cutChanges keeps the first Limit changes of a complete answer, in its
+// order, over all scopes and devices: a unit of snapshot diff is one change.
+// The scope where the limit falls keeps its first changes, and its answer
+// keeps its whole counts and adds how many it shows; the later scopes drop
+// out. Holes and notes stay whole.
+func cutChanges(e *Envelope[DiffInput, DiffResult], l ResultLimit) {
+	all := e.Summary.Found
+	if l.Limit == 0 || all <= l.Limit {
+		return
+	}
+	kept := 0
+	for i := range e.Results {
+		r := &e.Results[i]
+		if kept+len(r.Changes) < l.Limit {
+			kept += len(r.Changes)
+			continue
+		}
+		if n := l.Limit - kept; n < len(r.Changes) {
+			r.whole, r.Changes = r.Changes, r.Changes[:n]
+			r.Answer += fmt.Sprintf(" (%d of %d changes shown)", n, len(r.whole))
+		}
+		e.Results = e.Results[:i+1]
+		break
+	}
+	leftOut(e.Summary, l.Limit, all, "device")
+}
+
+// pair picks the two snapshots of a device to compare. A zero to is the
+// latest; a zero from is the snapshot before the newer one.
+func pair(st *store.Store, device string, from, to time.Time) (store.Snapshot, store.Snapshot, error) {
 	var newer store.Snapshot
 	var err error
-	if to == "" {
+	if to.IsZero() {
 		newer, err = st.Latest(device)
 	} else {
-		t, perr := estate.ParseAt(to)
-		if perr != nil {
-			return newer, newer, perr
-		}
-		newer, err = st.AtOrBefore(device, t)
+		newer, err = st.AtOrBefore(device, to)
 	}
 	if err != nil {
 		return newer, newer, err
 	}
-	if from != "" {
-		t, perr := estate.ParseAt(from)
-		if perr != nil {
-			return newer, newer, perr
-		}
-		older, err := st.AtOrBefore(device, t)
+	if !from.IsZero() {
+		older, err := st.AtOrBefore(device, from)
 		return older, newer, err
 	}
+	// AtOrBefore passes over a damaged snapshot, so the one before the newer is
+	// the next one that can be read.
 	older, err := st.AtOrBefore(device, newer.Meta.TakenAt.Add(-1))
-	if err != nil {
+	switch {
+	case errors.Is(err, store.ErrNoSnapshot):
 		return older, newer, fmt.Errorf("only one snapshot with a configuration at or before %s; nothing to compare", newer.ID)
+	case err != nil:
+		return older, newer, err
 	}
 	return older, newer, nil
 }

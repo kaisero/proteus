@@ -41,6 +41,10 @@ inventory export that `fetch` writes (see
 inventory with credentials. A change of devices needs a new fetch and a server
 restart.
 
+The server reads the [user snapshot](../configuration.md#the-user-snapshot) that
+`PROTEUS_USERS` names once, at start. Every call answers from that copy, so a
+changed file needs a server restart.
+
 The server checks its setup before it answers. A failed check stops it:
 
 | Check | Exit |
@@ -49,6 +53,7 @@ The server checks its setup before it answers. A failed check stops it:
 | The export holds a credential, cannot be parsed, or has no device | 2 |
 | `--http` without a token, with a token shorter than 32 bytes, or without `audit_log` | 2 |
 | `audit_log: -` over stdio, where standard output carries MCP | 2 |
+| The `PROTEUS_USERS` file is missing, cannot be read, or is not a valid user snapshot | 2 |
 | The export cannot be read, the store cannot be opened, the address cannot be listened on, or the audit file cannot be opened | 1 |
 
 Over HTTP the server prints `proteus mcp: serving http://<address> (Host check on: <hosts>)`
@@ -66,9 +71,9 @@ before `at`. A date in `at` means the end of that day.
 | `simulate_policy` | `source`, `destination`, `protocol`, `port`, `source_port`, `url`, `application`, `user`, `device`, `router`, `at`, `detail` |
 | `simulate_routing` | `source`, `destination`, `protocol`, `port`, `device`, `router`, `at`, `detail` |
 | `simulate_nat` | `source`, `destination`, `protocol`, `port`, `device` (required), `router`, `at`, `detail` |
-| `search` | `value`, `kind`, `device` (list), `label` (list), `vsys`, `at`, `detail` |
-| `lookup` | `name`, `kind`, `device` (list), `vsys`, `at`, `detail` |
-| `snapshot_diff` | `device`, `from`, `to`, `detail` |
+| `search` | `value`, `kind`, `device` (list), `label` (list), `vsys`, `at`, `detail`, `limit` |
+| `lookup` | `name`, `kind`, `device` (list), `vsys`, `at`, `detail`, `limit` |
+| `snapshot_diff` | `device`, `from`, `to`, `detail`, `limit` |
 
 - `source` and `destination` are an address or a host name. The server resolves a
   host name with its own DNS and checks the first IPv4 address.
@@ -81,6 +86,16 @@ before `at`. A date in `at` means the end of that day.
 - `application` is recorded, not evaluated. It does not change the answer.
 - `device` is an enum of the exported devices. The client sees the names in the
   tool's input schema, and the server refuses another name.
+- `limit` keeps the first N results, in the answer's usual order, over all
+  devices together. A result is a finding for `search`, a card for `lookup`,
+  and a single change for `snapshot_diff`, where the scope the limit falls in
+  keeps its first changes and the later scopes are left out. `limit` is 1 or
+  more, and it has no default: without it, the answer holds every result. The
+  summary's `found` counts every result and `omitted` the results left out, and
+  its answer line ends `; 5 of 812 shown, narrow by device, vsys or kind`. Holes,
+  unresolved entries and notes are never cut. A model should pass `limit` for a
+  broad search, such as a large prefix or a common port, so that the answer fits
+  its context.
 
 Each input has a description in the tool's input schema that says what proteus
 evaluates.
@@ -105,8 +120,8 @@ Each tool returns structured content of the form `{envelope, error}`:
 
 - `envelope` is the JSON format 2 envelope of the
   [scripting guide](scripting.md): `format`, `command`, `detail`, `input`,
-  `results`, `holes`, `unresolved` and `notes`, and `summary` for `search` and
-  `lookup`. It is null when the call failed.
+  `results`, `holes`, `unresolved` and `notes`, and `summary` for `search`,
+  `lookup` and `snapshot_diff`. It is null when the call failed.
 - `error` is null, or `{code, text, options, needs}` when the call failed.
 
 The JSON schema of each tool's output is in the tool's output schema. The schemas
@@ -131,12 +146,13 @@ carries `needs`: the inputs that can decide it. Each entry is
 | Code | Input | When |
 | --- | --- | --- |
 | `input.protocol` | `protocol` | a rule's service needs the protocol and the call gave none |
-| `input.port` | `port` | a rule's service or a NAT rule needs the destination port |
+| `input.port` | `port` | a rule's service, a NAT rule or a PBF rule on the path needs the destination port |
 | `input.url` | `url` | a rule names a URL category that the configuration defines |
 
-`needs: []` means that no input can decide the result. A predefined service, an
-application or a PAN-DB category is an example. A decided result has no `needs`
-key.
+`needs: []` means that no input can decide the result. A predefined service that
+the snapshot does not hold (stored before this release, or refused by the
+device), an application or a PAN-DB category is an example. A decided result has
+no `needs` key.
 
 ## Errors
 
@@ -203,13 +219,24 @@ flowchart LR
 - **proteus-mcp** runs `proteus mcp --http`. It mounts the store read-only, holds
   the token as a secret, and sits on a network with no route out.
 - **caddy** terminates TLS, limits the request body to 1 MB and forwards to
-  proteus-mcp. It checks the server with `/healthz`.
+  proteus-mcp. It checks the server with `/healthz`. Every line of its log drops
+  the `X-User-Claims` header, so only the audit holds identities.
 
 Both proteus containers run as UID 10001, read-only, with every capability
 dropped. The server image has no shell. The comments in
 `deploy/docker/compose.yaml` list the steps before the first start: the secrets,
 their owner and their mode. Until the first fetch writes the export, proteus-mcp
 exits 2 and restarts.
+
+**Give the server time to stop.** On SIGTERM the server lets the running calls
+answer, and an answer is written at most `call_timeout` + `max_wait` + 10 s after
+its request. The whole stop ends within that time, also when a call's work does
+not return or a client keeps its request open: the server then closes what is
+left and exits 143. Set the container's stop grace period to at least
+`call_timeout` + `max_wait` + 20 s: 90 s with the defaults, as
+`stop_grace_period` in the sample. A shorter grace lets the platform kill the
+server while calls still answer. The fetch container's script
+passes SIGTERM to the running `proteus fetch` and exits 143 when it ends.
 
 `deploy/portkey.md` registers the server in the Portkey MCP gateway: the URL, the
 static `Authorization: Bearer <token>` header, the identity forwarding through
@@ -246,9 +273,19 @@ its variable and its flag, and for the token rules.
 | `max_loads` | `2` | snapshot loads and index builds at once |
 | `max_cache` | `2048` | the cache of loaded snapshots, in MB |
 
-The cache keeps each loaded snapshot and its indexes. A loaded configuration takes
-about 13 times its file size. Size `max_cache` with that factor and the number of
-devices.
+The cache keeps each loaded snapshot and its indexes. The cache counts a loaded
+configuration as 32 MB plus 13 times its file size, and the schema of each PAN-OS
+version as 10 MB once. Size `max_cache` with that model and the number of devices:
+20 devices with 8 MB configurations need about 20 × (32 + 13 × 8) + 10 = 2,730 MB.
+
+`BenchmarkCacheRetention` in `internal/mcp` measures the model on two generated
+shapes at about 4 and 8 MB. One vsys with 2,000 nested address groups retains 29.3 MB
+plus 12.8 bytes per file byte; the fixed part is the group tree. Four vsys with
+nested groups and NAT and PBF rules retain 0.35 MB plus 12.7 bytes per file byte. The
+model takes the larger value of each part, rounded up, so it overstates most
+configurations: a small one by up to 32 MB. The benchmark also fails when the schema
+of a PAN-OS version retains more than the 10 MB that the cache counts for it; it
+retains about 9 MB.
 
 ## Audit and run logs
 
@@ -259,7 +296,7 @@ renamed files. With `audit_log: -` the lines go to standard output, and the
 container platform collects and keeps them (`--http` only):
 
 ```json
-{"time":"2026-10-10T08:00:00Z","auth":"token","identity_source":"header","identity":{"sub":"alice"},"tool":"simulate_policy","input":{"source":"198.18.1.10","destination":"198.18.10.100","port":443},"verdict":["allowed"],"codes":[],"snapshots":["fw01@2026-10-10T07-00-00Z","fw02@2026-10-10T07-00-00Z"],"duration_ms":120,"status":"ok"}
+{"time":"2026-10-10T08:00:00Z","auth":"token","identity_source":"header","identity":{"sub":"alice"},"tool":"simulate_policy","input":{"source":"198.18.1.10","destination":"198.18.10.100","port":443},"verdict":["allowed"],"verdict_count":1,"codes":[],"snapshots":["fw01@2026-10-10T07-00-00Z","fw02@2026-10-10T07-00-00Z"],"duration_ms":120,"status":"ok"}
 ```
 
 | Field | Content |
@@ -268,7 +305,8 @@ container platform collects and keeps them (`--http` only):
 | `identity_source` | `header`, `none` (header missing or not a JSON object) or `os` (stdio) |
 | `identity` | the `audit_claims` of the identity header, each cut to 256 bytes; the operating system user over stdio; `unknown` when none is found |
 | `tool`, `input` | the tool and its inputs as the client sent them |
-| `verdict` | the answer lines of the result |
+| `verdict` | the answer lines: the summary line and the first 20 result lines |
+| `verdict_count` | the number of answer lines the client received; more than the lines in `verdict` when a broad answer was cut. With `limit`, it counts the lines of the shortened answer, not every match |
 | `codes` | the reason codes of the holes, unresolved entries and notes |
 | `snapshots` | the snapshots that the answer read, as `<member>@<snapshot id>`: for an HA pair the member whose snapshot answered, for a single device the device |
 | `duration_ms` | the time the call took |
@@ -288,12 +326,18 @@ never reaches the audit or a log.
 **Run logs.** A call that ends `internal` or `timeout` writes its own run log in
 `log_dir`, named `mcp-<tool>-<time>-<seq>.log`. It holds the input, the snapshot
 each device resolved to, what each stage kept, and at the end the status, the code
-and the duration. A panic's stack goes there too. Any other call keeps its log in
-memory and drops it: its answer explains itself in its reasons and codes. With
-`--log-level debug` (or `log_level: debug`) every call writes its run log. The
-newest `log_keep` logs stay. The server process also writes one CLI run log in the
-CLI's log directory, with its start, settings, the refusal counts and its exit. A
-call that the server refuses as busy gets an audit line and no run log.
+and the duration. A panic's stack goes there too. The work of a call that timed
+out goes on until it returns; its log stays open for it and then also holds what
+the work logged late, when it returned, and the stack of a later panic. On
+SIGTERM the server waits for such work only until it stops: at most
+`call_timeout` over stdio, and `call_timeout` + `max_wait` + 10 s over HTTP. What
+the work logs after that is lost, and the lines written before stay. Any other call keeps
+its log in memory and drops it: its answer explains itself in its reasons and
+codes. With `--log-level debug` (or `log_level: debug`) every call writes its run
+log. The newest `log_keep` logs stay. The server process also writes one CLI run
+log in the CLI's log directory, with its start, settings, the refusal counts and
+its exit. A call that the server refuses as busy gets an audit line and no run
+log.
 
 ## Limits
 

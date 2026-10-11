@@ -67,6 +67,25 @@
         <element name="cuid-tags-fetch-enable" optional="yes" hidden="yes" type="bool" default="no" help-string="Enable or disable fetching of Registered IPs from Cloud UserID for the tags configured in the match filters" />
       </sequence>
     </array>
+    <array name="certificate" optional="yes">
+      <sequence name="entry" tlo="yes">
+        <attr-req name="name" type="string" maxlen="63"/>
+        <element name="common-name" type="string" minlen="0" maxlen="255"/>
+        <choice>
+          <element name="private-key" optional="yes" type="string" maxlen="16384" encrypt="yes" double-encrypt="yes"/>
+          <element name="private-key-on-hsm" optional="yes" type="bool" default="no"/>
+        </choice>
+      </sequence>
+    </array>
+    <sequence name="local-user-database" optional="yes">
+      <array name="user" optional="yes">
+        <sequence name="entry" tlo="yes" in-tpl="yes">
+          <attr-req name="name" type="string" regex=".*" maxlen="31" help-string="User name"/>
+          <element name="phash" type="string" maxlen="63"/>
+          <element name="disabled" type="bool" optional="yes"/>
+        </sequence>
+      </array>
+    </sequence>
   </sequence>
   <array name="devices" optional="yes">
     <sequence name="entry" alt-name="configuration for" max-count="1">

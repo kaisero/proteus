@@ -85,7 +85,7 @@ func (Simulation) Run(ctx context.Context, env *simulate.Env, in simulate.Input)
 	run.Stages = stages
 	run.Device, run.Vsys = d.Name, s.nat.Vsys
 	run.Fidelity = simulate.Overall(stages)
-	s.result.Notes = append(append(simulate.DNSNotes(in.Flow, true), s.notes...), s.result.Notes...)
+	s.result.Notes = append(append(simulate.DNSNotes(in.Flow, "traced"), s.notes...), s.result.Notes...)
 	run.Output = s.result
 	run.Notes = d.Notes
 	return run, err
@@ -151,18 +151,28 @@ func pbfStage(_ context.Context, s *state) (simulate.Outcome, error) {
 			Detail:   "no configuration for " + s.data.Name + " " + s.nat.Vsys,
 		}, nil
 	}
+	// A given ingress zone the vsys does not define is a question NAT cannot
+	// take (C15): the caller is told the vsys's zones.
+	if r := rulebase.UndefinedZones(v.Config, v.Scope, s.in.Params["from-zone"], ""); r != nil {
+		return simulate.Outcome{}, r.Choice
+	}
 	s.nat.Target = simulate.Target{Config: v.Config, Indexes: v.Indexes}
-	m := v.PBF(sourceAddr(s.in.Flow.Source.Addrs), s.in.Flow.Destination.Addrs[0], s.nat.In)
+	f := s.in.Flow
+	m := v.PBF(sourceAddr(f.Source.Addrs), f.Destination.Addrs[0], f.Protocol, f.DestPort, s.nat.In)
 	out := simulate.Outcome{
 		Fidelity:   rulebase.Certainty(resolve.PBF, m.Unresolved),
 		Detail:     "no PBF rule could take the packet",
 		Unresolved: m.Unresolved,
 	}
-	if !m.Found || m.Note.Text == "" {
-		return out, nil
+	switch {
+	case !m.Found:
+	case m.Note.Text == "":
+		out.Detail = "no-pbf rule " + m.Rule.Name + " leaves the packet to routing"
+	default:
+		s.notes = append(s.notes, reason.Reason{Code: m.Note.Code, Text: m.Note.Text + "; the NAT zones below assume it does not"})
+		out.Fidelity, out.Detail = simulate.Weakest(out.Fidelity, simulate.Inferred), m.Note.Text
 	}
-	s.notes = append(s.notes, reason.Reason{Code: m.Note.Code, Text: m.Note.Text + "; the NAT zones below assume it does not"})
-	out.Fidelity, out.Detail = simulate.Weakest(out.Fidelity, simulate.Inferred), m.Note.Text
+	out.Detail += rulebase.PassedText(m.Passed)
 	return out, nil
 }
 

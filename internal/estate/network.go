@@ -221,6 +221,9 @@ func (n *Network) read(node string) (simulate.DeviceData, error) {
 		d.Notes = append(d.Notes, reason.New("note.ha-from-peer",
 			fmt.Sprintf("%s was passive; its snapshot comes from the active peer %s", member, sn.Meta.FetchedFrom)))
 	}
+	if note, ok := SkipNote(sn); ok {
+		d.Notes = append(d.Notes, note)
+	}
 	if age := n.w.Now.Sub(sn.Meta.TakenAt); n.w.MaxAge > 0 && age > n.w.MaxAge {
 		d.Notes = append(d.Notes, reason.New("note.snapshot-stale", StaleNote(sn.ID, age, n.w.MaxAge)))
 	}
