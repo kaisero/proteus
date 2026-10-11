@@ -35,11 +35,11 @@ import (
 // Each part takes the larger shape's value, rounded up: the fixed part to a
 // multiple of 4 MiB, the part per byte to a whole number. The digest of each
 // PAN-OS version takes about 9 MB once per process: the benchmark measures
-// 8.8 MiB and fails above digestBytes.
+// 8.8 MiB and fails above digestBytes, which leaves about 1 MiB to spare.
 const (
 	configFixedBytes = 32 << 20
 	configPerByte    = 13
-	digestBytes      = 9 << 20
+	digestBytes      = 10 << 20
 	// opFactor sizes a snapshot's operational tables by their files' bytes.
 	// It is an estimate, not a measurement: the parsed tables keep less text
 	// than the XML they come from.

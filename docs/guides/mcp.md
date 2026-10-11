@@ -275,8 +275,8 @@ its variable and its flag, and for the token rules.
 
 The cache keeps each loaded snapshot and its indexes. The cache counts a loaded
 configuration as 32 MB plus 13 times its file size, and the schema of each PAN-OS
-version as 9 MB once. Size `max_cache` with that model and the number of devices:
-20 devices with 8 MB configurations need about 20 × (32 + 13 × 8) + 9 = 2,729 MB.
+version as 10 MB once. Size `max_cache` with that model and the number of devices:
+20 devices with 8 MB configurations need about 20 × (32 + 13 × 8) + 10 = 2,730 MB.
 
 `BenchmarkCacheRetention` in `internal/mcp` measures the model on two generated
 shapes at about 4 and 8 MB. One vsys with 2,000 nested address groups retains 29.3 MB
@@ -284,7 +284,8 @@ plus 12.8 bytes per file byte; the fixed part is the group tree. Four vsys with
 nested groups and NAT and PBF rules retain 0.35 MB plus 12.7 bytes per file byte. The
 model takes the larger value of each part, rounded up, so it overstates most
 configurations: a small one by up to 32 MB. The benchmark also fails when the schema
-of a PAN-OS version retains more than the 9 MB that the cache counts for it.
+of a PAN-OS version retains more than the 10 MB that the cache counts for it; it
+retains about 9 MB.
 
 ## Audit and run logs
 
