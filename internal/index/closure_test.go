@@ -25,6 +25,9 @@ func indexOf(t *testing.T, path, vsys string) *Index {
 	return idx
 }
 
+// vsys1 is the scope the fixtures' own groups sit in.
+var vsys1 = config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}
+
 func nestedIndex(t *testing.T) *Index {
 	t.Helper()
 	return indexOf(t, "../../testdata/config/firewall-nested-groups.xml", "vsys1")
@@ -175,14 +178,26 @@ func TestUnparsedFiltersAreReported(t *testing.T) {
 func TestGroupsHoldingDirect(t *testing.T) {
 	t.Parallel()
 	idx := nestedIndex(t)
-	if got := idx.GroupsHolding("address", "h-1", true); !slices.Equal(got, []Group{{"address-group", "g-inner"}}) {
+	if got := idx.GroupsHolding("address", "h-1", true); !slices.Equal(got, []Group{{"address-group", "g-inner", vsys1}}) {
 		t.Errorf("direct groups of h-1 = %v, want [g-inner]", got)
 	}
-	if got := idx.GroupsHolding("address-group", "g-inner", true); !slices.Equal(got, []Group{{"address-group", "g-middle"}}) {
+	if got := idx.GroupsHolding("address-group", "g-inner", true); !slices.Equal(got, []Group{{"address-group", "g-middle", vsys1}}) {
 		t.Errorf("direct groups of g-inner = %v, want [g-middle]", got)
 	}
 	if got := idx.GroupsHolding("address", "unknown", true); got != nil {
 		t.Errorf("an unknown name has no groups, got %v", got)
+	}
+}
+
+// A group carries its own scope: from vsys1, the shared dynamic group holding a
+// vsys1 address is shared.
+func TestGroupsHoldingGivesTheGroupsScope(t *testing.T) {
+	t.Parallel()
+	idx := indexOf(t, "../../testdata/config/firewall-multivsys.xml", "vsys1")
+	shared := config.Scope{Sort: config.ScopeShared}
+	got := idx.GroupsHolding("address", "corp-location-vienna", true)
+	if !slices.Equal(got, []Group{{"address-group", "corp-location", shared}}) {
+		t.Errorf("GroupsHolding = %v, want the shared corp-location", got)
 	}
 }
 
@@ -203,10 +218,10 @@ func TestEachGroupKindHasItsOwnClosure(t *testing.T) {
 		direct     bool
 		want       []Group
 	}{
-		{"service", "svc-web", false, []Group{{"service-group", "webgrp"}}},
-		{"service", "svc-web", true, []Group{{"service-group", "webgrp"}}},
-		{"address", "h-api", false, []Group{{"address-group", "webgrp"}}},
-		{"address", "h-web", true, []Group{{"address-group", "web"}}},
+		{"service", "svc-web", false, []Group{{"service-group", "webgrp", vsys1}}},
+		{"service", "svc-web", true, []Group{{"service-group", "webgrp", vsys1}}},
+		{"address", "h-api", false, []Group{{"address-group", "webgrp", vsys1}}},
+		{"address", "h-web", true, []Group{{"address-group", "web", vsys1}}},
 		{"tag", "web", false, nil},
 		{"address", "nothing", false, nil},
 	} {
@@ -280,7 +295,7 @@ func TestAGroupKindWithoutMemberKindsHoldsEveryKind(t *testing.T) {
 	for _, fam := range idx.families {
 		fam.members = nil
 	}
-	want := []Group{{"address-group", "g-dual-addr"}, {"application-group", "g-dual-app"}, {"service-group", "g-dual-svc"}}
+	want := []Group{{"address-group", "g-dual-addr", vsys1}, {"application-group", "g-dual-app", vsys1}, {"service-group", "g-dual-svc", vsys1}}
 	if got := idx.GroupsHolding("address", "dual", true); !slices.Equal(got, want) {
 		t.Errorf("GroupsHolding(address, dual) = %v, want %v", got, want)
 	}

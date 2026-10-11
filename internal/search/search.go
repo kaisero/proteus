@@ -122,15 +122,22 @@ func (s *searcher) namesFound() []string {
 	return slices.Sorted(maps.Keys(s.names))
 }
 
-// kindsByName maps every object name visible in the scope to its kinds.
-func (s *searcher) kindsByName() map[string][]string {
-	out := map[string][]string{}
+// kindsByName maps every object name visible in the scope to its kinds, each with
+// the scope that defines the object of that kind: shared, predefined or the vsys.
+func (s *searcher) kindsByName() map[string][]kindIn {
+	out := map[string][]kindIn{}
 	for _, k := range resolve.ObjectKinds(s.cfg) {
 		for _, o := range resolve.ObjectsInScope(s.cfg, s.sc, k) {
-			out[o.Name] = append(out[o.Name], k)
+			out[o.Name] = append(out[o.Name], kindIn{kind: k, scope: o.Scope})
 		}
 	}
 	return out
+}
+
+// kindIn is a kind of object and the scope that defines the object.
+type kindIn struct {
+	kind  string
+	scope config.Scope
 }
 
 func (s *searcher) kindAllowed(kind string) bool {
@@ -185,7 +192,7 @@ func (s *searcher) objects() {
 			continue
 		}
 		for _, k := range kinds {
-			s.addObject(k, name, s.sc, "name")
+			s.addObject(k.kind, name, k.scope, "name")
 		}
 	}
 }
@@ -278,7 +285,7 @@ func (s *searcher) groups() {
 					continue
 				}
 				s.foundAs(g.Name, g.Kind)
-				s.found = append(s.found, Finding{Stage: StageGroup, Kind: g.Kind, Name: g.Name, Scope: s.sc, Via: "holds " + m})
+				s.found = append(s.found, Finding{Stage: StageGroup, Kind: g.Kind, Name: g.Name, Scope: g.Scope, Via: "holds " + m})
 			}
 		}
 	}

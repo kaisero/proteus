@@ -304,6 +304,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A search finding names the scope that defines the object.** An object found
+  by its name, and a group holding an object found, now carry their own `scope`
+  in JSON, YAML and MCP answers, such as `shared` or `predefined`. Before, they
+  carried the vsys searched, as if that vsys defined them.
 - **A /32 or a range of one address finds a wildcard object, as the address
   does.** `search 10.88.7.1/32` and `search 10.88.7.1-10.88.7.1` now find a
   wildcard address object that matches the address, the groups holding it and

@@ -43,7 +43,7 @@
       "kind": "address-group",
       "name": "corp-dc",
       "via": "holds corp-dc-vienna",
-      "scope": "vsys:vsys1"
+      "scope": "shared"
     },
     {
       "answer": "file/vsys1: address-group corp-location",
@@ -53,7 +53,7 @@
       "kind": "address-group",
       "name": "corp-location",
       "via": "holds corp-location-vienna",
-      "scope": "vsys:vsys1"
+      "scope": "shared"
     },
     {
       "answer": "file/vsys1: security rule Corp DC Access (destination)",

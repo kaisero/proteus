@@ -301,6 +301,41 @@ func TestAPortFindsAPredefinedService(t *testing.T) {
 	}
 }
 
+// A finding by name and a group finding carry the object's own scope, as a
+// finding by value does, not the scope searched: from vsys1, a shared group is
+// shared and a predefined service is predefined.
+func TestFindingsCarryTheObjectsScope(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		fixture, term string
+		want          map[string]string // stage, kind and name -> scope
+	}{
+		{"firewall-multivsys.xml", "corp-location", map[string]string{
+			"object address-group corp-location": "shared",
+			"object tag corp-location":           "shared",
+		}},
+		{"firewall-multivsys.xml", "10.124.0.1", map[string]string{
+			"object address corp-dc-vienna":     "vsys:vsys1",
+			"group address-group corp-dc":       "shared",
+			"group address-group corp-location": "shared",
+		}},
+		{"../predefined/config.xml", "service-http", map[string]string{
+			"object service service-http": "predefined",
+			"group service-group g-web":   "vsys:vsys1",
+		}},
+	} {
+		got := map[string]string{}
+		for _, f := range run(t, tc.fixture, "vsys1", Query{Term: tc.term}) {
+			got[fmt.Sprintf("%s %s %s", f.Stage, f.Kind, f.Name)] = f.Scope.String()
+		}
+		for k, want := range tc.want {
+			if got[k] != want {
+				t.Errorf("%s: %s in scope %q, want %s (%v)", tc.term, k, got[k], want, got)
+			}
+		}
+	}
+}
+
 func TestReferrer(t *testing.T) {
 	t.Parallel()
 	for path, want := range map[string]string{

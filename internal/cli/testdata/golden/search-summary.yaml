@@ -32,14 +32,14 @@ results:
     stage: group
     kind: address-group
     name: corp-dc
-    scope: vsys:vsys1
+    scope: shared
   - answer: 'file/vsys1: address-group corp-location'
     device: file
     vsys: vsys1
     stage: group
     kind: address-group
     name: corp-location
-    scope: vsys:vsys1
+    scope: shared
   - answer: 'file/vsys1: security rule Corp DC Access (destination)'
     device: file
     vsys: vsys1

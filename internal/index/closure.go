@@ -23,6 +23,7 @@ import (
 type closureIndex struct {
 	direct  map[uint32]*roaring.Bitmap // group -> direct members
 	forward map[uint32]*roaring.Bitmap // group -> transitive members
+	scopes  map[string]config.Scope    // group name -> the scope that defines it
 
 	unparsed []UnparsedFilter
 
@@ -52,10 +53,12 @@ func newClosureIndex(in *Interner, groups, addrs []resolve.Object) *closureIndex
 	c := &closureIndex{
 		direct:  map[uint32]*roaring.Bitmap{},
 		forward: map[uint32]*roaring.Bitmap{},
+		scopes:  make(map[string]config.Scope, len(groups)),
 		reverse: map[uint32]*roaring.Bitmap{},
 	}
 	for _, g := range groups {
 		gid := in.ID(g.Name)
+		c.scopes[g.Name] = g.Scope
 		if g.Dynamic {
 			filter, err := resolve.ParseTagFilter(g.Value)
 			if err != nil {
@@ -291,16 +294,18 @@ func (i *Index) names(b *roaring.Bitmap) []string {
 	return out
 }
 
-// Group is a group holding a member, with the group's kind.
+// Group is a group holding a member, with the group's kind and the scope that
+// defines it: a shared group holds the objects of every vsys.
 type Group struct {
-	Kind string
-	Name string
+	Kind  string
+	Name  string
+	Scope config.Scope
 }
 
 // GroupsHolding returns the groups holding an object of a kind: at any depth, or
 // with direct only the groups that name it. Only the group kinds that can hold
 // that kind are asked, so an address group and a service group of one name stay
-// two groups. The groups come by kind, then name.
+// two groups. The groups come by kind, then name, each with its own scope.
 func (i *Index) GroupsHolding(kind, name string, direct bool) []Group {
 	id, known := i.in.Lookup(name)
 	if !known {
@@ -321,7 +326,7 @@ func (i *Index) GroupsHolding(kind, name string, direct bool) []Group {
 			slices.Sort(names)
 		}
 		for _, n := range names {
-			out = append(out, Group{Kind: fam.kind, Name: n})
+			out = append(out, Group{Kind: fam.kind, Name: n, Scope: fam.closure.scopes[n]})
 		}
 	}
 	return out
