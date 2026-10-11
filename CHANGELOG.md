@@ -313,6 +313,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   wildcard address object that matches the address, the groups holding it and
   the rules naming them. Before, they listed the object as unresolved and exited
   with code 3, while `search 10.88.7.1` found it.
+- **NAT translates to a large address group quickly.** A source pool that is
+  a static group of 200 address objects, among 20,000, now takes about 5 ms and
+  25 MB per translation (`BenchmarkTranslatePoolGroup`). Before, each name and
+  each group member read every address object again, which took 0.9 s and
+  4.7 GB per translation.
 - **A service name that two scopes define now means the nearest one, whatever
   its kind.** A vsys service hides a shared service group of the same name, and
   a vsys service group hides the predefined service, in NAT and security policy

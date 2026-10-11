@@ -49,7 +49,7 @@ func Translate(in Input, m MatchResult) Result {
 	if m.Rule == nil {
 		return out
 	}
-	tr := translator{in: in, v: m.vsys, res: &out}
+	tr := &translator{in: in, v: m.vsys, res: &out}
 	if s := m.Rule.Source; s != nil {
 		out.Source = tr.source(s, m.Rule)
 		if out.Source != nil && out.Source.Address.IsValid() {
@@ -77,15 +77,32 @@ type translator struct {
 	in  Input
 	v   rulebase.Vsys
 	res *Result
+	// addrs and groups are the vsys's address objects and address groups by
+	// name. Reading them walks the configuration, so objects reads them on the
+	// first name a translation looks up, once per Translate.
+	addrs  rulebase.Addresses
+	groups map[string]resolve.Object
 }
 
-func (t translator) unresolved(value string, why reason.Reason) {
+// objects returns the vsys's address objects and address groups by name.
+func (t *translator) objects() (rulebase.Addresses, map[string]resolve.Object) {
+	if t.addrs == nil {
+		t.addrs = t.v.Addresses()
+		t.groups = map[string]resolve.Object{}
+		for _, o := range resolve.ObjectsInScope(t.v.Config, t.v.Scope, "address-group") {
+			t.groups[o.Name] = o
+		}
+	}
+	return t.addrs, t.groups
+}
+
+func (t *translator) unresolved(value string, why reason.Reason) {
 	t.res.Unresolved = append(t.res.Unresolved, index.NewUnresolved(value, "", why))
 	t.res.Fidelity = simulate.Weakest(t.res.Fidelity, simulate.UnderMatch(why))
 }
 
 // source translates the source (spec §18 F7).
-func (t translator) source(s *resolve.SourceTranslation, r *Rule) *Translation {
+func (t *translator) source(s *resolve.SourceTranslation, r *Rule) *Translation {
 	out := &Translation{Kind: s.Kind, Port: PortRuntime}
 	switch s.Kind {
 	case resolve.DIPP, resolve.PersistentDIPP, resolve.DynamicIP:
@@ -116,7 +133,7 @@ func (t translator) source(s *resolve.SourceTranslation, r *Rule) *Translation {
 }
 
 // pool is a source pool's candidates: its addresses, or its interface's address.
-func (t translator) pool(s *resolve.SourceTranslation, r *Rule) []string {
+func (t *translator) pool(s *resolve.SourceTranslation, r *Rule) []string {
 	if s.Interface == "" && s.IPv6Interface != "" {
 		t.unresolved(r.Name, reason.New("gap.ipv6",
 			fmt.Sprintf("rule %s translates to the IPv6 address of %s, which is not simulated", r.Name, s.IPv6Interface)))
@@ -145,7 +162,7 @@ func (t translator) pool(s *resolve.SourceTranslation, r *Rule) []string {
 // values reads an address, an address object or a static group into what it
 // holds. A dynamic group or an external list is runtime content (spec §18 N2).
 // hostOnly drops a prefix length: an interface address is written with its mask.
-func (t translator) values(name string, r *Rule, hostOnly bool) []string {
+func (t *translator) values(name string, r *Rule, hostOnly bool) []string {
 	lit := func(v string) (string, bool) {
 		if p, err := netip.ParsePrefix(v); err == nil && hostOnly {
 			return p.Addr().String(), true
@@ -158,29 +175,24 @@ func (t translator) values(name string, r *Rule, hostOnly bool) []string {
 	if v, ok := lit(name); ok {
 		return []string{v}
 	}
-	for _, kind := range []string{"address", "address-group"} {
-		objs := resolve.ObjectsInScope(t.v.Config, t.v.Scope, kind)
-		for _, o := range objs {
-			if o.Name != name {
-				continue
-			}
-			if kind == "address" {
-				if v, ok := lit(o.Value); ok {
-					return []string{v}
-				}
-				return []string{o.Value} // an FQDN
-			}
-			if o.Dynamic {
-				t.unresolved(r.Name, reason.New("doubt.dynamic-group",
-					fmt.Sprintf("rule %s uses dynamic group %s, whose members are known at runtime", r.Name, name)))
-				return nil
-			}
-			var out []string
-			for m := range strings.SplitSeq(o.Value, ", ") {
-				out = append(out, t.values(m, r, hostOnly)...)
-			}
-			return out
+	addrs, groups := t.objects()
+	if v, ok := addrs[name]; ok {
+		if l, ok := lit(v); ok {
+			return []string{l}
 		}
+		return []string{v} // an FQDN
+	}
+	if g, ok := groups[name]; ok {
+		if g.Dynamic {
+			t.unresolved(r.Name, reason.New("doubt.dynamic-group",
+				fmt.Sprintf("rule %s uses dynamic group %s, whose members are known at runtime", r.Name, name)))
+			return nil
+		}
+		var out []string
+		for m := range strings.SplitSeq(g.Value, ", ") {
+			out = append(out, t.values(m, r, hostOnly)...)
+		}
+		return out
 	}
 	t.unresolved(r.Name, reason.New("gap.object-unresolved",
 		fmt.Sprintf("rule %s uses %s, which is runtime content or not in the configuration", r.Name, name)))
@@ -188,7 +200,7 @@ func (t translator) values(name string, r *Rule, hostOnly bool) []string {
 }
 
 // destination translates the destination (spec §18 F8).
-func (t translator) destination(d *resolve.DestinationTranslation, r *Rule) *Translation {
+func (t *translator) destination(d *resolve.DestinationTranslation, r *Rule) *Translation {
 	out := &Translation{Kind: d.Kind, Port: PortUnchanged}
 	if d.Port > 0 {
 		out.Port = fmt.Sprint(d.Port)
@@ -249,7 +261,7 @@ func (t translator) destination(d *resolve.DestinationTranslation, r *Rule) *Tra
 // mapStatic translates a within original to the same offset within translated:
 // one address to one, a range or netmask first to first (spec §18 F8, verified on
 // fw01: 198.18.19.0/28 -> 198.18.250.32-198.18.250.47).
-func (t translator) mapStatic(original, translated string, a netip.Addr) (netip.Addr, string) {
+func (t *translator) mapStatic(original, translated string, a netip.Addr) (netip.Addr, string) {
 	tv := t.values(translated, &Rule{}, false)
 	if len(tv) != 1 {
 		return netip.Addr{}, "the translated address " + translated + " is not one address, range or netmask"
@@ -321,7 +333,7 @@ func FQDNs(in Input, m MatchResult) []string {
 	}
 	res := &Result{}
 	var out []string
-	for _, val := range (translator{in: in, v: m.vsys, res: res}).values(r.Destination.Address, r, false) {
+	for _, val := range (&translator{in: in, v: m.vsys, res: res}).values(r.Destination.Address, r, false) {
 		if len(index.PrefixesOf(val)) == 0 {
 			out = append(out, val)
 		}
