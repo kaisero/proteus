@@ -312,6 +312,9 @@ type form struct {
 	values map[string]string
 	hidden map[string]hiding   // paths whose value is never shown, and why
 	orders map[string][]string // an order path's entry names, in document order
+	// repeats holds the values of a path that repeats, in document order,
+	// until canonical joins them once into values.
+	repeats map[string][]string
 }
 
 // hiding says why a value is never shown.
@@ -331,14 +334,30 @@ func (f *form) put(path, value string, h hiding) {
 	if h != visible {
 		f.hidden[path] = max(f.hidden[path], h)
 	}
-	if prev, ok := f.values[path]; ok {
+	if first, ok := f.values[path]; ok {
 		// Repeated siblings the digest does not describe: kept in document
-		// order, so a reorder shows rather than hides.
-		f.values[path] = prev + ", " + value
+		// order, so a reorder shows rather than hides. They are joined once,
+		// when the form is whole, so a long list costs time in its length,
+		// not in its square (BenchmarkCompareLongLists).
+		if f.repeats == nil {
+			f.repeats = map[string][]string{}
+		}
+		if f.repeats[path] == nil {
+			f.repeats[path] = []string{first}
+		}
+		f.repeats[path] = append(f.repeats[path], value)
 		return
 	}
 	f.paths = append(f.paths, path)
 	f.values[path] = value
+}
+
+// joinRepeats makes each repeated path's values one value.
+func (f *form) joinRepeats() {
+	for p, vs := range f.repeats {
+		f.values[p] = strings.Join(vs, ", ")
+	}
+	f.repeats = nil
 }
 
 // putOrder records the order of a nested entry list's entries.
@@ -412,6 +431,7 @@ func canonical(el *config.Element, n *schema.Node, root string) form {
 		}
 	}
 	walk(el, n, root)
+	f.joinRepeats()
 	return f
 }
 
@@ -497,11 +517,17 @@ func sameOrder(a, b []string) bool {
 	return slices.Equal(common(a, b), common(b, a))
 }
 
-// common keeps the names of a that b also holds, in a's order.
+// common keeps the names of a that b also holds, in a's order. It looks the
+// names up in a set, so a long list costs time in its length, not in its
+// square.
 func common(a, b []string) []string {
+	in := make(map[string]bool, len(b))
+	for _, n := range b {
+		in[n] = true
+	}
 	var out []string
 	for _, n := range a {
-		if slices.Contains(b, n) {
+		if in[n] {
 			out = append(out, n)
 		}
 	}
