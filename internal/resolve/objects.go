@@ -1,6 +1,7 @@
 package resolve
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/okaiser/proteus/internal/config"
@@ -38,6 +39,34 @@ func (t *Target) Objects(kind string) []Object {
 func ObjectsInScope(cfg *config.Config, sc config.Scope, kind string) []Object {
 	chain := chainFor(sc)
 	return objectsInChain(cfg, chain, kind, nil)
+}
+
+// ObjectsOfKindsInScope returns, by kind, the objects of several kinds that one
+// name in a field can mean, visible in a scope and its ancestors. A name resolves
+// by scope first and kind second: only the nearest scope that defines the name in
+// any of the kinds counts, the vsys before shared before the predefined objects,
+// and a namesake in a farther scope is hidden, whatever its kind. Each kind keeps
+// the order ObjectsInScope gives it.
+//
+// As observed on fw02, PAN-OS 12.2.3 (L9): a vsys service group hides the
+// predefined service of its name, and a vsys service hides a shared service group
+// of its name, in NAT and security rules alike.
+func ObjectsOfKindsInScope(cfg *config.Config, sc config.Scope, kinds ...string) map[string][]Object {
+	chain := append([]config.Scope{predefinedScope}, chainFor(sc)...)
+	nearness := func(o Object) int { return slices.Index(chain, o.Scope) }
+	out := make(map[string][]Object, len(kinds))
+	nearest := map[string]int{}
+	for _, kind := range kinds {
+		objs := ObjectsInScope(cfg, sc, kind)
+		out[kind] = objs
+		for _, o := range objs {
+			nearest[o.Name] = max(nearest[o.Name], nearness(o))
+		}
+	}
+	for kind, objs := range out {
+		out[kind] = slices.DeleteFunc(objs, func(o Object) bool { return nearness(o) < nearest[o.Name] })
+	}
+	return out
 }
 
 // ObjectsAt reads a kind from an explicit container path, for the kinds whose name

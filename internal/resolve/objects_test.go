@@ -347,6 +347,38 @@ func TestPredefinedServicesSitBelowShared(t *testing.T) {
 	}
 }
 
+// A name resolves by scope first and kind second. As observed on fw02, PAN-OS
+// 12.2.3 (L9): vsys1's service group service-https hides the predefined service
+// of that name, and vsys1's service web hides shared's service group web. Shared
+// sees its own group and the predefined service.
+func TestANameResolvesByScopeFirstAcrossKinds(t *testing.T) {
+	t.Parallel()
+	cfg := loadT(t, "../../testdata/predefined-cross-kind/config.xml")
+	for _, tc := range []struct {
+		sc             config.Scope
+		service, group string
+	}{
+		{
+			config.Scope{Sort: config.ScopeVsys, Name: "vsys1"},
+			"service-http=tcp/80,8080@predefined; svc-9080=tcp/9080@shared; svc-8443=tcp/8443@vsys:vsys1; web=tcp/8081@vsys:vsys1",
+			"service-https=svc-8443@vsys:vsys1",
+		},
+		{
+			config.Scope{Sort: config.ScopeShared},
+			"service-http=tcp/80,8080@predefined; service-https=tcp/443@predefined; svc-9080=tcp/9080@shared",
+			"web=svc-9080@shared",
+		},
+	} {
+		got := ObjectsOfKindsInScope(cfg, tc.sc, "service", "service-group")
+		if s := serviceList(got["service"]); s != tc.service {
+			t.Errorf("%s services: %s", tc.sc, s)
+		}
+		if s := serviceList(got["service-group"]); s != tc.group {
+			t.Errorf("%s groups: %s", tc.sc, s)
+		}
+	}
+}
+
 // A dynamic group is known by its dynamic element, not by the first character of
 // its filter. As observed on fw02, PAN-OS 12.2.3, a filter may start with "("
 // (L1); read as a member list it held one fake member and no address.

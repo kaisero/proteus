@@ -212,11 +212,11 @@ func (r *Rule) fits(in Input, pre simulate.Forward, src, dst *roaring.Bitmap, en
 }
 
 // services maps each service and service group name of the vsys to its value:
-// "tcp/443,8443" for a service, "a, b" for a group.
+// "tcp/443,8443" for a service, "a, b" for a group. A name means the object of
+// the nearest scope that defines it, whatever its kind (L9).
 func services(v rulebase.Vsys) map[string]string {
 	out := map[string]string{}
-	for _, kind := range []string{"service", "service-group"} {
-		objs := resolve.ObjectsInScope(v.Config, v.Scope, kind)
+	for kind, objs := range resolve.ObjectsOfKindsInScope(v.Config, v.Scope, "service", "service-group") {
 		for _, o := range objs {
 			out[kind+":"+o.Name] = o.Value
 		}

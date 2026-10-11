@@ -346,3 +346,29 @@ func TestPredefinedServicesDecideTheServiceStage(t *testing.T) {
 		t.Errorf("without predefined.xml: %s", got)
 	}
 }
+
+// As observed on fw02, PAN-OS 12.2.3 (L9): a service name resolves by scope
+// first and kind second, in the security policy as in NAT. vsys1's service
+// group service-https (tcp/8443) hides the predefined service-https (tcp/443),
+// and vsys1's service web (tcp/8081) hides shared's service group web
+// (tcp/9080).
+func TestAServiceNameResolvesByScopeFirst(t *testing.T) {
+	t.Parallel()
+	e := envPath(t, "../../../testdata/predefined-cross-kind/config.xml", false)
+	for _, tc := range []struct {
+		port uint16
+		rule string
+	}{
+		{8443, "sec-https"},
+		{443, "rest"},
+		{80, "rest"},
+		{8081, "sec-web"},
+		{9080, "rest"},
+	} {
+		r, v := run(t, e, simulate.Flow{Source: ep("10.88.1.5"), Destination: ep("10.88.10.100"), FromZone: "home", ToZone: "wan", DestPort: tc.port})
+		if first(v) != tc.rule || len(v.Doubts) != 0 || len(v.Undecided) != 0 || stage(r, "match-service").Fidelity.Level() != "exact" {
+			t.Errorf("tcp/%d: rule %s, want %s; doubts %s, undecided %v, service stage %s",
+				tc.port, first(v), tc.rule, doubtList(v), v.Undecided, stage(r, "match-service").Fidelity)
+		}
+	}
+}

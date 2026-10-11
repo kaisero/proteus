@@ -74,7 +74,10 @@ func build(cfg *config.Config, edges edgeList, sc config.Scope, rb resolve.Ruleb
 
 	addrs := resolve.ObjectsInScope(cfg, sc, "address")
 	groups := resolve.ObjectsInScope(cfg, sc, addressGroups)
-	svcGroups := resolve.ObjectsInScope(cfg, sc, "service-group")
+	// A service name resolves by scope first, kind second: a vsys service
+	// hides a shared service group of its name, and the other way round (L9).
+	svcKinds := resolve.ObjectsOfKindsInScope(cfg, sc, "service", "service-group")
+	svcs, svcGroups := svcKinds["service"], svcKinds["service-group"]
 	appGroups := resolve.ObjectsInScope(cfg, sc, "application-group")
 	// Intern the addresses first, so their ids are dense and stable.
 	for _, o := range addrs {
@@ -95,7 +98,6 @@ func build(cfg *config.Config, edges edgeList, sc config.Scope, rb resolve.Ruleb
 	// the resolver that can answer for it. A kind with no resolver is not silently
 	// dropped; see opaque rule-field values.
 	cats := resolve.ObjectsInScope(cfg, sc, "custom-url-category")
-	svcs := resolve.ObjectsInScope(cfg, sc, "service")
 	// "user" is ambiguous in the schema, so the container is named rather than
 	// guessed: a vsys has both a local user database and a separate user array.
 	localUsers := resolve.ObjectsAt(cfg, sc, "user", []string{"local-user-database", "user"})

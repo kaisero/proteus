@@ -73,6 +73,7 @@ Every item names its **component** (the package or area it changes) and one **ta
 | 54 | bug | simulate/routing | A hairpin through another firewall is reported as a loop |
 | 55 | qa | config, query | Undescribed elements of a configuration read with its own digest reach no answer |
 | 56 | qa | config, archtest | The read-only check sees setter names only, not writable exported fields |
+| 57 | test | resolve, index, simulate/nat | Verify an address and an address group of one name in two scopes |
 
 ---
 
@@ -527,3 +528,16 @@ Source for each: the code audit of 2026-10-10 and the cleanup plan
 - `TestPublicAPIIsReadOnly` fails on an exported setter name. `config.Element` has
   exported fields that a caller can still write. Make them read through methods, or
   extend the check to exported, writable fields of model types.
+
+### 57. Verify an address and an address group of one name in two scopes
+
+- **Tag:** test · **Component:** resolve, index, simulate/nat · **Source:** cleanup
+  plan, lab fact L9
+- A service name resolves by scope first and kind second (L9), and the index and NAT
+  read services that way. Addresses are still read one kind at a time: the index
+  reads `address` and `address-group` each on its own, so a rule naming `x` reaches
+  both a vsys address `x` and a shared address group `x`. NAT's translation takes the
+  address of that name first, in any scope.
+- Check on fw02 which object a rule's `x` means. If the device resolves it as it does
+  a service, read both kinds through `resolve.ObjectsOfKindsInScope` in the index and
+  in NAT, and test the lab fact.

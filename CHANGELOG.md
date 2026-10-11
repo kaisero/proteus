@@ -313,6 +313,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   wildcard address object that matches the address, the groups holding it and
   the rules naming them. Before, they listed the object as unresolved and exited
   with code 3, while `search 10.88.7.1` found it.
+- **A service name that two scopes define now means the nearest one, whatever
+  its kind.** A vsys service hides a shared service group of the same name, and
+  a vsys service group hides the predefined service, in NAT and security policy
+  alike. Before, NAT took the service group first from any scope and the
+  security policy matched both objects, so each could give a wrong answer marked
+  exact.
 - **The version-gap note counts what the older schema does not know.** When a
   configuration is read with an older release's schema, the `gap.version` note now
   says how many of its elements that schema does not describe, such as fields a

@@ -42,6 +42,14 @@ the device's predefined services, when the configuration came with
 hides them, the vsys's over shared's over the predefined one (lab facts L4, L7). `ObjectsAt` takes an explicit container path, for the kinds whose
 name is ambiguous in the schema.
 
+`ObjectsOfKindsInScope(cfg, scope, kinds...)` reads several kinds that one name
+in a field can mean. A name resolves by scope first and kind second: only the
+nearest scope that defines it in any of the kinds counts, so a vsys service hides a
+shared service group of its name, and a vsys service group hides the predefined
+service (lab fact L9). The security index and NAT read services and service groups
+through it. Addresses and address groups are still read one kind at a time: the
+device behaviour for them is not checked yet (`docs/todo.md`).
+
 `objectValue` reduces an object to the one value that identifies it, and PAN-OS
 spells that differently per kind: `ip-netmask`, `ip-range`, `fqdn`, `ip-wildcard`,
 `static` for an address group, `members` for a service group, `user` for a local
@@ -125,6 +133,7 @@ func InterfaceAddresses(cfg *config.Config) []InterfaceAddress
 func ObjectKinds(cfg *config.Config) []string
 func ObjectsAt(cfg *config.Config, sc config.Scope, kind string, within []string) []Object
 func ObjectsInScope(cfg *config.Config, sc config.Scope, kind string) []Object
+func ObjectsOfKindsInScope(cfg *config.Config, sc config.Scope, kinds ...string) map[string][]Object
 func ParseTagFilter(raw string) (*TagFilter, error)
 func ParseURLPattern(member string) (URLPattern, error)
 func ProfileGroupsInScope(cfg *config.Config, sc config.Scope) []ProfileGroup

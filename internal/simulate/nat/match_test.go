@@ -411,6 +411,29 @@ func TestConfiguredServicesHideThePredefinedOnes(t *testing.T) {
 	}
 }
 
+// As observed on fw02, PAN-OS 12.2.3 (L9): a service name resolves by scope
+// first and kind second. vsys1's service group service-https (tcp/8443) hides
+// the predefined service-https (tcp/443), and vsys1's service web (tcp/8081)
+// hides shared's service group web (tcp/9080).
+func TestAServiceNameResolvesByScopeFirst(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		port uint16
+		rule string
+	}{
+		{8443, "dnat-https"},
+		{443, "none"},
+		{80, "none"},
+		{8081, "dnat-web"},
+		{9080, "none"},
+	} {
+		rule, m := matchFile(t, "../../../testdata/predefined-cross-kind/config.xml", "tcp", tc.port)
+		if rule != tc.rule || len(m.Doubts) != 0 || m.Fidelity.Level() != "exact" {
+			t.Errorf("tcp/%d: rule %s, want %s; doubts %v, fidelity %s", tc.port, rule, tc.rule, m.Doubts, m.Fidelity)
+		}
+	}
+}
+
 // A snapshot stored before predefined.xml was fetched keeps the doubt, and the
 // doubt says that a fetch stores the predefined services.
 func TestWithoutPredefinedServicesNATStaysInDoubt(t *testing.T) {
