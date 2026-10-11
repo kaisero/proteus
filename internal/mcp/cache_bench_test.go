@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -19,7 +21,8 @@ import (
 // retained loads a snapshot through a new cache, builds the three rulebase
 // indexes of each vsys, and returns the bytes that stay live while the cache
 // holds them. The schema digest is loaded once per process before, so it is
-// not counted here: the cache sizes it apart, as digestBytes.
+// not counted here: the cache sizes it apart, as digestBytes, and
+// digestRetained measures it.
 func retained(tb testing.TB, sn store.Snapshot) uint64 {
 	tb.Helper()
 	var before, after runtime.MemStats
@@ -178,15 +181,23 @@ type retentionSample struct {
 // fixed part and its part per file byte, reported as <shape>-fixed-B and
 // <shape>-B/file-B.
 //
+// It also measures what the schema digest keeps, once per process, reported
+// as digest-B.
+//
 // It fails when the cache's estimate falls short of what any sample retains,
-// the multi-vsys fixture included, so bench-check catches a figure that no
-// longer holds.
+// the multi-vsys fixture included, or when the digest keeps more than
+// digestBytes, so bench-check catches a figure that no longer holds.
 func BenchmarkCacheRetention(b *testing.B) {
+	digest := digestRetained(b)
+	if digest > digestBytes {
+		b.Errorf("the schema digest retains %d, above the estimate digestBytes %d", digest, digestBytes)
+	}
+
 	st, err := store.Open(b.TempDir())
 	if err != nil {
 		b.Fatal(err)
 	}
-	tiny, tinyBytes := snapshotOf(b, st, "fixture", "../../testdata/config/firewall-multivsys.xml")
+	tiny, tinyBytes := snapshotOf(b, st, "fixture", multiVsysFixture)
 	retained(b, tiny) // warm the process-wide digest and schema tables
 
 	type shapeSnaps struct {
@@ -213,6 +224,7 @@ func BenchmarkCacheRetention(b *testing.B) {
 			perByte[s.name], fixed[s.name] = pb, float64(rs)-pb*float64(s.sb)
 		}
 	}
+	b.ReportMetric(float64(digest), "digest-B") // after the loop, which clears metrics reported before
 	for _, s := range shapes {
 		b.ReportMetric(fixed[s.name], s.name+"-fixed-B")
 		b.ReportMetric(perByte[s.name], s.name+"-B/file-B")
@@ -223,6 +235,62 @@ func BenchmarkCacheRetention(b *testing.B) {
 				s.what, s.fileBytes, s.retained, est, configFixedBytes, configPerByte, fitted(fixed, perByte))
 		}
 	}
+}
+
+// multiVsysFixture is the committed configuration that the retention checks
+// load as is.
+const multiVsysFixture = "../../testdata/config/firewall-multivsys.xml"
+
+// digestProbeEnv makes TestDigestRetained measure: digestRetained sets it in
+// the process it starts.
+const digestProbeEnv = "PROTEUS_DIGEST_PROBE"
+
+// digestRetained returns the bytes that the first configuration load of a
+// process keeps beyond the configuration: the decoded schema digest and its
+// tables. It measures in a new process of this test binary, because the
+// digest loads once per process, and any load before in this one (a test, or
+// an earlier -count) hides it.
+func digestRetained(tb testing.TB) uint64 {
+	tb.Helper()
+	cmd := exec.CommandContext(tb.Context(), os.Args[0], "-test.run=^TestDigestRetained$")
+	cmd.Env = append(os.Environ(), digestProbeEnv+"=1")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		tb.Fatalf("digest probe: %v\n%s", err, out)
+	}
+	for line := range strings.Lines(string(out)) {
+		if n, ok := strings.CutPrefix(strings.TrimSpace(line), "digest-retained "); ok {
+			v, err := strconv.ParseUint(n, 10, 64)
+			if err != nil {
+				tb.Fatalf("digest probe: %v", err)
+			}
+			return v
+		}
+	}
+	tb.Fatalf("digest probe printed no measurement:\n%s", out)
+	return 0
+}
+
+// TestDigestRetained is the process that digestRetained starts. It loads the
+// multi-vsys fixture twice: the first load also decodes the schema digest
+// and builds its tables, which stay for the process; the second does not.
+// It prints the difference.
+//
+//nolint:paralleltest // it measures the heap
+func TestDigestRetained(t *testing.T) {
+	if os.Getenv(digestProbeEnv) == "" {
+		t.Skip("runs only in the process that BenchmarkCacheRetention starts")
+	}
+	st, err := store.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	sn, _ := snapshotOf(t, st, "fixture", multiVsysFixture)
+	first, second := retained(t, sn), retained(t, sn)
+	if first < second {
+		t.Fatalf("the first load retains %d, less than the second's %d", first, second)
+	}
+	fmt.Printf("digest-retained %d\n", first-second)
 }
 
 // fitted lists the measured parts of each shape.
@@ -261,7 +329,7 @@ func TestCacheEstimateCoversTheMeasurements(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	sn, n := snapshotOf(t, st, "fixture", "../../testdata/config/firewall-multivsys.xml")
+	sn, n := snapshotOf(t, st, "fixture", multiVsysFixture)
 	if got := retained(t, sn); uint64(configBytes(n)) < got {
 		t.Errorf("the fixture's %d bytes retain %d, above the estimate %d", n, got, configBytes(n))
 	}

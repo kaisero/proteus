@@ -34,7 +34,8 @@ import (
 //
 // Each part takes the larger shape's value, rounded up: the fixed part to a
 // multiple of 4 MiB, the part per byte to a whole number. The digest of each
-// PAN-OS version takes about 9 MB once per process.
+// PAN-OS version takes about 9 MB once per process: the benchmark measures
+// 8.8 MiB and fails above digestBytes.
 const (
 	configFixedBytes = 32 << 20
 	configPerByte    = 13

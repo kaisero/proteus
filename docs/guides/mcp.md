@@ -282,7 +282,8 @@ shapes at about 4 and 8 MB. One vsys with 2,000 nested address groups retains 29
 plus 12.8 bytes per file byte; the fixed part is the group tree. Four vsys with
 nested groups and NAT and PBF rules retain 0.35 MB plus 12.7 bytes per file byte. The
 model takes the larger value of each part, rounded up, so it overstates most
-configurations: a small one by up to 32 MB.
+configurations: a small one by up to 32 MB. The benchmark also fails when the schema
+of a PAN-OS version retains more than the 9 MB that the cache counts for it.
 
 ## Audit and run logs
 
