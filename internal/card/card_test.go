@@ -1,6 +1,9 @@
 package card
 
 import (
+	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -292,6 +295,48 @@ func TestAServiceNameResolvesByScopeFirst(t *testing.T) {
 	}
 }
 
+// A group opens at its shallowest place on a card. The rule's source names all
+// and web, and all holds web as its seventh member, where a rendered card cuts
+// the list; so web opens where the rule names it, and inside all it says its
+// members are shown elsewhere.
+func TestAGroupOpensAtItsShallowestPlace(t *testing.T) {
+	t.Parallel()
+	var addrs, members strings.Builder
+	for i := range 6 {
+		fmt.Fprintf(&addrs, `<entry name="a%d"><ip-netmask>10.88.0.%d</ip-netmask></entry>`, i, i+1)
+		fmt.Fprintf(&members, `<member>a%d</member>`, i)
+	}
+	doc := `<config version="11.2.0" urldb="paloaltonetworks"><devices><entry name="localhost.localdomain"><vsys><entry name="vsys1">` +
+		`<address>` + addrs.String() + `<entry name="w1"><ip-netmask>10.88.1.1</ip-netmask></entry></address>` +
+		`<address-group><entry name="all"><static>` + members.String() + `<member>web</member></static></entry>` +
+		`<entry name="web"><static><member>w1</member></static></entry></address-group>` +
+		`<rulebase><security><rules><entry name="r1"><from><member>any</member></from><to><member>any</member></to>` +
+		`<source><member>all</member><member>web</member></source><destination><member>any</member></destination>` +
+		`<application><member>any</member></application><service><member>any</member></service><action>allow</action>` +
+		`</entry></rules></security></rulebase></entry></vsys></entry></devices></config>`
+	path := filepath.Join(t.TempDir(), "firewall.xml")
+	if err := os.WriteFile(path, []byte(doc), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, _, err := config.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	idx, err := index.New(cfg, config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}, resolve.Security)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cs, err := Find(cfg, idx, "r1", KindRule)
+	if err != nil || len(cs) != 1 {
+		t.Fatalf("Find: %d cards, %v", len(cs), err)
+	}
+	want := "all{a0(10.88.0.1/32), a1(10.88.0.2/32), a2(10.88.0.3/32), a3(10.88.0.4/32), a4(10.88.0.5/32), a5(10.88.0.6/32), " +
+		"web(members shown elsewhere on this card)}, web{w1(10.88.1.1/32)}"
+	if got := flat(row(cs[0], "source", "addresses").Items); got != want {
+		t.Errorf("source = %s\nwant     %s", got, want)
+	}
+}
+
 // An address and a service may share a name; each card lists only the groups of
 // its own kind that hold it.
 func TestHeldByKeepsToTheObjectsKind(t *testing.T) {
@@ -351,8 +396,8 @@ func TestACardOpensEachGroupOnce(t *testing.T) {
 		}
 	}
 	// Each of the 30 groups opens once and names three groups and an address.
-	if len(opened) != 30 || items != 30*4 || marks["cycle"] == 0 || marks["members shown above"] == 0 ||
-		marks["cycle"]+marks["members shown above"] != 30*3-29 {
+	if len(opened) != 30 || items != 30*4 || marks["cycle"] == 0 || marks["members shown elsewhere on this card"] == 0 ||
+		marks["cycle"]+marks["members shown elsewhere on this card"] != 30*3-29 {
 		t.Errorf("%d groups opened, %d items, marks %v", len(opened), items, marks)
 	}
 }

@@ -19,6 +19,7 @@ func Object(cfg *config.Config, idx *index.Index, o resolve.Object) Card {
 	if o.ShadowedFrom != nil {
 		c.Shadows = o.ShadowedFrom.String()
 	}
+	b.plan([]resolve.Object{o})
 	it := b.objectItem(o)
 	switch {
 	case o.Kind == "profile-group":

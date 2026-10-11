@@ -401,12 +401,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   75 ms (`BenchmarkIndexBuildGroupCycle`). 30 groups that each hold three
   others took 41 s; 40 such groups now take 57 ms
   (`BenchmarkIndexBuildDenseGroups`). The `lookup` card of a rule whose group
-  tree holds 364 groups took 290 ms and 1.2 GB; now 8 ms and 34 MB
-  (`BenchmarkRuleCardNestedGroups`). A card now opens each group once and marks
-  it `members shown above` where it meets it again. The card of one of 24
-  groups that each hold three others took 1.1 s and 1.8 GB; one of 30 now takes
-  9 ms and 34 MB (`BenchmarkObjectCardDenseGroups`). The card of a rule on a
-  cycle of 5,000 groups took 0.53 s and 1.2 GB; now 12 ms and 43 MB
+  tree holds 364 groups took 290 ms and 1.2 GB; now 10 ms and 37 MB
+  (`BenchmarkRuleCardNestedGroups`). A card now opens each group once, at its
+  place nearest the top, and marks it `members shown elsewhere on this card`
+  at every other place. The card of one of 24 groups that each hold three
+  others took 1.1 s and 1.8 GB; one of 30 now takes 10 ms and 37 MB
+  (`BenchmarkObjectCardDenseGroups`). The card of a rule on a cycle of 5,000
+  groups took 0.53 s and 1.2 GB; now 16 ms and 48 MB
   (`BenchmarkRuleCardGroupRing`).
 - **The sample containers stop cleanly, and the proxy log keeps no identity
   claims.** `docker compose down` now lets proteus-mcp finish its running calls,

@@ -71,8 +71,10 @@ type builder struct {
 	kinds  map[string][]string // rule field -> the object kinds it may name
 
 	// path holds the groups being opened, from the card's top down, and opened
-	// every group the card has opened. Both key on kind and name.
+	// every group the card has opened. depth is each group's shallowest place
+	// on the card, where it opens. All key on kind and name.
 	path, opened map[string]bool
+	depth        map[string]int
 }
 
 func newBuilder(cfg *config.Config, idx *index.Index) *builder {
@@ -82,6 +84,7 @@ func newBuilder(cfg *config.Config, idx *index.Index) *builder {
 		kinds:  cfg.FieldKinds("rulebase/security/rules"),
 		path:   map[string]bool{},
 		opened: map[string]bool{},
+		depth:  map[string]int{},
 	}
 }
 
@@ -119,15 +122,60 @@ func (b *builder) item(field, name string) Item {
 	if config.Keywords[name] {
 		return Item{Name: name}
 	}
-	for _, kind := range b.kinds[field] {
-		if o, ok := b.object(kind, name); ok {
-			return b.objectItem(o)
-		}
+	if o, ok := b.named(field, name); ok {
+		return b.objectItem(o)
 	}
 	if (field == "source" || field == "destination") && len(index.PrefixesOf(name)) > 0 {
 		return Item{Name: name, Literal: true}
 	}
 	return Item{Name: name, Predefined: fieldsWithPredefined[field]}
+}
+
+// named is the object a name in a rule field means, of the first of the field's
+// kinds that defines it.
+func (b *builder) named(field, name string) (resolve.Object, bool) {
+	for _, kind := range b.kinds[field] {
+		if o, ok := b.object(kind, name); ok {
+			return o, true
+		}
+	}
+	return resolve.Object{}, false
+}
+
+// memberField is the rule field whose kinds a static group's members are read
+// as; empty for a kind whose members are not opened as objects.
+func memberField(kind string) string {
+	switch kind {
+	case "address-group":
+		return "source"
+	case "service-group":
+		return "service"
+	}
+	return ""
+}
+
+// plan finds each group's shallowest place on the card, breadth first from
+// the card's top objects, so members opens the group there. A rendered card
+// cuts deep levels and long lists; a group opened where the card names it
+// first, at the top, keeps its members in view.
+func (b *builder) plan(level []resolve.Object) {
+	for d := 0; len(level) > 0; d++ {
+		var next []resolve.Object
+		for _, o := range level {
+			key := o.Kind + "/" + o.Name
+			field := memberField(o.Kind)
+			if _, seen := b.depth[key]; seen || field == "" || o.Dynamic {
+				continue
+			}
+			b.depth[key] = d
+			for _, n := range splitList(o.Value) {
+				if m, ok := b.named(field, n); ok {
+					next = append(next, m)
+				}
+			}
+		}
+		level = next
+	}
 }
 
 // objectItem is an object with its value and, for a group, its members.
@@ -145,11 +193,11 @@ func (b *builder) objectItem(o resolve.Object) Item {
 			}
 			break
 		}
-		it.Children, it.Value = b.members(o, "source")
+		it.Children, it.Value = b.members(o, memberField(o.Kind))
 	case "service":
 		it.Value = o.Value
 	case "service-group":
-		it.Children, it.Value = b.members(o, "service")
+		it.Children, it.Value = b.members(o, memberField(o.Kind))
 	case "application-group":
 		for _, n := range splitList(o.Value) {
 			it.Children = append(it.Children, Item{Name: n})
@@ -168,20 +216,21 @@ func (b *builder) objectItem(o resolve.Object) Item {
 }
 
 // members opens a group: its members, each resolved as the field names it. A
-// card opens each group once. A group met again shows no members and says they
-// are shown above; a group met inside itself, which the configuration allows,
-// is a cycle. So a card grows with the groups it holds, not with the paths that
-// reach them. Measured on groups that each hold three others
-// (BenchmarkObjectCardDenseGroups): opening a group on every path took 1.1 s
-// and 1.8 GB for the card of one of 24; opening each once takes 9 ms for one
-// of 30.
+// card opens each group once, at its shallowest place (plan). A group met
+// elsewhere shows no members and says where they are; a group met inside
+// itself, which the configuration allows, is a cycle. So a card grows with the
+// groups it holds, not with the paths that reach them. Measured on groups that
+// each hold three others (BenchmarkObjectCardDenseGroups): opening a group on
+// every path took 1.1 s and 1.8 GB for the card of one of 24; opening each once
+// takes 10 ms for one of 30.
 func (b *builder) members(o resolve.Object, field string) ([]Item, string) {
 	key := o.Kind + "/" + o.Name
+	d, planned := b.depth[key]
 	switch {
 	case b.path[key]:
 		return nil, "cycle"
-	case b.opened[key]:
-		return nil, "members shown above"
+	case b.opened[key] || planned && len(b.path) > d:
+		return nil, "members shown elsewhere on this card"
 	}
 	b.path[key], b.opened[key] = true, true
 	defer delete(b.path, key)

@@ -53,9 +53,10 @@ How to read it:
 - A literal address has no parentheses.
 - `(predefined)` marks a value the configuration does not define, such as
   `service-https`.
-- A card opens each group once. Where it meets the group again, the group shows
-  `(members shown above)` and no members. A group that holds itself through its
-  members shows `(cycle)`.
+- A card opens each group once, at its place nearest the top of the card. At
+  every other place, the group shows `(members shown elsewhere on this card)`
+  and no members. A group that holds itself through its members shows
+  `(cycle)`.
 - A list stops at five items. `--full` shows every item.
 
 ## An object
