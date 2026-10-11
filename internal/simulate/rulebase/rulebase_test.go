@@ -476,6 +476,45 @@ func TestUndefinedZones(t *testing.T) {
 	}
 }
 
+// A PBF rule whose source names an external list, a region or a dynamic group
+// may hold an address the configuration does not place in it, as in the
+// security check (spec E23): a forward or discard rule ends the scan with its
+// doubt, a no-pbf rule is passed, and a negated one stays in doubt. A member
+// the configuration tags decides the dynamic group.
+func TestPBFAnOpaqueSourceMayMatch(t *testing.T) {
+	t.Parallel()
+	cfg, _, err := config.Load("../../../testdata/config/firewall-pbf-opaque.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	v, ok := Load(func(_, vsys string) (simulate.Target, error) { return withIndexes(cfg, vsys), nil }, "fw", "vsys1")
+	if !ok {
+		t.Fatal("vsys1")
+	}
+	for _, tc := range []struct {
+		zone, src, rule, note, passed string
+	}{
+		{
+			"edl", "10.88.77.1", "edl-fwd", "pbf rule edl-fwd may forward this packet to ethernet1/4, if it matches: source: external list (edl-bad)",
+			"; no-pbf rule edl-no-pbf may match (source: external list (edl-bad))",
+		},
+		{"geo", "10.88.77.1", "geo-discard", "pbf rule geo-discard may drop this packet, if it matches: source: region (DE)", ""},
+		{"dag", "10.88.77.1", "dag-fwd", "pbf rule dag-fwd may forward this packet to ethernet1/4, if it matches: " +
+			"source: members registered at runtime are not known (dag-web)", ""},
+		{"dag", "10.88.20.1", "dag-fwd", "pbf rule dag-fwd may forward this packet to ethernet1/4", ""},
+		{"neg", "10.88.77.1", "neg-fwd", "pbf rule neg-fwd may forward this packet to ethernet1/4, if it matches: source: external list (edl-bad)", ""},
+	} {
+		m := v.PBF(ip(tc.src), ip("10.88.9.5"), "tcp", 443, simulate.Port{Zone: tc.zone})
+		if !m.Found || m.Rule.Name != tc.rule || m.Note != reason.New("path.pbf", tc.note) || PassedText(m.Passed) != tc.passed {
+			t.Errorf("%s from %s: %+v", tc.zone, tc.src, m)
+		}
+	}
+	if m := v.PBF(ip("10.88.77.1"), ip("10.88.9.5"), "tcp", 443, simulate.Port{Zone: "edl"}); len(m.Passed) != 1 ||
+		m.Passed[0].Doubts[0].Code != "doubt.edl" {
+		t.Errorf("the passed rule keeps the code: %+v", m.Passed)
+	}
+}
+
 // serviceGroupVsys loads firewall-service-group.xml, with the predefined
 // services of testdata/predefined next to it when predefined is set.
 func serviceGroupVsys(t *testing.T, predefined bool) Vsys {

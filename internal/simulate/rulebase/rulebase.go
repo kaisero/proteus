@@ -60,34 +60,73 @@ func Load(load func(device, vsys string) (simulate.Target, error), device, vsys 
 func (v Vsys) Sides(rb resolve.Rulebase, src, dst netip.Addr, negated func(int) (bool, bool)) (
 	s, d *roaring.Bitmap, unresolved []index.Unresolved,
 ) {
+	ss, ds, unresolved := v.sides(rb, src, dst, negated)
+	return ss.rules, ds.rules, unresolved
+}
+
+// side is the rules one side of a rulebase could hold an address in.
+type side struct {
+	// rules holds the rules whose side holds the address by what the
+	// configuration states, negated sides inverted.
+	rules *roaring.Bitmap
+	// may holds, by rule position, the rules the side only may hold, and why:
+	// they name an external list, a region or a dynamic address group, which
+	// can hold the address without the configuration saying so.
+	may map[uint32][]reason.Reason
+}
+
+// holds reports whether the side holds rule i, for sure or only perhaps.
+func (s side) holds(i uint32) bool {
+	_, may := s.may[i]
+	return may || s.rules.Contains(i)
+}
+
+// sides is Sides with, on each side, the rules it only may hold.
+func (v Vsys) sides(rb resolve.Rulebase, src, dst netip.Addr, negated func(int) (bool, bool)) (
+	s, d side, unresolved []index.Unresolved,
+) {
 	idx, err := v.index(rb)
 	if err != nil {
 		why := reason.New("gap.load-failed", fmt.Sprintf("the %s rules of %s were not checked: %v", rb, v.Scope.Name, err))
-		return roaring.New(), roaring.New(), []index.Unresolved{index.NewUnresolved(v.Scope.Name, "", why)}
+		return side{rules: roaring.New()}, side{rules: roaring.New()}, []index.Unresolved{index.NewUnresolved(v.Scope.Name, "", why)}
 	}
+	view := idx.With(index.Providers{})
 	n := len(idx.Rules())
 	all := roaring.New()
 	all.AddRange(0, uint64(len(idx.Rules())))
-	side := func(f index.Field, a netip.Addr, neg func(int) bool) *roaring.Bitmap {
+	one := func(f index.Field, a netip.Addr, neg func(int) bool) side {
 		if !a.IsValid() {
-			return all.Clone()
+			return side{rules: all.Clone()}
 		}
 		b, rep := idx.Candidates(f, a.String())
 		unresolved = append(unresolved, withoutGap(rep.Unresolved)...)
-		out := b.Clone()
+		out := side{rules: b.Clone()}
 		for i := range n {
 			if neg(i) {
 				if b.Contains(uint32(i)) {
-					out.Remove(uint32(i))
+					out.rules.Remove(uint32(i))
 				} else {
-					out.Add(uint32(i))
+					out.rules.Add(uint32(i))
 				}
 			}
 		}
+		// A rule that names an external list, a region or a dynamic group
+		// may hold the address without the configuration saying so. Unless
+		// a stated value already decides it, it only may hold it, negated or
+		// not, as in the security check (spec E23).
+		opaque, why := view.Opaque(f)
+		opaque.AndNot(b)
+		for it := opaque.Iterator(); it.HasNext(); {
+			if out.may == nil {
+				out.may = map[uint32][]reason.Reason{}
+			}
+			bit := it.Next()
+			out.may[bit] = simulate.Reasons(why[bit]).Prefixed(f.String() + ": ")
+		}
 		return out
 	}
-	s = side(index.Source, src, func(i int) bool { ns, _ := negated(i); return ns })
-	d = side(index.Destination, dst, func(i int) bool { _, nd := negated(i); return nd })
+	s = one(index.Source, src, func(i int) bool { ns, _ := negated(i); return ns })
+	d = one(index.Destination, dst, func(i int) bool { _, nd := negated(i); return nd })
 	return s, d, unresolved
 }
 
@@ -173,8 +212,9 @@ type PBFMatch struct {
 	// Note says what the rule would do; the zero reason for no-pbf, which leaves
 	// the packet to routing only on a sure match. When a forward or discard rule
 	// only may match, because it names an application or a user or has a
-	// schedule, which are not evaluated, or a service the answer cannot judge on
-	// this flow, the note ends with ", if it matches: " and why.
+	// schedule, which are not evaluated, a service the answer cannot judge on
+	// this flow, or an external list, a region or a dynamic group as source or
+	// destination, the note ends with ", if it matches: " and why.
 	Note reason.Reason
 	// Passed are the no-pbf rules before Rule that only may match. Only a sure
 	// no-pbf match ends the scan, so the scan went on past them.
@@ -218,8 +258,9 @@ func texts(rs []reason.Reason) string {
 // protocol and destination port; a port of 0 means none was given.
 //
 // A rule matches on its from, addresses and service. A rule that names an
-// application or a user, has a schedule, or names a service the answer cannot
-// judge, only may match.
+// application or a user, has a schedule, names a service the answer cannot
+// judge, or an external list, a region or a dynamic group the configuration
+// does not place the address in, only may match.
 // Such a forward or discard rule still ends the scan: it can redirect the packet,
 // so the path is undecided. Such a no-pbf rule does not: only a sure no-pbf
 // match leaves the packet to routing. As observed on fw02, PAN-OS 12.2.3 (L3): a
@@ -227,7 +268,7 @@ func texts(rs []reason.Reason) string {
 // tcp/22; tcp/443 and udp/22 went on to the forward rule.
 func (v Vsys) PBF(src, dst netip.Addr, proto string, port uint16, in simulate.Port) PBFMatch {
 	rules := v.Target.PBFRules()
-	s, d, un := v.Sides(resolve.PBF, src, dst, func(i int) (bool, bool) {
+	s, d, un := v.sides(resolve.PBF, src, dst, func(i int) (bool, bool) {
 		return rules[i].NegateSource, rules[i].NegateDestination
 	})
 	m := PBFMatch{Unresolved: un}
@@ -235,15 +276,16 @@ func (v Vsys) PBF(src, dst netip.Addr, proto string, port uint16, in simulate.Po
 	m.Unresolved = append(m.Unresolved, svc.unresolved...)
 	defaults := pbfDefaults(v.Config)
 	for i, r := range rules {
-		if r.Disabled || !s.Contains(uint32(i)) || !d.Contains(uint32(i)) || !FromFits(r, in) {
+		bit := uint32(i) //nolint:gosec // a rule position cannot reach 2^32; a rulebase is capped far below that
+		if r.Disabled || !s.holds(bit) || !d.holds(bit) || !FromFits(r, in) {
 			continue
 		}
 		fields := withDefaults(r.Fields, defaults)
-		doubts, fits := svc.judge(i, fields["service"])
+		why, fits := svc.judge(i, fields["service"])
 		if !fits {
 			continue
 		}
-		doubts = append(doubts, notEvaluated(fields, r.Schedule)...)
+		doubts := slices.Concat(s.may[bit], d.may[bit], why, notEvaluated(fields, r.Schedule))
 		if r.ActionKind == resolve.PBFNoPBF && len(doubts) > 0 {
 			m.Passed = append(m.Passed, PBFPassed{Rule: r.Name, Doubts: doubts})
 			continue

@@ -348,6 +348,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   of an HTTP server profile and the values of an MFA server profile now read
   `(secret)`, as passwords do. Before, their old and new values showed, because
   the schema does not mark them as encrypted.
+- **A PBF rule from an external list, a region or a dynamic group now may
+  match.** Only the addresses the configuration places in them counted, so such
+  a rule was skipped for every other address and the path was called exact. A
+  forward or discard rule now leaves the path undecided, and a no-pbf rule is
+  passed over with its doubt.
 - **A PBF rule with a schedule now only may match.** The schedule was not
   read, so a scheduled no-pbf rule always left the packet to routing and hid
   the forward rule below it, and a scheduled forward rule counted as certain.
