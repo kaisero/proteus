@@ -215,7 +215,7 @@ func (b *builder) objectItem(o resolve.Object) Item {
 // groups it holds, not with the paths that reach them. Measured on groups that
 // each hold three others (BenchmarkObjectCardDenseGroups): opening a group on
 // every path took 1.1 s and 1.8 GB for the card of one of 24; opening each once
-// takes 10 ms for one of 30.
+// takes 17 ms for one of 30.
 func (b *builder) members(o resolve.Object, field string) ([]Item, string) {
 	key := o.Kind + "/" + o.Name
 	d, planned := b.depth[key]

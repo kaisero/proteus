@@ -329,14 +329,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   by its name, and a group holding an object found, now carry their own `scope`
   in JSON, YAML and MCP answers, such as `shared` or `predefined`. Before, they
   carried the vsys searched, as if that vsys defined them.
-- **A /32 or a range of one address finds a wildcard object, as the address
-  does.** `search 10.88.7.1/32` and `search 10.88.7.1-10.88.7.1` now find a
-  wildcard address object that matches the address, the groups holding it and
-  the rules naming them. Before, they listed the object as unresolved and exited
-  with code 3, while `search 10.88.7.1` found it.
 - **NAT translates to a large address group quickly.** A source pool that is
-  a static group of 200 address objects, among 20,000, now takes about 5 ms and
-  25 MB per translation (`BenchmarkTranslatePoolGroup`). Before, each name and
+  a static group of 200 address objects, among 20,000, now takes about 6 ms and
+  26 MB per translation (`BenchmarkTranslatePoolGroup`). Before, each name and
   each group member read every address object again, which took 0.9 s and
   4.7 GB per translation.
 - **A service name that two scopes define now means the nearest one, whatever
@@ -359,16 +354,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   portal or the trusted root CAs, now shows as a change of kind `setting`, named
   by its path; a vsys user group's members show as kind `user-group`. Before,
   the diff said "no changes" when only such a setting changed.
-- **An added or removed object in `snapshot diff` no longer shows undescribed
-  values.** An object that holds a value the schema does not describe, or a
-  secret, now has no short line, and a rule's line shows every list the schema
-  describes. Before, a zone's tags could show in the line, and a rule that held an
-  undescribed list of `any` read `(not shown)` in place of its own `any` values.
-- **`snapshot diff` hides SNMP communities and other clear-text credentials.** An
-  SNMP v2c trap community, a SCEP fixed challenge, the URL, payload, header and
-  parameter values of an HTTP server profile and the values of an MFA server profile now read
-  `(secret)`, as passwords do. Before, their old and new values showed, because
-  the schema does not mark them as encrypted.
 - **A path held back by a PBF rule's service now asks for the port.** Asked
   without a port, a PBF rule that names a service left the path undecided with
   `needs: []`. The hop now says why the rule only may match, and `needs` asks
@@ -383,13 +368,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the forward rule below it, and a scheduled forward rule counted as certain.
 - **`simulate policy --file` no longer takes a default static route as the
   source zone.** With no zones given, a source that only a `0.0.0.0/0` static
-  route reaches was placed in that route's zone, so the default rule decided
-  on a zone the packet may not arrive in. The source zone now stays open, as it
-  does with a forwarding table.
+  route reaches was placed in that route's zone, so the rules were matched on a
+  zone the packet may not arrive in. The source zone now stays open, as it does
+  with a forwarding table.
 - **A rule that names a service group holding an unknown service is now in
   doubt.** In a snapshot without the predefined services, a group such as `web`
-  with `service-https` and `tcp/8443` counted as known, so a PBF or security
-  rule naming it was ruled out for `tcp/443` and a later rule answered, marked
+  with `service-https` and `tcp/8443` counted as known, so a security rule
+  naming it was ruled out for `tcp/443` and a later rule answered, marked
   exact.
 - **The version-gap note counts what the older schema does not know.** When a
   configuration is read with an older release's schema, the `gap.version` note now
@@ -403,22 +388,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `snapshot diff` said there was only one snapshot to compare.
 - **NAT answers quickly on a configuration with many bi-directional rules.**
   One flow against 300 bi-directional rules among 20,000 address objects now
-  takes about 6 ms and 27 MB (`BenchmarkMatchBidirectional`). Before, each
+  takes about 6.5 ms and 28 MB (`BenchmarkMatchBidirectional`). Before, each
   implicit rule read every address object again, which took 1.4 s and 7 GB.
 - **Long group cycles and large group trees no longer stall a question.** Each
   group's members and doubts are worked out once per index build, and groups
   that hold each other are joined first. Before, one cycle of 5,000 address
-  groups took 29 s to index and one of 2,000 took 11 s; now both take under
-  75 ms (`BenchmarkIndexBuildGroupCycle`). 30 groups that each hold three
-  others took 41 s; 40 such groups now take 57 ms
+  groups took 29 s to index and one of 2,000 took 11 s; now they take about 75
+  and 65 ms (`BenchmarkIndexBuildGroupCycle`). 30 groups that each hold three
+  others took 41 s; 40 such groups now take 58 ms
   (`BenchmarkIndexBuildDenseGroups`). The `lookup` card of a rule whose group
   tree holds 364 groups took 290 ms and 1.2 GB; now 10 ms and 37 MB
   (`BenchmarkRuleCardNestedGroups`). A card now opens each group once, at its
   place nearest the top, and marks it `members shown elsewhere on this card`
   at every other place. The card of one of 24 groups that each hold three
-  others took 1.1 s and 1.8 GB; one of 30 now takes 10 ms and 37 MB
+  others took 1.1 s and 1.8 GB; one of 30 now takes 17 ms and 66 MB
   (`BenchmarkObjectCardDenseGroups`). The card of a rule on a cycle of 5,000
-  groups took 0.53 s and 1.2 GB; now 16 ms and 48 MB
+  groups took 0.53 s and 1.2 GB; now 16 ms and 47 MB
   (`BenchmarkRuleCardGroupRing`).
 - **The sample containers stop cleanly, and the proxy log keeps no identity
   claims.** `docker compose down` now lets proteus-mcp finish its running calls,
@@ -461,8 +446,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   changed entry lists each setting that differs, such as
   `negate-destination: (unset) -> yes`. Secrets, and values the schema does not
   describe, show only that they changed; such values are common on a newer
-  PAN-OS, which proteus reads with the 11.2 schema. Before, it missed negation,
-  NAT translations, profiles, zones and the PBF and other rulebases.
+  PAN-OS, which proteus reads with the 11.2 schema. Secrets include credentials
+  the schema keeps in clear text: an SNMP v2c trap community, a SCEP fixed
+  challenge, the URL, payload, header and parameter values of an HTTP server
+  profile and the values of an MFA server profile. An added or removed object
+  that holds such a value shows no short line. Before, it missed negation, NAT
+  translations, profiles, zones and the PBF and other rulebases.
 - **A zone the vsys does not define is now refused.** `--from-zone` and `--to-zone`
   of `simulate policy --file`, and `--from-zone` of `simulate nat`, exit 2 with the
   vsys's zones listed. Before, a typo in a zone name could still let an intrazone

@@ -108,7 +108,7 @@ func (c *closureIndex) add(g, m uint32) {
 // Measured on 20,000 addresses and 5,000 rules beside one cycle of 5,000 groups
 // (BenchmarkIndexBuildGroupCycle): the build took 29 s while it ORed the
 // members' sets until none grew; with one pass over the components it takes
-// 73 ms.
+// 75 ms.
 func (c *closureIndex) settle() {
 	// A member that is a group leads the walk on; any other member ends it.
 	groups := func(g uint32) []uint32 {
