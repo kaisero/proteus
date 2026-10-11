@@ -146,7 +146,7 @@ carries `needs`: the inputs that can decide it. Each entry is
 | Code | Input | When |
 | --- | --- | --- |
 | `input.protocol` | `protocol` | a rule's service needs the protocol and the call gave none |
-| `input.port` | `port` | a rule's service or a NAT rule needs the destination port |
+| `input.port` | `port` | a rule's service, a NAT rule or a PBF rule on the path needs the destination port |
 | `input.url` | `url` | a rule names a URL category that the configuration defines |
 
 `needs: []` means that no input can decide the result. A predefined service that

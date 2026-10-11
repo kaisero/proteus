@@ -146,7 +146,8 @@ A hop is undecided for one of these causes:
     at runtime.
 - **Doubts on the path.** ECMP (other next hops are not followed), a PBF rule that
   can redirect the flow, a NAT or PBF answer that can miss matches, or a start that
-  only a default route places.
+  only a default route places. When the PBF rule only may match, the hop also
+  says why, such as a service and no `--port`.
 - **Zones.** The hop's vsys is unknown, a zone is missing, a zone is the
   placeholder `external` of a vsys crossing, or the zone is not defined in the
   vsys.

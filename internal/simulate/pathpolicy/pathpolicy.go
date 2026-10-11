@@ -207,6 +207,9 @@ func pathDoubts(p routing.Path, n int, stages []simulate.Stage) (simulate.Reason
 	for _, r := range h.PBF {
 		doubts = append(doubts, reason.New("path.pbf", fmt.Sprintf("PBF rule %s can redirect the flow", r)))
 	}
+	// Why that rule may not take the flow, each with its own code: an input
+	// that settles one, such as the port, is what a second call can give.
+	doubts = append(doubts, h.PBFDoubts...)
 	if f, ok := stageFidelity(stages, n, "pbf"); ok && f.Level() == "undermatch" {
 		doubts = append(doubts, f.UnderMatchReasons()...)
 	}

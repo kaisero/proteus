@@ -1,6 +1,7 @@
 package query
 
 import (
+	"bytes"
 	"cmp"
 	"context"
 	"encoding/json"
@@ -13,7 +14,9 @@ import (
 	"github.com/okaiser/proteus/internal/resolve"
 	"github.com/okaiser/proteus/internal/simulate"
 	"github.com/okaiser/proteus/internal/simulate/nat"
+	"github.com/okaiser/proteus/internal/simulate/pathlab"
 	"github.com/okaiser/proteus/internal/simulate/securitypolicy"
+	"github.com/okaiser/proteus/internal/store"
 )
 
 // codePattern finds every reason code in a result's JSON.
@@ -222,6 +225,48 @@ func TestNeedsNATProtocol(t *testing.T) {
 	}
 	if again := ask("udp"); again.Rule != nil && again.Rule.Name == "t-dnat-port" {
 		t.Errorf("udp: %s", again.Answer)
+	}
+}
+
+// A PBF rule that names a service and may take the lab flow on fw02 leaves the
+// path undecided; without a port, the port is what decides whether it matches.
+// tcp/22 takes it for sure, and tcp/443 passes it by.
+func TestNeedsPBFPort(t *testing.T) {
+	t.Parallel()
+	l := newLab(t)
+	l.fetch(pathlab.FW01, pathlab.ConfigFile(pathlab.FW01))
+	pbf := `</zone>
+          <service><entry name="svc-ssh"><protocol><tcp><port>22</port></tcp></protocol></entry></service>
+          <rulebase><pbf><rules><entry name="ssh-fwd">
+            <from><zone><member>home</member></zone></from>
+            <source><member>any</member></source><destination><member>any</member></destination>
+            <service><member>svc-ssh</member></service>
+            <action><forward><egress-interface>vlan.32</egress-interface></forward></action>
+          </entry></rules></pbf></rulebase>`
+	cfg := pathlab.Read(t, pathlab.ConfigFile(pathlab.FW02))
+	if bytes.Count(cfg, []byte("</zone>")) != 1 {
+		t.Fatal("fw02's configuration has not one zone list")
+	}
+	l.write(store.Meta{Device: pathlab.FW02, Host: "fw02.example.test"}, bytes.Replace(cfg, []byte("</zone>"), []byte(pbf), 1))
+	env := l.env()
+	ask := func(port string) PathResult {
+		e, err := Policy(context.Background(), env, PolicyInput{
+			Flow: FlowInput{Source: pathlab.Source, Destination: pathlab.Destination, Protocol: "tcp", Port: port},
+		})
+		if err != nil || len(e.Results) != 1 {
+			t.Fatalf("%+v %v", e, err)
+		}
+		return e.Results[0]
+	}
+	r := ask("")
+	if r.Verdict != "undecided" || !slices.Equal(needCodes(r.Needs), []string{"input.port port"}) || !slices.Contains(codes(t, r), "doubt.service-no-port") {
+		t.Errorf("no port: %s, needs %+v, codes %v", r.Answer, r.Needs, codes(t, r))
+	}
+	if again := ask("22"); again.Verdict != "undecided" || slices.Contains(codes(t, again), "doubt.service-no-port") || len(again.Needs) != 0 {
+		t.Errorf("tcp/22: %s, needs %+v, codes %v", again.Answer, again.Needs, codes(t, again))
+	}
+	if again := ask("443"); again.Verdict != "denied" || again.Needs != nil {
+		t.Errorf("tcp/443: %s, needs %+v", again.Answer, again.Needs)
 	}
 }
 

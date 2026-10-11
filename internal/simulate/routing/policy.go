@@ -46,6 +46,7 @@ func pbf(_ context.Context, s *state) (simulate.Outcome, error) {
 		if m.Note.Text != "" {
 			h.Notes = append(h.Notes, m.Note)
 			h.PBF = append(h.PBF, m.Rule.Name)
+			h.PBFDoubts = append(h.PBFDoubts, pbfDoubts(m)...)
 			out.Fidelity, out.Detail = simulate.Weakest(out.Fidelity, simulate.Inferred), m.Note.Text
 		} else {
 			out.Detail = "no-pbf rule " + m.Rule.Name + " leaves the packet to routing"
@@ -53,6 +54,23 @@ func pbf(_ context.Context, s *state) (simulate.Outcome, error) {
 	}
 	out.Detail += rulebase.PassedText(m.Passed)
 	return out, nil
+}
+
+// pbfDoubts are why a PBF rule that can redirect the packet may not take it,
+// each with its own code, so an input that settles one, such as the port, can
+// be asked for: the rule's doubts, then those of the no-pbf rules above it that
+// may match first.
+func pbfDoubts(m rulebase.PBFMatch) simulate.Reasons {
+	var out simulate.Reasons
+	for _, d := range m.Doubts {
+		out = append(out, reason.Reason{Code: d.Code, Text: fmt.Sprintf("PBF rule %s may not match: %s", m.Rule.Name, d.Text)})
+	}
+	for _, p := range m.Passed {
+		for _, d := range p.Doubts {
+			out = append(out, reason.Reason{Code: d.Code, Text: fmt.Sprintf("no-pbf rule %s may match first: %s", p.Rule, d.Text)})
+		}
+	}
+	return out
 }
 
 // NATDoubt names a NAT rule that may match instead of the one a hop applies,

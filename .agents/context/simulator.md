@@ -112,8 +112,9 @@ with interfaces without a router).
 
 `pathpolicy.Run(ctx, env, in)` answers a flow along its path (spec 2026-10-07 §4,
 §5). It is a function package, not a registered kind. It runs routing once, then per
-hop: the path's doubts (ECMP, a PBF rule, PBF or NAT undermatch, each NAT rule in
-doubt, a start by a default route), zone validity (both zones named, defined in the
+hop: the path's doubts (ECMP, a PBF rule and each reason it only may match, with
+its own code, PBF or NAT undermatch, each NAT rule in doubt, a start by a default
+route), zone validity (both zones named, defined in the
 hop's vsys, not a placeholder), and each `Check` in list order. Today the one check
 is `Security`: securitypolicy with the hop's zones given and each endpoint trimmed
 to the traced address. Its fidelity is the weakest of the address, zone and

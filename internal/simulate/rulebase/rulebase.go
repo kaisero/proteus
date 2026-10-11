@@ -216,6 +216,9 @@ type PBFMatch struct {
 	// this flow, or an external list, a region or a dynamic group as source or
 	// destination, the note ends with ", if it matches: " and why.
 	Note reason.Reason
+	// Doubts are why Rule only may match, each with its code; none for a sure
+	// match.
+	Doubts []reason.Reason
 	// Passed are the no-pbf rules before Rule that only may match. Only a sure
 	// no-pbf match ends the scan, so the scan went on past them.
 	Passed []PBFPassed
@@ -308,7 +311,7 @@ func (v Vsys) PBF(src, dst netip.Addr, proto string, port uint16, in simulate.Po
 			}
 			m.Note = reason.New("path.pbf", note)
 		}
-		m.Rule, m.Found = r, true
+		m.Rule, m.Found, m.Doubts = r, true, doubts
 		return m
 	}
 	return m

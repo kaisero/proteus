@@ -10,8 +10,10 @@ import (
 
 	"github.com/okaiser/proteus/internal/config"
 	"github.com/okaiser/proteus/internal/index"
+	"github.com/okaiser/proteus/internal/reason"
 	"github.com/okaiser/proteus/internal/resolve"
 	"github.com/okaiser/proteus/internal/simulate"
+	"github.com/okaiser/proteus/internal/simulate/rulebase"
 )
 
 // policyNet is one firewall carrying firewall-routing.xml's PBF and NAT rules, and
@@ -69,6 +71,26 @@ func TestPBFForwardAndSourceNAT(t *testing.T) {
 	if notes(h) != want || h.Fidelity.Level() != "inferred" || h.PostNAT == nil || h.PostNAT.Source.String() != "203.0.113.9" ||
 		!slices.Equal(h.PBF, []string{"branch-to-zscaler"}) {
 		t.Errorf("notes = %q, fidelity %s", notes(h), h.Fidelity)
+	}
+}
+
+// A PBF rule that may take the packet carries why it may not, and why a no-pbf
+// rule above it may match first, each with its own code.
+func TestPBFDoubtsKeepTheirCodes(t *testing.T) {
+	t.Parallel()
+	m := rulebase.PBFMatch{
+		Rule:   resolve.PBFRule{Rule: resolve.Rule{Name: "fwd"}},
+		Found:  true,
+		Doubts: []reason.Reason{reason.New("doubt.service-no-port", "no port")},
+		Passed: []rulebase.PBFPassed{{Rule: "keep", Doubts: []reason.Reason{reason.New("doubt.schedule", "schedule")}}},
+	}
+	got := pbfDoubts(m)
+	if len(got) != 2 || got[0] != reason.New("doubt.service-no-port", "PBF rule fwd may not match: no port") ||
+		got[1] != reason.New("doubt.schedule", "no-pbf rule keep may match first: schedule") {
+		t.Errorf("%v", got)
+	}
+	if got := pbfDoubts(rulebase.PBFMatch{Found: true}); got != nil {
+		t.Errorf("a sure match: %v", got)
 	}
 }
 
