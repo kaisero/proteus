@@ -354,8 +354,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   describes. Before, a zone's tags could show in the line, and a rule that held an
   undescribed list of `any` read `(not shown)` in place of its own `any` values.
 - **`snapshot diff` hides SNMP communities and other clear-text credentials.** An
-  SNMP v2c trap community, a SCEP fixed challenge, the header and parameter values
-  of an HTTP server profile and the values of an MFA server profile now read
+  SNMP v2c trap community, a SCEP fixed challenge, the URL, payload, header and
+  parameter values of an HTTP server profile and the values of an MFA server profile now read
   `(secret)`, as passwords do. Before, their old and new values showed, because
   the schema does not mark them as encrypted.
 - **A path held back by a PBF rule's service now asks for the port.** Asked

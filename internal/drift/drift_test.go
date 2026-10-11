@@ -548,6 +548,14 @@ func TestCompareHidesSecrets(t *testing.T) {
 			"http", "http1", "format/threat/params/token/value",
 		},
 		{
+			`<log-settings><http><entry name="http1"><format><system><url-format>/hook?token=%s</url-format></system></format></entry></http></log-settings>`,
+			"http", "http1", "format/system/url-format",
+		},
+		{
+			`<log-settings><http><entry name="http1"><format><system><payload>{"key":"%s"}</payload></system></format></entry></http></log-settings>`,
+			"http", "http1", "format/system/payload",
+		},
+		{
 			`<server-profile><mfa-server-profile><entry name="mfa1"><mfa-vendor-type>duo-security-v2</mfa-vendor-type><mfa-config><entry name="duo-secret-key"><value>%s</value></entry></mfa-config></entry></mfa-server-profile></server-profile>`,
 			"mfa-server-profile", "mfa1", "mfa-config/duo-secret-key/value",
 		},

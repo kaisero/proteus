@@ -130,8 +130,9 @@ whose changes are all left out prints below, as `note: fw02: <text>`.
 A secret never shows: a key, a password or a password hash, such as a
 certificate's private key, a server profile's password or a local user's
 password hash. Credentials the schema does not mark as encrypted count too:
-an SNMP v2c trap community, a SCEP fixed challenge, the header and parameter
-values of an HTTP server profile and the values of an MFA server profile. A
+an SNMP v2c trap community, a SCEP fixed challenge, the URL, payload, header
+and parameter values of an HTTP server profile and the values of an MFA server
+profile. A
 change in one reads `private-key: changed (secret, not shown)`, and JSON and
 YAML give `(secret)` for its old and new values, with `"secret": true`. Where a
 secret is set on one side only, that side reads `(secret)` and the other is

@@ -74,8 +74,10 @@ var handModelled = []HandModel{
 	// Credentials the schema keeps in clear text, in shared and in a vsys: an
 	// SNMP v2c trap community, a SCEP fixed challenge, the header and parameter
 	// values of an HTTP log server profile, which carry API tokens, and the
-	// values of an MFA server profile, which carry the vendor's keys. A *
-	// stands for one segment: here the log type of an HTTP profile's format.
+	// values of an MFA server profile, which carry the vendor's keys. An HTTP
+	// profile's URL and payload count too: a receiver can take its token in
+	// either. A * stands for one segment: here the log type of an HTTP
+	// profile's format.
 	{Path: "/config/shared/log-settings/snmptrap/entry/version/v2c/server/entry/community", Reason: clearReason, Owner: "internal/drift", Secret: true},
 	{Path: "/config/devices/entry/vsys/entry/log-settings/snmptrap/entry/version/v2c/server/entry/community", Reason: clearReason, Owner: "internal/drift", Secret: true},
 	{Path: "/config/shared/scep/entry/scep-challenge/fixed", Reason: clearReason, Owner: "internal/drift", Secret: true},
@@ -84,6 +86,10 @@ var handModelled = []HandModel{
 	{Path: "/config/devices/entry/vsys/entry/log-settings/http/entry/format/*/headers/entry/value", Reason: clearReason, Owner: "internal/drift", Secret: true},
 	{Path: "/config/shared/log-settings/http/entry/format/*/params/entry/value", Reason: clearReason, Owner: "internal/drift", Secret: true},
 	{Path: "/config/devices/entry/vsys/entry/log-settings/http/entry/format/*/params/entry/value", Reason: clearReason, Owner: "internal/drift", Secret: true},
+	{Path: "/config/shared/log-settings/http/entry/format/*/url-format", Reason: clearReason, Owner: "internal/drift", Secret: true},
+	{Path: "/config/devices/entry/vsys/entry/log-settings/http/entry/format/*/url-format", Reason: clearReason, Owner: "internal/drift", Secret: true},
+	{Path: "/config/shared/log-settings/http/entry/format/*/payload", Reason: clearReason, Owner: "internal/drift", Secret: true},
+	{Path: "/config/devices/entry/vsys/entry/log-settings/http/entry/format/*/payload", Reason: clearReason, Owner: "internal/drift", Secret: true},
 	{Path: "/config/shared/server-profile/mfa-server-profile/entry/mfa-config/entry/value", Reason: clearReason, Owner: "internal/drift", Secret: true},
 	{Path: "/config/devices/entry/vsys/entry/server-profile/mfa-server-profile/entry/mfa-config/entry/value", Reason: clearReason, Owner: "internal/drift", Secret: true},
 }
