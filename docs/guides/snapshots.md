@@ -83,6 +83,13 @@ What it compares:
   the rest), and the rules of every rulebase (security, NAT, PBF, decryption and
   the others). Shared compares shared only, with the rules pushed from Panorama;
   a vsys compares that vsys only.
+- Every setting of the scope that is not such an entry, such as the interfaces
+  a vsys imports, its captive portal or the trusted root CAs in shared. Each
+  is one entry of kind `setting`, named by its path below the scope:
+  `changed setting import/network/interface` with
+  `interface: ethernet1/1 -> ethernet1/1, ethernet1/3` below it. An added or
+  removed setting shows its value when it has one value that may show. A vsys
+  user group is a list of named entries and compares as kind `user-group`.
 - The whole entry: every setting, with its text and attributes. A list of members
   is a set, so a reorder is no change. A list of named entries inside an entry,
   such as a server profile's servers, keeps its order: a reorder shows as one

@@ -23,14 +23,14 @@ const (
 	Changed Op = "changed"
 )
 
-// Change is one object or rule that differs.
+// Change is one object, rule or setting of the scope that differs.
 //
 // An added or removed entry carries a short line in New or Old. A changed entry
 // carries Fields instead: each setting that differs, old and new.
 type Change struct {
 	Op     Op            `json:"op" jsonschema:"added, removed or changed"`
-	Kind   string        `json:"kind" jsonschema:"the object's container name, such as address or zone, or the rulebase and rule, such as security rule"`
-	Name   string        `json:"name" jsonschema:"the object's or rule's name"`
+	Kind   string        `json:"kind" jsonschema:"the object's container name, such as address or zone; the rulebase and rule, such as security rule; or setting, for a setting of the scope that is not an entry"`
+	Name   string        `json:"name" jsonschema:"the object's or rule's name, or a setting's path below the scope, such as import/network/interface"`
 	Old    string        `json:"old,omitempty" jsonschema:"a removed entry in one line"`
 	New    string        `json:"new,omitempty" jsonschema:"an added entry in one line"`
 	Fields []FieldChange `json:"fields,omitempty" jsonschema:"the settings of a changed entry that differ"`
@@ -85,11 +85,14 @@ var ignoredAttrs = map[string]bool{
 // kind and name.
 //
 // Every entry the scope defines counts: each object of every kind, profiles,
-// zones and schedules included, and each rule of every rulebase. The lists come
-// from walking the scope with the schema digest, not from a list kept here. Only
-// definitions in the scope itself count, so a vsys comparison does not repeat
-// every shared change; compare shared for those. The device's predefined
-// services are not configuration and are not compared.
+// zones and schedules included, and each rule of every rulebase. So does each
+// setting of the scope, an element or a list below it that is not an entry,
+// such as the interfaces a vsys imports: one entry of kind setting, named by
+// its path. The lists come from walking the scope with the schema digest, not
+// from a list kept here. Only definitions in the scope itself count, so a vsys
+// comparison does not repeat every shared change; compare shared for those.
+// The device's predefined services are not configuration and are not
+// compared.
 //
 // A rule's position is not compared: one inserted rule would otherwise mark
 // every rule below it as changed.
@@ -174,10 +177,17 @@ type walker struct {
 	lines map[key]string
 }
 
+// settingKind is the kind of a setting of the scope: an element or a list
+// below the scope that is not an entry, such as import/network/interface.
+const settingKind = "setting"
+
 // container descends an element that is not an entry, looking for entry lists.
 // An entry list's entries are compared whole, so the descent stops there. An
 // element the digest does not describe is compared whole as one entry named by
-// its path, so a change in it is not lost.
+// its path, so a change in it is not lost. So is a setting of the scope: an
+// element or a list that is not an entry list, and an element that holds
+// nothing where its node holds no entry list, such as a choice made by
+// presence alone.
 func (w walker) container(el *config.Element, n *schema.Node, path []string) {
 	for _, c := range el.Children {
 		cn := w.cfg.ChildNode(n, c) // the shared pushed rulebases read as a vsys rulebase
@@ -185,21 +195,36 @@ func (w walker) container(el *config.Element, n *schema.Node, path []string) {
 		switch {
 		case cn == nil:
 			w.add(strings.Join(cpath, "/"), strings.Join(cpath, "/"), "", c, nil)
-		case cn.IsEntryList():
+		case cn.IsEntryList() || namedEntries(cn):
 			kind := c.Name
 			if c.Name == "rules" && c.Parent.Parent != nil && strings.HasSuffix(c.Parent.Parent.Name, "rulebase") {
 				kind = c.Parent.Name + " rule"
 			}
-			seq := cn.EntrySequence()
+			seq := cn.Step("entry")
 			for _, e := range c.ChildrenNamed("entry") {
 				w.add(strings.Join(cpath, "/"), kind, e.Attr("name"), e, seq)
 			}
-		case cn.Kind == schema.KindArray || cn.Kind == schema.KindElement:
-			// A setting of the scope, not an entry.
+		case cn.Kind == schema.KindArray || cn.Kind == schema.KindElement,
+			len(c.Children) == 0 && !holdsEntryList(cn):
+			w.setting(strings.Join(cpath, "/"), c, cn)
 		default:
 			w.container(c, cn, cpath)
 		}
 	}
+}
+
+// namedEntries reports whether an array that is not an entry list still
+// holds named entries: an array named entry with a name attribute, as a vsys
+// user-group is in the schema, each entry a member list.
+func namedEntries(n *schema.Node) bool {
+	return n.Kind == schema.KindArray && declaresAttr(n.Step("entry"), "name")
+}
+
+// holdsEntryList reports whether a node or one below it is an entry list.
+func holdsEntryList(n *schema.Node) bool {
+	found := false
+	n.Walk(func(c *schema.Node) { found = found || c.IsEntryList() })
+	return found
 }
 
 // add records one entry with its short line. A rule's line reads only the
@@ -209,7 +234,7 @@ func (w walker) container(el *config.Element, n *schema.Node, path []string) {
 // or one the schema does not describe. Otherwise the object has no line.
 func (w walker) add(container, kind, name string, el *config.Element, n *schema.Node) {
 	k := key{container, kind, name}
-	f := canonical(el, n)
+	f := canonical(el, n, "")
 	line, ok := w.lines[k]
 	switch {
 	case ok && len(f.hidden) > 0:
@@ -218,6 +243,23 @@ func (w walker) add(container, kind, name string, el *config.Element, n *schema.
 		line = ruleLine(el, n)
 	}
 	w.out[k] = entry{form: f, line: line}
+}
+
+// setting records a setting of the scope, named by its path. Its form's paths
+// start at its own element, so a list's or a value's one path is the
+// element's name. A setting that holds nothing, such as an empty list, is
+// absent, as it is inside an entry. Its short line is its one value, when it
+// has exactly one and that value may show.
+func (w walker) setting(path string, el *config.Element, n *schema.Node) {
+	f := canonical(el, n, el.Name)
+	if len(f.paths) == 0 {
+		return
+	}
+	line := ""
+	if len(f.paths) == 1 && len(f.hidden) == 0 {
+		line = f.values[f.paths[0]]
+	}
+	w.out[key{path, settingKind, path}] = entry{form: f, line: line}
 }
 
 // objectLines is each object's short line, as resolve reads it: its value and
@@ -316,7 +358,12 @@ func (f *form) putOrder(path string, names []string, h hiding) {
 // servers is configuration. A secret is compared but marked, and so is a
 // value the digest does not describe: an element it does not know, or an
 // attribute it does not declare.
-func canonical(el *config.Element, n *schema.Node) form {
+//
+// The paths start at root: empty for an entry, whose settings are its
+// children, and the element's name for a setting of the scope, whose value
+// is its own. An entry that is itself a member list, as a vsys user-group's
+// entry is, names its members member.
+func canonical(el *config.Element, n *schema.Node, root string) form {
 	var f form
 	var walk func(el *config.Element, n *schema.Node, path string)
 	walk = func(el *config.Element, n *schema.Node, path string) {
@@ -329,7 +376,7 @@ func canonical(el *config.Element, n *schema.Node) form {
 				if !plain {
 					h = undescribed
 				}
-				f.put(path, m, h)
+				f.put(cmp.Or(path, "member"), m, h)
 			}
 			return
 		}
@@ -364,7 +411,7 @@ func canonical(el *config.Element, n *schema.Node) form {
 			f.putOrder(path, names, h)
 		}
 	}
-	walk(el, n, "")
+	walk(el, n, root)
 	return f
 }
 

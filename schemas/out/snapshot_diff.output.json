@@ -438,11 +438,11 @@
                         },
                         "kind": {
                           "type": "string",
-                          "description": "the object's container name, such as address or zone, or the rulebase and rule, such as security rule"
+                          "description": "the object's container name, such as address or zone; the rulebase and rule, such as security rule; or setting, for a setting of the scope that is not an entry"
                         },
                         "name": {
                           "type": "string",
-                          "description": "the object's or rule's name"
+                          "description": "the object's or rule's name, or a setting's path below the scope, such as import/network/interface"
                         },
                         "old": {
                           "type": "string",

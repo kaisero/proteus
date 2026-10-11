@@ -329,6 +329,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   counted 13 times the file size alone, so the cache could grow past `max_cache`.
   A `max_cache` sized by the old rule can now be too small, and the server then
   loads snapshots again.
+- **`snapshot diff` compares the settings of a vsys and of shared.** A setting
+  outside any object or rule, such as the interfaces a vsys imports, its captive
+  portal or the trusted root CAs, now shows as a change of kind `setting`, named
+  by its path; a vsys user group's members show as kind `user-group`. Before,
+  the diff said "no changes" when only such a setting changed.
 - **An added or removed object in `snapshot diff` no longer shows undescribed
   values.** An object that holds a value the schema does not describe, or a
   secret, now has no short line, and a rule's line shows every list the schema

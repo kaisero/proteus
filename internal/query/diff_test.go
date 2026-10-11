@@ -51,6 +51,24 @@ func TestSnapshotDiff(t *testing.T) {
 	}
 }
 
+// A setting of the scope is a change like any other: the limit counts it.
+func TestSnapshotDiffLimitCountsSettings(t *testing.T) {
+	t.Parallel()
+	l := newLab(t)
+	vsys := func(body string) []byte {
+		return []byte(`<config version="11.2.0"><shared/><devices><entry name="localhost.localdomain"><vsys><entry name="vsys1">` +
+			body + `</entry></vsys></entry></devices></config>`)
+	}
+	l.write(store.Meta{Device: "fw01"}, vsys(`<display-name>one</display-name>`))
+	l.write(store.Meta{Device: "fw01"}, vsys(`<display-name>two</display-name><import><network><interface><member>ethernet1/3</member></interface></network></import>`))
+	fw01 := Selection{Device: []string{"fw01"}, Vsys: []string{"vsys1"}}
+	e, err := SnapshotDiff(context.Background(), l.env(), DiffInput{Selection: fw01, ResultLimit: ResultLimit{Limit: 1}})
+	if err != nil || e.Summary.Found != 2 || e.Summary.Omitted != 1 || len(e.Results) != 2 || len(e.Results[1].Changes) != 1 ||
+		e.Results[1].Changes[0].Kind != "setting" || e.Results[1].Changes[0].Name != "display-name" {
+		t.Errorf("%v %+v %+v", err, e.Summary, e.Results)
+	}
+}
+
 // From and To pick the snapshots; one before any snapshot is a hole.
 func TestSnapshotDiffFromAndTo(t *testing.T) {
 	t.Parallel()

@@ -205,6 +205,106 @@ func TestCompareReadsEveryKind(t *testing.T) {
 	}
 }
 
+// A setting of the scope, an element or a list that is not an entry, is one
+// entry of kind setting, named by its path below the scope.
+func TestCompareReadsScopeSettings(t *testing.T) {
+	t.Parallel()
+	shared := config.Scope{Sort: config.ScopeShared}
+	for _, tc := range []struct {
+		name          string
+		scope         config.Scope
+		before, after string
+		want          []Change
+	}{
+		{
+			"an interface moved into the vsys", vsys1,
+			`<import><network><interface><member>ethernet1/1</member></interface></network></import>`,
+			`<import><network><interface><member>ethernet1/3</member><member>ethernet1/1</member></interface></network></import>`,
+			[]Change{{Op: Changed, Kind: "setting", Name: "import/network/interface", Fields: []FieldChange{
+				{Path: "interface", Old: "ethernet1/1", New: "ethernet1/1, ethernet1/3"},
+			}}},
+		},
+		{
+			"captive portal turned on", vsys1,
+			`<captive-portal><enable-captive-portal>no</enable-captive-portal></captive-portal>`,
+			`<captive-portal><enable-captive-portal>yes</enable-captive-portal></captive-portal>`,
+			[]Change{{Op: Changed, Kind: "setting", Name: "captive-portal/enable-captive-portal", Fields: []FieldChange{
+				{Path: "enable-captive-portal", Old: "no", New: "yes"},
+			}}},
+		},
+		{
+			"a trusted root CA added", shared,
+			`<ssl-decrypt><trusted-root-CA><member>ca1</member></trusted-root-CA></ssl-decrypt>`,
+			`<ssl-decrypt><trusted-root-CA><member>ca1</member><member>ca2</member></trusted-root-CA></ssl-decrypt>`,
+			[]Change{{Op: Changed, Kind: "setting", Name: "ssl-decrypt/trusted-root-CA", Fields: []FieldChange{
+				{Path: "trusted-root-CA", Old: "ca1", New: "ca1, ca2"},
+			}}},
+		},
+		{
+			// The schema holds a vsys user-group as an array of arrays named
+			// entry, each with a name: named entries, read as an entry list.
+			"a user-group member changed", vsys1,
+			`<user-group><entry name="g1"><member>u1</member></entry><entry name="g2"><member>u3</member></entry></user-group>`,
+			`<user-group><entry name="g1"><member>u1</member><member>u2</member></entry><entry name="g2"><member>u3</member></entry></user-group>`,
+			[]Change{{Op: Changed, Kind: "user-group", Name: "g1", Fields: []FieldChange{
+				{Path: "member", Old: "u1", New: "u1, u2"},
+			}}},
+		},
+		{
+			// A choice that holds nothing is present or not: its presence is
+			// the setting.
+			"the captive portal mode switched", vsys1,
+			`<captive-portal><mode><transparent/></mode></captive-portal>`,
+			`<captive-portal><mode><redirect/></mode></captive-portal>`,
+			[]Change{
+				{Op: Added, Kind: "setting", Name: "captive-portal/mode/redirect", New: Set},
+				{Op: Removed, Kind: "setting", Name: "captive-portal/mode/transparent", Old: Set},
+			},
+		},
+		{
+			"a secret setting", vsys1,
+			`<url-admin-override><password>DUMMYOVERRIDE0</password></url-admin-override>`,
+			`<url-admin-override><password>DUMMYOVERRIDE1</password></url-admin-override>`,
+			[]Change{{Op: Changed, Kind: "setting", Name: "url-admin-override/password", Fields: []FieldChange{
+				{Path: "password", Old: Hidden, New: Hidden, Secret: true},
+			}}},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			before := loadXML(t, inScope(tc.scope, tc.before))
+			after := loadXML(t, inScope(tc.scope, tc.after))
+			if got := Compare(before, after, tc.scope); !reflect.DeepEqual(got, tc.want) {
+				t.Errorf("got  %+v\nwant %+v", got, tc.want)
+			}
+			if got := Compare(after, after, tc.scope); len(got) != 0 {
+				t.Errorf("the same configuration: got %+v", got)
+			}
+		})
+	}
+	// An added or removed setting shows its value as its short line, unless
+	// it holds a value that must not show.
+	none := loadXML(t, inScope(vsys1, ""))
+	set := loadXML(t, inScope(vsys1, `<import><network><interface><member>ethernet1/3</member></interface></network></import>
+<url-admin-override><password>DUMMYOVERRIDE0</password></url-admin-override><future-setting>DUMMYFUTURE</future-setting>`))
+	got := Compare(none, set, vsys1)
+	want := []Change{
+		{Op: Added, Kind: "future-setting"},
+		{Op: Added, Kind: "setting", Name: "import/network/interface", New: "ethernet1/3"},
+		{Op: Added, Kind: "setting", Name: "url-admin-override/password"},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("got  %+v\nwant %+v", got, want)
+	}
+	assertAbsent(t, append(got, Compare(set, none, vsys1)...), "DUMMYOVERRIDE", "DUMMYFUTURE")
+	// A container of entry lists that holds nothing is no setting, and an
+	// empty list is absent, as inside an entry.
+	empty := loadXML(t, inScope(vsys1, `<rulebase/><profiles/><import><network><interface/></network></import>`))
+	if got := Compare(none, empty, vsys1); len(got) != 0 {
+		t.Errorf("empty containers: got %+v", got)
+	}
+}
+
 // The device's predefined services are not configuration: a snapshot with
 // them and one without do not differ.
 func TestComparePassesOverPredefined(t *testing.T) {
