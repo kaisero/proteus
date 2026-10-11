@@ -329,6 +329,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   counted 13 times the file size alone, so the cache could grow past `max_cache`.
   A `max_cache` sized by the old rule can now be too small, and the server then
   loads snapshots again.
+- **An added or removed object in `snapshot diff` no longer shows undescribed
+  values.** An object that holds a value the schema does not describe, or a
+  secret, now has no short line, and a rule's line shows every list the schema
+  describes. Before, a zone's tags could show in the line, and a rule that held an
+  undescribed list of `any` read `(not shown)` in place of its own `any` values.
 - **`snapshot diff` hides SNMP communities and other clear-text credentials.** An
   SNMP v2c trap community, a SCEP fixed challenge, the header and parameter values
   of an HTTP server profile and the values of an MFA server profile now read

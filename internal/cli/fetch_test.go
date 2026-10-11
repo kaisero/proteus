@@ -642,6 +642,16 @@ func TestSnapshotDiffHidesUndescribedValues(t *testing.T) {
 	if strings.Contains(out+errOut, "s3cr3t") {
 		t.Errorf("lookup shows the value:\n%s", out)
 	}
+	// An added object that holds an undescribed value has no short line: here
+	// a zone's tag list, which the schema does not describe.
+	d.Config = strings.Replace(read(t, "../../testdata/drift/before.xml"), "<zone>",
+		`<zone><entry name="dmz"><tag><member>DUMMYTAGA</member><member>DUMMYTAGB</member></tag></entry>`, 1)
+	c.want(0, "fetch", "fw01")
+	for _, format := range []string{"text", "json", "yaml"} {
+		if out := c.want(0, "snapshot", "diff", "--vsys", "vsys1", "--output", format); !strings.Contains(out, "dmz") || strings.Contains(out, "DUMMYTAG") {
+			t.Errorf("%s output must name the zone and none of its tags:\n%s", format, out)
+		}
+	}
 }
 
 func TestSnapshotDiff(t *testing.T) {

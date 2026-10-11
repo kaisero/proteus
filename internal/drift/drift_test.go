@@ -466,21 +466,43 @@ func TestCompareShowsWhereASecretIsSet(t *testing.T) {
 	}
 }
 
-// The guard on short lines: a hidden value the line holds as a whole token is
-// replaced; the same text inside another token is not.
-func TestRedactHidesAValueInALine(t *testing.T) {
+// A rule's short line reads only the member lists the schema describes, so a
+// list it does not describe neither shows nor hides a described value of the
+// same text.
+func TestCompareRuleLineReadsDescribedLists(t *testing.T) {
 	t.Parallel()
-	var f form
-	f.put("password", "s3cret", secret)
-	f.put("future", "1", undescribed)
-	f.put("fqdn", "host.example.com", visible)
-	line := "host.example.com s3cret 10.88.0.1,1 tags=1"
-	want := "host.example.com " + Hidden + " 10.88.0.1," + NotShown + " tags=" + NotShown
-	if got := redact(line, f); got != want {
-		t.Errorf("got  %q\nwant %q", got, want)
+	none := loadXML(t, inScope(vsys1, ""))
+	rule := loadXML(t, inScope(vsys1, `<rulebase><security><rules><entry name="r">
+<from><member>any</member></from><to><member>any</member></to>
+<source><member>any</member></source><destination><member>any</member></destination>
+<future-list><member>any</member></future-list><action>allow</action>
+</entry></rules></security></rulebase>`))
+	want := []Change{{Op: Added, Kind: "security rule", Name: "r", New: "allow destination=any from=any source=any to=any"}}
+	if got := Compare(none, rule, vsys1); !reflect.DeepEqual(got, want) {
+		t.Errorf("got  %+v\nwant %+v", got, want)
 	}
-	if got := replaceToken("a", "", "x"); got != "a" {
-		t.Errorf("an empty value: got %q", got)
+}
+
+// An object's short line comes from resolve, which does not read the schema.
+// An entry that holds a value the diff must not show has no short line: here
+// a zone's tag list, which the schema does not describe.
+func TestCompareObjectLineHoldsNoHiddenValue(t *testing.T) {
+	t.Parallel()
+	none := loadXML(t, inScope(vsys1, ""))
+	zone := loadXML(t, inScope(vsys1, `<zone><entry name="dmz"><network><layer3><member>ethernet1/3</member></layer3></network>
+<tag><member>DUMMYTAGA</member><member>DUMMYTAGB</member></tag></entry></zone>`))
+	got := Compare(none, zone, vsys1)
+	want := []Change{{Op: Added, Kind: "zone", Name: "dmz"}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("got  %+v\nwant %+v", got, want)
+	}
+	got = append(got, Compare(zone, none, vsys1)...)
+	assertAbsent(t, got, "DUMMYTAG")
+	// An object without a hidden value keeps its line.
+	addr := loadXML(t, inScope(vsys1, `<address><entry name="a"><ip-netmask>10.88.0.1</ip-netmask><tag><member>t1</member></tag></entry></address>`))
+	want = []Change{{Op: Added, Kind: "address", Name: "a", New: "10.88.0.1 tags=t1"}}
+	if got := Compare(none, addr, vsys1); !reflect.DeepEqual(got, want) {
+		t.Errorf("got  %+v\nwant %+v", got, want)
 	}
 }
 

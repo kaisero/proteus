@@ -62,10 +62,6 @@ const Set = "(set)"
 // (schema.IsSecret). A secret is compared, but its value is never shown.
 const Hidden = "(secret)"
 
-// NotShown stands in for a value the schema does not describe, in an added or
-// removed entry's short line.
-const NotShown = "(not shown)"
-
 // OrderSuffix ends the path of a nested entry list's order field: server
 // order is the order of a server profile's servers.
 const OrderSuffix = " order"
@@ -206,66 +202,22 @@ func (w walker) container(el *config.Element, n *schema.Node, path []string) {
 	}
 }
 
+// add records one entry with its short line. A rule's line reads only the
+// member lists the schema describes, so it holds no hidden value. An object's
+// line comes from resolve, which reads a value and tags without the schema, so
+// it stands only when the entry holds no value that must not show: a secret
+// or one the schema does not describe. Otherwise the object has no line.
 func (w walker) add(container, kind, name string, el *config.Element, n *schema.Node) {
 	k := key{container, kind, name}
+	f := canonical(el, n)
 	line, ok := w.lines[k]
-	if !ok && strings.HasSuffix(kind, " rule") {
+	switch {
+	case ok && len(f.hidden) > 0:
+		line = ""
+	case !ok && strings.HasSuffix(kind, " rule"):
 		line = ruleLine(el, n)
 	}
-	f := canonical(el, n)
-	w.out[k] = entry{form: f, line: redact(line, f)}
-}
-
-// redact hides any value of the entry that must not show and that its short
-// line holds: a secret, or a value the schema does not describe. The short
-// lines read described fields only, so this is a second guard.
-//
-// A value is replaced only where it stands as a whole token of the line,
-// bounded by the line's ends, a space, a comma or an equals sign, which is how
-// a short line joins the values it shows. A plain substring replace would
-// also hit a short value inside an unrelated one, such as 1 in 10.88.0.1.
-func redact(line string, f form) string {
-	for _, p := range f.paths {
-		h := f.hidden[p]
-		if h == visible {
-			continue
-		}
-		mark := Hidden
-		if h == undescribed {
-			mark = NotShown
-		}
-		line = replaceToken(line, f.values[p], mark)
-	}
-	return line
-}
-
-// isBoundary reports whether a byte ends a token of a short line.
-func isBoundary(b byte) bool { return b == ' ' || b == ',' || b == '=' }
-
-// replaceToken replaces each whole-token occurrence of v in line.
-func replaceToken(line, v, mark string) string {
-	if v == "" {
-		return line
-	}
-	var b strings.Builder
-	for i := 0; i < len(line); {
-		j := strings.Index(line[i:], v)
-		if j < 0 {
-			b.WriteString(line[i:])
-			break
-		}
-		start, end := i+j, i+j+len(v)
-		whole := (start == 0 || isBoundary(line[start-1])) && (end == len(line) || isBoundary(line[end]))
-		if whole {
-			b.WriteString(line[i:start])
-			b.WriteString(mark)
-			i = end
-			continue
-		}
-		b.WriteString(line[i : start+1])
-		i = start + 1
-	}
-	return b.String()
+	w.out[k] = entry{form: f, line: line}
 }
 
 // objectLines is each object's short line, as resolve reads it: its value and

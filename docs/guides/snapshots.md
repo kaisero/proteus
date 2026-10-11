@@ -133,7 +133,8 @@ attribute that the schema proteus reads the configuration with does not know, as
 newer release can add. It may hold a secret. Its change still shows, as
 `<path>: changed (not described by the schema; values not shown)`; JSON and
 YAML give empty `old` and `new` with `"undescribed": true`. An added or removed
-entry's short line leaves such values out.
+object that holds such a value, or a secret, shows no short line; a rule's short
+line shows only the lists the schema describes.
 
 ## Old snapshots
 

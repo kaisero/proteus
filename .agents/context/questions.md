@@ -62,7 +62,9 @@ compared but never shown; `uuid`,
 carries `Fields` (`path`, `old`, `new`, `secret`, `undescribed`); an added or
 removed one a short line in
 `New` or `Old`: the object's value and tags as `resolve` reads them, or a rule's
-action and member lists. Position is not compared. Predefined services are never
+action and described member lists. `resolve` does not read the schema, so an
+object whose form holds a secret or an undescribed value has no short line.
+Position is not compared. Predefined services are never
 read.
 
 ## Build / run pointers
@@ -159,8 +161,10 @@ func Compare(before, after *config.Config, sc config.Scope) []Change
   `encrypt="yes"`, or a hand-modelled one: `phash` and the credentials the schema
   keeps in clear text, such as an SNMP v2c community) is compared, but its values read
   `(secret)` (`drift.Hidden`) and `FieldChange.Secret` is set; the text line is
-  `<path>: changed (secret, not shown)`. A short line passes `redact` as a second
-  guard (`drift.TestCompareHidesSecrets`).
+  `<path>: changed (secret, not shown)` (`drift.TestCompareHidesSecrets`). A
+  rule's short line reads only described member lists; an object's short line
+  is dropped when its form holds a hidden value
+  (`drift.TestCompareObjectLineHoldsNoHiddenValue`).
 - **An undescribed value never shows.** An element the digest does not describe
   (a whole one under the scope, or an unknown child of a known entry), an
   attribute it does not declare (only `name`, `id` and `status` are declared) and
