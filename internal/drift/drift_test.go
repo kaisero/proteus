@@ -42,7 +42,7 @@ func TestSharedIsItsOwnScope(t *testing.T) {
 		lines = append(lines, string(c.Op)+" "+c.Kind+" "+c.Name)
 	}
 	joined := strings.Join(lines, ",")
-	for _, want := range []string{"removed address shared-dns", "removed security rule pushed-pre", "added address-group corp-location"} {
+	for _, want := range []string{"removed address shared-dns", "removed pre-rulebase security rule pushed-pre", "added address-group corp-location"} {
 		if !strings.Contains(joined, want) {
 			t.Errorf("missing %q in %s", want, joined)
 		}
@@ -115,7 +115,7 @@ func TestCompareNamesTheChangedSetting(t *testing.T) {
 			[]FieldChange{{Path: "decoder/smtp/action", Old: "alert", New: "reset-both"}},
 		},
 		{
-			"pushed.xml", shared, "security rule", "pushed-post",
+			"pushed.xml", shared, "post-rulebase security rule", "pushed-post",
 			[]FieldChange{{Path: "action", Old: "deny", New: "drop"}},
 		},
 	} {
@@ -442,9 +442,29 @@ func TestCompareReadsAttributes(t *testing.T) {
 	}
 }
 
-// Two pushed rules of one name, before and after the firewall's own, sort by
-// their container, so the output does not depend on map order.
+// Two lists of one kind, a vsys's local users and its users, sort by their
+// container, so a local user and a user of one name keep their order whatever
+// the map order.
 func TestCompareSortsByContainer(t *testing.T) {
+	t.Parallel()
+	local := `<local-user-database><user><entry name="u"><phash>%s</phash></entry></user></local-user-database>`
+	before := loadXML(t, inScope(vsys1, fmt.Sprintf(local, "DUMMYHASHA")))
+	after := loadXML(t, inScope(vsys1, fmt.Sprintf(local, "DUMMYHASHB")+`<user><entry name="u"/></user>`))
+	want := []Change{
+		{Op: Changed, Kind: "user", Name: "u", Fields: []FieldChange{{Path: "phash", Old: Hidden, New: Hidden, Secret: true}}},
+		{Op: Added, Kind: "user", Name: "u"},
+	}
+	for range 20 {
+		if got := Compare(before, after, vsys1); !reflect.DeepEqual(got, want) {
+			t.Fatalf("got  %+v\nwant %+v", got, want)
+		}
+	}
+}
+
+// A pushed rule's kind names its rulebase, so two pushed rules of one name,
+// before and after the firewall's own, tell apart, and their order does not
+// depend on map order. The vsys's own rulebase keeps the plain kind.
+func TestCompareNamesThePushedRulebase(t *testing.T) {
 	t.Parallel()
 	before := loadXML(t, `<config version="11.2.0"><shared/></config>`)
 	after := loadXML(t, `<config version="11.2.0"><shared>
@@ -452,11 +472,19 @@ func TestCompareSortsByContainer(t *testing.T) {
 <pre-rulebase><security><rules><entry name="r"><action>allow</action></entry></rules></security></pre-rulebase>
 </shared></config>`)
 	shared := config.Scope{Sort: config.ScopeShared}
+	want := []Change{
+		{Op: Added, Kind: "post-rulebase security rule", Name: "r", New: "deny"},
+		{Op: Added, Kind: "pre-rulebase security rule", Name: "r", New: "allow"},
+	}
 	for range 20 {
-		got := Compare(before, after, shared)
-		if len(got) != 2 || got[0].New != "deny" || got[1].New != "allow" {
-			t.Fatalf("got %+v; want post-rulebase before pre-rulebase", got)
+		if got := Compare(before, after, shared); !reflect.DeepEqual(got, want) {
+			t.Fatalf("got  %+v\nwant %+v", got, want)
 		}
+	}
+	own := loadXML(t, inScope(vsys1, `<rulebase><security><rules><entry name="r"><action>allow</action></entry></rules></security></rulebase>`))
+	want = []Change{{Op: Added, Kind: "security rule", Name: "r", New: "allow"}}
+	if got := Compare(loadXML(t, inScope(vsys1, "")), own, vsys1); !reflect.DeepEqual(got, want) {
+		t.Errorf("got  %+v\nwant %+v", got, want)
 	}
 }
 

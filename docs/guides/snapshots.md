@@ -82,7 +82,9 @@ What it compares:
   external lists, zones, schedules, profiles, profile groups, log settings and
   the rest), and the rules of every rulebase (security, NAT, PBF, decryption and
   the others). Shared compares shared only, with the rules pushed from Panorama;
-  a vsys compares that vsys only.
+  a vsys compares that vsys only. A pushed rule's kind names its rulebase,
+  `pre-rulebase security rule` or `post-rulebase security rule`; a vsys's own
+  rule reads `security rule`.
 - Every setting of the scope that is not such an entry, such as the interfaces
   a vsys imports, its captive portal or the trusted root CAs in shared. Each
   is one entry of kind `setting`, named by its path below the scope:

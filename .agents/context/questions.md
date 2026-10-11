@@ -55,8 +55,10 @@ with a name, is read as an entry list too (`namedEntries`). Every other element
 or array below the scope, and an empty element whose node holds no entry list
 (a choice made by presence), is a setting: one entry of kind `setting`, named
 by its path below the scope, whose form paths start at its own name
-(`drift.TestCompareReadsScopeSettings`). The shared `pre-rulebase` and `post-rulebase` are read with
-a vsys rulebase's node (hand-modelled, R8). An element the digest does not
+(`drift.TestCompareReadsScopeSettings`). The shared `pre-rulebase` and
+`post-rulebase` are read with a vsys rulebase's node (hand-modelled, R8); their
+rules' kind names the rulebase, such as `pre-rulebase security rule`
+(`ruleKind`), and a vsys's own rule reads `security rule`. An element the digest does not
 describe is compared whole, as one entry named by its path. Each entry becomes a
 canonical form: setting paths with text and attributes in document order; a
 member list (from the digest, R4) is one value with its members sorted; a

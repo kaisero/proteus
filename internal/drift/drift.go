@@ -29,7 +29,7 @@ const (
 // carries Fields instead: each setting that differs, old and new.
 type Change struct {
 	Op     Op            `json:"op" jsonschema:"added, removed or changed"`
-	Kind   string        `json:"kind" jsonschema:"the object's container name, such as address or zone; the rulebase and rule, such as security rule; or setting, for a setting of the scope that is not an entry"`
+	Kind   string        `json:"kind" jsonschema:"the object's container name, such as address or zone; the rulebase and rule, such as security rule, with pre-rulebase or post-rulebase in front for a rule pushed from Panorama; or setting, for a setting of the scope that is not an entry"`
 	Name   string        `json:"name" jsonschema:"the object's or rule's name, or a setting's path below the scope, such as import/network/interface"`
 	Old    string        `json:"old,omitempty" jsonschema:"a removed entry in one line"`
 	New    string        `json:"new,omitempty" jsonschema:"an added entry in one line"`
@@ -119,8 +119,8 @@ func Compare(before, after *config.Config, sc config.Scope) []Change {
 			all = append(all, keyed{k, Change{Op: Added, Kind: k.kind, Name: k.name, New: nu.line}})
 		}
 	}
-	// The container breaks a tie of kind and name, such as a pushed pre-rule
-	// and post-rule of one name, so the order does not depend on map order.
+	// The container breaks a tie of kind and name, such as a local user and a
+	// vsys user of one name, so the order does not depend on map order.
 	slices.SortFunc(all, func(x, y keyed) int {
 		return cmp.Or(cmp.Compare(x.k.kind, y.k.kind), cmp.Compare(x.k.name, y.k.name),
 			cmp.Compare(x.k.container, y.k.container), cmp.Compare(x.c.Op, y.c.Op))
@@ -196,10 +196,7 @@ func (w walker) container(el *config.Element, n *schema.Node, path []string) {
 		case cn == nil:
 			w.add(strings.Join(cpath, "/"), strings.Join(cpath, "/"), "", c, nil)
 		case cn.IsEntryList() || namedEntries(cn):
-			kind := c.Name
-			if c.Name == "rules" && c.Parent.Parent != nil && strings.HasSuffix(c.Parent.Parent.Name, "rulebase") {
-				kind = c.Parent.Name + " rule"
-			}
+			kind := ruleKind(c)
 			seq := cn.Step("entry")
 			for _, e := range c.ChildrenNamed("entry") {
 				w.add(strings.Join(cpath, "/"), kind, e.Attr("name"), e, seq)
@@ -211,6 +208,22 @@ func (w walker) container(el *config.Element, n *schema.Node, path []string) {
 			w.container(c, cn, cpath)
 		}
 	}
+}
+
+// ruleKind is the kind of an entry list's entries: the list's name, or for
+// the rules of a rulebase, the rulebase and rule, such as security rule. The
+// rules Panorama pushes before and after the firewall's own name their
+// rulebase too, pre-rulebase security rule or post-rulebase security rule,
+// so they tell apart; the vsys's own rulebase keeps the plain kind.
+func ruleKind(list *config.Element) string {
+	rb := list.Parent.Parent
+	if list.Name != "rules" || rb == nil || !strings.HasSuffix(rb.Name, "rulebase") {
+		return list.Name
+	}
+	if rb.Name == "pre-rulebase" || rb.Name == "post-rulebase" {
+		return rb.Name + " " + list.Parent.Name + " rule"
+	}
+	return list.Parent.Name + " rule"
 }
 
 // namedEntries reports whether an array that is not an entry list still

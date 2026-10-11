@@ -438,7 +438,7 @@
                         },
                         "kind": {
                           "type": "string",
-                          "description": "the object's container name, such as address or zone; the rulebase and rule, such as security rule; or setting, for a setting of the scope that is not an entry"
+                          "description": "the object's container name, such as address or zone; the rulebase and rule, such as security rule, with pre-rulebase or post-rulebase in front for a rule pushed from Panorama; or setting, for a setting of the scope that is not an entry"
                         },
                         "name": {
                           "type": "string",

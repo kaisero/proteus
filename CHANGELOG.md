@@ -329,6 +329,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   counted 13 times the file size alone, so the cache could grow past `max_cache`.
   A `max_cache` sized by the old rule can now be too small, and the server then
   loads snapshots again.
+- **`snapshot diff` tells pushed pre-rules from post-rules.** A rule pushed from
+  Panorama now reads `pre-rulebase security rule` or `post-rulebase security
+  rule`, and a vsys's own rule still reads `security rule`. Before, both pushed
+  rulebases read `security rule`, so two pushed rules of one name looked the same.
 - **`snapshot diff` compares the settings of a vsys and of shared.** A setting
   outside any object or rule, such as the interfaces a vsys imports, its captive
   portal or the trusted root CAs, now shows as a change of kind `setting`, named
