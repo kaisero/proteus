@@ -324,6 +324,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   alike. Before, NAT took the service group first from any scope and the
   security policy matched both objects, so each could give a wrong answer marked
   exact.
+- **The MCP server's cache counts what a loaded snapshot really keeps.** A cached
+  snapshot now counts 32 MiB plus 13 times its file size, as measured. Before, it
+  counted 13 times the file size alone, so the cache could grow past `max_cache`.
+  A `max_cache` sized by the old rule can now be too small, and the server then
+  loads snapshots again.
 - **The version-gap note counts what the older schema does not know.** When a
   configuration is read with an older release's schema, the `gap.version` note now
   says how many of its elements that schema does not describe, such as fields a
@@ -391,9 +396,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Before, every device became a hole that blamed `--at`, and the command exited 3.
 - **`snapshot diff` now reports every changed setting of objects and rules.** A
   changed entry lists each setting that differs, such as
-  `negate-destination: (unset) -> yes`, and secrets show only that they changed.
-  Before, it missed negation, NAT translations, profiles, zones and the PBF and
-  other rulebases.
+  `negate-destination: (unset) -> yes`. Secrets, and values the schema does not
+  describe, show only that they changed; such values are common on a newer
+  PAN-OS, which proteus reads with the 11.2 schema. Before, it missed negation,
+  NAT translations, profiles, zones and the PBF and other rulebases.
 - **A zone the vsys does not define is now refused.** `--from-zone` and `--to-zone`
   of `simulate policy --file`, and `--from-zone` of `simulate nat`, exit 2 with the
   vsys's zones listed. Before, a typo in a zone name could still let an intrazone
@@ -444,7 +450,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   called exact.
 - **A wildcard address object now matches the addresses its mask allows.** An
   object such as `10.88.2.1/0.0.255.0` matched no address, so a simulation skipped
-  the rules using it and a later rule answered.
+  the rules using it and a later rule answered. A search for a prefix or a range
+  wider than one address, or with `--within` or `--exact`, now lists such an
+  object as unresolved (`gap.address-wildcard`) and exits 3, because a prefix
+  cannot decide a mask.
 - **A dynamic group whose filter starts with a parenthesis now counts as dynamic.**
   A filter such as `('web' or 'db')` was read as one member name, so no address
   reached the group and the rules using it were skipped.
