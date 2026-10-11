@@ -269,7 +269,9 @@ func withIndexes(cfg *config.Config, vsys string) simulate.Target {
 
 // A port decides only a service the configuration defines: a predefined
 // service, or a group of them, is a predefined doubt with or without a port,
-// so a caller is never asked for a port that cannot help.
+// so a caller is never asked for a port that cannot help. A group with a
+// defined member that holds the port holds it for sure, whatever its other
+// members are.
 func TestServiceFitsAsksForAPortOnlyWhenItHelps(t *testing.T) {
 	t.Parallel()
 	cfg := natConfig(t, "firewall-nat-cases.xml")
@@ -291,8 +293,10 @@ func TestServiceFitsAsksForAPortOnlyWhenItHelps(t *testing.T) {
 		{"svc-443", 0, "path.nat-no-port"},
 		{"g-defined", 0, "path.nat-no-port"},
 		{"service-http", 443, "doubt.service-predefined"},
-		{"g-defined", 443, "doubt.service-predefined"},
-		{"mixed-loop", 443, "doubt.service-predefined"},
+		{"g-defined", 443, ""},
+		{"g-defined", 8443, "doubt.service-predefined"},
+		{"mixed-loop", 443, ""},
+		{"mixed-loop", 8443, "doubt.service-predefined"},
 		{"svc-443", 443, ""},
 	} {
 		_, r := serviceFits(tc.name, simulate.Flow{Protocol: "tcp", DestPort: tc.port}, svc, cfg)
@@ -502,5 +506,47 @@ func TestAnOpaqueSourceIsADoubt(t *testing.T) {
 		"dag-snat: source: members registered at runtime are not known (dag-web)"
 	if m.Rule == nil || m.Rule.Name != "rest-snat" || strings.Join(doubts, "; ") != want {
 		t.Errorf("rule %v, doubts %q, excluded %v", m.Rule, doubts, m.Excluded)
+	}
+}
+
+// A service group with a member the snapshot does not define still holds what
+// its defined members hold: mixed holds service-https, undefined without the
+// predefined services, and svc-8443. tcp/8443 hits the rule for sure; tcp/443
+// leaves it in doubt, as in the security check and PBF.
+func TestAGroupWithAnUndefinedMemberHoldsItsDefinedOnes(t *testing.T) {
+	t.Parallel()
+	doc := `<config version="11.2.0" urldb="paloaltonetworks"><devices>` +
+		`<entry name="localhost.localdomain"><vsys><entry name="vsys1">` +
+		`<service><entry name="svc-8443"><protocol><tcp><port>8443</port></tcp></protocol></entry></service>` +
+		`<service-group><entry name="mixed"><members><member>service-https</member><member>svc-8443</member></members></entry></service-group>` +
+		`<rulebase><nat><rules><entry name="dnat-mixed"><from><member>trust</member></from><to><member>untrust</member></to>` +
+		`<source><member>any</member></source><destination><member>any</member></destination><service>mixed</service>` +
+		`<destination-translation><translated-address>10.88.20.1</translated-address></destination-translation></entry>` +
+		`</rules></nat></rulebase></entry></vsys></entry></devices></config>`
+	path := filepath.Join(t.TempDir(), "firewall.xml")
+	if err := os.WriteFile(path, []byte(doc), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, _, err := config.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	match := func(port uint16) MatchResult {
+		return Match(Input{
+			Target: withIndexes(cfg, "vsys1"), Vsys: "vsys1",
+			Flow: simulate.Flow{
+				Source:      simulate.Addr(netip.MustParseAddr("10.88.250.1")),
+				Destination: simulate.Addr(netip.MustParseAddr("198.19.0.1")),
+				Protocol:    "tcp", DestPort: port,
+			},
+			In:     simulate.Port{Device: "fw", Router: "default", Zone: "trust"},
+			PreNAT: &simulate.Forward{Out: simulate.Port{Zone: "untrust", Interface: "ethernet1/1"}},
+		})
+	}
+	if m := match(8443); m.Rule == nil || m.Rule.Name != "dnat-mixed" || len(m.Doubts) != 0 {
+		t.Errorf("tcp/8443: rule %v, doubts %v", m.Rule, m.Doubts)
+	}
+	if m := match(443); m.Rule != nil || len(m.Doubts) != 1 || m.Doubts[0].Rule != "dnat-mixed" {
+		t.Errorf("tcp/443: rule %v, doubts %v", m.Rule, m.Doubts)
 	}
 }

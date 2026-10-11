@@ -283,17 +283,23 @@ func anyDefined(name string, svc map[string]string, depth int) bool {
 	return ok
 }
 
+// serviceHolds reports whether a service or group holds the port, and whether
+// that is known. A group holds it when one member does, whatever the others
+// are; it is unknown only when no member holds it and one is unknown.
 func serviceHolds(name, proto string, port int, svc map[string]string, depth int) (matched, known bool) {
 	if depth > 8 {
 		return false, false
 	}
 	if members, ok := svc["service-group:"+name]; ok {
+		known = true
 		for m := range strings.SplitSeq(members, ", ") {
-			if mm, mk := serviceHolds(m, proto, port, svc, depth+1); mm || !mk {
-				return mm, mk
+			mm, mk := serviceHolds(m, proto, port, svc, depth+1)
+			if mm {
+				return true, true
 			}
+			known = known && mk
 		}
-		return false, true
+		return false, known
 	}
 	value, ok := svc["service:"+name]
 	if !ok {

@@ -304,6 +304,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **NAT matches a service group through any member that holds the port.** A
+  group with a member the snapshot does not define, such as `service-https`
+  without the predefined services, now matches a port another member holds, as
+  the security check and PBF do. Before, NAT stopped at the undefined member and
+  left the rule in doubt.
 - **An address name that two scopes define now means the nearest one, whatever
   its kind.** A vsys address hides a shared address group of the same name, and a
   vsys address group hides a shared address, in security policy, NAT, `lookup`
