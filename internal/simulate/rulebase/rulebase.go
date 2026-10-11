@@ -403,14 +403,79 @@ func ServiceTerm(proto string, port uint16) (string, bool) {
 
 // Defined returns the names a configuration defines for the kinds a rulebase's
 // field may name, so a value outside them is predefined or unknown here.
+//
+// A static group counts only when every member does, through nested groups: a
+// group that holds service-https in a snapshot without the predefined services
+// cannot rule out a flow its other members miss. A member on a cycle adds
+// nothing, so a group that holds only a cycle, or nothing, does not count.
 func Defined(cfg *config.Config, sc config.Scope, rb resolve.Rulebase, field string) map[string]bool {
 	out := map[string]bool{}
+	members := map[string][]string{} // each static group's members
 	for _, kind := range cfg.FieldKinds("rulebase/" + rb.String() + "/rules")[field] {
+		group := isGroupKind(cfg, kind)
 		for _, o := range resolve.ObjectsInScope(cfg, sc, kind) {
-			out[o.Name] = true
+			if !group || o.Dynamic {
+				out[o.Name] = true
+				continue
+			}
+			members[o.Name] = []string{}
+			for m := range strings.SplitSeq(o.Value, ", ") {
+				if m = strings.TrimSpace(m); m != "" {
+					members[o.Name] = append(members[o.Name], m)
+				}
+			}
+		}
+	}
+	// A group holds a defined object when one of its groups, at any depth,
+	// names one, and misses a member when one of them names a value that is
+	// neither an object nor a group. Each spreads from the groups that name
+	// it to every group holding them; a group is taken once, so a cycle ends.
+	holders := map[string][]string{}
+	var holds, misses []string
+	for g, ms := range members {
+		for _, m := range ms {
+			_, isGroup := members[m]
+			switch {
+			case isGroup:
+				holders[m] = append(holders[m], g)
+			case out[m]:
+				holds = append(holds, g)
+			default:
+				misses = append(misses, g)
+			}
+		}
+	}
+	spread := func(from []string) map[string]bool {
+		seen := map[string]bool{}
+		for len(from) > 0 {
+			g := from[len(from)-1]
+			from = from[:len(from)-1]
+			if !seen[g] {
+				seen[g] = true
+				from = append(from, holders[g]...)
+			}
+		}
+		return seen
+	}
+	held, missing := spread(holds), spread(misses)
+	for g := range members {
+		if held[g] && !missing[g] {
+			out[g] = true
 		}
 	}
 	return out
+}
+
+// isGroupKind reports whether a kind is a group kind: its member list can name
+// the kind itself, as the schema says (R1). A service group and an address
+// group are; a custom URL category, whose list holds URLs, is not.
+func isGroupKind(cfg *config.Config, kind string) bool {
+	for _, kinds := range cfg.FieldKinds("/" + kind) {
+		if slices.Contains(kinds, kind) {
+			return true
+		}
+	}
+	return false
 }
 
 // UndefinedService is the doubt of a rule that names a service no scope defines,

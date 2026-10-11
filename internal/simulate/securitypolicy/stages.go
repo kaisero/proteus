@@ -405,7 +405,12 @@ func matchService(_ context.Context, s *state) (simulate.Outcome, error) {
 		return simulate.Outcome{Fidelity: simulate.NotEvaluated("service"), Detail: "no port given"}, nil
 	}
 	b, rep := s.view.Candidates(index.Service, term)
+	// A rule whose service holds the port through an object the
+	// configuration defines matches on it, whatever else the field names, as
+	// a service group with one undefined member does.
+	s.serviceHits = b.Clone()
 	kept := s.unevaluable("service", "application-default")
+	kept.AndNot(s.serviceHits)
 	b.Or(kept)
 	s.cand.And(b)
 	out := simulate.Outcome{Fidelity: simulate.Exact, Detail: term, Candidates: s.cand}

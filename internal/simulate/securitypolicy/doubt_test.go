@@ -372,3 +372,41 @@ func TestAServiceNameResolvesByScopeFirst(t *testing.T) {
 		}
 	}
 }
+
+// A service group with a member the snapshot does not define, here
+// service-https without the predefined services, leaves its rule in doubt for
+// a flow the defined members miss: web-deny above allow-all is undecided for
+// tcp/443. A flow a defined member holds decides it, and so do the predefined
+// services.
+func TestAServiceGroupWithAnUndefinedMemberIsInDoubt(t *testing.T) {
+	t.Parallel()
+	fixture := "../../../testdata/config/firewall-service-group.xml"
+	dir := t.TempDir()
+	for src, dst := range map[string]string{fixture: "config.xml", "../../../testdata/predefined/predefined.xml": config.PredefinedFile} {
+		b, err := os.ReadFile(src)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, dst), b, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	flow := func(port uint16) simulate.Flow {
+		return simulate.Flow{Source: ep("10.88.1.5"), Destination: ep("10.88.10.100"), FromZone: "home", ToZone: "wan", DestPort: port}
+	}
+	without := envPath(t, fixture, false)
+	_, v := run(t, without, flow(443))
+	if out, why := v.Decision(); out != Undecided || why[0].Code != "doubt.service-predefined" ||
+		doubtList(v) != "1 web-deny: service predefined or not defined in the configuration (web); the snapshot holds no predefined services; a fetch with this release stores them when the device returns them" {
+		t.Errorf("tcp/443: %s %v, doubts %s", out, why, doubtList(v))
+	}
+	for _, tc := range []struct {
+		env  *simulate.Env
+		port uint16
+	}{{without, 8443}, {envPath(t, filepath.Join(dir, "config.xml"), false), 443}, {envPath(t, filepath.Join(dir, "config.xml"), false), 8443}} {
+		r, v := run(t, tc.env, flow(tc.port))
+		if out, _ := v.Decision(); out != Stop || first(v) != "web-deny" || len(v.Doubts) != 0 || stage(r, "match-service").Fidelity.Level() != "exact" {
+			t.Errorf("tcp/%d: %s %s, doubts %s, service stage %s", tc.port, out, first(v), doubtList(v), stage(r, "match-service").Fidelity)
+		}
+	}
+}

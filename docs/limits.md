@@ -19,7 +19,8 @@ proteus reports each of these limits in its answers. It does not hide them.
 - **Predefined services come from the device.** `fetch` stores `service-http` and
   `service-https` with each snapshot, in `predefined.xml`. A snapshot stored
   before, a firewall that refused them, or `--file` without `predefined.xml` next
-  to the configuration keeps a rule that names one in doubt.
+  to the configuration keeps a rule that names one, or a service group that
+  holds one, in doubt.
 - **External dynamic lists.** The firewall fetches their contents at runtime.
 - **User-to-group mapping.** It comes from User-ID. Give proteus a
   [user snapshot](configuration.md#the-user-snapshot).

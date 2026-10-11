@@ -348,6 +348,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   of an HTTP server profile and the values of an MFA server profile now read
   `(secret)`, as passwords do. Before, their old and new values showed, because
   the schema does not mark them as encrypted.
+- **A rule that names a service group holding an unknown service is now in
+  doubt.** In a snapshot without the predefined services, a group such as `web`
+  with `service-https` and `tcp/8443` counted as known, so a PBF or security
+  rule naming it was ruled out for `tcp/443` and a later rule answered, marked
+  exact.
 - **The version-gap note counts what the older schema does not know.** When a
   configuration is read with an older release's schema, the `gap.version` note now
   says how many of its elements that schema does not describe, such as fields a

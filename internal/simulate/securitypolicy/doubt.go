@@ -115,6 +115,10 @@ func (s *state) doubts() []Doubt {
 		for _, f := range ruleFields {
 			switch {
 			case f.name == "service":
+				//nolint:gosec // a rule position cannot reach 2^32; a rulebase is capped far below that
+				if s.serviceHits != nil && s.serviceHits.Contains(uint32(r.Position-1)) {
+					break // the port matched through a defined object
+				}
 				if why := s.serviceDoubt(r.Fields["service"], services); why.Text != "" {
 					add(why)
 				}

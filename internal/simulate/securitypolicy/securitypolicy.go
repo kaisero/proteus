@@ -159,8 +159,11 @@ type state struct {
 	opaque map[string]map[uint32][]reason.Reason
 	// fqdn holds, per address field, the candidates that matched the flow's
 	// FQDN only through an FQDN object, by rule position (spec 2026-10-09 §3.8).
-	fqdn    map[string]fqdnMatch
-	verdict Verdict
+	fqdn map[string]fqdnMatch
+	// serviceHits holds the rules whose service holds the flow's port through
+	// an object the configuration defines, or any; nil without a port.
+	serviceHits *roaring.Bitmap
+	verdict     Verdict
 }
 
 // fqdnMatch is the rules an FQDN reached only through an FQDN object, and the

@@ -4,6 +4,8 @@ import (
 	"errors"
 	"maps"
 	"net/netip"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -451,5 +453,87 @@ func TestUndefinedZones(t *testing.T) {
 	r = UndefinedZones(cfg, config.Scope{Sort: config.ScopeVsys, Name: "vsys9"}, "inside", "")
 	if r == nil || r.Choice.Question != "--from-zone inside is not a zone of vsys9 (it defines no zone)" {
 		t.Errorf("no zones: %+v", r)
+	}
+}
+
+// serviceGroupVsys loads firewall-service-group.xml, with the predefined
+// services of testdata/predefined next to it when predefined is set.
+func serviceGroupVsys(t *testing.T, predefined bool) Vsys {
+	t.Helper()
+	path := "../../../testdata/config/firewall-service-group.xml"
+	if predefined {
+		dir := t.TempDir()
+		for src, dst := range map[string]string{path: "config.xml", "../../../testdata/predefined/predefined.xml": config.PredefinedFile} {
+			b, err := os.ReadFile(src)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(dir, dst), b, 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}
+		path = filepath.Join(dir, "config.xml")
+	}
+	cfg, _, err := config.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	v, ok := Load(func(_, vsys string) (simulate.Target, error) { return withIndexes(cfg, vsys), nil }, "fw", "vsys1")
+	if !ok {
+		t.Fatal("vsys1")
+	}
+	return v
+}
+
+// A group counts as defined only when every member does, through nested
+// groups. A member on a cycle adds nothing, so a group that holds only a
+// cycle, or nothing, is not defined. web holds service-https, which a
+// snapshot without the predefined services does not define.
+func TestDefinedCountsAGroupWhenEveryMemberIsDefined(t *testing.T) {
+	t.Parallel()
+	for _, predefined := range []bool{false, true} {
+		v := serviceGroupVsys(t, predefined)
+		got := Defined(v.Config, v.Scope, resolve.PBF, "service")
+		want := map[string]bool{
+			"svc-8443": true, "svc-ssh": true, "inner-ssh": true, "ssh-set": true, "loop-a": true, "loop-b": true,
+			"web": predefined, "inner-web": predefined, "nested": predefined, "service-https": predefined,
+			"ring-a": false, "ring-b": false, "empty": false,
+		}
+		for name, w := range want {
+			if got[name] != w {
+				t.Errorf("predefined %v: %s defined %v, want %v", predefined, name, got[name], w)
+			}
+		}
+	}
+}
+
+// A PBF rule naming a group with an undefined member only may match a flow
+// the defined members miss; a flow a defined member holds decides it. With
+// the predefined services, tcp/443 decides it too.
+func TestPBFAGroupWithAnUndefinedMemberMayMatch(t *testing.T) {
+	t.Parallel()
+	dmz := simulate.Port{Zone: "dmz"}
+	for _, tc := range []struct {
+		predefined bool
+		port       uint16
+		note       string
+	}{
+		{false, 443, "pbf rule web-discard may drop this packet, if it matches: the rule names a service the configuration does not define, " +
+			"such as a predefined one; the snapshot holds no predefined services; a fetch with this release stores them when the device returns them"},
+		{false, 8443, "pbf rule web-discard may drop this packet"},
+		{true, 443, "pbf rule web-discard may drop this packet"},
+		{true, 8443, "pbf rule web-discard may drop this packet"},
+	} {
+		m := serviceGroupVsys(t, tc.predefined).PBF(ip("10.88.5.5"), ip("10.88.9.5"), "tcp", tc.port, dmz)
+		if !m.Found || m.Rule.Name != "web-discard" || m.Note != reason.New("path.pbf", tc.note) {
+			t.Errorf("predefined %v, tcp/%d: %+v", tc.predefined, tc.port, m)
+		}
+	}
+	// Without the predefined services, service-https may hold any port.
+	if m := serviceGroupVsys(t, false).PBF(ip("10.88.5.5"), ip("10.88.9.5"), "tcp", 22, dmz); !m.Found || !strings.Contains(m.Note.Text, "if it matches") {
+		t.Errorf("tcp/22 without the predefined services: %+v", m)
+	}
+	if m := serviceGroupVsys(t, true).PBF(ip("10.88.5.5"), ip("10.88.9.5"), "tcp", 22, dmz); m.Found {
+		t.Errorf("tcp/22, which no member holds: %+v", m)
 	}
 }
