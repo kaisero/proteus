@@ -304,6 +304,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A NAT rule whose source or destination is an external list, a region or a
+  dynamic group is a doubt.** Such a rule may hold an address without the
+  configuration saying so, so a flow it may take now lists it as a doubt, as
+  PBF and the security check do. Before, NAT skipped the rule as a sure miss and
+  a later rule answered, marked exact.
 - **A NAT pool whose address groups hold each other no longer stops the
   program.** Each group of a translated address now adds its members once, so a
   cycle ends and a group held twice adds its addresses once. Before, such a pool

@@ -306,11 +306,13 @@ func UnknownNextHopType(node string, m simulate.Match) (reason.Reason, bool)
 type Addresses map[string]string
 type PBFMatch struct{ ... }
 type PBFPassed struct{ ... }
+type Side struct{ ... }
 type Vsys struct{ ... }
 type ZoneRefusal struct{ ... }
 
 func (m Addresses) Holds(value string, a netip.Addr) bool
 func (p PBFPassed) String() string
+func (s Side) Holds(i uint32) bool
 func (v Vsys) Addresses() Addresses
 func (v Vsys) PBF(src, dst netip.Addr, proto string, port uint16, in simulate.Port) PBFMatch
 func (v Vsys) Sides(rb resolve.Rulebase, src, dst netip.Addr, negated func(int) (bool, bool)) (

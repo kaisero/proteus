@@ -48,9 +48,26 @@ func Load(load func(device, vsys string) (simulate.Target, error), device, vsys 
 	return Vsys{}, false
 }
 
+// Side is the rules one side of a rulebase could hold an address in.
+type Side struct {
+	// Rules holds the rules whose side holds the address by what the
+	// configuration states, negated sides inverted.
+	Rules *roaring.Bitmap
+	// May holds, by rule position, the rules the side only may hold, and why:
+	// they name an external list, a region or a dynamic address group, which
+	// can hold the address without the configuration saying so.
+	May map[uint32][]reason.Reason
+}
+
+// Holds reports whether the side holds rule i, for sure or only perhaps.
+func (s Side) Holds(i uint32) bool {
+	_, may := s.May[i]
+	return may || s.Rules.Contains(i)
+}
+
 // Sides returns the rules, by position in the rulebase, whose source and whose
-// destination could hold the flow's addresses, negated sides inverted. An invalid
-// address holds anything.
+// destination could hold the flow's addresses, negated sides inverted, and on
+// each side the rules it only may hold. An invalid address holds anything.
 //
 // Values the index recognised but could not evaluate come back as unresolved: a
 // rule reached only through one of them can be missing from its side. A schema
@@ -58,55 +75,30 @@ func Load(load func(device, vsys string) (simulate.Target, error), device, vsys 
 // built returns no rule and says so as an unresolved entry, because a silent "no
 // rule" would be a wrong answer that looks complete.
 func (v Vsys) Sides(rb resolve.Rulebase, src, dst netip.Addr, negated func(int) (bool, bool)) (
-	s, d *roaring.Bitmap, unresolved []index.Unresolved,
-) {
-	ss, ds, unresolved := v.sides(rb, src, dst, negated)
-	return ss.rules, ds.rules, unresolved
-}
-
-// side is the rules one side of a rulebase could hold an address in.
-type side struct {
-	// rules holds the rules whose side holds the address by what the
-	// configuration states, negated sides inverted.
-	rules *roaring.Bitmap
-	// may holds, by rule position, the rules the side only may hold, and why:
-	// they name an external list, a region or a dynamic address group, which
-	// can hold the address without the configuration saying so.
-	may map[uint32][]reason.Reason
-}
-
-// holds reports whether the side holds rule i, for sure or only perhaps.
-func (s side) holds(i uint32) bool {
-	_, may := s.may[i]
-	return may || s.rules.Contains(i)
-}
-
-// sides is Sides with, on each side, the rules it only may hold.
-func (v Vsys) sides(rb resolve.Rulebase, src, dst netip.Addr, negated func(int) (bool, bool)) (
-	s, d side, unresolved []index.Unresolved,
+	s, d Side, unresolved []index.Unresolved,
 ) {
 	idx, err := v.index(rb)
 	if err != nil {
 		why := reason.New("gap.load-failed", fmt.Sprintf("the %s rules of %s were not checked: %v", rb, v.Scope.Name, err))
-		return side{rules: roaring.New()}, side{rules: roaring.New()}, []index.Unresolved{index.NewUnresolved(v.Scope.Name, "", why)}
+		return Side{Rules: roaring.New()}, Side{Rules: roaring.New()}, []index.Unresolved{index.NewUnresolved(v.Scope.Name, "", why)}
 	}
 	view := idx.With(index.Providers{})
 	n := len(idx.Rules())
 	all := roaring.New()
 	all.AddRange(0, uint64(len(idx.Rules())))
-	one := func(f index.Field, a netip.Addr, neg func(int) bool) side {
+	one := func(f index.Field, a netip.Addr, neg func(int) bool) Side {
 		if !a.IsValid() {
-			return side{rules: all.Clone()}
+			return Side{Rules: all.Clone()}
 		}
 		b, rep := idx.Candidates(f, a.String())
 		unresolved = append(unresolved, withoutGap(rep.Unresolved)...)
-		out := side{rules: b.Clone()}
+		out := Side{Rules: b.Clone()}
 		for i := range n {
 			if neg(i) {
 				if b.Contains(uint32(i)) {
-					out.rules.Remove(uint32(i))
+					out.Rules.Remove(uint32(i))
 				} else {
-					out.rules.Add(uint32(i))
+					out.Rules.Add(uint32(i))
 				}
 			}
 		}
@@ -117,11 +109,11 @@ func (v Vsys) sides(rb resolve.Rulebase, src, dst netip.Addr, negated func(int) 
 		opaque, why := view.Opaque(f)
 		opaque.AndNot(b)
 		for it := opaque.Iterator(); it.HasNext(); {
-			if out.may == nil {
-				out.may = map[uint32][]reason.Reason{}
+			if out.May == nil {
+				out.May = map[uint32][]reason.Reason{}
 			}
 			bit := it.Next()
-			out.may[bit] = simulate.Reasons(why[bit]).Prefixed(f.String() + ": ")
+			out.May[bit] = simulate.Reasons(why[bit]).Prefixed(f.String() + ": ")
 		}
 		return out
 	}
@@ -271,7 +263,7 @@ func texts(rs []reason.Reason) string {
 // tcp/22; tcp/443 and udp/22 went on to the forward rule.
 func (v Vsys) PBF(src, dst netip.Addr, proto string, port uint16, in simulate.Port) PBFMatch {
 	rules := v.Target.PBFRules()
-	s, d, un := v.sides(resolve.PBF, src, dst, func(i int) (bool, bool) {
+	s, d, un := v.Sides(resolve.PBF, src, dst, func(i int) (bool, bool) {
 		return rules[i].NegateSource, rules[i].NegateDestination
 	})
 	m := PBFMatch{Unresolved: un}
@@ -280,7 +272,7 @@ func (v Vsys) PBF(src, dst netip.Addr, proto string, port uint16, in simulate.Po
 	defaults := pbfDefaults(v.Config)
 	for i, r := range rules {
 		bit := uint32(i) //nolint:gosec // a rule position cannot reach 2^32; a rulebase is capped far below that
-		if r.Disabled || !s.holds(bit) || !d.holds(bit) || !FromFits(r, in) {
+		if r.Disabled || !s.Holds(bit) || !d.Holds(bit) || !FromFits(r, in) {
 			continue
 		}
 		fields := withDefaults(r.Fields, defaults)
@@ -288,7 +280,7 @@ func (v Vsys) PBF(src, dst netip.Addr, proto string, port uint16, in simulate.Po
 		if !fits {
 			continue
 		}
-		doubts := slices.Concat(s.may[bit], d.may[bit], why, notEvaluated(fields, r.Schedule))
+		doubts := slices.Concat(s.May[bit], d.May[bit], why, notEvaluated(fields, r.Schedule))
 		if r.ActionKind == resolve.PBFNoPBF && len(doubts) > 0 {
 			m.Passed = append(m.Passed, PBFPassed{Rule: r.Name, Doubts: doubts})
 			continue

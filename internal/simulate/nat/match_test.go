@@ -456,3 +456,51 @@ func TestWithoutPredefinedServicesNATStaysInDoubt(t *testing.T) {
 		}
 	}
 }
+
+// A NAT rule that names an external list, a region or a dynamic group as its
+// source may hold the flow's source without the configuration saying so. Such a
+// rule is a doubt, as in PBF and the security check; it is not excluded.
+func TestAnOpaqueSourceIsADoubt(t *testing.T) {
+	t.Parallel()
+	rule := func(name, src string) string {
+		return `<entry name="` + name + `"><from><member>trust</member></from><to><member>untrust</member></to>` +
+			`<source><member>` + src + `</member></source><destination><member>any</member></destination>` +
+			`<service>any</service><source-translation><dynamic-ip-and-port><interface-address>` +
+			`<interface>ethernet1/1</interface></interface-address></dynamic-ip-and-port></source-translation></entry>`
+	}
+	doc := `<config version="11.2.0" urldb="paloaltonetworks"><devices>` +
+		`<entry name="localhost.localdomain"><vsys><entry name="vsys1">` +
+		`<address-group><entry name="dag-web"><dynamic><filter>'web-tag'</filter></dynamic></entry></address-group>` +
+		`<external-list><entry name="edl-bad"><type><ip><recurring><daily><at>01</at></daily></recurring>` +
+		`<url>https://lists.example.com/bad.txt</url></ip></type></entry></external-list>` +
+		`<rulebase><nat><rules>` + rule("edl-snat", "edl-bad") + rule("geo-snat", "DE") + rule("dag-snat", "dag-web") +
+		rule("rest-snat", "any") + `</rules></nat></rulebase></entry></vsys></entry></devices></config>`
+	path := filepath.Join(t.TempDir(), "firewall.xml")
+	if err := os.WriteFile(path, []byte(doc), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, _, err := config.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	in := Input{
+		Target: withIndexes(cfg, "vsys1"), Vsys: "vsys1",
+		Flow: simulate.Flow{
+			Source:      simulate.Addr(netip.MustParseAddr("10.88.77.1")),
+			Destination: simulate.Addr(netip.MustParseAddr("198.19.0.1")),
+			Protocol:    "tcp", DestPort: 443,
+		},
+		In:     simulate.Port{Device: "fw", Router: "default", Zone: "trust"},
+		PreNAT: &simulate.Forward{Out: simulate.Port{Zone: "untrust", Interface: "ethernet1/1"}},
+	}
+	m := Match(in)
+	var doubts []string
+	for _, d := range m.Doubts {
+		doubts = append(doubts, d.Rule+": "+d.Text())
+	}
+	want := "edl-snat: source: external list (edl-bad); geo-snat: source: region (DE); " +
+		"dag-snat: source: members registered at runtime are not known (dag-web)"
+	if m.Rule == nil || m.Rule.Name != "rest-snat" || strings.Join(doubts, "; ") != want {
+		t.Errorf("rule %v, doubts %q, excluded %v", m.Rule, doubts, m.Excluded)
+	}
+}

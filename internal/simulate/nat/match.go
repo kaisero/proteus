@@ -7,8 +7,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/RoaringBitmap/roaring/v2"
-
 	"github.com/okaiser/proteus/internal/config"
 	"github.com/okaiser/proteus/internal/index"
 	"github.com/okaiser/proteus/internal/reason"
@@ -163,7 +161,7 @@ type matchEnv struct {
 
 // fits decides one rule: a field that excludes it, or a doubt, or neither (a sure
 // match).
-func (r *Rule) fits(in Input, pre simulate.Forward, src, dst *roaring.Bitmap, env matchEnv) (string, simulate.Reasons) {
+func (r *Rule) fits(in Input, pre simulate.Forward, src, dst rulebase.Side, env matchEnv) (string, simulate.Reasons) {
 	if r.Disabled {
 		return "disabled", nil
 	}
@@ -199,12 +197,16 @@ func (r *Rule) fits(in Input, pre simulate.Forward, src, dst *roaring.Bitmap, en
 	}
 	if r.explicit >= 0 {
 		pos := uint32(r.explicit) //nolint:gosec // a rulebase position fits in 32 bits
-		if !src.Contains(pos) {
+		if !src.Holds(pos) {
 			return "source", nil
 		}
-		if !dst.Contains(pos) {
+		if !dst.Holds(pos) {
 			return "destination", nil
 		}
+		// A side naming an external list, a region or a dynamic group only
+		// may hold the address, as in PBF and the security check (spec E23).
+		doubts = append(doubts, src.May[pos]...)
+		doubts = append(doubts, dst.May[pos]...)
 	} else if !env.addrs.Holds(first(r.Fields["destination"]), in.Flow.Destination.Addrs[0]) {
 		return "destination", nil
 	}

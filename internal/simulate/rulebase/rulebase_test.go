@@ -89,8 +89,8 @@ func TestAnUnbuildableIndexIsUnresolved(t *testing.T) {
 	bad.Indexes = index.NewSet(bad.Config).Provider(bad.Scope)
 	noNegation := func(int) (bool, bool) { return false, false }
 	s, d, un := bad.Sides(resolve.NAT, ip("1.1.1.1"), ip("1.1.1.1"), noNegation)
-	if !s.IsEmpty() || !d.IsEmpty() || s == d || len(un) != 1 || !strings.Contains(un[0].Reason, "not checked") {
-		t.Errorf("Sides: %v %v %v", s.ToArray(), d.ToArray(), un)
+	if !s.Rules.IsEmpty() || !d.Rules.IsEmpty() || s.Rules == d.Rules || len(un) != 1 || !strings.Contains(un[0].Reason, "not checked") {
+		t.Errorf("Sides: %v %v %v", s.Rules.ToArray(), d.Rules.ToArray(), un)
 	}
 	if m := bad.PBF(ip("1.1.1.1"), ip("1.1.1.1"), "tcp", 443, simulate.Port{}); m.Found || len(m.Unresolved) != 1 {
 		t.Errorf("PBF: %+v", m)
@@ -125,8 +125,8 @@ func TestSidesAndHolds(t *testing.T) {
 	t.Parallel()
 	v := routingVsys(t)
 	src, dst, un := v.Sides(resolve.NAT, netip.Addr{}, ip("198.51.100.10"), func(int) (bool, bool) { return false, false })
-	if len(un) != 0 || src.GetCardinality() != 4 || !dst.Contains(1) {
-		t.Errorf("src %v, dst %v, unresolved %v", src.ToArray(), dst.ToArray(), un)
+	if len(un) != 0 || src.Rules.GetCardinality() != 4 || !dst.Rules.Contains(1) {
+		t.Errorf("src %v, dst %v, unresolved %v", src.Rules.ToArray(), dst.Rules.ToArray(), un)
 	}
 	addrs := v.Addresses()
 	if addrs["dc01"] != "10.1.10.100" {
