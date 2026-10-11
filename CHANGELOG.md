@@ -304,6 +304,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A NAT pool whose address groups hold each other no longer stops the
+  program.** Each group of a translated address now adds its members once, so a
+  cycle ends and a group held twice adds its addresses once. Before, such a pool
+  recursed until the stack ran out, which ended `simulate` and the MCP server
+  with a fatal error.
 - **A search finding names the scope that defines the object.** An object found
   by its name, and a group holding an object found, now carry their own `scope`
   in JSON, YAML and MCP answers, such as `shared` or `predefined`. Before, they

@@ -163,6 +163,13 @@ func (t *translator) pool(s *resolve.SourceTranslation, r *Rule) []string {
 // holds. A dynamic group or an external list is runtime content (spec §18 N2).
 // hostOnly drops a prefix length: an interface address is written with its mask.
 func (t *translator) values(name string, r *Rule, hostOnly bool) []string {
+	return t.expand(name, r, hostOnly, map[string]bool{})
+}
+
+// expand is values with the groups already opened. A group opens once: met
+// again, through a shared member group or a cycle, it adds nothing more, so a
+// cycle of groups ends and a shared group's addresses are not repeated.
+func (t *translator) expand(name string, r *Rule, hostOnly bool, opened map[string]bool) []string {
 	lit := func(v string) (string, bool) {
 		if p, err := netip.ParsePrefix(v); err == nil && hostOnly {
 			return p.Addr().String(), true
@@ -188,9 +195,13 @@ func (t *translator) values(name string, r *Rule, hostOnly bool) []string {
 				fmt.Sprintf("rule %s uses dynamic group %s, whose members are known at runtime", r.Name, name)))
 			return nil
 		}
+		if opened[name] {
+			return nil
+		}
+		opened[name] = true
 		var out []string
 		for m := range strings.SplitSeq(g.Value, ", ") {
-			out = append(out, t.values(m, r, hostOnly)...)
+			out = append(out, t.expand(m, r, hostOnly, opened)...)
 		}
 		return out
 	}
