@@ -1,6 +1,7 @@
 package config
 
 import (
+	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -260,6 +261,22 @@ func TestNoSecretIsAReference(t *testing.T) {
 	})
 	if secrets == 0 {
 		t.Fatal("the digest marks no secret")
+	}
+	// Each hand-modelled secret names a node of the digest, and IsSecret
+	// marks it: a typo in a registered path would hide nothing.
+	for _, h := range schema.HandModelled() {
+		if !h.Secret {
+			continue
+		}
+		found := 0
+		cfg.Digest().Walk(func(n *schema.Node) {
+			if ok, _ := path.Match(h.Path, n.Path()); ok && n.Kind == schema.KindElement && schema.IsSecret(n) {
+				found++
+			}
+		})
+		if found == 0 {
+			t.Errorf("%s names no secret of the digest", h.Path)
+		}
 	}
 	if err := cfg.WalkPaths(func(e Event) bool {
 		for _, v := range e.Values {

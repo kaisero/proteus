@@ -1,6 +1,7 @@
 package schema
 
 import (
+	"path"
 	"strings"
 	"sync"
 )
@@ -8,7 +9,7 @@ import (
 // HandModel records a config node the schema does not describe, so it must be
 // modelled by hand. See AGENTS.md R8.
 type HandModel struct {
-	Path   string // the config xpath
+	Path   string // the config xpath; for a secret, a * may stand for one segment
 	Reason string // why the schema does not describe it
 	Owner  string // the Go package that models it
 	// Secret marks a node whose value is never shown, like one the schema marks
@@ -70,16 +71,33 @@ var handModelled = []HandModel{
 	// future reader hides the hash too.
 	{Path: "/config/mgt-config/users/entry/phash", Reason: phashReason + "; no package reads administrators yet, " +
 		"and IsSecret marks it for any that will", Owner: "internal/schema", Secret: true},
+	// Credentials the schema keeps in clear text, in shared and in a vsys: an
+	// SNMP v2c trap community, a SCEP fixed challenge, the header and parameter
+	// values of an HTTP log server profile, which carry API tokens, and the
+	// values of an MFA server profile, which carry the vendor's keys. A *
+	// stands for one segment: here the log type of an HTTP profile's format.
+	{Path: "/config/shared/log-settings/snmptrap/entry/version/v2c/server/entry/community", Reason: clearReason, Owner: "internal/drift", Secret: true},
+	{Path: "/config/devices/entry/vsys/entry/log-settings/snmptrap/entry/version/v2c/server/entry/community", Reason: clearReason, Owner: "internal/drift", Secret: true},
+	{Path: "/config/shared/scep/entry/scep-challenge/fixed", Reason: clearReason, Owner: "internal/drift", Secret: true},
+	{Path: "/config/devices/entry/vsys/entry/scep/entry/scep-challenge/fixed", Reason: clearReason, Owner: "internal/drift", Secret: true},
+	{Path: "/config/shared/log-settings/http/entry/format/*/headers/entry/value", Reason: clearReason, Owner: "internal/drift", Secret: true},
+	{Path: "/config/devices/entry/vsys/entry/log-settings/http/entry/format/*/headers/entry/value", Reason: clearReason, Owner: "internal/drift", Secret: true},
+	{Path: "/config/shared/log-settings/http/entry/format/*/params/entry/value", Reason: clearReason, Owner: "internal/drift", Secret: true},
+	{Path: "/config/devices/entry/vsys/entry/log-settings/http/entry/format/*/params/entry/value", Reason: clearReason, Owner: "internal/drift", Secret: true},
+	{Path: "/config/shared/server-profile/mfa-server-profile/entry/mfa-config/entry/value", Reason: clearReason, Owner: "internal/drift", Secret: true},
+	{Path: "/config/devices/entry/vsys/entry/server-profile/mfa-server-profile/entry/mfa-config/entry/value", Reason: clearReason, Owner: "internal/drift", Secret: true},
 }
 
 // secretPaths are the hand-modelled secrets, by schema path, and
 // secretNames the last segment of each, so a tree is searched without
-// building the path of every node.
-var secretPaths, secretNames = func() (map[string]bool, map[string]bool) {
-	paths, names := map[string]bool{}, map[string]bool{}
+// building the path of every node. A path's * stands for one segment
+// (path.Match); a last segment is always a name.
+var secretPaths, secretNames = func() ([]string, map[string]bool) {
+	var paths []string
+	names := map[string]bool{}
 	for _, h := range handModelled {
 		if h.Secret {
-			paths[h.Path] = true
+			paths = append(paths, h.Path)
 			names[h.Path[strings.LastIndex(h.Path, "/")+1:]] = true
 		}
 	}
@@ -115,8 +133,15 @@ func IsSecret(n *Node) bool {
 func secretNodes(root *Node) map[*Node]bool {
 	out := map[*Node]bool{}
 	root.Walk(func(n *Node) {
-		if secretNames[n.Name] && secretPaths[n.Path()] {
-			out[n] = true
+		if !secretNames[n.Name] {
+			return
+		}
+		p := n.Path()
+		for _, pattern := range secretPaths {
+			if ok, _ := path.Match(pattern, p); ok {
+				out[n] = true
+				return
+			}
 		}
 	})
 	return out
@@ -124,6 +149,10 @@ func secretNodes(root *Node) map[*Node]bool {
 
 // phashReason is why a phash node is registered as a secret.
 const phashReason = "a password hash; the schema does not mark it encrypted"
+
+// clearReason is why a credential the schema keeps in clear text is
+// registered as a secret.
+const clearReason = "holds a credential in clear text; the schema does not mark it encrypt"
 
 // HandModelled returns the registered hand-modelled nodes.
 func HandModelled() []HandModel {

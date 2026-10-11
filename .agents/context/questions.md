@@ -156,7 +156,8 @@ func Compare(before, after *config.Config, sc config.Scope) []Change
 - **"Predefined" means only "not in the configuration".** No table of PAN-OS
   predefined values exists (spec §14 open item 6).
 - **A secret never shows.** A setting `schema.IsSecret` marks (the schema's
-  `encrypt="yes"`, or the hand-modelled `phash`) is compared, but its values read
+  `encrypt="yes"`, or a hand-modelled one: `phash` and the credentials the schema
+  keeps in clear text, such as an SNMP v2c community) is compared, but its values read
   `(secret)` (`drift.Hidden`) and `FieldChange.Secret` is set; the text line is
   `<path>: changed (secret, not shown)`. A short line passes `redact` as a second
   guard (`drift.TestCompareHidesSecrets`).

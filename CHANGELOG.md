@@ -329,6 +329,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   counted 13 times the file size alone, so the cache could grow past `max_cache`.
   A `max_cache` sized by the old rule can now be too small, and the server then
   loads snapshots again.
+- **`snapshot diff` hides SNMP communities and other clear-text credentials.** An
+  SNMP v2c trap community, a SCEP fixed challenge, the header and parameter values
+  of an HTTP server profile and the values of an MFA server profile now read
+  `(secret)`, as passwords do. Before, their old and new values showed, because
+  the schema does not mark them as encrypted.
 - **The version-gap note counts what the older schema does not know.** When a
   configuration is read with an older release's schema, the `gap.version` note now
   says how many of its elements that schema does not describe, such as fields a

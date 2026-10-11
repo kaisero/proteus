@@ -396,6 +396,57 @@ func TestCompareHidesSecrets(t *testing.T) {
 			}
 		}
 	}
+	// Credentials the schema holds in clear text, registered by hand: the
+	// same in shared and in a vsys.
+	for _, tc := range []struct {
+		body       string // one %s for the value
+		kind, name string
+		path       string
+	}{
+		{
+			`<log-settings><snmptrap><entry name="trap1"><version><v2c><server><entry name="mgr1"><manager>10.88.6.1</manager><community>%s</community></entry></server></v2c></version></entry></snmptrap></log-settings>`,
+			"snmptrap", "trap1", "version/v2c/server/mgr1/community",
+		},
+		{
+			`<scep><entry name="scep1"><scep-url>https://scep.example.com/</scep-url><scep-challenge><fixed>%s</fixed></scep-challenge></entry></scep>`,
+			"scep", "scep1", "scep-challenge/fixed",
+		},
+		{
+			`<log-settings><http><entry name="http1"><format><traffic><headers><entry name="Authorization"><value>%s</value></entry></headers></traffic></format></entry></http></log-settings>`,
+			"http", "http1", "format/traffic/headers/Authorization/value",
+		},
+		{
+			`<log-settings><http><entry name="http1"><format><threat><params><entry name="token"><value>%s</value></entry></params></threat></format></entry></http></log-settings>`,
+			"http", "http1", "format/threat/params/token/value",
+		},
+		{
+			`<server-profile><mfa-server-profile><entry name="mfa1"><mfa-vendor-type>duo-security-v2</mfa-vendor-type><mfa-config><entry name="duo-secret-key"><value>%s</value></entry></mfa-config></entry></mfa-server-profile></server-profile>`,
+			"mfa-server-profile", "mfa1", "mfa-config/duo-secret-key/value",
+		},
+	} {
+		for _, sc := range []config.Scope{{Sort: config.ScopeShared}, vsys1} {
+			before := loadXML(t, inScope(sc, fmt.Sprintf(tc.body, "DUMMYCLEARBEFORE00")))
+			after := loadXML(t, inScope(sc, fmt.Sprintf(tc.body, "DUMMYCLEARAFTER000")))
+			none := loadXML(t, inScope(sc, ""))
+			got := Compare(before, after, sc)
+			want := []Change{{Op: Changed, Kind: tc.kind, Name: tc.name, Fields: hidden(tc.path)}}
+			if !reflect.DeepEqual(got, want) {
+				t.Errorf("%s %s: got  %+v\nwant %+v", sc, tc.path, got, want)
+			}
+			got = append(got, Compare(before, none, sc)...)
+			got = append(got, Compare(none, after, sc)...)
+			assertAbsent(t, got, "DUMMYCLEAR")
+		}
+	}
+}
+
+// inScope is a configuration that holds body in one scope: shared or vsys1.
+func inScope(sc config.Scope, body string) string {
+	if sc.Sort == config.ScopeShared {
+		return `<config version="11.2.0"><shared>` + body + `</shared></config>`
+	}
+	return `<config version="11.2.0"><shared/><devices><entry name="localhost.localdomain"><vsys><entry name="vsys1">` +
+		body + `</entry></vsys></entry></devices></config>`
 }
 
 // A secret set where there was none shows (secret) on the side that holds it.

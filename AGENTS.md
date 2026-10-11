@@ -96,7 +96,10 @@ Today these nodes are registered:
   load's count of undescribed elements;
 - the device's predefined services under `predefined/service`;
 - `phash`, the password hash of a local user (shared and vsys) and of an
-  administrator: a secret the schema does not mark `encrypt="yes"`.
+  administrator: a secret the schema does not mark `encrypt="yes"`;
+- the credentials the schema keeps in clear text, in shared and in a vsys: the
+  SNMP v2c trap community, the SCEP fixed challenge, the header and parameter
+  values of an HTTP log server profile and the values of an MFA server profile.
 
 Check: `go test ./internal/schema -run TestHandModelledIsDeclared`
 
