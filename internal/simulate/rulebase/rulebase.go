@@ -158,9 +158,10 @@ func withoutGap(unresolved []index.Unresolved) []index.Unresolved {
 // once per question and asks Holds of the map.
 type Addresses map[string]string
 
-// Addresses returns the address objects the vsys sees.
+// Addresses returns the address objects the vsys sees. An address group of the
+// same name in a nearer scope hides an address (L10).
 func (v Vsys) Addresses() Addresses {
-	objs := resolve.ObjectsInScope(v.Config, v.Scope, "address")
+	objs := resolve.ObjectsOfKindsInScope(v.Config, v.Scope, "address", "address-group")["address"]
 	out := make(Addresses, len(objs))
 	for _, o := range objs {
 		out[o.Name] = o.Value

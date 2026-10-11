@@ -46,9 +46,10 @@ name is ambiguous in the schema.
 in a field can mean. A name resolves by scope first and kind second: only the
 nearest scope that defines it in any of the kinds counts, so a vsys service hides a
 shared service group of its name, and a vsys service group hides the predefined
-service (lab fact L9). The security index and NAT read services and service groups
-through it. Addresses and address groups are still read one kind at a time: the
-device behaviour for them is not checked yet (`docs/todo.md`).
+service (lab fact L9). Addresses resolve the same way: a vsys address hides a
+shared address group of its name, and the other way round (lab fact L10). The
+security index, NAT and lookup cards read services and service groups, and
+addresses and address groups, through it.
 
 `objectValue` reduces an object to the one value that identifies it, and PAN-OS
 spells that differently per kind: `ip-netmask`, `ip-range`, `fqdn`, `ip-wildcard`,

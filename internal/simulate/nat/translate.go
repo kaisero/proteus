@@ -84,12 +84,18 @@ type translator struct {
 	groups map[string]resolve.Object
 }
 
-// objects returns the vsys's address objects and address groups by name.
+// objects returns the vsys's address objects and address groups by name. A
+// name resolves by scope first, kind second: the nearer of an address and a
+// group of one name hides the other (L10).
 func (t *translator) objects() (rulebase.Addresses, map[string]resolve.Object) {
 	if t.addrs == nil {
-		t.addrs = t.v.Addresses()
+		kinds := resolve.ObjectsOfKindsInScope(t.v.Config, t.v.Scope, "address", "address-group")
+		t.addrs = make(rulebase.Addresses, len(kinds["address"]))
+		for _, o := range kinds["address"] {
+			t.addrs[o.Name] = o.Value
+		}
 		t.groups = map[string]resolve.Object{}
-		for _, o := range resolve.ObjectsInScope(t.v.Config, t.v.Scope, "address-group") {
+		for _, o := range kinds["address-group"] {
 			t.groups[o.Name] = o
 		}
 	}

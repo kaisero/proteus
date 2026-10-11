@@ -72,10 +72,11 @@ func New(cfg *config.Config, sc config.Scope, rb resolve.Rulebase) (*Index, erro
 func build(cfg *config.Config, edges edgeList, sc config.Scope, rb resolve.Rulebase) (*Index, error) {
 	in := NewInterner()
 
-	addrs := resolve.ObjectsInScope(cfg, sc, "address")
-	groups := resolve.ObjectsInScope(cfg, sc, addressGroups)
-	// A service name resolves by scope first, kind second: a vsys service
-	// hides a shared service group of its name, and the other way round (L9).
+	// A service or address name resolves by scope first, kind second: a vsys
+	// service hides a shared service group of its name, a vsys address group
+	// a shared address, and the other way round (L9, L10).
+	addrKinds := resolve.ObjectsOfKindsInScope(cfg, sc, "address", addressGroups)
+	addrs, groups := addrKinds["address"], addrKinds[addressGroups]
 	svcKinds := resolve.ObjectsOfKindsInScope(cfg, sc, "service", "service-group")
 	svcs, svcGroups := svcKinds["service"], svcKinds["service-group"]
 	appGroups := resolve.ObjectsInScope(cfg, sc, "application-group")

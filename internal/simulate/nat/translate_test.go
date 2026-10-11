@@ -265,3 +265,28 @@ func TestAPoolGroupCycleEnds(t *testing.T) {
 		t.Errorf("source = %+v", r.Source)
 	}
 }
+
+// As observed on fw02, PAN-OS 12.2.3 (L10): an address name resolves by scope
+// first and kind second. The pool rv-adr2 is vsys1's group (10.88.6.6), which
+// hides shared's address rv-adr2 (10.88.7.7).
+func TestAPoolNameResolvesByScopeFirst(t *testing.T) {
+	t.Parallel()
+	cfg, _, err := config.Load("../../../testdata/config/firewall-address-cross-kind.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	in := Input{
+		Target: withIndexes(cfg, "vsys1"), Vsys: "vsys1",
+		Flow: simulate.Flow{
+			Source:      simulate.Addr(netip.MustParseAddr("10.88.250.1")),
+			Destination: simulate.Addr(netip.MustParseAddr("198.19.0.1")),
+			Protocol:    "tcp", DestPort: 443,
+		},
+		In:     simulate.Port{Device: "fw", Router: "default", Zone: "home"},
+		PreNAT: &simulate.Forward{Out: simulate.Port{Zone: "wan", Interface: "ethernet1/1"}},
+	}
+	r := Translate(in, Match(in))
+	if r.Source == nil || strings.Join(r.Source.Candidates, " ") != "10.88.6.6/32" {
+		t.Errorf("source = %+v", r.Source)
+	}
+}

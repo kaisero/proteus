@@ -117,8 +117,9 @@ Check: review.
 No index spans scopes, and no lookup resolves a name without one. A scope is
 `shared` or `vsys:<name>`, and a vsys inherits shared. Below shared, every scope
 sees the device's predefined services; a shared or vsys service or service group
-of the same name hides them. A service name resolves by scope first and kind
-second, so a vsys service also hides a shared service group of its name.
+of the same name hides them. A service or address name resolves by scope first
+and kind second, so a vsys service also hides a shared service group of its
+name, and a vsys address group a shared address (lab facts L9, L10).
 
 A global index merges sibling scopes. First observed on a lab device: one shared
 dynamic address group resolved to `10.124.0.0/16` in one scope and

@@ -337,6 +337,17 @@ func TestAGroupOpensAtItsShallowestPlace(t *testing.T) {
 	}
 }
 
+// As observed on fw02, PAN-OS 12.2.3 (L10): addresses resolve by scope first,
+// kind second, as services do.
+func TestAnAddressNameResolvesByScopeFirst(t *testing.T) {
+	t.Parallel()
+	for rule, want := range map[string]string{"sec-a": "rv-adr(10.88.8.8/32)", "sec-b": "rv-adr2{rv-a6(10.88.6.6/32)}"} {
+		if got := flat(row(one(t, "firewall-address-cross-kind.xml", rule), "source", "addresses").Items); got != want {
+			t.Errorf("%s source = %s, want %s", rule, got, want)
+		}
+	}
+}
+
 // An address and a service may share a name; each card lists only the groups of
 // its own kind that hold it.
 func TestHeldByKeepsToTheObjectsKind(t *testing.T) {

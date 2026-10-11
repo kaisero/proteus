@@ -373,6 +373,21 @@ func TestAServiceNameResolvesByScopeFirst(t *testing.T) {
 	}
 }
 
+// As observed on fw02, PAN-OS 12.2.3 (L10): an address name resolves as a
+// service name does, by scope first and kind second. vsys1's address rv-adr
+// hides shared's group rv-adr, and vsys1's group rv-adr2 hides shared's address
+// rv-adr2.
+func TestAnAddressNameResolvesByScopeFirst(t *testing.T) {
+	t.Parallel()
+	e := envPath(t, "../../../testdata/config/firewall-address-cross-kind.xml", false)
+	for src, rule := range map[string]string{"10.88.8.8": "sec-a", "10.88.9.9": "rest", "10.88.6.6": "sec-b", "10.88.7.7": "rest"} {
+		_, v := run(t, e, simulate.Flow{Source: ep(src), Destination: ep("198.19.0.1"), FromZone: "home", ToZone: "wan", DestPort: 443})
+		if first(v) != rule || len(v.Doubts) != 0 || len(v.Undecided) != 0 {
+			t.Errorf("%s: rule %s, want %s; doubts %s, undecided %v", src, first(v), rule, doubtList(v), v.Undecided)
+		}
+	}
+}
+
 // A service group with a member the snapshot does not define, here
 // service-https without the predefined services, leaves its rule in doubt for
 // a flow the defined members miss: web-deny above allow-all is undecided for

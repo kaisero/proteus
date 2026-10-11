@@ -73,7 +73,7 @@ Every item names its **component** (the package or area it changes) and one **ta
 | 54 | bug | simulate/routing | A hairpin through another firewall is reported as a loop |
 | 55 | qa | config, query | Undescribed elements of a configuration read with its own digest reach no answer |
 | 56 | qa | config, archtest | The read-only check sees setter names only, not writable exported fields |
-| 57 | test | resolve, index, simulate/nat | Verify an address and an address group of one name in two scopes |
+| 57 | done | resolve, index, simulate/nat | ~~Verify an address and an address group of one name in two scopes~~ (lab fact L10: as services) |
 
 ---
 
@@ -531,7 +531,7 @@ Source for each: the code audit of 2026-10-10 and the cleanup plan
 
 ### 57. Verify an address and an address group of one name in two scopes
 
-- **Tag:** test · **Component:** resolve, index, simulate/nat · **Source:** cleanup
+- **Tag:** done · **Component:** resolve, index, simulate/nat · **Source:** cleanup
   plan, lab fact L9
 - A service name resolves by scope first and kind second (L9), and the index and NAT
   read services that way. Addresses are still read one kind at a time: the index
@@ -541,3 +541,6 @@ Source for each: the code audit of 2026-10-10 and the cleanup plan
 - Check on fw02 which object a rule's `x` means. If the device resolves it as it does
   a service, read both kinds through `resolve.ObjectsOfKindsInScope` in the index and
   in NAT, and test the lab fact.
+- Done: on fw02, PAN-OS 12.2.3, an address name resolves as a service name does, by
+  scope first and kind second (lab fact L10). The index, NAT and lookup cards read
+  addresses and address groups through `resolve.ObjectsOfKindsInScope`.
