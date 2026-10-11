@@ -69,6 +69,24 @@ func ObjectsOfKindsInScope(cfg *config.Config, sc config.Scope, kinds ...string)
 	return out
 }
 
+// namesakes are the kinds whose names resolve together (L9, L10).
+var namesakes = map[string][]string{
+	"service": {"service", "service-group"}, "service-group": {"service", "service-group"},
+	"address": {"address", "address-group"}, "address-group": {"address", "address-group"},
+}
+
+// Namesakes returns the kinds a name of this kind resolves together with, by
+// scope first and kind second, the kind among them: a vsys service hides a shared
+// service group of its name, a vsys address group a shared address, and the other
+// way round (as observed on fw02, PAN-OS 12.2.3, L9 and L10). A kind with no
+// namesake kind comes back alone.
+func Namesakes(kind string) []string {
+	if ks, ok := namesakes[kind]; ok {
+		return ks
+	}
+	return []string{kind}
+}
+
 // ObjectsAt reads a kind from an explicit container path, for the kinds whose name
 // appears in more than one place under a scope.
 //

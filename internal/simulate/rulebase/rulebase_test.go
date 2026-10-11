@@ -566,6 +566,48 @@ func TestDefinedCountsAGroupWhenEveryMemberIsDefined(t *testing.T) {
 	}
 }
 
+// A name resolves by scope first, kind second (L9): vsys1's service group web2
+// hides shared's service web2. The group holds only service-https, which the
+// snapshot does not define, so web2 is not defined; shared's namesake does not
+// make it so.
+func TestDefinedReadsTheNearestOfANamesKinds(t *testing.T) {
+	t.Parallel()
+	doc := `<config version="11.2.0" urldb="paloaltonetworks"><shared><service>` +
+		`<entry name="web2"><protocol><tcp><port>8081</port></tcp></protocol></entry></service></shared>` +
+		`<devices><entry name="localhost.localdomain"><vsys><entry name="vsys1">` +
+		`<service-group><entry name="web2"><members><member>service-https</member></members></entry></service-group>` +
+		`</entry></vsys></entry></devices></config>`
+	path := filepath.Join(t.TempDir(), "firewall.xml")
+	if err := os.WriteFile(path, []byte(doc), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, _, err := config.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := Defined(cfg, config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}, resolve.Security, "service"); got["web2"] {
+		t.Errorf("web2 is defined: %v", got)
+	}
+}
+
+// Addresses holds the address objects the vsys sees: an address group of the
+// same name in a nearer scope hides an address (L10).
+func TestAddressesKeepsTheNearestOfANamesKinds(t *testing.T) {
+	t.Parallel()
+	cfg, _, err := config.Load("../../../testdata/config/firewall-address-cross-kind.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	v, ok := Load(func(_, vsys string) (simulate.Target, error) { return withIndexes(cfg, vsys), nil }, "fw", "vsys1")
+	if !ok {
+		t.Fatal("vsys1")
+	}
+	addrs := v.Addresses()
+	if _, hidden := addrs["rv-adr2"]; hidden || addrs["rv-adr"] != "10.88.8.8/32" {
+		t.Errorf("Addresses() = %v", addrs)
+	}
+}
+
 // A PBF rule naming a group with an undefined member only may match a flow
 // the defined members miss; a flow a defined member holds decides it. With
 // the predefined services, tcp/443 decides it too.

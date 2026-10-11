@@ -74,6 +74,7 @@ Every item names its **component** (the package or area it changes) and one **ta
 | 55 | qa | config, query | Undescribed elements of a configuration read with its own digest reach no answer |
 | 56 | qa | config, archtest | The read-only check sees setter names only, not writable exported fields |
 | 57 | done | resolve, index, simulate/nat | ~~Verify an address and an address group of one name in two scopes~~ (lab fact L10: as services) |
+| 58 | test | index | A hidden address's tags and a dynamic group in the vsys |
 
 ---
 
@@ -544,3 +545,15 @@ Source for each: the code audit of 2026-10-10 and the cleanup plan
 - Done: on fw02, PAN-OS 12.2.3, an address name resolves as a service name does, by
   scope first and kind second (lab fact L10). The index, NAT and lookup cards read
   addresses and address groups through `resolve.ObjectsOfKindsInScope`.
+
+### 58. A hidden address's tags and a dynamic group in the vsys
+
+- **Tag:** test · **Component:** index · **Source:** cleanup plan, fix review
+- A vsys address group `x` hides a shared address `x` (lab fact L10). The index keys an
+  object by its name, so it reads only the group: the shared address's tags no longer
+  place its address in a dynamic group of the vsys. Before L10 the index read both,
+  and a dynamic group whose filter matched the address's tags took the group `x`
+  instead, which was wrong too.
+- Check on fw02 whether a vsys dynamic group holds a shared address whose name a vsys
+  group hides. If it does, the closure must hold the address by its value, not by its
+  name.

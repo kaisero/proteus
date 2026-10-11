@@ -124,10 +124,11 @@ func (s *searcher) namesFound() []string {
 
 // kindsByName maps every object name visible in the scope to its kinds, each with
 // the scope that defines the object of that kind: shared, predefined or the vsys.
+// A namesake of another kind in a nearer scope hides an object (L9, L10).
 func (s *searcher) kindsByName() map[string][]kindIn {
 	out := map[string][]kindIn{}
 	for _, k := range resolve.ObjectKinds(s.cfg) {
-		for _, o := range resolve.ObjectsInScope(s.cfg, s.sc, k) {
+		for _, o := range resolve.ObjectsOfKindsInScope(s.cfg, s.sc, resolve.Namesakes(k)...)[k] {
 			out[o.Name] = append(out[o.Name], kindIn{kind: k, scope: o.Scope})
 		}
 	}

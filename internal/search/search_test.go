@@ -336,6 +336,24 @@ func TestFindingsCarryTheObjectsScope(t *testing.T) {
 	}
 }
 
+// As observed on fw02, PAN-OS 12.2.3 (L9, L10): a name resolves by scope first
+// and kind second. Search lists only the object the vsys sees: vsys1's address
+// rv-adr, not shared's group rv-adr; vsys1's group rv-adr2, not shared's address.
+func TestSearchListsTheNearestOfANamesKinds(t *testing.T) {
+	t.Parallel()
+	for term, want := range map[string]string{"rv-adr": "object address rv-adr vsys:vsys1", "rv-adr2": "object address-group rv-adr2 vsys:vsys1"} {
+		var got []string
+		for _, f := range run(t, "firewall-address-cross-kind.xml", "vsys1", Query{Term: term}) {
+			if f.Stage == StageObject {
+				got = append(got, fmt.Sprintf("%s %s %s %s", f.Stage, f.Kind, f.Name, f.Scope))
+			}
+		}
+		if strings.Join(got, "; ") != want {
+			t.Errorf("%s: %v, want %s", term, got, want)
+		}
+	}
+}
+
 func TestReferrer(t *testing.T) {
 	t.Parallel()
 	for path, want := range map[string]string{

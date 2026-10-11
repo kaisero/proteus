@@ -455,7 +455,9 @@ func Defined(cfg *config.Config, sc config.Scope, rb resolve.Rulebase, field str
 	members := map[string][]string{} // each static group's members
 	for _, kind := range cfg.FieldKinds("rulebase/" + rb.String() + "/rules")[field] {
 		group := isGroupKind(cfg, kind)
-		for _, o := range resolve.ObjectsInScope(cfg, sc, kind) {
+		// A name resolves by scope first, kind second: a namesake of
+		// another kind in a nearer scope hides this one (L9).
+		for _, o := range resolve.ObjectsOfKindsInScope(cfg, sc, resolve.Namesakes(kind)...)[kind] {
 			if !group || o.Dynamic {
 				out[o.Name] = true
 				continue

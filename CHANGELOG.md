@@ -306,10 +306,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **An address name that two scopes define now means the nearest one, whatever
   its kind.** A vsys address hides a shared address group of the same name, and a
-  vsys address group hides a shared address, in security policy, NAT and
-  `lookup` alike, as for services. Before, a rule reached both objects, and NAT
-  took the address first from any scope, so an answer could be wrong and marked
-  exact.
+  vsys address group hides a shared address, in security policy, NAT, `lookup`
+  and `search` alike, as for services. Before, a rule reached both objects, and
+  NAT took the address first from any scope, so an answer could be wrong and
+  marked exact.
 - **A NAT rule whose source or destination is an external list, a region or a
   dynamic group is a doubt.** Such a rule may hold an address without the
   configuration saying so, so a flow it may take now lists it as a doubt, as
@@ -336,10 +336,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   4.7 GB per translation.
 - **A service name that two scopes define now means the nearest one, whatever
   its kind.** A vsys service hides a shared service group of the same name, and
-  a vsys service group hides the predefined service, in NAT, security policy and
-  `lookup` alike. Before, NAT took the service group first from any scope, the
-  security policy matched both objects, and a rule's card could show the hidden
-  one, so each could give a wrong answer marked exact.
+  a vsys service group hides the predefined service, in NAT, security policy, PBF,
+  `lookup` and `search` alike. Before, NAT took the service group first from any
+  scope, the security policy matched both objects, and a rule's card could show
+  the hidden one, so each could give a wrong answer marked exact.
 - **The MCP server's cache counts what a loaded snapshot really keeps.** A cached
   snapshot now counts 32 MiB plus 13 times its file size, as measured. Before, it
   counted 13 times the file size alone, so the cache could grow past `max_cache`.

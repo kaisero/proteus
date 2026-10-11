@@ -48,8 +48,9 @@ nearest scope that defines it in any of the kinds counts, so a vsys service hide
 shared service group of its name, and a vsys service group hides the predefined
 service (lab fact L9). Addresses resolve the same way: a vsys address hides a
 shared address group of its name, and the other way round (lab fact L10). The
-security index, NAT and lookup cards read services and service groups, and
-addresses and address groups, through it.
+security index, NAT, lookup cards, search and `rulebase.Defined` read services and
+service groups, and addresses and address groups, through it; `Namesakes(kind)`
+names the kinds that resolve together.
 
 `objectValue` reduces an object to the one value that identifies it, and PAN-OS
 spells that differently per kind: `ip-netmask`, `ip-range`, `fqdn`, `ip-wildcard`,
@@ -131,6 +132,7 @@ func (t *Target) Serial() string
 func (t *Target) Vsys() string
 func DynamicRoutingProtocols(cfg *config.Config) []string
 func InterfaceAddresses(cfg *config.Config) []InterfaceAddress
+func Namesakes(kind string) []string
 func ObjectKinds(cfg *config.Config) []string
 func ObjectsAt(cfg *config.Config, sc config.Scope, kind string, within []string) []Object
 func ObjectsInScope(cfg *config.Config, sc config.Scope, kind string) []Object

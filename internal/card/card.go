@@ -91,11 +91,7 @@ func newBuilder(cfg *config.Config, idx *index.Index) *builder {
 // object returns the object of a kind visible in the scope, by name.
 func (b *builder) object(kind, name string) (resolve.Object, bool) {
 	if _, ok := b.byKind[kind]; !ok {
-		kinds, ok := namesakes[kind]
-		if !ok {
-			kinds = []string{kind}
-		}
-		for k, objs := range resolve.ObjectsOfKindsInScope(b.cfg, b.sc, kinds...) {
+		for k, objs := range resolve.ObjectsOfKindsInScope(b.cfg, b.sc, resolve.Namesakes(kind)...) {
 			m := map[string]resolve.Object{}
 			for _, o := range objs {
 				m[o.Name] = o
@@ -105,14 +101,6 @@ func (b *builder) object(kind, name string) (resolve.Object, bool) {
 	}
 	o, ok := b.byKind[kind][name]
 	return o, ok
-}
-
-// namesakes are the kinds whose names resolve together, by scope first and
-// kind second: a vsys service hides a shared service group of its name, a vsys
-// address group a shared address, and the other way round (L9, L10).
-var namesakes = map[string][]string{
-	"service": {"service", "service-group"}, "service-group": {"service", "service-group"},
-	"address": {"address", "address-group"}, "address-group": {"address", "address-group"},
 }
 
 // fieldsWithPredefined are the rule fields where a name no object defines is a
