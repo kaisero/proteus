@@ -320,10 +320,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   4.7 GB per translation.
 - **A service name that two scopes define now means the nearest one, whatever
   its kind.** A vsys service hides a shared service group of the same name, and
-  a vsys service group hides the predefined service, in NAT and security policy
-  alike. Before, NAT took the service group first from any scope and the
-  security policy matched both objects, so each could give a wrong answer marked
-  exact.
+  a vsys service group hides the predefined service, in NAT, security policy and
+  `lookup` alike. Before, NAT took the service group first from any scope, the
+  security policy matched both objects, and a rule's card could show the hidden
+  one, so each could give a wrong answer marked exact.
 - **The MCP server's cache counts what a loaded snapshot really keeps.** A cached
   snapshot now counts 32 MiB plus 13 times its file size, as measured. Before, it
   counted 13 times the file size alone, so the cache could grow past `max_cache`.

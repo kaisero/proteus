@@ -87,16 +87,23 @@ func newBuilder(cfg *config.Config, idx *index.Index) *builder {
 
 // object returns the object of a kind visible in the scope, by name.
 func (b *builder) object(kind, name string) (resolve.Object, bool) {
-	m, ok := b.byKind[kind]
-	if !ok {
-		m = map[string]resolve.Object{}
-		objs := resolve.ObjectsInScope(b.cfg, b.sc, kind)
-		for _, o := range objs {
-			m[o.Name] = o
+	if _, ok := b.byKind[kind]; !ok {
+		kinds := []string{kind}
+		if kind == "service" || kind == "service-group" {
+			// A service name resolves by scope first, kind second: a vsys
+			// service hides a shared service group of its name, and the other
+			// way round (L9).
+			kinds = []string{"service", "service-group"}
 		}
-		b.byKind[kind] = m
+		for k, objs := range resolve.ObjectsOfKindsInScope(b.cfg, b.sc, kinds...) {
+			m := map[string]resolve.Object{}
+			for _, o := range objs {
+				m[o.Name] = o
+			}
+			b.byKind[k] = m
+		}
 	}
-	o, ok := m[name]
+	o, ok := b.byKind[kind][name]
 	return o, ok
 }
 

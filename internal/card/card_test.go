@@ -269,6 +269,29 @@ func TestAPredefinedServiceCard(t *testing.T) {
 	}
 }
 
+// As observed on fw02, PAN-OS 12.2.3 (L9): a service name resolves by scope
+// first, kind second. vsys1's service group service-https hides the predefined
+// service, and vsys1's service web hides shared's service group web, so the
+// cards and a rule's service show only the vsys objects.
+func TestAServiceNameResolvesByScopeFirst(t *testing.T) {
+	t.Parallel()
+	for name, want := range map[string]string{"service-https": "service-group vsys:vsys1", "web": "service vsys:vsys1"} {
+		cs := find(t, "../predefined-cross-kind/config.xml", name, "")
+		var got []string
+		for _, c := range cs {
+			got = append(got, c.Kind+" "+c.Scope.String())
+		}
+		if strings.Join(got, "; ") != want {
+			t.Errorf("%s: cards %v, want %s", name, got, want)
+		}
+	}
+	for rule, want := range map[string]string{"sec-https": "service-https{svc-8443(tcp/8443)}", "sec-web": "web(tcp/8081)"} {
+		if got := flat(row(one(t, "../predefined-cross-kind/config.xml", rule), "service", "").Items); got != want {
+			t.Errorf("%s service = %s, want %s", rule, got, want)
+		}
+	}
+}
+
 // An address and a service may share a name; each card lists only the groups of
 // its own kind that hold it.
 func TestHeldByKeepsToTheObjectsKind(t *testing.T) {
