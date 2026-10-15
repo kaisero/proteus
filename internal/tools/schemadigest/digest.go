@@ -14,7 +14,8 @@ import (
 // schemaFile is the vendor file a firewall carries at /opt/pancfg/mgmt/factory.
 const schemaFile = "schema.xml"
 
-// runDigest turns the firewall schema in schemaDir into a committed digest.
+// runDigest turns the firewall schema in schemaDir into the committed digest. It
+// replaces the digest already there.
 func runDigest(schemaDir, outDir, version string) error {
 	in := filepath.Join(schemaDir, schemaFile)
 	f, err := os.Open(in)
@@ -43,7 +44,7 @@ func runDigest(schemaDir, outDir, version string) error {
 	if err := os.MkdirAll(outDir, 0o755); err != nil {
 		return fmt.Errorf("create %s: %w", outDir, err)
 	}
-	out := filepath.Join(outDir, digest.Filename(digest.PlatformFirewall, version))
+	out := filepath.Join(outDir, digest.Filename)
 	w, err := os.Create(out)
 	if err != nil {
 		return fmt.Errorf("create %s: %w", out, err)

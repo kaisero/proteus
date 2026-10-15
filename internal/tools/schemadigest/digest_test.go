@@ -34,7 +34,7 @@ func TestDigestWritesAReadableDigest(t *testing.T) {
 	if err := runDigest(schemaDir, digestDir, "11.2.0"); err != nil {
 		t.Fatalf("runDigest: %v", err)
 	}
-	f, err := os.Open(filepath.Join(digestDir, "panos-11.2.0-firewall.json.gz"))
+	f, err := os.Open(filepath.Join(digestDir, digest.Filename))
 	if err != nil {
 		t.Fatalf("digest not written: %v", err)
 	}

@@ -11,6 +11,7 @@ DIGEST_DIR := internal/config/schemadigest
 
 # PAN-OS config version the schemas in $(SCHEMA_DIR) came from, e.g. 11.2.0.
 # Read it from the <config version="..."> attribute of a config from that device.
+# The digest records it; proteus reads every version with the one digest.
 PANOS_VERSION ?=
 
 # Pinned dev-tool versions (CI installs the same ones; keep in sync with .github).
@@ -84,7 +85,7 @@ ci: tidy-check lint test-race test-cov bench-check context-check build vuln ## E
 
 ## --- schema / build ---
 
-schema-digest: ## Build a committed digest from $(SCHEMA_DIR) (PANOS_VERSION=x.y.z)
+schema-digest: ## Replace the one committed digest from $(SCHEMA_DIR) (PANOS_VERSION=x.y.z)
 	@test -n "$(PANOS_VERSION)" || { echo "usage: make schema-digest PANOS_VERSION=11.2.0"; exit 1; }
 	go run ./internal/tools/schemadigest -schema $(SCHEMA_DIR) -out $(DIGEST_DIR) -version $(PANOS_VERSION)
 
