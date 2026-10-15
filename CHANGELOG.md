@@ -247,8 +247,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **A policy answer says when it cannot decide.** A rule that names an application,
   `application-default`, a predefined or absent service, or a user above the match
   can leave the flow undecided (exit 3), and rules naming an external list, a region
-  or a dynamic group stay as candidates in doubt instead of being dropped. A schema
-  version gap is now a note and no longer forces exit 3.
+  or a dynamic group stay as candidates in doubt instead of being dropped.
 - **`snapshot diff` no longer offers `--file`, `--at` or `--fresh`.** It always
   refused them; they are now unknown flags. Shared flags have one help text in every
   command.
@@ -281,10 +280,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **The project is now `panos-analyst`.** The module path is
   `github.com/okaiser/panos-analyst`; update imports that used
   `github.com/okaiser/go-panos-schema`.
-- **A configuration from a release without a bundled schema now loads.** It is read
-  with the nearest schema this build carries, and every answer from it says which two
-  versions were involved, because a field that moved between them can make a lookup
-  miss rules without looking incomplete.
 
 - **One schema reads every PAN-OS version.** A configuration from any release now
   answers without a version-gap warning, exit code 3 or an `inferred` downgrade; a
@@ -383,11 +378,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   with `service-https` and `tcp/8443` counted as known, so a security rule
   naming it was ruled out for `tcp/443` and a later rule answered, marked
   exact.
-- **The version-gap note counts what the older schema does not know.** When a
-  configuration is read with an older release's schema, the `gap.version` note now
-  says how many of its elements that schema does not describe, such as fields a
-  newer release added. Before, it warned of the gap but not whether this
-  configuration held anything the schema missed.
 - **`--at` and `snapshot diff` pass over a damaged snapshot.** They read the
   next older snapshot that can be read, and a `note.snapshot-skipped` note names
   the one passed over; when none can be read, the hole is `gap.load-failed` and
