@@ -81,7 +81,7 @@ pristine checkout did not compile.
 ## Build / run pointers
 
 - `make schema-pull HOST=user@host` — copy the vendor schema files into `schemas/`.
-- `make schema-digest PANOS_VERSION=x.y.z` — write a digest for that version.
+- `make schema-digest PANOS_VERSION=x.y.z` — replace the one digest; the version is recorded in it.
 - `make context` / `make context-check` — refresh or verify the API blocks in these
   agent docs.
 - `go test ./internal/schema ./internal/digest ./internal/tools/...`
@@ -94,9 +94,10 @@ None. `internal/schema` and `internal/digest` are internal, and the surface is
 ## Gotchas / invariants
 
 - **The schema files themselves are not committed.** `/schemas/` is gitignored
-  because redistribution is unresolved. The digests are committed instead.
-- **Only 11.2 digests ship.** Adding 12.2 is a `make schema-digest` run against
-  that appliance's `schema.xml`, not a code change.
+  because redistribution is unresolved. The digest is committed instead.
+- **One digest ships, from 11.2.** It reads every version. Moving to 12.2 is a
+  `make schema-digest` run against that appliance's `schema.xml`, not a code
+  change (todo 29).
 
 ## See also
 

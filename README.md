@@ -100,8 +100,8 @@ The pages also build as a site: `mkdocs serve` (see
 
 ## Status
 
-proteus works against PAN-OS firewalls and ships a schema digest for PAN-OS 11.2.
-A configuration from another version loads with the nearest digest and a warning.
+proteus works against PAN-OS firewalls. It ships one schema digest, from PAN-OS
+11.2, and reads every configuration version with it.
 `simulate policy` does not evaluate application or user yet. See
 [Limits](docs/limits.md).
 

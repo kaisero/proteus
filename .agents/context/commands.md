@@ -276,8 +276,8 @@ func SourceTranslation(from string, t *nat.Translation) string
 func Summarize[In, R, S any](e Envelope[In, R], f func(R) S) Envelope[In, S]
 func SystemCanonicalName(ctx context.Context, name string) (string, error)
 func SystemResolve(ctx context.Context, name string) ([]netip.Addr, error)
+func TargetNotes(ts []estate.Target) []Note
 func TargetOf(t estate.Target) Target
-func TargetQualifiers(ts []estate.Target) ([]Unresolved, []Note)
 func Targets(ctx context.Context, env Env, sel Selection) ([]estate.Target, []estate.Hole, error)
 func UnresolvedOf(device, vsys string, r reason.Reason) Unresolved
 func UnresolvedOfParts(device, vsys string, rs simulate.Reasons) []Unresolved
@@ -291,9 +291,8 @@ func UnresolvedOfParts(device, vsys string, rs simulate.Reasons) []Unresolved
   four paths live in `internal/index/candidates.go` and nowhere else.
 - **An incomplete answer exits 3.** A hole or an unresolved entry is printed and
   sets the exit code; a script must be able to refuse to act on it.
-- **A version gap is unresolved, a stale snapshot is a note.** The first can make
-  an answer miss rules; the second only qualifies it. `simulate policy` is the
-  exception (E25): the gap is a note and the check is `inferred`.
+- **A stale snapshot is a note.** It qualifies an answer and does not change the
+  exit code. No note names the PAN-OS version: one schema reads every version.
 
 ## See also
 

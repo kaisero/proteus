@@ -55,7 +55,7 @@ A test (`internal/archtest`) fails the build when an import breaks this rule.
 | --- | --- |
 | `cmd/proteus` | the `main` package: signal handling and version, then `cli.Run` |
 | `internal/cli` | the commands, their text and JSON output, and the settings |
-| `internal/config` | loads a configuration into an element tree; picks the schema digest for its version |
+| `internal/config` | loads a configuration into an element tree; attaches the schema digest |
 | `internal/resolve` | PAN-OS semantics: vsys targets, rule order, object visibility, groups, tag filters, URL patterns, zones, routes |
 | `internal/index` | scope-keyed indexes: references, group closure, address containment, rule bitmaps |
 | `internal/search` | the four search stages for one scope |
@@ -110,11 +110,11 @@ Every firewall carries its configuration schema at
 
 `internal/tools/schemadigest` turns the schema into a compact gzipped digest.
 The digest is committed in `internal/config/schemadigest/` and embedded in the
-binary. At load time, `config` picks the digest for the configuration's PAN-OS
-version, or the nearest one with a warning.
+binary. One digest reads every configuration. `config` does not check the
+configuration's PAN-OS version.
 
 `resolve` and `index` read the configuration as an element tree, guided by the
-digest. They do not use generated Go structs, so a new PAN-OS version needs a new
+digest. They do not use generated Go structs, so a newer schema needs a new
 digest and no code change.
 
 ## Simulation framework

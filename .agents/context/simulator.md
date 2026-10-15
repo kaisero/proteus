@@ -62,8 +62,7 @@ the built-in action; local and pushed that disagree are undecided). Doubts come 
 a test): application, user, HIP, schedule, `application-default`, predefined or
 absent service, a URL category without `--url` or not defined, and an EDL, region or
 dynamic group as source or destination (`index.View.Opaque`, E23). Any stage at
-undermatch leaves the flow undecided. A version gap is a note and `inferred` (E25),
-not unresolved. `Verdict.Decision()` gives `Pass`, `Stop` or `Undecided`.
+undermatch leaves the flow undecided. `Verdict.Decision()` gives `Pass`, `Stop` or `Undecided`.
 
 Negated rules are inverted in the resolve stages. A rule without a category matches
 any URL. Relevance (S14) comes from the zone locator: a route more specific than a
@@ -86,7 +85,7 @@ exit 2).
 | Slug | Fidelity |
 |---|---|
 | `place` | exact (connected, `--device`); inferred (routed); undermatch when a device cannot be read |
-| `hop<N>/pbf` | exact; inferred when a PBF rule could take the packet or on a version gap; not evaluated without configuration |
+| `hop<N>/pbf` | exact; inferred when a PBF rule could take the packet; not evaluated without configuration |
 | `hop<N>/lookup` | exact; undermatch on ECMP (lowest next hop followed) or an unknown `nh_type` |
 | `hop<N>/zones` | exact |
 | `hop<N>/nat` | exact; inferred when a NAT rule could translate, or after an earlier hop could |
@@ -118,8 +117,7 @@ route), zone validity (both zones named, defined in the
 hop's vsys, not a placeholder), and each `Check` in list order. Today the one check
 is `Security`: securitypolicy with the hop's zones given and each endpoint trimmed
 to the traced address. Its fidelity is the weakest of the address, zone and
-`first-match` stages, capped by a routed start or inferred NAT; a version gap is
-inferred. A hop that routing drops runs no check. The fold: the first undecided or
+`first-match` stages, capped by a routed start or inferred NAT. A hop that routing drops runs no check. The fold: the first undecided or
 stopping hop sets `At`; undecided wins over stop on one hop; a later stop after an
 undecided point is a note; hops after a stop carry `AfterDeny`; with no point,
 routing's end decides (delivered or local: allowed; dropped: denied; any other end:

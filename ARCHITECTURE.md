@@ -74,7 +74,7 @@ Resolve globally and sibling vsys bleed into each other. R5 exists for this.
 cmd/proteus/                main only: signal context, version, calls internal/cli
 internal/cli/               the commands, their rendering and settings
 internal/config/            Load, version detection, element tree, scopes
-internal/config/schemadigest/  committed firewall digests, ~0.2 MB each, embedded
+internal/config/schemadigest/  the committed firewall digest, ~0.2 MB, embedded
 internal/resolve/           PAN-OS semantics (targets, rule order, scoped visibility)
 internal/index/             scope-keyed indexes (refs, closure, CIDR, rules)
 internal/inventory/         devices, credentials and TLS choice, from YAML
@@ -103,8 +103,8 @@ versioned package except the caller. R12 checks it with a test rather than a
 sentence, and the test fails when a rule names a package that no longer exists,
 so a move cannot switch a rule off.
 
-The schema digests have one home, `internal/config/schemadigest/`: `go:embed`
-cannot reach outside its package, so the schemadigest tool writes them there
+The schema digest has one home, `internal/config/schemadigest/`: `go:embed`
+cannot reach outside its package, so the schemadigest tool writes it there
 rather than keeping a second copy in step.
 
 ## Decisions
@@ -112,9 +112,9 @@ rather than keeping a second copy in step.
 Settled in `docs/specs/2026-09-26-go-panos-schema-design.md`, which holds the
 detail and the measurements.
 
-- **Versions.** One digest per PAN-OS minor, embedded in the binary. A
-  configuration from a release without one loads with the nearest digest and a
-  warning.
+- **Versions.** One digest, embedded in the binary, reads every PAN-OS
+  version. The schema changes little between releases, so the digest of a recent
+  release is sufficient. Nothing checks the configuration's version.
 - **Schema input.** A compact digest is committed; the vendor XML is not.
 - **Unknown data.** Preserved verbatim and reported. A newer config still loads.
 - **Indexes live here, verdicts do not.** References, transitive group closure,

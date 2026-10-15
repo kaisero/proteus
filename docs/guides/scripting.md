@@ -142,25 +142,6 @@ command and detail: `simulate-policy.full.json`, `search.summary.json`, and so
 on. `simulate-policy-file.*` is `simulate policy --file`. Every JSON example the
 tests hold validates against them.
 
-## A version without a digest
-
-A configuration from a PAN-OS version without a schema digest is read with the
-nearest digest. Every answer then carries an unresolved entry and exits with
-code 3:
-
-```
-$ proteus search 198.18.10.100 --vsys vsys1 --show objects \
-    --file testdata/config/firewall-version-12.2.xml
-search 198.18.10.100 (covers)
-
-file / vsys1   testdata/config/firewall-version-12.2.xml
-  object     address              dc01                     198.18.10.100/32
-  object     address              net-labor                198.18.0.0/15
-unresolved: file/vsys1: the configuration is PAN-OS 12.2.0 but was read with the 11.2.0 schema, the nearest this build carries; a field added or moved between them yields no reference, so this answer can miss rules
-
-1 with results, 0 without, 0 holes
-```
-
 ## Example: fail a pipeline on an incomplete answer
 
 ```bash
