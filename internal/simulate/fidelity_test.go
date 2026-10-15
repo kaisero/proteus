@@ -73,7 +73,7 @@ func TestDeclaredAndString(t *testing.T) {
 		Exact.String():                       "exact",
 		Inferred.String():                    "inferred",
 		NotEvaluated("application").String(): "overmatch; not evaluated: application",
-		under("a version gap").String():      "undermatch: a version gap",
+		under("a missing table").String():    "undermatch: a missing table",
 		over("predefined").String():          "overmatch: predefined",
 	} {
 		if f != want {
@@ -176,7 +176,7 @@ func TestMissingKeepsItsCode(t *testing.T) {
 func TestWeakestKeepsATextOnce(t *testing.T) {
 	t.Parallel()
 	a := UnderMatch(reason.New("gap.object-unresolved", "same"))
-	b := UnderMatch(reason.New("gap.version", "same"))
+	b := UnderMatch(reason.New("gap.load-failed", "same"))
 	got := Weakest(a, b)
 	if rs := got.Reasons(); len(rs) != 1 || rs[0].Code != "gap.object-unresolved" {
 		t.Errorf("reasons %v", rs)
@@ -201,7 +201,7 @@ func TestCodedError(t *testing.T) {
 func TestACompositeReasonKeepsItsParts(t *testing.T) {
 	t.Parallel()
 	a, b := reason.New("doubt.edl", "r at 1 may match first: source: external list (x)"), reason.New("doubt.region", "region (AT)")
-	f := Weakest(UnderMatch(a, b), UnderMatch(a, b), UnderMatch(reason.New("gap.version", "other")))
+	f := Weakest(UnderMatch(a, b), UnderMatch(a, b), UnderMatch(reason.New("gap.load-failed", "other")))
 	if got := f.String(); got != "undermatch: r at 1 may match first: source: external list (x); region (AT); other" {
 		t.Errorf("string = %s", got)
 	}

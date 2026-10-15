@@ -56,7 +56,8 @@ func TestEveryClassHasACode(t *testing.T) {
 }
 
 // Spec §12 C7: every not-evaluated dimension has its own code, and no wildcard.
-// C11: path.pbf-no-port is gone. C15: the version gap is a code.
+// C11: path.pbf-no-port is gone. gap.version is gone: one schema reads every
+// version.
 func TestRegistryHoldsTheCorrections(t *testing.T) {
 	t.Parallel()
 	for _, d := range []string{"zones", "source-zone", "destination-zone", "service", "url", "application", "user", "nat", "pbf"} {
@@ -73,13 +74,16 @@ func TestRegistryHoldsTheCorrections(t *testing.T) {
 	if notEvaluated != 9 {
 		t.Errorf("%d not-evaluated codes, want 9", notEvaluated)
 	}
-	for _, c := range []Code{"doubt.imsi", "doubt.imei", "doubt.nw-slice", "doubt.saas-user-list", "doubt.saas-tenant-list", "gap.version", "verdict.rule", "verdict.default"} {
+	for _, c := range []Code{"doubt.imsi", "doubt.imei", "doubt.nw-slice", "doubt.saas-user-list", "doubt.saas-tenant-list", "verdict.rule", "verdict.default"} {
 		if !Known(c) {
 			t.Errorf("%s is missing", c)
 		}
 	}
 	if Known("path.pbf-no-port") {
 		t.Error("path.pbf-no-port is registered; PBF matching ignores the port")
+	}
+	if Known("gap.version") {
+		t.Error("gap.version is registered; one schema reads every version")
 	}
 }
 
@@ -95,7 +99,7 @@ var specCodes = map[Class][]string{
 		"not-evaluated.user", "not-evaluated.nat", "not-evaluated.pbf",
 		"imsi", "imei", "nw-slice", "saas-user-list", "saas-tenant-list",
 	},
-	Gap: {"version", "fqdn-no-address", "object-unresolved", "load-failed", "snapshot-missing", "config-missing"},
+	Gap: {"fqdn-no-address", "object-unresolved", "load-failed", "snapshot-missing", "config-missing"},
 	Path: {
 		"left-estate", "left-by-interface", "loop", "too-long", "unresolved", "no-route", "ecmp",
 		"pbf", "nat-undermatch", "nat-no-port", "start-default-route", "hidden-firewall",

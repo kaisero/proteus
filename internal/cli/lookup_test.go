@@ -127,7 +127,7 @@ func TestLookupExitCodes(t *testing.T) {
 	if out := c.want(0, "lookup", "nothing-by-this-name", "--file", lookupFile); !strings.Contains(out, `no element named "nothing-by-this-name"`) {
 		t.Errorf("not found: %s", out)
 	}
-	c.want(3, "lookup", "nothing", "--file", "../../testdata/config/firewall-version-12.2.xml")
+	c.want(0, "lookup", "nothing", "--file", "../../testdata/config/firewall-version-12.2.xml")
 	c.want(2, "lookup")
 }
 

@@ -136,8 +136,8 @@ func TestOpenFile(t *testing.T) {
 	if names(ts) != "file/vsys1,file/vsys2" || ts[0].Snapshot != nil {
 		t.Errorf("targets = %s", names(ts))
 	}
-	if len(ts[0].Notes) != 1 || !strings.Contains(ts[0].Notes[0].Text, "12.2.0") || ts[0].Notes[0].Code != "gap.version" {
-		t.Errorf("the version gap must be a note, got %v", ts[0].Notes)
+	if len(ts[0].Notes) != 0 {
+		t.Errorf("a 12.2 file has no note, got %v", ts[0].Notes)
 	}
 	if _, _, err := OpenFile("../../testdata/config/nope.xml", nil, nil); err == nil {
 		t.Error("a missing file must be an error")

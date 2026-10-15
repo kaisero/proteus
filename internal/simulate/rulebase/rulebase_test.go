@@ -158,22 +158,6 @@ func TestCertainty(t *testing.T) {
 	}
 }
 
-func TestWithoutGap(t *testing.T) {
-	t.Parallel()
-	// The gap is known by its code, not by its text: another entry with the same
-	// text stays.
-	un := []index.Unresolved{
-		index.NewUnresolved("a", "", reason.New("gap.version", "gap")),
-		index.NewUnresolved("b", "", reason.New("gap.object-unresolved", "gap")),
-	}
-	if got := withoutGap(un); len(got) != 1 || got[0].Value != "b" {
-		t.Errorf("with a gap: %v", got)
-	}
-	if got := withoutGap(un[1:]); len(got) != 1 {
-		t.Errorf("without a gap: %v", got)
-	}
-}
-
 // withIndexes is a target over a vsys of cfg with its index provider, as a
 // loader gives it.
 func withIndexes(cfg *config.Config, vsys string) simulate.Target {

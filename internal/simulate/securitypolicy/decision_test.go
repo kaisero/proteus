@@ -13,12 +13,12 @@ import (
 	"github.com/okaiser/proteus/internal/simulate"
 )
 
-// The decision tree of spec §4.7, on the doubt fixture, read with its own schema
-// and with an older one (spec E25). The first three flows follow the device checks
-// on fw02 (2026-10-08).
+// The decision tree of spec §4.7, on the doubt fixture as PAN-OS 11.2 and as
+// 12.2: the one schema reads both alike. The first three flows follow the device
+// checks on fw02 (2026-10-08).
 func TestDecision(t *testing.T) {
 	t.Parallel()
-	gapped := gappedDoubt(t)
+	other := otherVersionDoubt(t)
 	flow := func(src, dst, from, to, proto string, port uint16) simulate.Flow {
 		return simulate.Flow{Source: ep(src), Destination: ep(dst), FromZone: from, ToZone: to, Protocol: proto, DestPort: port}
 	}
@@ -65,7 +65,7 @@ func TestDecision(t *testing.T) {
 			"undermatch: app-one (allow) at position 3 may match first: service application-default; not evaluated: application",
 		},
 	} {
-		for _, e := range []*simulate.Env{env(t, "firewall-doubt.xml", false), envPath(t, gapped, false)} {
+		for _, e := range []*simulate.Env{env(t, "firewall-doubt.xml", false), envPath(t, other, false)} {
 			r, v := run(t, e, c.flow)
 			got, why := v.Decision()
 			fm := stage(r, "first-match")
@@ -79,28 +79,29 @@ func TestDecision(t *testing.T) {
 			}
 		}
 	}
-	// The gap makes the run inferred, never more certain.
-	r, _ := run(t, envPath(t, gapped, false), flow("198.18.1.68", "192.0.2.1", "home", "wan", "udp", 443))
-	if r.Fidelity.Level() != "inferred" {
-		t.Errorf("a version gap is inferred: %s", r.Fidelity)
+	// Both versions give the same fidelity.
+	f := flow("198.18.1.68", "192.0.2.1", "home", "wan", "udp", 443)
+	r11, _ := run(t, env(t, "firewall-doubt.xml", false), f)
+	r12, _ := run(t, envPath(t, other, false), f)
+	if r11.Fidelity.String() != r12.Fidelity.String() {
+		t.Errorf("fidelity 11.2 %s, 12.2 %s", r11.Fidelity, r12.Fidelity)
 	}
 }
 
-// gappedDoubt writes the doubt fixture as PAN-OS 12.2, which this build reads with
-// the 11.2 schema, and returns its path.
-func gappedDoubt(t *testing.T) string {
+// otherVersionDoubt writes the doubt fixture as PAN-OS 12.2 and returns its path.
+func otherVersionDoubt(t *testing.T) string {
 	t.Helper()
 	src, err := os.ReadFile("../../../testdata/config/firewall-doubt.xml")
 	if err != nil {
 		t.Fatal(err)
 	}
-	gapped := filepath.Join(t.TempDir(), "doubt-12.2.xml")
+	path := filepath.Join(t.TempDir(), "doubt-12.2.xml")
 	doc := strings.Replace(string(src), `version="11.2.0" urldb="paloaltonetworks" detail-version="11.2.5"`,
 		`version="12.2.0" urldb="paloaltonetworks" detail-version="12.2.3"`, 1)
-	if err := os.WriteFile(gapped, []byte(doc), 0o600); err != nil {
+	if err := os.WriteFile(path, []byte(doc), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	return gapped
+	return path
 }
 
 func TestDecisionOfAVerdict(t *testing.T) {
@@ -129,8 +130,7 @@ func TestDecisionOfAVerdict(t *testing.T) {
 }
 
 // A stage that may be missing matches leaves the flow undecided, whatever a later
-// rule says: the rule the device hits may be among those missed (spec §4.7). A
-// version gap alone is inferred, so the flow stays decided (E25).
+// rule says: the rule the device hits may be among those missed (spec §4.7).
 func TestAnUndermatchLeavesTheFlowUndecided(t *testing.T) {
 	t.Parallel()
 	for _, c := range []struct {
@@ -151,12 +151,6 @@ func TestAnUndermatchLeavesTheFlowUndecided(t *testing.T) {
 			env(t, "firewall-urlcat-edge.xml", false),
 			simulate.Flow{Source: ep("10.0.0.1"), Destination: ep("10.0.0.2"), URL: "good.example.com"},
 			Undecided, "a Category Match category lists predefined URL categories, whose contents are in the PAN-DB cloud",
-		},
-		{
-			"a version gap alone",
-			envPath(t, gappedDoubt(t), false),
-			simulate.Flow{Source: ep("198.18.1.68"), Destination: ep("192.0.2.1"), FromZone: "home", ToZone: "wan", Protocol: "udp", DestPort: 443},
-			Stop, "rule block-udp-443 (deny)",
 		},
 	} {
 		r, v := run(t, c.env, c.flow)

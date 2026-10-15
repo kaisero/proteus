@@ -85,10 +85,6 @@ func Match(in Input) MatchResult {
 		out.Dropped = "no configuration for " + in.Vsys
 		return out
 	}
-	if v.Config.VersionGap() != "" {
-		out.Notes = append(out.Notes, reason.New("gap.version", fmt.Sprintf("schema: NAT checked with the %s digest", v.Config.DigestVersion())))
-		out.Fidelity = simulate.Inferred
-	}
 	out.vsys = v
 	rules := Rules(v.Target)
 	noNegation := func(int) (bool, bool) { return false, false }

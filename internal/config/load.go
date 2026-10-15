@@ -6,9 +6,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"slices"
-	"strconv"
-	"strings"
 	"sync"
 
 	"github.com/okaiser/proteus/internal/digest"
@@ -25,18 +22,17 @@ type Config struct {
 	path          string
 	version       string
 	detailVersion string
-	digestVersion string
 	schema        *loadedSchema
 	root          *Element
 	predefined    *Element
-	untyped       int // elements the digest does not describe, AGENTS.md R3
 }
 
 // PredefinedFile is the file next to a configuration that holds the device's
 // predefined services. fetch stores it as the document "predefined".
 const PredefinedFile = "predefined.xml"
 
-// Version returns the schema version from the config root, e.g. 11.2.0.
+// Version returns the version attribute of the config root, e.g. 11.2.0, or
+// empty when it has none. Nothing checks it: one schema reads every version.
 func (c *Config) Version() string { return c.version }
 
 // DetailVersion returns the patch level from the config root, e.g. 11.2.7.
@@ -57,7 +53,8 @@ func (c *Config) Root() *Element { return c.root }
 // sees it.
 func (c *Config) Predefined() *Element { return c.predefined }
 
-// Load reads a configuration file and the schema digest that describes it.
+// Load reads a configuration file and the schema digest that describes it. One
+// digest reads every PAN-OS version.
 //
 // A configuration arrives in two shapes. type=export&category=configuration
 // yields a bare <config>; type=config&action=show wraps it in
@@ -80,20 +77,12 @@ func Load(path string) (*Config, Report, error) {
 	if err != nil {
 		return nil, rep, fmt.Errorf("config: %s: %w", path, err)
 	}
-	version := root.Attr("version")
-	if version == "" {
-		return nil, rep, fmt.Errorf("config: %s: the <config> element has no version attribute", path)
-	}
 	if isPanorama(root) {
 		return nil, rep, fmt.Errorf("config: %s is a Panorama configuration; "+
 			"proteus reads each firewall's own configuration", path)
 	}
 
-	dv, err := nearestDigest(version, digestVersions(digestFS))
-	if err != nil {
-		return nil, rep, fmt.Errorf("config: %s: %w", path, err)
-	}
-	sch, err := loadDigest(dv)
+	sch, err := loadDigest()
 	if err != nil {
 		return nil, rep, err
 	}
@@ -102,12 +91,10 @@ func Load(path string) (*Config, Report, error) {
 		return nil, rep, err
 	}
 	cfg := &Config{
-		path: path, version: version, detailVersion: root.Attr("detail-version"),
-		digestVersion: dv, schema: sch, root: root, predefined: pre,
+		path: path, version: root.Attr("version"), detailVersion: root.Attr("detail-version"),
+		schema: sch, root: root, predefined: pre,
 	}
 	rep.Untyped = cfg.undescribed()
-	cfg.untyped = len(rep.Untyped)
-	rep.VersionGap = cfg.VersionGap()
 	return cfg, rep, nil
 }
 
@@ -141,111 +128,6 @@ func loadPredefined(path string) (*Element, error) {
 	return pre, nil
 }
 
-// DigestVersion returns the PAN-OS version of the schema the configuration was read
-// with. It differs from Version when this build carries no digest for that version.
-func (c *Config) DigestVersion() string { return c.digestVersion }
-
-// VersionGap describes the difference between Version and DigestVersion, or is
-// empty when they agree.
-//
-// A configuration read with another release's schema can be under-read silently: a
-// field that was added or moved yields no reference, so a lookup misses rules and
-// looks complete. Spec §9 requires the gap to travel with every answer.
-//
-// When that schema does not describe some elements of the configuration, the
-// gap says how many (AGENTS.md R3), so the reader sees what the gap holds.
-func (c *Config) VersionGap() string {
-	if c.version == c.digestVersion {
-		return ""
-	}
-	gap := fmt.Sprintf("the configuration is PAN-OS %s but was read with the %s schema, "+
-		"the nearest this build carries; a field added or moved between them yields no "+
-		"reference, so this answer can miss rules", c.version, c.digestVersion)
-	switch {
-	case c.untyped == 1:
-		gap += "; that schema does not describe 1 element of the configuration"
-	case c.untyped > 1:
-		gap += fmt.Sprintf("; that schema does not describe %d elements of the configuration", c.untyped)
-	}
-	return gap
-}
-
-// digestVersions lists the PAN-OS versions a file system carries a firewall digest
-// for, oldest first. Load passes the embedded files, so adding a digest needs no
-// edit here.
-func digestVersions(fsys fs.FS) []string {
-	entries, err := fs.ReadDir(fsys, "schemadigest")
-	if err != nil {
-		return nil
-	}
-	var out []string
-	for _, e := range entries {
-		v, ok := strings.CutPrefix(e.Name(), "panos-")
-		if !ok {
-			continue
-		}
-		if v, ok = strings.CutSuffix(v, "-"+digest.PlatformFirewall+".json.gz"); !ok {
-			continue
-		}
-		if _, err := parseVersion(v); err == nil {
-			out = append(out, v)
-		}
-	}
-	slices.SortFunc(out, func(x, y string) int {
-		a, _ := parseVersion(x)
-		b, _ := parseVersion(y)
-		return slices.Compare(a[:], b[:])
-	})
-	return out
-}
-
-// nearestDigest picks the digest a configuration is read with: its own version when
-// the build has it, else the highest below it, else the lowest there is. have must
-// be sorted oldest first. Source: docs/specs/2026-09-27-panos-analyst-scope.md §9.
-func nearestDigest(version string, have []string) (string, error) {
-	want, err := parseVersion(version)
-	if err != nil {
-		return "", err
-	}
-	if len(have) == 0 {
-		return "", errors.New("this build carries no schema digest")
-	}
-	best := ""
-	for _, h := range have {
-		hv, err := parseVersion(h)
-		if err != nil {
-			continue
-		}
-		if lessVersion(want, hv) {
-			break
-		}
-		best = h
-	}
-	if best == "" {
-		best = have[0]
-	}
-	return best, nil
-}
-
-// parseVersion reads a PAN-OS schema version such as 11.2.0.
-func parseVersion(s string) ([3]int, error) {
-	var v [3]int
-	parts := strings.Split(s, ".")
-	if len(parts) != 3 {
-		return v, fmt.Errorf("version %q is not a PAN-OS version like 11.2.0", s)
-	}
-	for i, p := range parts {
-		n, err := strconv.Atoi(p)
-		if err != nil || n < 0 {
-			return v, fmt.Errorf("version %q is not a PAN-OS version like 11.2.0", s)
-		}
-		v[i] = n
-	}
-	return v, nil
-}
-
-func lessVersion(a, b [3]int) bool { return slices.Compare(a[:], b[:]) < 0 }
-
 // isPanorama reports whether a configuration came from Panorama.
 //
 // Panorama writes device-group, template and template-stack under devices/entry;
@@ -278,33 +160,30 @@ type loadedSchema struct {
 }
 
 var (
-	schemaMu    sync.Mutex
-	schemaCache = map[string]*loadedSchema{}
+	schemaOnce   sync.Once
+	schemaLoaded *loadedSchema
+	schemaErr    error
 )
 
-func loadDigest(version string) (*loadedSchema, error) {
-	name := digest.Filename(digest.PlatformFirewall, version)
+func loadDigest() (*loadedSchema, error) {
+	schemaOnce.Do(func() { schemaLoaded, schemaErr = readDigest(digestFS) })
+	return schemaLoaded, schemaErr
+}
 
-	schemaMu.Lock()
-	defer schemaMu.Unlock()
-	if ls, ok := schemaCache[name]; ok {
-		return ls, nil
-	}
-
-	f, err := digestFS.Open("schemadigest/" + name)
+// readDigest decodes the digest in fsys and builds its tables.
+func readDigest(fsys fs.FS) (*loadedSchema, error) {
+	f, err := fsys.Open("schemadigest/" + digest.Filename)
 	if err != nil {
-		return nil, fmt.Errorf("config: no schema digest for PAN-OS %s", version)
+		return nil, fmt.Errorf("config: no schema digest: %w", err)
 	}
 	defer func() { _ = f.Close() }()
 	d, err := digest.Read(f)
 	if err != nil {
-		return nil, fmt.Errorf("config: read digest %s: %w", name, err)
+		return nil, fmt.Errorf("config: read digest %s: %w", digest.Filename, err)
 	}
-	ls := &loadedSchema{
+	return &loadedSchema{
 		root: d.Root, refs: buildRefTable(d.Root), paths: buildPathTable(d.Root), kinds: buildKindTable(d.Root),
 		shared:   d.Root.Step("shared"),
 		rulebase: d.Root.Step("devices").Step("entry").Step("vsys").Step("entry").Step("rulebase"),
-	}
-	schemaCache[name] = ls
-	return ls, nil
+	}, nil
 }

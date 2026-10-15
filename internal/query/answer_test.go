@@ -30,6 +30,8 @@ func TestAnswerLines(t *testing.T) {
 		{PathAnswer(path("denied", "routing", "")), "denied at hop 1: no route to 10.0.0.9 on fw01"},
 		{PathAnswer(path("denied", "security", "block")), "denied at hop 1: fw01 / vsys1, rule block (deny)"},
 		{CheckAction(pathpolicy.CheckResult{Security: &securitypolicy.Verdict{DefaultAction: "deny"}}), "deny"},
+		{CheckAction(pathpolicy.CheckResult{}), ""},
+		{CheckAction(pathpolicy.CheckResult{Security: &securitypolicy.Verdict{Rule: &resolve.Rule{Action: "allow"}}}), "allow"},
 		{FileAnswer(securitypolicy.Verdict{}), "no enabled rule matches"},
 		{FileAnswer(securitypolicy.Verdict{Rule: &resolve.Rule{Name: "a", Action: "allow"}}), "first match: a (allow)"},
 		{FileAnswer(securitypolicy.Verdict{Undecided: simulate.Reasons{reason.New("doubt.hip", "x")}}), "undecided: x"},

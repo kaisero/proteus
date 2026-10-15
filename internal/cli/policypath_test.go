@@ -324,15 +324,15 @@ func TestEveryKindHasACommand(t *testing.T) {
 	}
 }
 
-// A version gap on a hop is a note in the text and in the envelope, not an
-// unresolved entry: the hop's check is inferred and still decides (spec E25).
-func TestPolicyPathVersionGapIsANote(t *testing.T) {
+// A hop of another PAN-OS version decides as an 11.2 hop does: exact, with no
+// note and no unresolved entry.
+func TestPolicyPathOtherVersionIsExact(t *testing.T) {
 	t.Parallel()
-	gapped := bytes.Replace(pathlab.Read(t, pathlab.ConfigFile(pathlab.FW02)), []byte(`version="11.2.0"`), []byte(`version="12.2.0"`), 1)
-	c := pathVariant(t, pathConfigs{fw02: gapped}, true)
+	other := bytes.Replace(pathlab.Read(t, pathlab.ConfigFile(pathlab.FW02)), []byte(`version="11.2.0"`), []byte(`version="12.2.0"`), 1)
+	c := pathVariant(t, pathConfigs{fw02: other}, true)
 	args := []string{"simulate", "policy", pathlab.Source, pathlab.Destination}
 	out := c.want(0, args...)
-	if !strings.Contains(out, "  note: fw02 / vsys1: ") || !strings.Contains(out, "12.2.0") || !strings.Contains(out, "fidelity: inferred") {
+	if strings.Contains(out, "note: ") || !strings.Contains(out, "fidelity: exact") {
 		t.Errorf("text:\n%s", out)
 	}
 	var env struct {
@@ -340,15 +340,8 @@ func TestPolicyPathVersionGapIsANote(t *testing.T) {
 		Notes      []struct{ Device, Vsys, Text string }
 	}
 	out = c.want(0, append(args, "--output", "json")...)
-	if err := json.Unmarshal([]byte(out), &env); err != nil || len(env.Unresolved) != 0 {
-		t.Fatalf("json: %v\n%s", err, out)
-	}
-	found := false
-	for _, n := range env.Notes {
-		found = found || n.Device == "fw02" && n.Vsys == "vsys1" && strings.Contains(n.Text, "PAN-OS 12.2.0")
-	}
-	if !found {
-		t.Errorf("the gap must be an envelope note: %+v", env.Notes)
+	if err := json.Unmarshal([]byte(out), &env); err != nil || len(env.Unresolved) != 0 || len(env.Notes) != 0 {
+		t.Errorf("json: %v\n%s", err, out)
 	}
 }
 
@@ -508,7 +501,7 @@ func TestUnresolvedPartsShareALine(t *testing.T) {
 	parts := query.UnresolvedOfParts("fw01", "vsys1", simulate.Reasons{
 		reason.New("doubt.edl", "r may match first: source: external list (x)"), reason.New("doubt.region", "region (AT)"),
 	})
-	printQualifiers(w, qualifiers{Unresolved: append(parts, query.UnresolvedOf("fw02", "", reason.New("gap.version", "other")))})
+	printQualifiers(w, qualifiers{Unresolved: append(parts, query.UnresolvedOf("fw02", "", reason.New("gap.load-failed", "other")))})
 	want := "unresolved: fw01/vsys1: r may match first: source: external list (x); region (AT)\nunresolved: fw02: other\n\n"
 	if b.String() != want {
 		t.Errorf("got\n%q\nwant\n%q", b.String(), want)

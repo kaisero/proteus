@@ -73,7 +73,6 @@ var registry = []Entry{
 	{Code: "gap.snapshot-missing", Class: Gap, Description: "the store has no snapshot for the device at the asked time"},
 	{Code: "gap.url-pattern", Class: Gap, Description: "a custom URL category member is not a pattern the answer can read"},
 	{Code: "gap.user-directory-stale", Class: Gap, Description: "the user directory is older than its freshness limit"},
-	{Code: "gap.version", Class: Gap, Description: "the configuration's PAN-OS version has no schema digest; a near one is used"},
 	{Code: "gap.vsys-missing", Class: Gap, Description: "the configuration has no vsys of the asked name"},
 
 	{Code: "input.device", Class: Input, Description: "give the device"},

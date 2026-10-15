@@ -35,10 +35,6 @@ func pbf(_ context.Context, s *state) (simulate.Outcome, error) {
 		}, nil
 	}
 	out := simulate.Outcome{Fidelity: simulate.Exact, Detail: "no PBF rule could match"}
-	if gap := v.Config.VersionGap(); gap != "" {
-		h.Notes = append(h.Notes, reason.New("gap.version", fmt.Sprintf("schema: PBF checked with the %s digest", v.Config.DigestVersion())))
-		out.Fidelity = simulate.Inferred
-	}
 	m := v.PBF(s.src, s.dst, s.cur.Protocol, s.cur.DestPort, h.In)
 	out.Unresolved = m.Unresolved
 	out.Fidelity = simulate.Weakest(out.Fidelity, rulebase.Certainty(resolve.PBF, m.Unresolved))

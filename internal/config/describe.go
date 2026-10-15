@@ -50,7 +50,7 @@ func (c *Config) undescribed() []Untyped {
 		for _, ch := range el.Children {
 			cn := c.ChildNode(n, ch)
 			if cn == nil {
-				out = append(out, Untyped{XPath: ch.InstancePath(), Digest: c.digestVersion})
+				out = append(out, Untyped{XPath: ch.InstancePath()})
 				continue
 			}
 			if len(ch.Children) > 0 {

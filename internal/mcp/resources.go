@@ -24,7 +24,7 @@ func schemaURI(tool, detail string) string { return "proteus://schemas/" + tool 
 const limits = `# What proteus cannot know
 
 - Answers are static analysis of stored snapshots, not live tests. A note says when a snapshot is older than the freshness limit.
-- Only PAN-OS 11.2 digests ship; another version reads with the nearest one, and the answer says so.
+- One schema digest reads every PAN-OS version. A field the schema does not describe gives no reference, so a rule that names an object only there is missed.
 - Predefined applications, regions and PAN-DB URL categories live in content the firewall downloads. A rule that names one stays in doubt, and the answer can be undecided.
 - Predefined services (service-http, service-https) are fetched from the device into each snapshot. A snapshot stored before they were fetched, or from a device that refused them, keeps a rule that names one in doubt.
 - Application, user, HIP, schedule, external dynamic lists and dynamic address groups are not evaluated. The application input is recorded only; it does not change the answer.

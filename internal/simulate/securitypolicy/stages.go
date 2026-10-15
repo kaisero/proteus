@@ -63,8 +63,8 @@ func (s *state) side(f index.Field, ep simulate.Endpoint, negated func(resolve.R
 			}
 		}
 		b.Or(byFQDN)
-		// An FQDN nothing defines is expected; only a real gap, such as a version
-		// gap, counts as unresolved.
+		// An FQDN nothing defines is expected; only a real gap counts as
+		// unresolved.
 		for _, u := range rep.Unresolved {
 			if u.Value != ep.Name || len(ep.Addrs) == 0 {
 				out.Unresolved = append(out.Unresolved, u)
@@ -133,7 +133,7 @@ func (s *state) side(f index.Field, ep simulate.Endpoint, negated func(resolve.R
 	default:
 		out.Fidelity = simulate.Exact
 	}
-	out.Unresolved = s.withoutGap(&out.Fidelity, dedupe(out.Unresolved))
+	out.Unresolved = dedupe(out.Unresolved)
 	for _, u := range out.Unresolved {
 		out.Fidelity = simulate.Weakest(out.Fidelity, simulate.UnderMatch(u.Why()))
 	}
@@ -405,7 +405,7 @@ func matchService(_ context.Context, s *state) (simulate.Outcome, error) {
 	b.Or(kept)
 	s.cand.And(b)
 	out := simulate.Outcome{Fidelity: simulate.Exact, Detail: term, Candidates: s.cand}
-	out.Unresolved = s.withoutGap(&out.Fidelity, rep.Unresolved)
+	out.Unresolved = rep.Unresolved
 	if still := roaring.And(kept, s.cand); !still.IsEmpty() {
 		out.Fidelity = simulate.Weakest(out.Fidelity, simulate.OverMatchBecause(reason.New("doubt.service-kept",
 			"kept rules whose service is application-default, predefined or absent: "+names(s.rules, still))))
@@ -434,7 +434,7 @@ func matchURL(_ context.Context, s *state) (simulate.Outcome, error) {
 	b.Or(s.withoutField("category"))
 	s.cand.And(b)
 	out := simulate.Outcome{Fidelity: simulate.Exact, Detail: url, Candidates: s.cand}
-	out.Unresolved = s.withoutGap(&out.Fidelity, rep.Unresolved)
+	out.Unresolved = rep.Unresolved
 	for _, h := range rep.Hits {
 		out.Debug = append(out.Debug, fmt.Sprintf("%s (%s) via %s", h.Name, h.Kind, h.Via))
 	}
@@ -664,23 +664,6 @@ func (s *state) defaultRule() (resolve.DefaultRule, reason.Reason) {
 			fmt.Sprintf("%s has the action %q, which is not a security rule action", name, d.Action))
 	}
 	return d, reason.Reason{}
-}
-
-// withoutGap drops the version gap from a lookup's unresolved entries and lowers
-// the fidelity to inferred instead (spec E25): the configuration was read with
-// the nearest older schema, so an answer may miss what the newer version added,
-// as routing's version gap does. The gap stays in the run's notes. Every lookup
-// reports it, with no kind; any other entry stays unresolved.
-func (s *state) withoutGap(f *simulate.Fidelity, us []index.Unresolved) []index.Unresolved {
-	var out []index.Unresolved
-	for _, u := range us {
-		if u.Code == "gap.version" {
-			*f = simulate.Weakest(*f, simulate.Inferred)
-			continue
-		}
-		out = append(out, u)
-	}
-	return out
 }
 
 // names lists the rules in a set, for the log.

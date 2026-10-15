@@ -208,8 +208,7 @@ func (Simulation) Run(ctx context.Context, env *simulate.Env, in simulate.Input)
 // so no rule after it decides the flow: the tree's first question (spec §4.7), so
 // its reason wins over a doubt first-match found. Only the undermatch reasons
 // count: an overmatch reason of the same stage says nothing about what is
-// missing. A version gap does not count: withoutGap has already made it inferred
-// (E25). Several reasons stay parts, each with its code.
+// missing. Several reasons stay parts, each with its code.
 func undermatched(stages []simulate.Stage) simulate.Reasons {
 	for _, st := range stages {
 		if f := st.Fidelity; f.Level() == "undermatch" {

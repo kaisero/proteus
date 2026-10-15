@@ -153,7 +153,7 @@ func printQualifiers(t *textOut, q qualifiers, left ...note) {
 }
 
 // leftNotes are the notes of the targets that printed no header: shown says
-// which did. A version gap is unresolved and prints there.
+// which did.
 func leftNotes(ts []estate.Target, shown func(i int) bool) []note {
 	var out []note
 	for i, tg := range ts {
@@ -161,21 +161,16 @@ func leftNotes(ts []estate.Target, shown func(i int) bool) []note {
 			continue
 		}
 		for _, n := range tg.Notes {
-			if n.Code != "gap.version" {
-				out = append(out, noteOf(tg.Device, tg.Vsys, n))
-			}
+			out = append(out, noteOf(tg.Device, tg.Vsys, n))
 		}
 	}
 	return out
 }
 
-// printNotes prints a target's notes under its header. A version gap is left for
-// printQualifiers, because it makes the answer incomplete rather than qualifying it.
+// printNotes prints a target's notes under its header.
 func printNotes(t *textOut, tg estate.Target) {
 	for _, n := range tg.Notes {
-		if n.Code != "gap.version" {
-			fmt.Fprintf(t, "  %s\n", noteStyle(t.pal, n)("note: "+n.Text))
-		}
+		fmt.Fprintf(t, "  %s\n", noteStyle(t.pal, n)("note: "+n.Text))
 	}
 }
 

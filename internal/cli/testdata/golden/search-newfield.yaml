@@ -37,9 +37,5 @@ summary:
   without: 0
   omitted: 0
 holes: []
-unresolved:
-  - device: file
-    vsys: vsys1
-    code: gap.version
-    text: the configuration is PAN-OS 12.2.0 but was read with the 11.2.0 schema, the nearest this build carries; a field added or moved between them yields no reference, so this answer can miss rules; that schema does not describe 2 elements of the configuration
+unresolved: []
 notes: []

@@ -70,10 +70,9 @@ func (s Side) Holds(i uint32) bool {
 // each side the rules it only may hold. An invalid address holds anything.
 //
 // Values the index recognised but could not evaluate come back as unresolved: a
-// rule reached only through one of them can be missing from its side. A schema
-// version gap is left out; the callers note it themselves. An index that cannot be
-// built returns no rule and says so as an unresolved entry, because a silent "no
-// rule" would be a wrong answer that looks complete.
+// rule reached only through one of them can be missing from its side. An index
+// that cannot be built returns no rule and says so as an unresolved entry, because
+// a silent "no rule" would be a wrong answer that looks complete.
 func (v Vsys) Sides(rb resolve.Rulebase, src, dst netip.Addr, negated func(int) (bool, bool)) (
 	s, d Side, unresolved []index.Unresolved,
 ) {
@@ -91,7 +90,7 @@ func (v Vsys) Sides(rb resolve.Rulebase, src, dst netip.Addr, negated func(int) 
 			return Side{Rules: all.Clone()}
 		}
 		b, rep := idx.Candidates(f, a.String())
-		unresolved = append(unresolved, withoutGap(rep.Unresolved)...)
+		unresolved = append(unresolved, rep.Unresolved...)
 		out := Side{Rules: b.Clone()}
 		for i := range n {
 			if neg(i) {
@@ -138,19 +137,6 @@ func (v Vsys) index(rb resolve.Rulebase) (*index.Index, error) {
 		return nil, fmt.Errorf("the index provider gives %s, not %s", idx.Scope(), v.Scope)
 	}
 	return idx, nil
-}
-
-// withoutGap drops the schema version gap from a report's unresolved values. The
-// callers of Sides note a gap themselves, as an inferred answer rather than a
-// missing one.
-func withoutGap(unresolved []index.Unresolved) []index.Unresolved {
-	var out []index.Unresolved
-	for _, u := range unresolved {
-		if u.Code != "gap.version" {
-			out = append(out, u)
-		}
-	}
-	return out
 }
 
 // Addresses maps the name of each address object the vsys sees to its value.
@@ -391,7 +377,7 @@ func (v Vsys) pbfServices(rules []resolve.PBFRule, proto string, port uint16) pb
 		return out // Sides has said so; no rule passes it
 	}
 	b, rep := idx.Candidates(index.Service, term)
-	out.term, out.hits, out.unresolved = term, b, withoutGap(rep.Unresolved)
+	out.term, out.hits, out.unresolved = term, b, rep.Unresolved
 	out.defined, out.cfg = Defined(v.Config, v.Scope, resolve.PBF, "service"), v.Config
 	return out
 }

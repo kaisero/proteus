@@ -35,7 +35,7 @@ type Target struct {
 	// it keeps them; nil leaves them to the caller. It is no data of the
 	// answer, so JSON leaves it out.
 	Indexes Indexes `json:"-"`
-	// Notes qualify every answer from this target: a stale snapshot, a version gap.
+	// Notes qualify every answer from this target: a stale snapshot, a skipped document.
 	Notes simulate.Reasons
 }
 
@@ -184,8 +184,8 @@ func openSnapshot(d string, sn store.Snapshot, err error, vsys []string, w When)
 		return nil, []Hole{NewHole(d, "", reason.New("gap.load-failed", err.Error()))}
 	}
 	cfg := l.Config
-	w.Log.Infof(runlog.TagSnap, "%s: snapshot %s taken %s, PAN-OS %s read with the %s schema",
-		d, sn.ID, sn.Meta.TakenAt.Format(time.RFC3339), cfg.Version(), cfg.DigestVersion())
+	w.Log.Infof(runlog.TagSnap, "%s: snapshot %s taken %s, PAN-OS %s",
+		d, sn.ID, sn.Meta.TakenAt.Format(time.RFC3339), cfg.Version())
 	var notes simulate.Reasons
 	if n, ok := SkipNote(sn); ok {
 		w.Log.Warnf(runlog.TagSnap, "%s: %s", d, n.Text)
@@ -207,7 +207,7 @@ func OpenFile(path string, vsys []string, log *runlog.Logger) ([]Target, []Hole,
 	if err != nil {
 		return nil, nil, err
 	}
-	log.Infof(runlog.TagSnap, "file %s: PAN-OS %s read with the %s schema", path, cfg.Version(), cfg.DigestVersion())
+	log.Infof(runlog.TagSnap, "file %s: PAN-OS %s", path, cfg.Version())
 	ts, hs := scopes(FileDevice, nil, cfg, rep, nil, vsys, nil)
 	return ts, hs, nil
 }
@@ -225,9 +225,6 @@ func scopes(device string, sn *store.Snapshot, cfg *config.Config, rep config.Re
 	ix Indexes, vsys []string, notes simulate.Reasons,
 ) ([]Target, []Hole) {
 	have := resolve.Vsyses(cfg)
-	if rep.VersionGap != "" {
-		notes = append(notes, reason.New("gap.version", rep.VersionGap))
-	}
 	want := map[string]bool{}
 	for _, v := range vsys {
 		want[v] = true

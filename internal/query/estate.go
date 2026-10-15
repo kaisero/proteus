@@ -99,22 +99,16 @@ func Targets(ctx context.Context, env Env, sel Selection) ([]estate.Target, []es
 	return ts, holes, nil
 }
 
-// TargetQualifiers splits each target's notes: a version gap can make an answer
-// miss rules, so it is unresolved; a stale snapshot or a failed fresh fetch is a
-// note.
-func TargetQualifiers(ts []estate.Target) ([]Unresolved, []Note) {
-	var un []Unresolved
+// TargetNotes lists each target's notes, such as a stale snapshot or a failed
+// fresh fetch, with the device and vsys they qualify.
+func TargetNotes(ts []estate.Target) []Note {
 	var notes []Note
 	for _, t := range ts {
 		for _, n := range t.Notes {
-			if n.Code == "gap.version" {
-				un = append(un, UnresolvedOf(t.Device, t.Vsys, n))
-				continue
-			}
 			notes = append(notes, NoteOf(t.Device, t.Vsys, n))
 		}
 	}
-	return un, notes
+	return notes
 }
 
 // indexSets keeps one index set per configuration a query reads, so it builds

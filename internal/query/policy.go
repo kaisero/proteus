@@ -228,8 +228,6 @@ func PolicyFile(ctx context.Context, env Env, in PolicyFileInput) (Envelope[Poli
 	e.Results = []SecurityResult{securityResultOf(run, t, v)}
 	e.Results[0].Needs = securityNeeds(flow, e.Results[0].Verdict, &v, run.Fidelity)
 	e.Targets, e.Read = ts, readOf(ts)
-	// A version gap is a note, not an unresolved entry: the security check
-	// lowers its fidelity to inferred instead (spec E25).
 	for _, n := range t.Notes {
 		e.Notes = append(e.Notes, NoteOf(t.Device, t.Vsys, n))
 	}

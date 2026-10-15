@@ -112,11 +112,6 @@ func printRun(w *textOut, run simulate.Run, t estate.Target, v securitypolicy.Ve
 	}
 	fmt.Fprintf(w, "\n%s\n", w.pal.head(header(t, w.now)))
 	printNotes(w, t)
-	for _, n := range t.Notes {
-		if n.Code == "gap.version" {
-			fmt.Fprintf(w, "  %s\n", noteStyle(w.pal, n)("note: "+n.Text))
-		}
-	}
 	for _, ep := range []simulate.Endpoint{flow.Source, flow.Destination} {
 		if ep.Name != "" {
 			fmt.Fprintf(w, "  dns        %s -> %v\n", ep.Name, ep.Addrs)

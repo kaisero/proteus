@@ -518,7 +518,7 @@ func TestSearchAcrossTheEstate(t *testing.T) {
 	if out := c.want(0, "search", "198.18.10.100", "--file", "../../testdata/config/firewall-lab.xml"); !strings.Contains(out, "file / vsys1") {
 		t.Errorf("--file:\n%s", out)
 	}
-	c.want(3, "search", "198.18.10.100", "--file", "../../testdata/config/firewall-version-12.2.xml")
+	c.want(0, "search", "198.18.10.100", "--file", "../../testdata/config/firewall-version-12.2.xml")
 	c.want(1, "search", "x", "--file", "../../testdata/config/missing.xml")
 }
 
@@ -738,9 +738,9 @@ func TestSimulatePolicy(t *testing.T) {
 	}
 }
 
-// A version gap is a note, not an unresolved entry, so a decided flow exits 0
-// (spec E25).
-func TestSimulatePolicyVersionGap(t *testing.T) {
+// A file of another PAN-OS version decides as the 11.2 file does: no note, no
+// unresolved entry, exit 0.
+func TestSimulatePolicyOtherVersion(t *testing.T) {
 	t.Parallel()
 	src, err := os.ReadFile("../../testdata/config/firewall-doubt.xml")
 	if err != nil {
@@ -755,8 +755,8 @@ func TestSimulatePolicyVersionGap(t *testing.T) {
 	c := newCLI(t)
 	args := []string{"simulate", "policy", "198.18.1.68", "192.0.2.1", "--port", "udp/443", "--from-zone", "home", "--to-zone", "wan", "--file", file}
 	out := c.want(0, args...)
-	if !strings.Contains(out, "note: ") || !strings.Contains(out, "12.2.0") || strings.Contains(out, "unresolved:") ||
-		!strings.Contains(out, "fidelity   inferred") || !strings.Contains(out, "first match: block-udp-443 (deny)") {
+	if strings.Contains(out, "note: ") || strings.Contains(out, "unresolved:") ||
+		strings.Contains(out, "fidelity   inferred") || !strings.Contains(out, "first match: block-udp-443 (deny)") {
 		t.Errorf("text:\n%s", out)
 	}
 	out = c.want(0, append(args, "--output", "json")...)
@@ -765,8 +765,8 @@ func TestSimulatePolicyVersionGap(t *testing.T) {
 		Notes      []struct{ Text string }
 		Results    []struct{ Verdict string }
 	}
-	if err := json.Unmarshal([]byte(out), &env); err != nil || len(env.Unresolved) != 0 || len(env.Notes) != 1 ||
-		!strings.Contains(env.Notes[0].Text, "12.2.0") || env.Results[0].Verdict != "stop" {
+	if err := json.Unmarshal([]byte(out), &env); err != nil || len(env.Unresolved) != 0 || len(env.Notes) != 0 ||
+		env.Results[0].Verdict != "stop" {
 		t.Errorf("json: %v\n%s", err, out)
 	}
 }

@@ -193,7 +193,7 @@ func (a *app) runSnapshotShow(ctx context.Context, o snapshotShowOptions) (answe
 		}
 		ans.rows = append(ans.rows, r)
 	}
-	ans.un, ans.notes = query.TargetQualifiers(ts)
+	ans.notes = query.TargetNotes(ts)
 	return ans, nil
 }
 
