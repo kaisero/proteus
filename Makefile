@@ -14,7 +14,7 @@ DIGEST_DIR := internal/config/schemadigest
 PANOS_VERSION ?=
 
 # Pinned dev-tool versions (CI installs the same ones; keep in sync with .github).
-GOLANGCI_VERSION    := v2.13.1
+GOLANGCI_VERSION    := v2.14.0
 GOFUMPT_VERSION     := v0.11.0
 GOVULNCHECK_VERSION := v1.7.0
 
