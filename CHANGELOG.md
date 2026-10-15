@@ -286,6 +286,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   versions were involved, because a field that moved between them can make a lookup
   miss rules without looking incomplete.
 
+- **One schema reads every PAN-OS version.** A configuration from any release now
+  answers without a version-gap warning, exit code 3 or an `inferred` downgrade; a
+  field the bundled 11.2 schema does not know is not read, and no answer says so.
+
 ### Removed
 
 - **`panos-demo` and `panos-schemagen` are gone.** `proteus` is now the only
@@ -301,6 +305,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   firewall's own configuration, so device groups, templates and the device-group
   hierarchy are gone, and loading a Panorama export returns an error that says so.
   A firewall's pushed shared pre- and post-rules are still read in evaluation order.
+
+- **The `gap.version` reason code is gone.** Answers from other PAN-OS versions are
+  now complete, so a script that matched this code no longer sees it.
 
 ### Fixed
 
