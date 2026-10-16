@@ -6,6 +6,7 @@
   resolve-source      ‹ok›exact‹/›    2 10.1.0.5: 0 hits, 0 negated rules
   resolve-destination ‹ok›exact‹/›    2 10.2.0.5: 0 hits, 0 negated rules
   derive-zones        inferred 1 from inside; to dmz (configuration)
+  match-application   ‹ok›exact‹/›    1 no application given
   match-service       ‹ok›exact‹/›    1 tcp/443
   match-url           ‹ok›exact‹/›    1 no candidate names a URL category
   drop-disabled       ‹ok›exact‹/›    1 0 disabled

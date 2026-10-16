@@ -31,6 +31,8 @@ const (
 	// evaluated: a stage matches the flow on it. service and category are
 	// evaluated only when the flow carries a port or a URL and the configuration
 	// defines the value; otherwise a candidate naming them has a doubt.
+	// application is evaluated only with a flow application and App-ID data
+	// (spec 2026-10-16 §4.1); otherwise it is a doubt as before.
 	evaluated fieldClass = iota + 1
 	// doubtful: a matching field no stage evaluates, so a candidate that sets it
 	// to something other than any has a doubt.
@@ -58,7 +60,7 @@ var ruleFields = []struct {
 	{"destination", evaluated},
 	{"service", evaluated},
 	{"category", evaluated},
-	{"application", doubtful},
+	{"application", evaluated},
 	{"source-imsi", doubtful},
 	{"source-imei", doubtful},
 	{"source-nw-slice", doubtful},
@@ -92,7 +94,6 @@ var doubtLabel = map[string]string{"source-user": "user"}
 // doubtful field missing here fails every test that reaches it.
 var doubtCodes = map[string]reason.Code{
 	"source-user":      "doubt.not-evaluated.user",
-	"application":      "doubt.application",
 	"source-imsi":      "doubt.imsi",
 	"source-imei":      "doubt.imei",
 	"source-nw-slice":  "doubt.nw-slice",
@@ -125,6 +126,17 @@ func (s *state) doubts() []Doubt {
 			case f.name == "category":
 				if why := s.categoryDoubt(r.Fields["category"], categories); why.Text != "" {
 					add(why)
+				}
+			case f.name == "application":
+				// With an evaluated application, only a rule that
+				// match-application kept for a name it cannot judge has a
+				// doubt.
+				if s.evaluated {
+					if why := s.appDoubts[uint32(r.Position-1)]; len(why) > 0 { //nolint:gosec // as above
+						add(why...)
+					}
+				} else if vs := notAny(r.Fields["application"]); len(vs) > 0 {
+					add(reason.New("doubt.application", fmt.Sprintf("application not evaluated (%s)", strings.Join(vs, ", "))))
 				}
 			case f.name == "rule-type":
 				//nolint:gosec // a rule position cannot reach 2^32; a rulebase is capped far below that

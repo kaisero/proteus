@@ -37,7 +37,9 @@ var handModelled = []HandModel{
 		Path: "/config/devices/entry/vsys/entry/rulebase/security/rules/entry",
 		Reason: "the schema says what each child of a security rule holds, not whether the device " +
 			"matches a flow on it nor whether the security check evaluates it; the check classifies " +
-			"every child, and a candidate that sets a matching field no stage evaluates has a doubt",
+			"every child, and a candidate that sets a matching field no stage evaluates has a doubt; " +
+			"the application is evaluated with the device's App-ID content data, and without a flow " +
+			"application or without that data a rule that names one has a doubt (spec 2026-10-16 §4)",
 		Owner: "internal/simulate/securitypolicy",
 	},
 	{

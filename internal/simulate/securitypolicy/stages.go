@@ -22,6 +22,9 @@ var steps = []simulate.Step[state]{
 	{Name: "Resolve the source", Slug: "resolve-source", Do: resolveSource},
 	{Name: "Resolve the destination", Slug: "resolve-destination", Do: resolveDestination},
 	{Name: "Derive the zones", Slug: "derive-zones", Do: deriveZones},
+	// Before the service: application-default needs the application (spec
+	// 2026-10-16 D6).
+	{Name: "Match the application", Slug: "match-application", Do: matchApplication},
 	{Name: "Match the service", Slug: "match-service", Do: matchService},
 	{Name: "Match the URL category", Slug: "match-url", Do: matchURL},
 	{Name: "Drop disabled rules", Slug: "drop-disabled", Do: dropDisabled},
@@ -497,10 +500,20 @@ func dropDisabled(_ context.Context, s *state) (simulate.Outcome, error) {
 }
 
 // order lists the candidates in evaluation order: a rule's bit is its position.
+// With an evaluated application, the explicit candidates and the rules kept in
+// doubt come first, in rule order, then the implicit candidates, in rule order:
+// an explicit match wins over an implicit one, also when it comes later (spec
+// 2026-10-16 I2, D7). The default rules follow both in firstMatch (I6).
 func order(_ context.Context, s *state) (simulate.Outcome, error) {
 	s.verdict.Candidates = nil
-	for it := s.cand.Iterator(); it.HasNext(); {
-		s.verdict.Candidates = append(s.verdict.Candidates, s.rules[it.Next()])
+	passes := []*roaring.Bitmap{s.cand}
+	if s.evaluated {
+		passes = []*roaring.Bitmap{roaring.And(roaring.Or(s.explicit, s.kept), s.cand), roaring.And(s.implicit, s.cand)}
+	}
+	for _, b := range passes {
+		for it := b.Iterator(); it.HasNext(); {
+			s.verdict.Candidates = append(s.verdict.Candidates, s.rules[it.Next()])
+		}
 	}
 	s.verdict.Doubts = s.doubts()
 	return simulate.Outcome{Fidelity: simulate.Exact, Detail: fmt.Sprintf("%d in order", len(s.verdict.Candidates))}, nil
@@ -528,7 +541,7 @@ func firstMatch(_ context.Context, s *state) (simulate.Outcome, error) {
 		upto, before = cands[:at+1], cands[:at]
 	}
 	out := simulate.Outcome{Fidelity: simulate.Exact}
-	if skipped := notEvaluated(upto); len(skipped) > 0 {
+	if skipped := notEvaluated(upto, s.evaluated); len(skipped) > 0 {
 		out.Fidelity = simulate.NotEvaluated(skipped...)
 	}
 	var action string
@@ -538,6 +551,7 @@ func firstMatch(_ context.Context, s *state) (simulate.Outcome, error) {
 		s.verdict.Rule = &r
 		action = r.Action
 		out.Detail = fmt.Sprintf("%s (%s), position %d", r.Name, r.Action, r.Position)
+		s.implicitWinner(r)
 	default:
 		lead := "no enabled rule matches"
 		if len(cands) > 0 {
@@ -575,9 +589,13 @@ func firstMatch(_ context.Context, s *state) (simulate.Outcome, error) {
 
 // notEvaluated names the matching dimensions no stage evaluates that a candidate
 // at or before the decision sets: only those can change which rule decides.
-func notEvaluated(upto []resolve.Rule) []string {
+// application says whether match-application evaluated the application.
+func notEvaluated(upto []resolve.Rule, application bool) []string {
 	var out []string
 	for _, c := range []struct{ field, dim string }{{"application", "application"}, {"source-user", "user"}} {
+		if application && c.field == "application" {
+			continue
+		}
 		for _, r := range upto {
 			if len(notAny(r.Fields[c.field])) > 0 {
 				out = append(out, c.dim)

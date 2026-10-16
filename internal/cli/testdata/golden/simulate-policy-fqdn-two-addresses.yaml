@@ -85,6 +85,13 @@ results:
         candidates: 2
         detail: no zone found for either side (not evaluated)
         elapsed_ms: 0
+      - slug: match-application
+        name: Match the application
+        fidelity:
+          level: exact
+        candidates: 2
+        detail: no application given
+        elapsed_ms: 0
       - slug: match-service
         name: Match the service
         fidelity:

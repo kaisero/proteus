@@ -733,7 +733,7 @@ func TestSimulatePolicy(t *testing.T) {
 		}
 	}
 	if err := json.Unmarshal([]byte(out), &env); err != nil || len(env.Results) != 1 || env.Results[0].FirstMatch == nil ||
-		env.Results[0].FirstMatch.Name != "from-inside" || len(env.Results[0].Stages) != 8 || env.Results[0].Fidelity.Level == "" {
+		env.Results[0].FirstMatch.Name != "from-inside" || len(env.Results[0].Stages) != 9 || env.Results[0].Fidelity.Level == "" {
 		t.Errorf("json: %v %s", err, out)
 	}
 }

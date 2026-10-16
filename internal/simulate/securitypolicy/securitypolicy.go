@@ -4,7 +4,12 @@
 //
 // The flow's source and destination are an address or an FQDN; it can carry a port,
 // a URL and zones. Zones are derived from the stored forwarding table, or from the
-// configuration, when not given. Application and user are not evaluated.
+// configuration, when not given. The application is evaluated with the device's
+// App-ID content data (spec 2026-10-16 §4): the explicit candidates first, then
+// the allow rules that imply it, as observed on the lab VM, PAN-OS 12.1.9
+// (I1-I8, S9), and on fw02, PAN-OS 12.2.3 (I9). The flow's application matches
+// without regard to case (P14). Without a flow application or without the data,
+// a rule that names an application stays in doubt. The user is not evaluated.
 package securitypolicy
 
 import (
@@ -16,6 +21,7 @@ import (
 
 	"github.com/RoaringBitmap/roaring/v2"
 
+	"github.com/okaiser/proteus/internal/appid"
 	"github.com/okaiser/proteus/internal/index"
 	"github.com/okaiser/proteus/internal/reason"
 	"github.com/okaiser/proteus/internal/resolve"
@@ -68,6 +74,12 @@ type Verdict struct {
 	Doubts    []Doubt        `json:"doubts"`
 	Zones     ZoneDerivation `json:"zones"`
 	Relevance Relevance      `json:"relevance"`
+	// Implicit is set when Rule matches the flow's application only through
+	// the implicit use of the rule's applications (spec 2026-10-16 I1).
+	Implicit *Implicit `json:"implicit,omitempty"`
+	// AppData is whether the target had App-ID content data. The needs read
+	// it: only with data does an application decide a doubt (C8).
+	AppData bool `json:"-"`
 }
 
 // Outcome is what a decided flow meets: it passes, or it stops.
@@ -163,7 +175,26 @@ type state struct {
 	// serviceHits holds the rules whose service holds the flow's port through
 	// an object the configuration defines, or any; nil without a port.
 	serviceHits *roaring.Bitmap
-	verdict     Verdict
+	// apps is the target's App-ID content data, nil without it. flowApp is
+	// the flow's application, and flowErr a value of its custom entry that
+	// cannot be read. evaluated is whether match-application evaluated the
+	// application: a flow application and data.
+	apps      *appid.Data
+	flowApp   appid.App
+	flowErr   error
+	evaluated bool
+	// explicit, implicit and kept are the candidates of the two passes (spec
+	// 2026-10-16 §4.3): the rules whose set holds the flow's application, the
+	// allow rules whose applications imply it, and the rules kept for a name
+	// the data and the configuration lack. implied names, per implicit rule,
+	// its applications that imply the flow's; appDoubts gives each kept rule
+	// its reasons.
+	explicit, implicit, kept *roaring.Bitmap
+	implied                  map[uint32][]string
+	appDoubts                map[uint32][]reason.Reason
+	// notes are the run's own notes, after the target's.
+	notes   simulate.Reasons
+	verdict Verdict
 }
 
 // fqdnMatch is the rules an FQDN reached only through an FQDN object, and the
@@ -181,7 +212,8 @@ func (Simulation) Run(ctx context.Context, env *simulate.Env, in simulate.Input)
 	if err != nil {
 		return run, fmt.Errorf("%s: %s/%s: %w", Kind, in.Device, in.Vsys, err)
 	}
-	run.Notes = t.Notes
+	// A copy: the run appends its own notes, and the target is shared.
+	run.Notes = slices.Clone(t.Notes)
 	idx, err := t.Index(resolve.Security, in.Vsys)
 	if err != nil {
 		return run, fmt.Errorf("%s: %s/%s: %w", Kind, in.Device, in.Vsys, err)
@@ -191,7 +223,19 @@ func (Simulation) Run(ctx context.Context, env *simulate.Env, in simulate.Input)
 	if r := rulebase.UndefinedZones(t.Config, idx.Scope(), in.Flow.FromZone, in.Flow.ToZone); r != nil {
 		return run, r.Choice
 	}
-	s := &state{env: env, in: in, target: t, idx: idx, view: idx.With(t.Providers), rules: idx.Rules()}
+	s := &state{env: env, in: in, target: t, idx: idx, view: idx.With(t.Providers), rules: idx.Rules(), apps: t.Providers.Apps}
+	s.verdict.AppData = s.apps != nil
+	// With data, the flow's application is checked and made canonical before
+	// the stages (spec 2026-10-16 P10, P14, P15).
+	if s.apps != nil && in.Flow.Application != "" {
+		a, refusal := flowApplication(t.Config, idx.Scope(), s.apps, in.Flow.Application)
+		if refusal != nil {
+			return run, refusal
+		}
+		s.flowApp, s.flowErr = a.App, a.Err
+		s.in.Flow.Application = a.App.Name
+		run.Input.Flow.Application = a.App.Name
+	}
 	s.verdict.Relevance = relevance(t.Providers.Zones, in.Flow)
 	stages, err := simulate.Execute(ctx, Kind, s, steps, false, env.Log)
 	run.Stages = stages
@@ -199,6 +243,7 @@ func (Simulation) Run(ctx context.Context, env *simulate.Env, in simulate.Input)
 	if u := undermatched(stages); err == nil && len(u) > 0 {
 		s.verdict.Undecided = u
 	}
+	run.Notes = append(run.Notes, s.notes...)
 	run.Output = s.verdict
 	return run, err
 }

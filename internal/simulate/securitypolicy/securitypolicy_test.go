@@ -294,7 +294,7 @@ func TestDescribeAndStages(t *testing.T) {
 	if s.Kind() != "policy" || s.Describe() == "" {
 		t.Error("kind and description")
 	}
-	if got := strings.Join(s.Stages(), ","); got != "resolve-source,resolve-destination,derive-zones,match-service,match-url,drop-disabled,order,first-match" {
+	if got := strings.Join(s.Stages(), ","); got != "resolve-source,resolve-destination,derive-zones,match-application,match-service,match-url,drop-disabled,order,first-match" {
 		t.Errorf("stages = %s", got)
 	}
 }
