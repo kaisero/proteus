@@ -160,13 +160,18 @@ type Snapshot struct{ ... }
 type Store struct{ ... }
 
 func (s *Store) AtOrBefore(device string, t time.Time) (Snapshot, error)
+func (s *Store) ContentPath(version string) string
 func (s *Store) Get(device, id string) (Snapshot, error)
+func (s *Store) HaveContent(version string) bool
 func (s *Store) Latest(device string) (Snapshot, error)
 func (s *Store) List(device string) ([]string, error)
+func (s *Store) PruneContent() error
 func (s *Store) Resolve(ref string) (Snapshot, error)
 func (s *Store) WithClock(now func() time.Time) *Store
 func (s *Store) Write(meta Meta, docs map[string][]byte, keep int) (Snapshot, error)
+func (s *Store) WriteContent(version string, b []byte) error
 func (sn Snapshot) ConfigPath() (string, error)
+func (sn Snapshot) ContentPath() string
 func (sn Snapshot) Path(doc string) string
 func (sn Snapshot) Zones() (*index.ZoneSnapshot, error)
 func At(root string) *Store

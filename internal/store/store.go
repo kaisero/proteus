@@ -4,8 +4,10 @@
 //	<root>/<device>/<timestamp>/<document>.xml
 //	<root>/<device>/<timestamp>/meta.json
 //	<root>/<device>/latest -> <timestamp>
+//	<root>/.content/<app-version>.v<trim>.xml.gz
 //
-// Spec: docs/specs/2026-09-27-panos-analyst-scope.md §8.
+// Spec: docs/specs/2026-09-27-panos-analyst-scope.md §8. The App-ID content
+// files: docs/specs/2026-10-16-app-id-design.md §3.
 package store
 
 import (
@@ -42,6 +44,9 @@ type Store struct {
 	// step, when set, runs at the named points of Write, so a test can put a
 	// second writer between them.
 	step func(name string)
+	// chtimes, when set, replaces os.Chtimes in HaveContent, so a test can make
+	// it fail.
+	chtimes func(name string, atime, mtime time.Time) error
 }
 
 // Open returns the store at root, creating it private to its owner.
@@ -82,14 +87,18 @@ func DefaultRoot(getenv func(string) string) (string, error) {
 
 // Meta is a snapshot's meta.json.
 type Meta struct {
-	Device    string         `json:"device"`
-	Host      string         `json:"host"`
-	TakenAt   time.Time      `json:"taken_at"`
-	Hostname  string         `json:"hostname,omitempty"`
-	Model     string         `json:"model,omitempty"`
-	Serial    string         `json:"serial,omitempty"`
-	SWVersion string         `json:"sw_version,omitempty"`
-	Documents []DocumentMeta `json:"documents"`
+	Device    string    `json:"device"`
+	Host      string    `json:"host"`
+	TakenAt   time.Time `json:"taken_at"`
+	Hostname  string    `json:"hostname,omitempty"`
+	Model     string    `json:"model,omitempty"`
+	Serial    string    `json:"serial,omitempty"`
+	SWVersion string    `json:"sw_version,omitempty"`
+	// AppVersion is the content version whose file this fetch wrote or reused,
+	// and empty when it did neither: a snapshot cannot pick up the file of
+	// another device (spec 2026-10-16 §3.1).
+	AppVersion string         `json:"app_version,omitempty"`
+	Documents  []DocumentMeta `json:"documents"`
 	// FetchedFrom is the host that answered when it is not the device's own: the
 	// active peer of a device found passive.
 	FetchedFrom string   `json:"fetched_from,omitempty"`
