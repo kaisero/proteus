@@ -22,7 +22,7 @@
         {
           "name": "system-info",
           "file": "system-info.xml",
-          "bytes": 216
+          "bytes": 252
         },
         {
           "name": "interfaces",
@@ -70,7 +70,7 @@
         {
           "name": "system-info",
           "file": "system-info.xml",
-          "bytes": 216
+          "bytes": 252
         },
         {
           "name": "interfaces",

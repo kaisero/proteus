@@ -85,6 +85,7 @@ var registry = []Entry{
 
 	{Code: "note.dns-rewrite", Class: Note, Description: "a NAT rule also rewrites DNS answers, which is not simulated"},
 	{Code: "note.export-failed", Class: Note, Description: "writing the inventory export for the MCP server failed: the server may still read the previous export, or the new one may not be flushed to disk"},
+	{Code: "note.fetch-applications-missing", Class: Note, Description: "the device did not return its application data, so rules that name an application stay in doubt"},
 	{Code: "note.fetch-ha-mode", Class: Note, Description: "the HA mode is not active-passive, so the fetch stays on the device asked"},
 	{Code: "note.fetch-ha-state", Class: Note, Description: "the HA state is neither active nor passive, so the fetch stays on the device asked"},
 	{Code: "note.fetch-peer-unconfirmed", Class: Note, Description: "the device is passive and its peer does not confirm the pair, so the fetch stays on the device asked"},

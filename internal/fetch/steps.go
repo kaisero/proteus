@@ -19,8 +19,12 @@ type State struct {
 	Docs   []Document
 	Opts   ActiveOptions
 	Log    *runlog.Logger // the same logger as task.Options.Log; the client needs it
-	Result Result
-	client *Client // the device's, or the active peer's after the ha step
+	// HaveApps reports whether the store holds the content file of a content
+	// version, and nil is always a miss. The caller gives it, because fetch
+	// does not import the store (AGENTS.md R12).
+	HaveApps func(version string) bool
+	Result   Result
+	client   *Client // the device's, or the active peer's after the ha step
 }
 
 // NewState starts a device's fetch.
@@ -32,13 +36,16 @@ func NewState(t inventory.Target, docs []Document, opts ActiveOptions, log *runl
 }
 
 // Steps are the device-side steps of a fetch: log in, follow the active HA peer,
-// fetch the documents. A failed login fails the device, because nothing can be read
-// without a key; a failed document is recorded and the rest still arrive (spec S10).
+// fetch the documents, fetch the application data. A failed login fails the
+// device, because nothing can be read without a key; a failed document is
+// recorded and the rest still arrive (spec S10). The application data comes
+// last: it needs the content version of the system info.
 func Steps() []task.Step[State] {
 	return []task.Step[State]{
 		{Name: "log in", Slug: "login", Do: loginStep},
 		{Name: "follow the active HA peer", Slug: "ha", Do: haStep},
 		{Name: "fetch the documents", Slug: "documents", Do: documentsStep},
+		{Name: "fetch the application data", Slug: "applications", Do: applicationsStep},
 	}
 }
 

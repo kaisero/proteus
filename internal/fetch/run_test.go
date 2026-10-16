@@ -3,6 +3,7 @@ package fetch
 import (
 	"context"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -243,8 +244,12 @@ func TestARefusedPredefinedDocumentIsANote(t *testing.T) {
 				t.Fatal(err)
 			}
 			_ = l.Close()
-			docs := recs[len(recs)-1]
-			if docs.Slug != "documents" || docs.Status != task.OK || docs.Detail != "6 of 7 documents" ||
+			i := slices.IndexFunc(recs, func(r task.Record) bool { return r.Slug == "documents" })
+			if i < 0 {
+				t.Fatalf("no documents step: %+v", recs)
+			}
+			docs := recs[i]
+			if docs.Status != task.OK || docs.Detail != "6 of 7 documents" ||
 				len(docs.Notes) != 1 || docs.Notes[0].Code != "note.fetch-predefined-missing" {
 				t.Errorf("documents step = %+v", docs)
 			}

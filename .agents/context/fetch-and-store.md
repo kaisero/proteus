@@ -132,6 +132,7 @@ snapshots and none is readable, its error matches `ErrUnreadable` only
 ```go
 type APIError struct{ ... }
 type ActiveOptions struct{ ... }
+type AppData struct{ ... }
 type Client struct{ ... }
 type Document struct{ ... }
 type Optional struct{ ... }

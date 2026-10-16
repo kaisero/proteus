@@ -18,7 +18,7 @@ func ha(mode, local, localSerial, peer, peerSerial, peerIP string) string {
 
 func member(state string) *fakepanos.Device {
 	d := device()
-	d.Ops["<show><system><info/></system></show>"] = fakepanos.Success("<system><hostname>" + state + "</hostname></system>")
+	d.Ops["<show><system><info/></system></show>"] = fakepanos.Success("<system><hostname>" + state + "</hostname><app-version>8000-1000</app-version></system>")
 	return d
 }
 

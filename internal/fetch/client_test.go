@@ -3,6 +3,7 @@ package fetch
 import (
 	"context"
 	"errors"
+	"io"
 	"os"
 	"reflect"
 	"strings"
@@ -24,7 +25,7 @@ func device() *fakepanos.Device {
 	return &fakepanos.Device{
 		User: testUser, Password: testPass, Key: testKey,
 		Ops: map[string]string{
-			"<show><system><info/></system></show>": fakepanos.Success("<system><hostname>lab</hostname></system>"),
+			"<show><system><info/></system></show>": fakepanos.Success("<system><hostname>lab</hostname><app-version>8000-1000</app-version></system>"),
 		},
 		Config: `<config version="11.2.0"><devices/></config>`,
 	}
@@ -198,7 +199,8 @@ func TestVerificationRejectsAnUntrustedCertificate(t *testing.T) {
 }
 
 // R2. The client reads: it can ask for a key, run show commands and export the
-// configuration, and nothing else reaches the device.
+// configuration, and nothing else reaches the device. The unexported opStream
+// keeps the same guard.
 func TestOnlyReadCalls(t *testing.T) {
 	t.Parallel()
 	d := device()
@@ -212,6 +214,13 @@ func TestOnlyReadCalls(t *testing.T) {
 	} {
 		if _, err := c.Op(context.Background(), cmd); err == nil {
 			t.Errorf("Op(%q) was allowed", cmd)
+		}
+		err := c.opStream(context.Background(), cmd, func(io.Reader) error {
+			t.Errorf("opStream(%q) read an answer", cmd)
+			return nil
+		})
+		if err == nil {
+			t.Errorf("opStream(%q) was allowed", cmd)
 		}
 	}
 	if n := len(d.Requests()); n != 1 {

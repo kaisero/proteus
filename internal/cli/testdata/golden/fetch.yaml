@@ -15,11 +15,12 @@ results:
       serial: "007900000000001"
       sw_version: 11.2.5
       multi_vsys: "off"
+      app_version: 8000-1000
     documents:
       - name: config
         bytes: 2993
       - name: system-info
-        bytes: 216
+        bytes: 252
       - name: interfaces
         bytes: 7786
       - name: fib
@@ -50,6 +51,11 @@ results:
         name: fetch the documents
         status: ok
         detail: 7 of 7 documents
+        elapsed_ms: 0
+      - slug: applications
+        name: fetch the application data
+        status: ok
+        detail: content 8000-1000, 4 applications, 1 container
         elapsed_ms: 0
       - slug: store
         name: store the snapshot
