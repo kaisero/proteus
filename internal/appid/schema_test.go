@@ -1,6 +1,7 @@
 package appid_test
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/okaiser/proteus/internal/appid"
@@ -57,6 +58,26 @@ func TestEveryFilterFieldHasAKeptField(t *testing.T) {
 	for _, f := range []string{"name", "exclude", "no-such-field"} {
 		if _, ok := appid.FilterField(f); ok {
 			t.Errorf("FilterField(%s) maps a field that selects nothing", f)
+		}
+	}
+	// Spec 2026-10-16 §5.1: Via lists the fields in schema field order.
+	for _, segs := range [][]string{
+		{"devices", "entry", "vsys", "entry", "application-filter", "entry"},
+		{"shared", "application-filter", "entry"},
+	} {
+		n := cfg.Digest()
+		for _, s := range segs {
+			n = n.Step(s)
+		}
+		var order []string
+		for _, f := range n.Fields() {
+			if f.Kind != schema.KindAttrReq && f.Name != "exclude" {
+				order = append(order, f.Name)
+			}
+		}
+		got := slices.DeleteFunc(appid.FilterOrder(), func(f string) bool { return !slices.Contains(order, f) })
+		if !slices.Equal(got, order) {
+			t.Errorf("%s: the filter order is %v, the schema order %v", n.Path(), got, order)
 		}
 	}
 	declared := false

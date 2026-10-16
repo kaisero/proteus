@@ -75,6 +75,11 @@ type Data struct {
 	apps       []App          // by name
 	byName     map[string]int // lower-case name -> index in apps
 	conts      map[string]Container
+	// The reverse maps, built at parse time, by lower-case application name:
+	// the containers that hold a function (S9) and the content applications
+	// whose implicit-use-applications hold an application (I1).
+	containerOf map[string][]string
+	impliedBy   map[string][]string
 }
 
 // Version is the content version of the file, such as 8000-1000.
@@ -189,7 +194,108 @@ func Parse(r io.Reader) (*Data, error) {
 	for i, a := range d.apps {
 		d.byName[strings.ToLower(a.Name)] = i
 	}
+	d.reverse()
 	return d, nil
+}
+
+// reverse builds the reverse maps. The applications are sorted by name, so
+// each list of implying applications is too.
+func (d *Data) reverse() {
+	d.containerOf = map[string][]string{}
+	d.impliedBy = map[string][]string{}
+	for _, c := range d.conts {
+		for _, fn := range c.Functions {
+			key := strings.ToLower(fn)
+			if !slices.Contains(d.containerOf[key], c.Name) {
+				d.containerOf[key] = append(d.containerOf[key], c.Name)
+			}
+		}
+	}
+	for _, names := range d.containerOf {
+		slices.Sort(names)
+	}
+	for _, a := range d.apps {
+		for _, m := range a.ImplicitUse {
+			key := strings.ToLower(m)
+			if !slices.Contains(d.impliedBy[key], a.Name) {
+				d.impliedBy[key] = append(d.impliedBy[key], a.Name)
+			}
+		}
+	}
+}
+
+// ContainersOf returns the containers whose functions hold app, by name. The
+// name takes any case (P14). A container in a rule matches each of its
+// functions (S9). The content data puts no app in two containers (F15). The
+// answer is nil when the file lacks the containers (§2.2).
+func (d *Data) ContainersOf(app string) []string {
+	return slices.Clone(d.containerOf[strings.ToLower(app)])
+}
+
+// ImpliedBy returns the content applications whose implicit-use-applications
+// hold app, by name (I1). An allow rule that names one of them also matches
+// app. The reverse does not hold (I3): use-applications do not count. Only
+// content applications imply: as observed on fw02, PAN-OS 12.2.3, a custom
+// application refuses implicit-use-applications (spec 2026-10-16 I9), and the
+// file holds no custom application.
+func (d *Data) ImpliedBy(app string) []string {
+	return slices.Clone(d.impliedBy[strings.ToLower(app)])
+}
+
+// Suggest returns up to n application names for a name that is no
+// application. For a container, they are its functions: the device refuses a
+// container as the flow's application (P10). Otherwise they are the names
+// nearest to name, in any case: the names within a small edit distance and
+// the names that hold name, nearest first.
+func (d *Data) Suggest(name string, n int) []string {
+	if n <= 0 {
+		return nil
+	}
+	if c, ok := d.Container(name); ok {
+		return slices.Clone(c.Functions[:min(n, len(c.Functions))])
+	}
+	q := strings.ToLower(name)
+	limit := max(2, len(q)/3)
+	type near struct {
+		name string
+		dist int
+	}
+	var found []near
+	for _, a := range d.apps {
+		lower := strings.ToLower(a.Name)
+		if dist := distance(q, lower); dist <= limit || strings.Contains(lower, q) {
+			found = append(found, near{a.Name, dist})
+		}
+	}
+	slices.SortStableFunc(found, func(a, b near) int { return a.dist - b.dist })
+	var out []string
+	for _, f := range found[:min(n, len(found))] {
+		out = append(out, f.name)
+	}
+	return out
+}
+
+// distance is the Levenshtein distance of two names, by byte. It only ranks
+// suggestions, so a multi-byte letter that counts as several edits does no
+// harm.
+func distance(a, b string) int {
+	prev := make([]int, len(b)+1)
+	cur := make([]int, len(b)+1)
+	for j := range prev {
+		prev[j] = j
+	}
+	for i := 1; i <= len(a); i++ {
+		cur[0] = i
+		for j := 1; j <= len(b); j++ {
+			cost := 1
+			if a[i-1] == b[j-1] {
+				cost = 0
+			}
+			cur[j] = min(prev[j]+1, cur[j-1]+1, prev[j-1]+cost)
+		}
+		prev, cur = cur, prev
+	}
+	return prev[len(b)]
 }
 
 // first returns the first child of each name. The device filters by release,

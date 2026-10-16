@@ -70,36 +70,51 @@ func kept(field string) bool { return keptSet[field] }
 // child of saas/certifications (S6, F8). The schema names the filter fields,
 // not the application fields they select, so this map is hand-modelled
 // (AGENTS.md R8).
-var filterFields = map[string]string{
-	"category":                  "category",
-	"subcategory":               "subcategory",
-	"technology":                "technology",
-	"risk":                      "risk",
-	"evasive":                   "evasive-behavior",
-	"excessive-bandwidth-use":   "consume-big-bandwidth",
-	"used-by-malware":           "used-by-malware",
-	"transfers-files":           "able-to-transfer-file",
-	"has-known-vulnerabilities": "has-known-vulnerability",
-	"tunnels-other-apps":        "tunnel-other-application",
-	"prone-to-misuse":           "prone-to-misuse",
-	"pervasive":                 "pervasive-use",
-	"is-saas":                   "is-saas",
-	"new-appid":                 "new-appid",
-	"saas-risk":                 "saas",
-	"saas-certifications":       "saas",
-	// The configuration holds the tags under tag; S10 names the field
-	// tagging, as the command line shows it.
-	"tag":     "tag",
-	"tagging": "tag",
+//
+// The list is in schema field order, which Selection.Via follows (§5.1).
+// TestEveryFilterFieldHasAKeptField holds the order to the digest.
+var filterFields = []struct{ filter, app string }{
+	{"category", "category"},
+	{"subcategory", "subcategory"},
+	{"technology", "technology"},
+	{"evasive", "evasive-behavior"},
+	{"excessive-bandwidth-use", "consume-big-bandwidth"},
+	{"used-by-malware", "used-by-malware"},
+	{"transfers-files", "able-to-transfer-file"},
+	{"has-known-vulnerabilities", "has-known-vulnerability"},
+	{"tunnels-other-apps", "tunnel-other-application"},
+	{"prone-to-misuse", "prone-to-misuse"},
+	{"pervasive", "pervasive-use"},
+	{"is-saas", "is-saas"},
+	{"new-appid", "new-appid"},
+	{"risk", "risk"},
+	{"saas-certifications", "saas"},
+	{"saas-risk", "saas"},
 	// no-tag reads the tags too, and adds no restriction (S14).
-	"no-tag": "tag",
+	{"no-tag", "tag"},
+	// The configuration holds the tags under tagging/tag; S10 names the
+	// field tagging, as the command line shows it.
+	{"tag", "tag"},
+	{"tagging", "tag"},
 }
+
+// filterIndex is the position of each filter field in filterFields.
+var filterIndex = func() map[string]int {
+	m := make(map[string]int, len(filterFields))
+	for i, f := range filterFields {
+		m[f.filter] = i
+	}
+	return m
+}()
 
 // FilterField returns the application field that a field of an application
 // filter selects on. name and exclude select on no field.
 func FilterField(name string) (string, bool) {
-	f, ok := filterFields[name]
-	return f, ok
+	i, ok := filterIndex[name]
+	if !ok {
+		return "", false
+	}
+	return filterFields[i].app, true
 }
 
 // ErrNoEntries is a success answer without an entry, such as "No data found"
