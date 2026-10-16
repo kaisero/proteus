@@ -200,9 +200,14 @@ func TestServicesByPort(t *testing.T) {
 	if strings.Contains(ruleNames(v), "custom-port") || head(v) != "app-default" {
 		t.Errorf("a port no service holds drops custom-port: %s", ruleNames(v))
 	}
-	r, _ = run(t, e, simulate.Flow{Source: ep("10.0.0.1"), Destination: ep("10.5.0.1"), Protocol: "icmp", DestPort: 8})
-	if !strings.Contains(stage(r, "match-service").Fidelity.String(), "not evaluated: service") {
-		t.Errorf("icmp has no service port: %s", stage(r, "match-service").Fidelity)
+	// A protocol without ports never matches a custom service (spec
+	// 2026-10-16 P13, D19): icmp drops custom-port, and the rules the
+	// configuration cannot judge stay.
+	r, v = run(t, e, simulate.Flow{Source: ep("10.0.0.1"), Destination: ep("10.5.0.1"), Protocol: "icmp", DestPort: 8})
+	svc = stage(r, "match-service").Fidelity
+	if strings.Contains(ruleNames(v), "custom-port") || strings.Contains(svc.String(), "not evaluated: service") ||
+		!strings.Contains(svc.String(), "app-default, predefined-https") {
+		t.Errorf("icmp: candidates %s, match-service = %s", ruleNames(v), svc)
 	}
 }
 

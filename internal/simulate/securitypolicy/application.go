@@ -15,6 +15,7 @@ import (
 	"github.com/okaiser/proteus/internal/reason"
 	"github.com/okaiser/proteus/internal/resolve"
 	"github.com/okaiser/proteus/internal/simulate"
+	"github.com/okaiser/proteus/internal/simulate/rulebase"
 )
 
 // Implicit says that the deciding rule matches the flow's application only
@@ -298,4 +299,157 @@ func (s *state) implicitWinner(r resolve.Rule) {
 	s.verdict.Implicit = &Implicit{App: s.in.Flow.Application, Via: via}
 	s.notes = append(s.notes, reason.New("note.app-implicit", fmt.Sprintf(
 		"rule %s matches %s only through the implicit use of %s", r.Name, s.in.Flow.Application, strings.Join(via, ", "))))
+}
+
+// protocolOf is the protocol a run takes for a flow application given
+// without a protocol, and where it comes from (spec 2026-10-16 §4.1): the one
+// protocol of the application's default. A default with several protocols,
+// or without a default block, which allows every protocol (P6), leaves the
+// protocol open: empty.
+func protocolOf(a appid.App) (proto, from string) {
+	ps := a.Default.Protocols()
+	switch {
+	case len(ps) == 1:
+		return ps[0], fmt.Sprintf("protocol %s, from the default of %s (%s)", ps[0], a.Name, a.Default)
+	case len(ps) == 0:
+		return "", fmt.Sprintf("protocol open: %s has no default block, so it allows every protocol", a.Name)
+	}
+	return "", fmt.Sprintf("protocol open: the default of %s has %s (%s)", a.Name, strings.Join(ps, ", "), a.Default)
+}
+
+// portless reports whether a protocol is known and has no ports: neither
+// tcp, udp nor sctp, given by name or by number.
+func portless(proto string) bool {
+	n, ok := appid.ProtocolNumber(proto)
+	return ok && n != 6 && n != 17 && n != 132
+}
+
+// matchOrder ranks the answers of a default, the best last: no match, an
+// open question, an ICMP type, a secure port, a plain port.
+var matchOrder = []appid.PortMatch{appid.PortNo, appid.PortOpen, appid.PortICMP, appid.PortSecure, appid.PortYes}
+
+// defaultMatch compares the flow's protocol and port with the default the
+// rule's application-default uses, and names the applications of that
+// default. An explicit candidate uses the default of the flow's application;
+// a custom one takes it from the configuration (P7). An implicit candidate
+// uses the union over its applications that imply the flow's, as observed on
+// the lab VM, PAN-OS 12.1.9 (spec 2026-10-16 I7, I8). The error is that of a
+// custom flow application whose default cannot be read.
+func (s *state) defaultMatch(bit uint32) (appid.PortMatch, []string, error) {
+	port := s.in.Flow.DestPort
+	if !s.implicit.Contains(bit) {
+		if s.flowErr != nil {
+			return appid.PortNo, []string{s.flowApp.Name}, s.flowErr
+		}
+		return s.flowApp.Default.Match(s.proto, port), []string{s.flowApp.Name}, nil
+	}
+	best := appid.PortNo
+	for _, x := range s.implied[bit] {
+		// The data names x: it is a content application that implies the
+		// flow's.
+		a, _ := s.apps.App(x)
+		if m := a.Default.Match(s.proto, port); slices.Index(matchOrder, m) > slices.Index(matchOrder, best) {
+			best = m
+		}
+	}
+	return best, s.implied[bit], nil
+}
+
+// applicationDefault judges the candidates in kept that name
+// application-default, with an evaluated application (spec 2026-10-16 §4.4,
+// §4.5). A match moves the rule from kept to hits, the rules whose service
+// holds the flow; a secure port (P2) or an ICMP type (P5) gives the rule a
+// port note. No match drops the rule, unless another of its values cannot be
+// judged. An open protocol or port, or a default that cannot be read, keeps
+// the rule with a service doubt. It returns the rules the question leaves
+// open.
+func (s *state) applicationDefault(kept, hits *roaring.Bitmap) *roaring.Bitmap {
+	open := roaring.New()
+	defined := rulebase.Defined(s.target.Config, s.idx.Scope(), resolve.Security, "service")
+	for it := roaring.And(kept, s.cand).Iterator(); it.HasNext(); {
+		bit := it.Next()
+		r := s.rules[bit]
+		vs := r.Fields["service"]
+		if !slices.Contains(vs, "application-default") {
+			continue
+		}
+		m, of, err := s.defaultMatch(bit)
+		if err != nil {
+			s.svcDoubts[bit] = reason.New("doubt.service-application-default", fmt.Sprintf(
+				"service application-default: the default of %s cannot be read: %v", s.flowApp.Name, err))
+			continue
+		}
+		port := s.portText()
+		switch m {
+		case appid.PortYes, appid.PortSecure, appid.PortICMP:
+			kept.Remove(bit)
+			hits.Add(bit)
+			s.serviceHits.Add(bit)
+		case appid.PortOpen:
+			open.Add(bit)
+			s.svcDoubts[bit] = reason.New("doubt.app-port-open", fmt.Sprintf(
+				"service application-default: %s may match a default port of %s (%s)", port, strings.Join(of, ", "), s.defaults(of)))
+		default:
+			others := slices.DeleteFunc(slices.Clone(vs), func(v string) bool { return v == "application-default" })
+			if len(others) == 0 || !rulebase.Undecidable(others, defined) {
+				kept.Remove(bit)
+			}
+		}
+		switch m {
+		case appid.PortSecure:
+			s.portNotes[bit] = append(s.portNotes[bit], reason.New("note.app-secure-port", fmt.Sprintf(
+				"rule %s matches %s on %s, a secure extended port of %s", r.Name, s.in.Flow.Application, port, strings.Join(of, ", "))))
+		case appid.PortICMP:
+			s.portNotes[bit] = append(s.portNotes[bit], reason.New("note.app-icmp-type", fmt.Sprintf(
+				"rule %s matches %s by ICMP type; the answer does not check the type", r.Name, s.in.Flow.Application)))
+		}
+	}
+	return open
+}
+
+// nonDefaultPorts notes the candidates whose custom service holds the flow's
+// port while the default of the application does not: such a rule matches
+// the application only on its service's port, as observed on the lab VM,
+// PAN-OS 12.1.9 (spec 2026-10-16 P8). A rule with service any is no such
+// match.
+func (s *state) nonDefaultPorts(hits *roaring.Bitmap) {
+	byService := roaring.And(hits, s.cand)
+	byService.AndNot(s.idx.RulesWithAny(index.Service))
+	for it := byService.Iterator(); it.HasNext(); {
+		bit := it.Next()
+		m, of, err := s.defaultMatch(bit)
+		if err != nil || m != appid.PortNo {
+			continue
+		}
+		r := s.rules[bit]
+		s.portNotes[bit] = append(s.portNotes[bit], reason.New("note.app-non-default-port", fmt.Sprintf(
+			"rule %s matches %s only on %s of its service, not on a default port of %s (%s)",
+			r.Name, s.in.Flow.Application, s.portText(), strings.Join(of, ", "), s.defaults(of))))
+	}
+}
+
+// portText is the flow's protocol and port as a note names them.
+func (s *state) portText() string {
+	proto := s.proto
+	if proto == "" {
+		proto = "an open protocol"
+	}
+	if s.in.Flow.DestPort == 0 {
+		return proto + " without a port"
+	}
+	return fmt.Sprintf("%s/%d", proto, s.in.Flow.DestPort)
+}
+
+// defaults gives the defaults of applications as text.
+func (s *state) defaults(names []string) string {
+	out := make([]string, 0, len(names))
+	for _, n := range names {
+		d := s.flowApp.Default
+		if n != s.flowApp.Name {
+			a, _ := s.apps.App(n)
+			d = a.Default
+		}
+		out = append(out, d.String())
+	}
+	return strings.Join(out, "; ")
 }

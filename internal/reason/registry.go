@@ -18,6 +18,7 @@ var registry = []Entry{
 	{Code: "dns.canonical-name", Class: DNS, Description: "the name is an alias; the canonical name is as this machine's resolver reports it"},
 	{Code: "dns.other-addresses", Class: DNS, Description: "the name resolves to more addresses than the one the answer used"},
 
+	{Code: "doubt.app-port-open", Class: Doubt, Description: "a rule uses service application-default and the question leaves the port or the protocol open"},
 	{Code: "doubt.application", Class: Doubt, Description: "a rule names an application, and the answer does not evaluate it: no application given, no application data, or a PBF rule"},
 	{Code: "doubt.application-unknown", Class: Doubt, Description: "a rule or a hop's flow names an application that neither the content data nor the configuration holds"},
 	{Code: "doubt.category-no-url", Class: Doubt, Description: "a rule names a URL category and the question gives no URL"},
@@ -84,7 +85,10 @@ var registry = []Entry{
 	{Code: "input.to-zone", Class: Input, Description: "give the destination zone"},
 	{Code: "input.url", Class: Input, Description: "give the URL"},
 
+	{Code: "note.app-icmp-type", Class: Note, Description: "the application matches ICMP by type, and the answer does not check the type"},
 	{Code: "note.app-implicit", Class: Note, Description: "the rule matches only through the implicit use of another application"},
+	{Code: "note.app-non-default-port", Class: Note, Description: "the rule matches the application only on a port of its service, not on a default port"},
+	{Code: "note.app-secure-port", Class: Note, Description: "the port is a secure extended port of the application"},
 	{Code: "note.app-shift", Class: Note, Description: "the device can match a session again when App-ID identifies it later"},
 	{Code: "note.dns-rewrite", Class: Note, Description: "a NAT rule also rewrites DNS answers, which is not simulated"},
 	{Code: "note.export-failed", Class: Note, Description: "writing the inventory export for the MCP server failed: the server may still read the previous export, or the new one may not be flushed to disk"},

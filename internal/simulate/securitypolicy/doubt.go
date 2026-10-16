@@ -118,9 +118,19 @@ func (s *state) doubts() []Doubt {
 			case f.name == "service":
 				//nolint:gosec // a rule position cannot reach 2^32; a rulebase is capped far below that
 				if s.serviceHits != nil && s.serviceHits.Contains(uint32(r.Position-1)) {
-					break // the port matched through a defined object
+					break // the port matched through a defined object, or application-default decided
 				}
-				if why := s.serviceDoubt(r.Fields["service"], services); why.Text != "" {
+				if why, ok := s.svcDoubts[uint32(r.Position-1)]; ok { //nolint:gosec // as above
+					add(why)
+					break
+				}
+				vs := r.Fields["service"]
+				if s.evaluated && len(vs) > 1 {
+					// match-service judged application-default: it did not
+					// match, so only the other values can.
+					vs = slices.DeleteFunc(slices.Clone(vs), func(v string) bool { return v == "application-default" })
+				}
+				if why := s.serviceDoubt(vs, services); why.Text != "" {
 					add(why)
 				}
 			case f.name == "category":
@@ -179,7 +189,9 @@ func (s *state) doubts() []Doubt {
 
 // serviceDoubt says why a rule's service cannot be judged on this flow, or the
 // zero reason when it can: matchService evaluates a service the configuration defines,
-// against a tcp, udp or sctp port.
+// against a tcp, udp or sctp port. On a protocol without ports, a defined
+// service never matches (spec 2026-10-16 P13), so match-service dropped the
+// rules that name only those, and no port helps the rest.
 func (s *state) serviceDoubt(vs []string, defined map[string]bool) reason.Reason {
 	if len(vs) == 0 {
 		return reason.New("doubt.service-absent", "service absent")
@@ -192,8 +204,8 @@ func (s *state) serviceDoubt(vs []string, defined map[string]bool) reason.Reason
 	// value is application-default or not defined, no port helps, so that
 	// doubt comes first and the answer asks for no port.
 	judged := slices.ContainsFunc(vs, func(v string) bool { return v != "application-default" && defined[v] })
-	f := s.in.Flow
-	if proto := rulebase.Protocol(f.Protocol); judged && (f.DestPort == 0 || (proto != "tcp" && proto != "udp" && proto != "sctp")) {
+	if proto := rulebase.Protocol(s.proto); judged && !portless(s.proto) &&
+		(s.in.Flow.DestPort == 0 || (proto != "tcp" && proto != "udp" && proto != "sctp")) {
 		return reason.New("doubt.service-no-port",
 			fmt.Sprintf("service not evaluated without a tcp, udp or sctp port (%s)", strings.Join(vs, ", ")))
 	}

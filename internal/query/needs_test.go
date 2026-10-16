@@ -84,7 +84,6 @@ func TestNeedsRows(t *testing.T) {
 			FlowInput{Port: "udp/443"},
 			[]string{"input.protocol protocol", "input.port port"},
 		},
-		{"icmp never needs a port", false, FlowInput{Protocol: "icmp"}, FlowInput{}, []string{}},
 		{
 			"category without a URL", true,
 			FlowInput{Protocol: "tcp", Port: "443", ToZone: "home"},
@@ -132,6 +131,13 @@ func TestNeedsOnlyHeldBack(t *testing.T) {
 	r = file(t, false, FlowInput{Protocol: "udp"})
 	if len(r.Needs) != 1 || r.Needs[0].Text != "give the destination port; it decides the service of rule block-udp-443" {
 		t.Errorf("%+v", r.Needs)
+	}
+	// icmp never needs a port: a protocol without ports never matches the
+	// custom service of block-udp-443 (spec 2026-10-16 P13), so the answer
+	// decides.
+	r = file(t, false, FlowInput{Protocol: "icmp"})
+	if r.Verdict == "undecided" || r.Needs != nil {
+		t.Errorf("icmp: %s: %+v (%s)", r.Verdict, r.Needs, r.Answer)
 	}
 }
 
