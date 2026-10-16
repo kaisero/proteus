@@ -93,6 +93,7 @@ var registry = []Entry{
 	{Code: "note.app-non-default-port", Class: Note, Description: "the rule matches the application only on a port of its service, not on a default port"},
 	{Code: "note.app-secure-port", Class: Note, Description: "the port is a secure extended port of the application"},
 	{Code: "note.app-shift", Class: Note, Description: "the device can match a session again when App-ID identifies it later"},
+	{Code: "note.app-version-changed", Class: Note, Description: "the content version differs between the two snapshots"},
 	{Code: "note.dns-rewrite", Class: Note, Description: "a NAT rule also rewrites DNS answers, which is not simulated"},
 	{Code: "note.export-failed", Class: Note, Description: "writing the inventory export for the MCP server failed: the server may still read the previous export, or the new one may not be flushed to disk"},
 	{Code: "note.fetch-applications-missing", Class: Note, Description: "the device did not return its application data, so rules that name an application stay in doubt"},

@@ -49,30 +49,38 @@ func (e Env) appSource() estate.AppSource {
 	return &appMemo{src: src, got: map[string]appLoad{}}
 }
 
-// noAppData ends the text of note.app-data-missing.
-const noAppData = "; rules that name an application stay in doubt"
+// The ends of the text of note.app-data-missing: what the answer lacks.
+const (
+	noAppData       = "; rules that name an application stay in doubt"
+	noAppDataSearch = "; search finds no filter, container or implicit use of an application"
+	noAppDataLookup = "; lookup finds no predefined application or container, and no application of a filter"
+)
 
-// appsOf is a target's App-ID content data, or nil and note.app-data-missing
+// appsOf is a target's App-ID content data for a simulation (appsFor).
+func appsOf(t estate.Target) (*appid.Data, simulate.Reasons) { return appsFor(t, noAppData) }
+
+// appsFor is a target's App-ID content data, or nil and note.app-data-missing
 // with the cause: a snapshot that names no content version, a file that does
-// not exist, or one that cannot be read or parsed. The answer is then as
-// without data (spec 2026-10-16 §4.1). Data read from a file beside the
-// configuration comes with note.app-data-file, which names the file: nothing
-// checks that its content version is the device's (§6).
-func appsOf(t estate.Target) (*appid.Data, simulate.Reasons) {
+// not exist, or one that cannot be read or parsed. lacks ends the note: what
+// the answer lacks. The answer is then as without data (spec 2026-10-16
+// §4.1). Data read from a file beside the configuration comes with
+// note.app-data-file, which names the file: nothing checks that its content
+// version is the device's (§6).
+func appsFor(t estate.Target, lacks string) (*appid.Data, simulate.Reasons) {
 	if t.Apps == nil {
 		what := "the snapshot names no content version"
 		if t.Snapshot != nil {
 			what = fmt.Sprintf("snapshot %s names no content version", t.Snapshot.ID)
 		}
-		return nil, simulate.Reasons{reason.New("note.app-data-missing", "no application data: "+what+noAppData)}
+		return nil, simulate.Reasons{reason.New("note.app-data-missing", "no application data: "+what+lacks)}
 	}
 	d, err := t.Apps()
 	switch {
 	case errors.Is(err, fs.ErrNotExist):
 		return nil, simulate.Reasons{reason.New("note.app-data-missing",
-			fmt.Sprintf("no application data: %s does not exist%s", t.AppsPath, noAppData))}
+			fmt.Sprintf("no application data: %s does not exist%s", t.AppsPath, lacks))}
 	case err != nil:
-		return nil, simulate.Reasons{reason.New("note.app-data-missing", "no application data: "+err.Error()+noAppData)}
+		return nil, simulate.Reasons{reason.New("note.app-data-missing", "no application data: "+err.Error()+lacks)}
 	case t.Snapshot == nil:
 		return d, simulate.Reasons{reason.New("note.app-data-file",
 			fmt.Sprintf("application data of content %s from %s", d.Version(), t.AppsPath))}

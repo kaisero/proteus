@@ -3,11 +3,11 @@
   "properties": {
     "name": {
       "type": "string",
-      "description": "the rule or object name"
+      "description": "the rule, object or application name"
     },
     "kind": {
       "type": "string",
-      "description": "pick one kind when several share the name: security-rule or an object kind"
+      "description": "pick one kind when several share the name: security-rule, application or another object kind"
     },
     "device": {
       "type": [

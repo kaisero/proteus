@@ -3,6 +3,8 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
+	"os"
+	"slices"
 	"strings"
 	"testing"
 
@@ -212,5 +214,48 @@ func TestRendererCuts(t *testing.T) {
 	}
 	if plural(1, "member") != "1 member" {
 		t.Error("plural")
+	}
+}
+
+// The text filter card shows the criteria, the count and the first 20
+// applications; --full shows all (spec 2026-10-16 §5.2, C5). JSON always
+// holds all.
+func TestLookupFilterCardText(t *testing.T) {
+	t.Parallel()
+	path := appConfig(t)
+	out := newCLI(t).want(0, "lookup", "f-media", "--file", path)
+	for _, want := range []string{"criteria     category   media", "applications 3 applications", "app-media, app-old, shared-media", "held by      inner"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q in:\n%s", want, out)
+		}
+	}
+	// f-wide selects every application of risk 1 to 4: more than 20.
+	raw := read(t, path)
+	wide := `<entry name="f-wide"><risk><member>1</member><member>2</member><member>3</member><member>4</member></risk></entry>`
+	if err := os.WriteFile(path, []byte(strings.Replace(raw, "<application-filter>", "<application-filter>"+wide, 1)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	listed := func(out string) []string {
+		for _, l := range strings.Split(out, "\n") {
+			if strings.HasPrefix(l, "  ") && strings.Contains(l, "app-collab") {
+				return strings.Split(strings.TrimSpace(l), ", ")
+			}
+		}
+		return nil
+	}
+	cut := listed(newCLI(t).want(0, "lookup", "f-wide", "--file", path))
+	all := listed(newCLI(t).want(0, "lookup", "f-wide", "--file", path, "--full"))
+	if len(cut) != maxFilterApps+1 || !strings.HasPrefix(cut[maxFilterApps], "… (+") || len(all) <= maxFilterApps ||
+		slices.ContainsFunc(all, func(s string) bool { return strings.HasPrefix(s, "…") }) {
+		t.Errorf("cut %d: %v\nfull %d: %v", len(cut), cut, len(all), all)
+	}
+	var env struct{ Results []struct{ Card card.Card } }
+	if err := json.Unmarshal([]byte(newCLI(t).want(0, "lookup", "f-wide", "--file", path, "--output", "json")), &env); err != nil || len(env.Results) != 1 {
+		t.Fatalf("json: %v", err)
+	}
+	for _, s := range env.Results[0].Card.Sections {
+		if s.Title == "applications" && len(s.Rows[1].Items) != len(all) {
+			t.Errorf("json holds %d applications, --full %d", len(s.Rows[1].Items), len(all))
+		}
 	}
 }

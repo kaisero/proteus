@@ -118,6 +118,12 @@ func SnapshotDiff(ctx context.Context, env Env, in DiffInput) (Envelope[DiffInpu
 			e.Notes = append(e.Notes, NoteOf(d, "", reason.New("note.serial-changed", fmt.Sprintf(
 				"the snapshots come from different firewalls (serial %s, then %s), as after an HA failover; settings an HA pair does not sync show as changes", was, now))))
 		}
+		// The diff says only that the content version changed; it does not
+		// compare applications (spec 2026-10-16 §5.3).
+		if was, now := older.Meta.AppVersion, newer.Meta.AppVersion; was != "" && now != "" && was != now {
+			e.Notes = append(e.Notes, NoteOf(d, "", reason.New("note.app-version-changed",
+				fmt.Sprintf("content version %s → %s", was, now))))
+		}
 		was, err1 := env.configs().Config(older)
 		now, err2 := env.configs().Config(newer)
 		if err1 != nil || err2 != nil {

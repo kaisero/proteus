@@ -10,17 +10,19 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/okaiser/proteus/internal/appid"
 	"github.com/okaiser/proteus/internal/estate"
 	"github.com/okaiser/proteus/internal/index"
 	"github.com/okaiser/proteus/internal/reason"
 	"github.com/okaiser/proteus/internal/resolve"
 	"github.com/okaiser/proteus/internal/runlog"
 	"github.com/okaiser/proteus/internal/search"
+	"github.com/okaiser/proteus/internal/simulate"
 )
 
 // SearchInput is search: every place a value or name appears.
 type SearchInput struct {
-	Term string `json:"term" jsonschema:"the value or name to search for: an address, a prefix, a port or a name"`
+	Term string `json:"term" jsonschema:"the value or name to search for: an address, a prefix, a port, a name or an application"`
 	// Mode overrides the match the term's type sets: exact, within or contains.
 	Mode string `json:"mode,omitempty" jsonschema:"exact, within or contains; empty lets the term's type decide"`
 	// Kinds, Fields and Show narrow the findings; Direct keeps groups one level
@@ -166,6 +168,31 @@ func (in SearchInput) query() search.Query {
 // portTerm is a port, bare or with its protocol: 443, tcp/443.
 var portTerm = regexp.MustCompile(`^((tcp|udp|sctp)/)?[0-9]+$`)
 
+// nameShaped says whether a term has the shape of a name: no address, prefix
+// or range, no port, and no slash or space. Only such a term can name an
+// application, so only it loads the App-ID data (spec 2026-10-16 D11).
+func nameShaped(term string) bool {
+	return len(index.PrefixesOf(term)) == 0 && !portTerm.MatchString(term) && !strings.ContainsAny(term, "/ ")
+}
+
+// canonicalApp is the name of the application a term names in any case: the
+// custom application's name as configured, or the content name (spec
+// 2026-10-16 P14). Refs and the interner match names exactly, so the search
+// runs on it (D17). Any other term stays as it is.
+func canonicalApp(t estate.Target, apps *appid.Data, term string) string {
+	for _, a := range resolve.Applications(t.Config, t.Scope) {
+		if strings.EqualFold(a.Name, term) {
+			return a.Name
+		}
+	}
+	if apps != nil {
+		if a, ok := apps.App(term); ok {
+			return a.Name
+		}
+	}
+	return term
+}
+
 // Matching says how the term is matched: the mode asked, or what the term's type
 // sets: covers, overlaps or matches.
 func (in SearchInput) Matching() string {
@@ -241,6 +268,14 @@ func Search(ctx context.Context, env Env, in SearchInput) (Envelope[SearchInput,
 		if err != nil {
 			e.Holes = append(e.Holes, estate.NewHole(t.Device, t.Vsys, reason.New("gap.load-failed", err.Error())))
 			continue
+		}
+		q.Term = in.Term
+		if nameShaped(in.Term) {
+			var notes simulate.Reasons
+			q.Providers.Apps, notes = appsFor(t, noAppDataSearch)
+			// A copy: the target's notes may share their array with a cached load.
+			ts[i].Notes = append(slices.Clone(t.Notes), notes...)
+			q.Term = canonicalApp(t, q.Providers.Apps, in.Term)
 		}
 		fs, un, err := search.Run(t.Config, idx, q)
 		if err != nil {

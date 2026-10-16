@@ -16,10 +16,10 @@ import (
 
 // LookupInput is lookup: the whole rule or object a name refers to.
 type LookupInput struct {
-	Name string `json:"name" jsonschema:"the rule or object name"`
-	// Kind picks one kind when several share the name: security-rule or an
-	// object kind.
-	Kind string `json:"kind,omitempty" jsonschema:"pick one kind when several share the name: security-rule or an object kind"`
+	Name string `json:"name" jsonschema:"the rule, object or application name"`
+	// Kind picks one kind when several share the name: security-rule,
+	// application or another object kind.
+	Kind string `json:"kind,omitempty" jsonschema:"pick one kind when several share the name: security-rule, application or another object kind"`
 	// Expand and Full shape the rendered card; the result always holds all of it.
 	Expand bool `json:"expand,omitempty" jsonschema:"expand groups in the text card"`
 	Full   bool `json:"full,omitempty" jsonschema:"show every field in the text card"`
@@ -77,9 +77,16 @@ func Lookup(ctx context.Context, env Env, in LookupInput) (Envelope[LookupInput,
 			e.Holes = append(e.Holes, estate.NewHole(t.Device, t.Vsys, reason.New("gap.load-failed", err.Error())))
 			continue
 		}
-		cs, err := card.Find(t.Config, idx, in.Name, in.Kind)
+		cs, err := card.Find(t.Config, idx, nil, in.Name, in.Kind)
 		if err != nil {
 			return none, usageOf(err, "--kind: "+err.Error(), "kind: "+err.Error())
+		}
+		if needsApps(in.Kind, cs) {
+			apps, notes := appsFor(t, noAppDataLookup)
+			// A copy: the target's notes may share their array with a cached load.
+			ts[i].Notes = append(slices.Clone(t.Notes), notes...)
+			// The kind passed the first call, so this one cannot refuse it.
+			cs, _ = card.Find(t.Config, idx, apps, in.Name, in.Kind)
 		}
 		var here []string
 		for _, cd := range cs {
@@ -107,6 +114,20 @@ func Lookup(ctx context.Context, env Env, in LookupInput) (Envelope[LookupInput,
 	e.Notes = TargetNotes(ts)
 	cut(&e, in.ResultLimit, "device or vsys")
 	return e, nil
+}
+
+// needsApps says whether a lookup loads the App-ID data after a first look
+// without it (spec 2026-10-16 D11): for an application kind, or, with no
+// kind, when the first look found nothing or found an application filter. A
+// rule or another object needs no data, so its lookup opens no content file.
+func needsApps(kind string, cs []card.Card) bool {
+	switch kind {
+	case card.KindApplication, card.KindFilter, card.KindContainer:
+		return true
+	case "":
+		return len(cs) == 0 || slices.ContainsFunc(cs, func(c card.Card) bool { return c.Kind == card.KindFilter })
+	}
+	return false
 }
 
 // where names a device's vsys, or the device alone.

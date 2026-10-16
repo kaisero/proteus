@@ -57,7 +57,7 @@ type natArgs struct {
 }
 
 type searchArgs struct {
-	Value  string   `json:"value" jsonschema:"the value or name to search for: an address, a prefix, a port or a name"`
+	Value  string   `json:"value" jsonschema:"the value or name to search for: an address, a prefix, a port, a name or an application"`
 	Kind   string   `json:"kind,omitempty" jsonschema:"an object kind to search, such as address or service; left out, every kind"`
 	Device []string `json:"device,omitempty" jsonschema:"the devices to search; left out, every device"`
 	Label  []string `json:"label,omitempty" jsonschema:"select devices by label, key=value"`
@@ -68,8 +68,8 @@ type searchArgs struct {
 }
 
 type lookupArgs struct {
-	Name   string   `json:"name" jsonschema:"the rule or object name"`
-	Kind   string   `json:"kind,omitempty" jsonschema:"pick one kind when several share the name: security-rule or an object kind"`
+	Name   string   `json:"name" jsonschema:"the rule, object or application name"`
+	Kind   string   `json:"kind,omitempty" jsonschema:"pick one kind when several share the name: security-rule, application or another object kind"`
 	Device []string `json:"device,omitempty" jsonschema:"the devices to read; left out, every device"`
 	Vsys   string   `json:"vsys,omitempty" jsonschema:"the vsys to read; left out, every vsys"`
 	At     string   `json:"at,omitempty" jsonschema:"read each device's newest snapshot at or before this time; left out, the latest"`

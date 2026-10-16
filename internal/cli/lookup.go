@@ -13,10 +13,13 @@ import (
 	"github.com/okaiser/proteus/internal/query"
 )
 
-// Limits of a rendered card (spec §16 K3, K5). JSON always carries the whole card.
+// Limits of a rendered card (spec §16 K3, K5). A filter card shows the first
+// 20 applications the filter selects (spec 2026-10-16 §5.2, C5). --full lifts
+// each limit; JSON always carries the whole card.
 const (
-	maxItems = 5
-	maxDepth = 3
+	maxItems      = 5
+	maxDepth      = 3
+	maxFilterApps = 20
 )
 
 // lookupOptions are lookup's flags.
@@ -35,10 +38,11 @@ func (a *app) lookupCmd() *cobra.Command {
 		Short: "Show the whole rule or object a name refers to",
 		Long: "Lookup prints the element a search result points to: a security rule laid out\n" +
 			"like the firewall's rule editor, or an object with its value, its members and the\n" +
-			"groups holding it.\n\n" +
+			"groups holding it. With the device's App-ID data, it also prints a predefined\n" +
+			"application, an application container, and the applications a filter selects.\n\n" +
 			"The kind is inferred from the name. When several kinds share the name, --kind\n" +
 			"picks one. --expand shows each name's value and every group's members; --full\n" +
-			"lifts the five-item limit on lists.",
+			"lifts the five-item limit on lists and the 20-application limit of a filter.",
 		Args: args(cobra.ExactArgs(1)),
 		RunE: func(c *cobra.Command, argv []string) error {
 			o.name = argv[0]
@@ -47,7 +51,7 @@ func (a *app) lookupCmd() *cobra.Command {
 	}
 	o.sel.bind(cmd, selectOpts{file: true, at: true, fresh: true})
 	f := cmd.Flags()
-	f.StringVar(&o.kind, "kind", "", "the kind of element: security-rule or an object kind")
+	f.StringVar(&o.kind, "kind", "", "the kind of element: security-rule, application or another object kind")
 	f.BoolVar(&o.expand, "expand", false, "show each name's value and every group's members")
 	f.BoolVar(&o.full, "full", false, "show every item of a list")
 	bindLimit(cmd, &o.limit)
@@ -153,23 +157,28 @@ func (r renderer) card(c card.Card) {
 	}
 	fmt.Fprintln(r.w)
 	for _, s := range c.Sections {
+		limit := maxItems
+		if c.Kind == card.KindFilter && s.Title == "applications" {
+			limit = maxFilterApps
+		}
 		for i, row := range s.Rows {
 			title := ""
 			if i == 0 {
 				title = s.Title
 			}
-			r.row(title, row, c.Kind != card.KindRule)
+			r.row(title, row, c.Kind != card.KindRule, limit)
 		}
 	}
 }
 
-// row writes one row. A row whose items have children is a tree, one item per
-// line; any other row is one line.
-func (r renderer) row(title string, row card.Row, object bool) {
+// row writes one row, its list cut at limit. A row whose items have children
+// is a tree, one item per line; any other row is one line. A title or label
+// longer than its column keeps one space before the row's text.
+func (r renderer) row(title string, row card.Row, object bool, limit int) {
 	indent := 2 + titleWidth
-	prefix := fmt.Sprintf("  %-*s", titleWidth, title)
+	prefix := fmt.Sprintf("  %-*s ", titleWidth-1, title)
 	if row.Label != "" {
-		prefix += fmt.Sprintf("%-*s", labelWidth, row.Label)
+		prefix += fmt.Sprintf("%-*s ", labelWidth-1, row.Label)
 		indent += labelWidth
 	}
 	not := ""
@@ -182,7 +191,7 @@ func (r renderer) row(title string, row card.Row, object bool) {
 	}
 	tree := (r.expand || object) && slices.ContainsFunc(row.Items, func(it card.Item) bool { return len(it.Children) > 0 })
 	if !tree {
-		fmt.Fprintln(r.w, prefix+not+strings.Join(r.names(row.Items), ", "))
+		fmt.Fprintln(r.w, prefix+not+strings.Join(r.namesAt(row.Items, limit), ", "))
 		return
 	}
 	lines := r.tree(row.Items, 1)
@@ -194,8 +203,11 @@ func (r renderer) row(title string, row card.Row, object bool) {
 }
 
 // names renders items on one line, cut at five unless --full.
-func (r renderer) names(items []card.Item) []string {
-	shown, more := r.cut(items)
+func (r renderer) names(items []card.Item) []string { return r.namesAt(items, maxItems) }
+
+// namesAt renders items on one line, cut at limit unless --full.
+func (r renderer) namesAt(items []card.Item, limit int) []string {
+	shown, more := r.cutAt(items, limit)
 	var out []string
 	for _, it := range shown {
 		s := r.name(it)
@@ -250,11 +262,15 @@ func (r renderer) name(it card.Item) string {
 	return it.Name
 }
 
-func (r renderer) cut(items []card.Item) ([]card.Item, int) {
-	if r.full || len(items) <= maxItems {
+func (r renderer) cut(items []card.Item) ([]card.Item, int) { return r.cutAt(items, maxItems) }
+
+// cutAt keeps the first limit items unless --full, and says how many it left
+// out.
+func (r renderer) cutAt(items []card.Item, limit int) ([]card.Item, int) {
+	if r.full || len(items) <= limit {
 		return items, 0
 	}
-	return items[:maxItems], len(items) - maxItems
+	return items[:limit], len(items) - limit
 }
 
 func plural(n int, one string) string {

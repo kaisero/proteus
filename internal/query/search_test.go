@@ -266,3 +266,67 @@ func TestSearchListsAWildcardAsUnresolved(t *testing.T) {
 		t.Errorf("unresolved: %+v", e.Unresolved)
 	}
 }
+
+// A term in any case finds the application: the search runs on the canonical
+// name, and the findings name it (spec 2026-10-16 P14, D17). The answer names
+// the content file it used.
+func TestSearchFindsAnApplicationInAnyCase(t *testing.T) {
+	t.Parallel()
+	path := appFile(t, true)
+	e, err := Search(context.Background(), Env{}, SearchInput{Term: "SSL", Selection: Selection{File: path}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var lines []string
+	for _, r := range e.Results {
+		lines = append(lines, string(r.Stage)+" "+r.Kind+" "+r.Name+" "+r.Via)
+	}
+	got := strings.Join(lines, "\n")
+	for _, want := range []string{
+		"object application ssl predefined",
+		"group application-group outer holds outer > inner > ssl",
+		"reference security rule allow-outer outer",
+		"reference security rule allow-remote implicit use by app-remote",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %q in:\n%s", want, got)
+		}
+	}
+	if n, ok := noteWith(e.Notes, "note.app-data-file"); !ok || !strings.Contains(n.Note, "8000-1000") {
+		t.Errorf("notes %+v", e.Notes)
+	}
+	// A custom application takes its name as configured.
+	e, err = Search(context.Background(), Env{}, SearchInput{Term: "erp-mixed", Selection: Selection{File: path}})
+	if err != nil || !slices.ContainsFunc(e.Results, func(f Finding) bool { return f.Name == "Erp-Mixed" && f.Via == "name" }) {
+		t.Errorf("erp-mixed: %+v %v", e.Results, err)
+	}
+}
+
+// Only a term with the shape of a name loads the data (D11): an address or a
+// port does not, so its answer carries no note. A name without the file says
+// the data is missing.
+func TestSearchLoadsDataForANameOnly(t *testing.T) {
+	t.Parallel()
+	for _, term := range []string{"10.1.0.5", "443", "tcp/443", "10.1.0.0/24"} {
+		e, err := Search(context.Background(), Env{}, SearchInput{Term: term, Selection: Selection{File: appFile(t, true)}})
+		if err != nil || len(e.Notes) != 0 {
+			t.Errorf("%s: notes %+v %v", term, e.Notes, err)
+		}
+	}
+	e, err := Search(context.Background(), Env{}, SearchInput{Term: "ssl", Selection: Selection{File: appFile(t, false)}})
+	if n, ok := noteWith(e.Notes, "note.app-data-missing"); err != nil || !ok || !strings.Contains(n.Note, "does not exist") || len(e.Results) != 0 {
+		t.Errorf("without the file: %+v %+v %v", e.Results, e.Notes, err)
+	}
+}
+
+func TestNameShaped(t *testing.T) {
+	t.Parallel()
+	for term, want := range map[string]bool{
+		"ssl": true, "Erp-Mixed": true, "f-media": true, "10.1.0.5": false, "10.0.0.0/8": false,
+		"443": false, "udp/53": false, "a b": false, "x/y": false, "10.1.0.1-10.1.0.9": false,
+	} {
+		if got := nameShaped(term); got != want {
+			t.Errorf("%q: %v, want %v", term, got, want)
+		}
+	}
+}

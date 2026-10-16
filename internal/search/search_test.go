@@ -4,12 +4,16 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
+	"github.com/okaiser/proteus/internal/appid"
 	"github.com/okaiser/proteus/internal/config"
 	"github.com/okaiser/proteus/internal/index"
 	"github.com/okaiser/proteus/internal/resolve"
+	"github.com/okaiser/proteus/internal/testconfig"
 )
 
 func run(t *testing.T, fixture, vsys string, q Query) []Finding {
@@ -556,6 +560,172 @@ func TestDeviceLevelReferences(t *testing.T) {
 	for _, f := range got {
 		if f.Stage == StageReference && f.Scope.String() != "config" {
 			t.Errorf("scope %s for %s", f.Scope, line(f))
+		}
+	}
+}
+
+// appVariant is firewall-appid.xml with two rules more before allow-remote:
+// deny-remote, which denies app-remote, and allow-ssl, which names ssl. It
+// returns the copy's path.
+func appVariant(t *testing.T) string {
+	t.Helper()
+	raw, err := os.ReadFile("../../testdata/config/firewall-appid.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rule := func(name, app, action string) string {
+		return `<entry name="` + name + `"><from><member>inside</member></from><to><member>outside</member></to>` +
+			`<source><member>any</member></source><destination><member>any</member></destination>` +
+			`<application><member>` + app + `</member></application>` +
+			`<service><member>application-default</member></service><action>` + action + `</action></entry>`
+	}
+	extra := rule("deny-remote", "app-remote", "deny") + rule("allow-ssl", "ssl", "allow")
+	out := strings.Replace(string(raw), `<entry name="allow-remote">`, extra+`<entry name="allow-remote">`, 1)
+	path := filepath.Join(t.TempDir(), "config.xml")
+	if err := os.WriteFile(path, []byte(out), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+// runApps searches vsys1 of a configuration with the App-ID content data of
+// testdata/appid/content.xml, version 8000-1000.
+func runApps(t *testing.T, path string, q Query) []Finding {
+	t.Helper()
+	cfg, _, err := config.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	idx, err := index.New(cfg, config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}, resolve.Security)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gz := filepath.Join(t.TempDir(), "apps.xml.gz")
+	testconfig.Content(t, gz)
+	apps, err := appid.Load(gz)
+	if err != nil {
+		t.Fatal(err)
+	}
+	q.Providers.Apps = apps
+	got, _, err := Run(cfg, idx, q)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return got
+}
+
+const appFixture = "../../testdata/config/firewall-appid.xml"
+
+// A filter that selects the application is a finding with the fields that
+// select it, and the rule that names the filter follows (spec 2026-10-16
+// §5.1, S1).
+func TestSearchFindsAFilterWithItsReason(t *testing.T) {
+	t.Parallel()
+	got := runApps(t, appFixture, Query{Term: "app-media"})
+	for _, want := range []string{
+		"object application-filter f-media  category=media",
+		"reference security rule allow-media application f-media",
+		"reference security rule deny-risky application f-risky",
+	} {
+		if !has(got, want) {
+			t.Errorf("missing %q in:\n%s", want, dump(got))
+		}
+	}
+}
+
+// A group that holds the application through another group shows the path
+// (spec 2026-10-16 §5.1, S8).
+func TestSearchShowsTheGroupPath(t *testing.T) {
+	t.Parallel()
+	got := runApps(t, appFixture, Query{Term: "ssl"})
+	for _, want := range []string{
+		"group application-group outer  holds outer > inner > ssl",
+		"group application-group inner  holds inner > ssl",
+		"reference security rule allow-outer application outer",
+	} {
+		if !has(got, want) {
+			t.Errorf("missing %q in:\n%s", want, dump(got))
+		}
+	}
+}
+
+// A container that holds the application is a finding, and the rule that
+// names the container follows (spec 2026-10-16 §5.1, S9).
+func TestSearchFindsAContainer(t *testing.T) {
+	t.Parallel()
+	got := runApps(t, appFixture, Query{Term: "office-docs"})
+	for _, want := range []string{
+		"object application office-docs  predefined",
+		"object application-container office-suite  holds office-docs",
+		"reference security rule allow-office application office-suite",
+	} {
+		if !has(got, want) {
+			t.Errorf("missing %q in:\n%s", want, dump(got))
+		}
+	}
+}
+
+// An allow rule of app-remote reaches ssl through implicit use (I1). A deny
+// rule of app-remote does not (I5), and a rule that names ssl is an explicit
+// finding only.
+func TestSearchFindsImplicitUse(t *testing.T) {
+	t.Parallel()
+	got := runApps(t, appVariant(t), Query{Term: "ssl"})
+	if !has(got, "reference security rule allow-remote application implicit use by app-remote") {
+		t.Errorf("no implicit use by app-remote in:\n%s", dump(got))
+	}
+	for _, f := range got {
+		if f.Name == "deny-remote" || f.Name == "allow-ssl" && strings.HasPrefix(f.Via, "implicit") ||
+			f.Name == "allow-outer" && strings.HasPrefix(f.Via, "implicit") {
+			t.Errorf("unexpected %s", line(f))
+		}
+	}
+	// No other field shows implicit use.
+	if fs := runApps(t, appVariant(t), Query{Term: "ssl", Fields: []string{"source"}}); has(fs, "reference") {
+		t.Errorf("--field source:\n%s", dump(fs))
+	}
+}
+
+// A predefined application is an object finding of the predefined scope, and
+// the rules that name it follow (spec 2026-10-16 §5.1, A12).
+func TestSearchNamesAPredefinedApp(t *testing.T) {
+	t.Parallel()
+	got := runApps(t, appVariant(t), Query{Term: "ssl"})
+	i := slices.IndexFunc(got, func(f Finding) bool { return f.Stage == StageObject && f.Name == "ssl" })
+	if i < 0 || got[i].Kind != "application" || got[i].Via != "predefined" || got[i].Scope.Sort != config.ScopePredefined {
+		t.Fatalf("no predefined ssl in:\n%s", dump(got))
+	}
+	if !has(got, "reference security rule allow-ssl application ssl") {
+		t.Errorf("no rule that names ssl in:\n%s", dump(got))
+	}
+}
+
+// Without data, an application term finds what it found before the App-ID
+// support: no filter, container or implicit use, and group findings without
+// a path (spec 2026-10-16 §4.8).
+func TestSearchWithoutDataIsTodays(t *testing.T) {
+	t.Parallel()
+	for term, want := range map[string][]string{
+		"ssl":          nil,
+		"app-media":    nil,
+		"office-suite": nil,
+		"f-media": {
+			"object application-filter f-media  name",
+			"group application-group inner  holds f-media",
+			"group application-group outer  holds f-media",
+			"reference application-group inner members f-media",
+			"reference application-group outer members inner",
+			"reference security rule allow-media application f-media",
+			"reference security rule allow-outer application outer",
+		},
+		"erp-mixed": {
+			"object application Erp-Mixed  Erp-Mixed",
+			"reference security rule allow-erp application Erp-Mixed",
+		},
+	} {
+		got := run(t, "firewall-appid.xml", "vsys1", Query{Term: term})
+		if d := dump(got); d != strings.Join(want, "\n") {
+			t.Errorf("%s:\n%s\nwant:\n%s", term, d, strings.Join(want, "\n"))
 		}
 	}
 }

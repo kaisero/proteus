@@ -137,7 +137,9 @@ type Item struct{ ... }
 type Row struct{ ... }
 type Section struct{ ... }
 
-func Find(cfg *config.Config, idx *index.Index, name, kind string) ([]Card, error)
+func App(a appid.App, sc config.Scope) Card
+func FilterCard(cfg *config.Config, idx *index.Index, apps *appid.Data, o resolve.Object) Card
+func Find(cfg *config.Config, idx *index.Index, apps *appid.Data, name, kind string) ([]Card, error)
 func Kinds(cfg *config.Config) []string
 func Object(cfg *config.Config, idx *index.Index, o resolve.Object) Card
 func Rule(cfg *config.Config, idx *index.Index, r resolve.Rule, rules int) Card

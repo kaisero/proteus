@@ -6,6 +6,12 @@
 // Rules whose field is "any" reach every value, but no object or reference leads to
 // them, so search leaves them out. Which rule traffic would hit is a simulation
 // question. Spec §15 C4 to C6.
+//
+// With the App-ID content data in Query.Providers.Apps, an application term finds
+// more (spec 2026-10-16 §5.1): the filters that select the application, with the
+// fields that select it; the containers that hold it; the path through nested
+// application groups; and the allow rules that reach it only through the implicit
+// use of another application. Without the data the search is as before (§4.8).
 package search
 
 import (
@@ -57,7 +63,8 @@ type Query struct {
 	Direct bool     // groups one level up only
 
 	// Providers supply what a configuration does not hold: the directory groups a
-	// user belongs to, and the zones the device places an address in.
+	// user belongs to, the zones the device places an address in, and the App-ID
+	// content data.
 	Providers index.Providers
 }
 
@@ -87,6 +94,7 @@ func Run(cfg *config.Config, idx *index.Index, q Query) ([]Finding, []index.Unre
 	s.objects()
 	s.groups()
 	s.references()
+	s.implicitUse()
 	s.literals()
 	return s.result(), s.unresolved, nil
 }
@@ -286,10 +294,22 @@ func (s *searcher) groups() {
 					continue
 				}
 				s.foundAs(g.Name, g.Kind)
-				s.found = append(s.found, Finding{Stage: StageGroup, Kind: g.Kind, Name: g.Name, Scope: g.Scope, Via: "holds " + m})
+				s.found = append(s.found, Finding{Stage: StageGroup, Kind: g.Kind, Name: g.Name, Scope: g.Scope, Via: "holds " + s.groupPath(g, m)})
 			}
 		}
 	}
+}
+
+// groupPath is what a group holds, as its finding names it: the member, or,
+// with the App-ID data, the path from an application group down to the member
+// through nested groups, "outer > inner > ssl" (spec 2026-10-16 §5.1, S8).
+// The other group kinds keep the member.
+func (s *searcher) groupPath(g index.Group, member string) string {
+	if s.q.Providers.Apps == nil || g.Kind != "application-group" {
+		return member
+	}
+	// The group holds the member, so the path is never empty.
+	return strings.Join(s.idx.GroupPath(g.Kind, g.Name, member), " > ")
 }
 
 // references is stage 4: every place that names an object or group found.
@@ -339,6 +359,42 @@ func (s *searcher) references() {
 			Stage: StageReference, Kind: "security rule", Name: u.Rule, Scope: u.Scope,
 			Field: "profile-setting", Via: via,
 		})
+	}
+}
+
+// implicitUse is the allow rules that reach the application only through the
+// implicit use of another application: an allow rule also matches the
+// implicit-use-applications of its applications, as measured on the lab VM,
+// PAN-OS 12.1.9 (spec 2026-10-16 I1). A deny rule never matches implicitly
+// (I5). The any-rules stay out, as everywhere in search, and so do the rules
+// the explicit findings hold: an explicit match wins (I2). It needs the
+// App-ID data and a term the value spaces read as it is.
+func (s *searcher) implicitUse() {
+	apps := s.q.Providers.Apps
+	if apps == nil || s.q.Mode != Auto || !s.fieldAllowed(index.Application.String()) {
+		return
+	}
+	explicit := map[string]bool{}
+	for _, f := range s.found {
+		if f.Stage == StageReference && f.Kind == "security rule" && f.Field == index.Application.String() {
+			explicit[f.Scope.String()+"/"+f.Name] = true
+		}
+	}
+	rules := s.idx.Rules()
+	view := s.idx.With(s.q.Providers)
+	for _, member := range apps.ImpliedBy(s.q.Term) {
+		b, _ := view.Candidates(index.Application, member)
+		b.AndNot(s.idx.RulesWithAny(index.Application))
+		for it := b.Iterator(); it.HasNext(); {
+			r := rules[it.Next()]
+			if r.Action != "allow" || explicit[r.Scope.String()+"/"+r.Name] {
+				continue
+			}
+			s.found = append(s.found, Finding{
+				Stage: StageReference, Kind: "security rule", Name: r.Name, Scope: r.Scope,
+				Field: index.Application.String(), Via: "implicit use by " + member,
+			})
+		}
 	}
 }
 

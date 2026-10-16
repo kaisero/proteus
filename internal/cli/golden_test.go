@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
@@ -362,6 +363,30 @@ func TestGoldenApp(t *testing.T) {
 			golden(t, g.name, appPolicy(t, g.code, append(g.args, "--output", "json")...))
 			goldenFile(t, g.name+".yaml", appPolicy(t, g.code, append(g.args, "--output", "yaml")...))
 			goldenText(t, g.name, appPolicy(t, g.code, append(g.args, "--why")...))
+		})
+	}
+}
+
+// search and lookup with the App-ID data on a file (spec 2026-10-16 §5): ssl
+// found through nested groups and implicit use, the card of an application,
+// and the card of a filter with the applications it selects.
+func TestGoldenAppFind(t *testing.T) {
+	t.Parallel()
+	for _, g := range []struct {
+		name string
+		args []string
+	}{
+		// With --why, so the JSON twin's answers are lines of the text.
+		{"search-app", []string{"search", "ssl", "--why"}},
+		{"lookup-app", []string{"lookup", "app-remote"}},
+		{"lookup-app-filter", []string{"lookup", "f-media"}},
+	} {
+		t.Run(g.name, func(t *testing.T) {
+			t.Parallel()
+			args := append(slices.Clone(g.args), "--file", appConfig(t))
+			golden(t, g.name, newCLI(t).want(0, append(args, "--output", "json")...))
+			goldenFile(t, g.name+".yaml", newCLI(t).want(0, append(args, "--output", "yaml")...))
+			goldenText(t, g.name, newCLI(t).want(0, args...))
 		})
 	}
 }
