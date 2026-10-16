@@ -45,6 +45,7 @@ func (a *app) policyCmd(sim simulate.Simulation) *cobra.Command {
 		Args: args(cobra.ExactArgs(2)),
 		RunE: func(c *cobra.Command, argv []string) error {
 			o.src, o.dst = argv[0], argv[1]
+			o.fl.protocolSet = c.Flags().Changed("protocol")
 			// --each first, then --file, else the path (spec 2026-10-07 §3.1).
 			// Each mode's input says which flags it refuses.
 			switch {
@@ -64,7 +65,7 @@ func (a *app) policyCmd(sim simulate.Simulation) *cobra.Command {
 	f.StringSliceVar(&o.sel.vsys, "vsys", nil, "with --file: the vsys to check")
 	f.StringArrayVar(&o.sel.labels, "label", nil, "select devices by key=value label (with --each, in a later release)")
 	f.BoolVar(&o.each, "each", false, "check every selected firewall on its own (in a later release)")
-	o.fl.bindProtocol(cmd)
+	o.fl.bindProtocol(cmd, policyProtocolHelp)
 	o.fl.bindPort(cmd)
 	o.fl.bindSourcePort(cmd)
 	o.fl.bindZones(cmd)
@@ -159,7 +160,15 @@ func (p pathAnswer) text(t *textOut, res query.PathResult) {
 	}
 	fmt.Fprintln(t)
 	title := fmt.Sprintf("simulate policy %s -> %s %s", sourceText(r.Path), r.Path.Destination, flow.Protocol)
-	if flow.DestPort != 0 {
+	switch {
+	case flow.Protocol == "" && flow.Application != "":
+		// Each hop runs with the protocol of its application's default (spec
+		// 2026-10-16 §4.1).
+		title += "default of " + flow.Application
+		if flow.DestPort != 0 {
+			title += fmt.Sprintf(", port %d", flow.DestPort)
+		}
+	case flow.DestPort != 0:
 		title += fmt.Sprintf("/%d", flow.DestPort)
 	}
 	renderPath(t, title, simulate.Run{Fidelity: r.Fidelity, Stages: res.RunStages}, r.Path, t.now, p.why,

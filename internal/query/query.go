@@ -6,8 +6,8 @@
 // answer (spec 2026-10-09 §3.7).
 //
 // R12: query imports the simulations, estate, store, inventory, search,
-// drift, card, resolve, index, config, runlog and reason. It does not import
-// fetch, cli, mcp, Cobra or a terminal package.
+// drift, card, resolve, index, config, appid, runlog and reason. It does not
+// import fetch, cli, mcp, Cobra or a terminal package.
 package query
 
 import (
@@ -59,6 +59,10 @@ type Env struct {
 	// Nil loads each from the store on every question; a server shares a
 	// cache here, bound to the call (spec 2026-10-09 §4.8).
 	Configs estate.ConfigSource
+	// Apps loads the App-ID content files. Nil loads them from disk; a
+	// server shares a cache here. Either way a question loads each file
+	// once (spec 2026-10-16 D11).
+	Apps estate.AppSource
 	// Fresh fetches devices before a query reads them and returns the notes
 	// each device's fetch left, by device: TLS verification off, a failed
 	// document, a failed fetch. Nil takes no fresh fetch.

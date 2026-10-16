@@ -282,6 +282,9 @@ func TestGoldensValidate(t *testing.T) {
 		if slices.Contains(notQuestions, command) {
 			continue
 		}
+		if _, exit := doc["exit"]; exit && command == "" {
+			continue // a usage error's stderr line: no envelope, and no tool returns it
+		}
 		sh, ok := shapeOf(doc)
 		if !ok {
 			t.Errorf("%s: no schema for command %q", f, command)

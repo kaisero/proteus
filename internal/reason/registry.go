@@ -77,6 +77,7 @@ var registry = []Entry{
 	{Code: "gap.user-directory-stale", Class: Gap, Description: "the user directory is older than its freshness limit"},
 	{Code: "gap.vsys-missing", Class: Gap, Description: "the configuration has no vsys of the asked name"},
 
+	{Code: "input.application", Class: Input, Description: "give the application"},
 	{Code: "input.device", Class: Input, Description: "give the device"},
 	{Code: "input.from-zone", Class: Input, Description: "give the source zone"},
 	{Code: "input.port", Class: Input, Description: "give the destination port"},
@@ -85,6 +86,8 @@ var registry = []Entry{
 	{Code: "input.to-zone", Class: Input, Description: "give the destination zone"},
 	{Code: "input.url", Class: Input, Description: "give the URL"},
 
+	{Code: "note.app-data-file", Class: Note, Description: "the application data came from a file beside the configuration"},
+	{Code: "note.app-data-missing", Class: Note, Description: "no application data for the snapshot or the file, so rules that name an application stay in doubt"},
 	{Code: "note.app-icmp-type", Class: Note, Description: "the application matches ICMP by type, and the answer does not check the type"},
 	{Code: "note.app-implicit", Class: Note, Description: "the rule matches only through the implicit use of another application"},
 	{Code: "note.app-non-default-port", Class: Note, Description: "the rule matches the application only on a port of its service, not on a default port"},

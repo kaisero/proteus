@@ -84,7 +84,9 @@ read.
 
 <!-- GENERATED:api ./internal/estate -->
 ```go
+type AppSource interface{ ... }
 type ConfigSource interface{ ... }
+type DiskApps struct{}
 type DiskConfigs struct{}
 type DiskOps struct{}
 type Hole struct{ ... }
@@ -96,6 +98,7 @@ type OpTables struct{ ... }
 type Target struct{ ... }
 type When struct{ ... }
 
+func (DiskApps) Apps(path string) (*appid.Data, error)
 func (DiskConfigs) Config(sn store.Snapshot) (Loaded, error)
 func (DiskOps) HA(sn store.Snapshot) (resolve.HAState, error)
 func (DiskOps) Tables(sn store.Snapshot) (OpTables, error)

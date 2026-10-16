@@ -3,7 +3,8 @@
        testdata/appid/content.xml, content version 8000-1000: custom applications
        with and without a default (P6, P7), one in mixed case (P14), configured
        application tags (S12), application filters, nested application groups
-       (S8) and a rule that names a container (S9). -->
+       (S8), a rule that names a container (S9) and a rule whose application
+       implies others (I1). -->
   <shared>
     <application>
       <entry name="shared-media">
@@ -165,6 +166,15 @@
                   <application><member>f-risky</member></application>
                   <service><member>any</member></service>
                   <action>deny</action>
+                </entry>
+                <entry name="allow-remote">
+                  <from><member>inside</member></from>
+                  <to><member>outside</member></to>
+                  <source><member>any</member></source>
+                  <destination><member>any</member></destination>
+                  <application><member>app-remote</member></application>
+                  <service><member>application-default</member></service>
+                  <action>allow</action>
                 </entry>
               </rules>
             </security>

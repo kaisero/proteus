@@ -91,7 +91,7 @@ var queryImports = []string{
 	"internal/simulate/nat", "internal/simulate/pathpolicy", "internal/simulate/topology",
 	"internal/simulate/rulebase", "internal/estate", "internal/store", "internal/inventory",
 	"internal/search", "internal/drift", "internal/card", "internal/resolve", "internal/index",
-	"internal/config", "internal/runlog", reasonPkg,
+	"internal/config", appidPkg, "internal/runlog", reasonPkg,
 }
 
 // queryForbids are the front ends and the fetcher: the query layer serves the

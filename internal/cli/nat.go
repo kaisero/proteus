@@ -48,7 +48,7 @@ func (a *app) natCmd(sim simulate.Simulation) *cobra.Command {
 	f.StringVar(&o.fromZone, "from-zone", "", "the zone the packet arrives in")
 	f.StringVar(&o.fromIf, "from-interface", "", "the interface the packet arrives on")
 	cmd.MarkFlagsMutuallyExclusive("from-zone", "from-interface")
-	o.fl.bindProtocol(cmd)
+	o.fl.bindProtocol(cmd, protocolHelp)
 	o.fl.bindPort(cmd)
 	o.fl.bindSourcePort(cmd)
 	f.StringVar(&o.at, "at", "", "read the newest snapshot at or before this time (id, RFC 3339 or date)")

@@ -18,13 +18,15 @@ import (
 // its name as a tool takes it, and Text says what to give and which rules it
 // decides, in the tool's words.
 type Need struct {
-	Code  reason.Code `json:"code" jsonschema:"the input's code: input.port, input.protocol, input.url, input.from-zone or input.to-zone"`
+	Code  reason.Code `json:"code" jsonschema:"the input's code: input.port, input.protocol, input.url, input.application, input.from-zone or input.to-zone"`
 	Input string      `json:"input" jsonschema:"the input to give in a second call"`
 	Text  string      `json:"text" jsonschema:"what to give and which rules it decides"`
 }
 
 // cause is a reason code that held an answer back, and the rule it belongs
-// to, when one does: its kind ("rule", "NAT rule") and name.
+// to, when one does: its kind ("rule", "NAT rule") and name. doubtCauses
+// gives the input codes a rule's doubts need, judged with the flow of their
+// run; needsOf takes such a code as it is.
 type cause struct {
 	code reason.Code
 	rule ruleName
@@ -42,6 +44,7 @@ var needKinds = []struct {
 	{"input.protocol", "protocol", "give the protocol: tcp, udp or sctp", "the service"},
 	{"input.port", "port", "give the destination port", "the service"},
 	{"input.url", "url", "give the URL", "the URL category"},
+	{"input.application", "application", "give the application", "the application"},
 	{"input.from-zone", "from_zone", "give the source zone, with to_zone", "the rule-type"},
 	{"input.to-zone", "to_zone", "give the destination zone, with from_zone", "the rule-type"},
 }
@@ -50,13 +53,17 @@ var needKinds = []struct {
 // A service judged without a port needs the port only for tcp, udp or sctp,
 // and the protocol too when none was given (the tools have no protocol
 // default); icmp or another protocol never needs a port. A protocol given by
-// number counts by its name. A NAT service whose port fits without a protocol
-// needs the protocol. Derived zones that leave rule-type or the default rule
-// open need both zones. Every other code
-// needs nothing a second call can give: a predefined category, an
-// application, a user, a gap, a path, a zone or a default rule. The result is
-// never nil, so an undecided answer prints [] when nothing helps.
-func needsOf(flow simulate.Flow, causes []cause) []Need {
+// number counts by its name. An application-default rule judged without a
+// port or a protocol needs them the same way (spec 2026-10-16 §4.5). A NAT
+// service whose port fits without a protocol needs the protocol. Derived
+// zones that leave rule-type or the default rule open need both zones. A rule
+// that names an application, or uses service application-default, needs the
+// application when none was given and apps says the target has application
+// data to decide it (C8). Every other code needs nothing a second call can
+// give: a predefined category, an unknown application, a user, a gap, a path,
+// a zone or a default rule. The result is never nil, so an undecided answer
+// prints [] when nothing helps.
+func needsOf(flow simulate.Flow, apps bool, causes []cause) []Need {
 	rules := map[reason.Code][]ruleName{}
 	given := map[reason.Code]bool{}
 	add := func(c reason.Code, rule ruleName) {
@@ -66,8 +73,19 @@ func needsOf(flow simulate.Flow, causes []cause) []Need {
 		}
 	}
 	for _, c := range causes {
+		if strings.HasPrefix(string(c.code), "input.") {
+			add(c.code, c.rule) // judged by doubtCauses
+			continue
+		}
 		switch c.code {
-		case "doubt.service-no-port", "path.nat-no-port":
+		case "doubt.application", "doubt.service-application-default":
+			// With data, the application decides the rule's application and
+			// the ports of its application-default service (spec 2026-10-16
+			// §4.4, §4.8).
+			if apps && flow.Application == "" {
+				add("input.application", c.rule)
+			}
+		case "doubt.service-no-port", "path.nat-no-port", "doubt.app-port-open":
 			proto := rulebase.Protocol(flow.Protocol)
 			if proto == "" {
 				add("input.protocol", c.rule)
@@ -145,11 +163,13 @@ func fidelityCauses(f simulate.Fidelity) []cause {
 
 // securityCauses are the doubts of the candidates before the first certain
 // match, in rule order, cut as doubtCauses cuts them. blocked says a doubt no
-// input can fix was met.
+// input can fix was met. They are judged as the run judged the flow: with its
+// protocol and its application data (runJudged).
 func securityCauses(flow simulate.Flow, v *securitypolicy.Verdict) (out []cause, blocked bool) {
 	if v == nil {
 		return nil, false
 	}
+	flow, apps := runJudged(flow, v)
 	ds := slices.Clone(v.Doubts)
 	slices.SortStableFunc(ds, func(a, b securitypolicy.Doubt) int { return a.Position - b.Position })
 	var before []ruleDoubt
@@ -159,7 +179,21 @@ func securityCauses(flow simulate.Flow, v *securitypolicy.Verdict) (out []cause,
 		}
 		before = append(before, ruleDoubt{d.Rule, d.Reasons})
 	}
-	return doubtCauses(flow, "rule", before)
+	return doubtCauses(flow, apps, "rule", before)
+}
+
+// runJudged is the flow as a security run judged it, and whether the run's
+// target had application data. A flow with an application and no protocol
+// runs with the protocol of the application's default (spec 2026-10-16
+// §4.1), so a port need follows that protocol and not the open one.
+func runJudged(flow simulate.Flow, v *securitypolicy.Verdict) (simulate.Flow, bool) {
+	if v == nil {
+		return flow, false
+	}
+	if v.Protocol != "" {
+		flow.Protocol = v.Protocol
+	}
+	return flow, v.AppData
 }
 
 // natCauses are NAT doubts: rules that may match instead of the one taken.
@@ -170,7 +204,7 @@ func natCauses(flow simulate.Flow, ds []nat.Doubt) (out []cause, blocked bool) {
 	for i, d := range ds {
 		rds[i] = ruleDoubt{d.Rule, d.Reasons}
 	}
-	return doubtCauses(flow, "NAT rule", rds)
+	return doubtCauses(flow, false, "NAT rule", rds)
 }
 
 // ruleDoubt is a rule in doubt and why.
@@ -184,13 +218,14 @@ type ruleDoubt struct {
 // verdict, so its doubts and the ones after it need nothing. blocked says such
 // a doubt was met. A doubt with one reason an input settles does not block:
 // that input can rule the rule out, so its fixable causes count and the walk
-// goes on.
-func doubtCauses(flow simulate.Flow, kind string, ds []ruleDoubt) (out []cause, blocked bool) {
+// goes on. Each cause is the input code a reason needs, judged here with the
+// flow and apps of the rule's run, so the hops of a path keep their own.
+func doubtCauses(flow simulate.Flow, apps bool, kind string, ds []ruleDoubt) (out []cause, blocked bool) {
 	for _, d := range ds {
 		var cs []cause
 		for _, r := range d.reasons {
-			if c := (cause{code: r.Code, rule: ruleName{kind, d.rule}}); len(needsOf(flow, []cause{c})) > 0 {
-				cs = append(cs, c)
+			for _, n := range needsOf(flow, apps, []cause{{code: r.Code}}) {
+				cs = append(cs, cause{code: n.Code, rule: ruleName{kind, d.rule}})
 			}
 		}
 		if len(cs) == 0 {
@@ -211,7 +246,8 @@ func securityNeeds(flow simulate.Flow, verdict string, v *securitypolicy.Verdict
 	if !blocked {
 		causes = append(causes, fidelityCauses(f)...)
 	}
-	return needsOf(flow, causes)
+	flow, apps := runJudged(flow, v)
+	return needsOf(flow, apps, causes)
 }
 
 // pathNeeds is a path answer's needs: each undecided check's doubts and each
@@ -238,7 +274,7 @@ func pathNeeds(flow simulate.Flow, r pathpolicy.Result) []Need {
 	if !blocked {
 		causes = append(fidelityCauses(r.Fidelity), causes...)
 	}
-	return needsOf(flow, causes)
+	return needsOf(flow, false, causes)
 }
 
 // routingNeeds is a routing answer's needs. A hop whose NAT rule another rule
@@ -262,7 +298,7 @@ func routingNeeds(flow simulate.Flow, p routing.Path, f simulate.Fidelity) []Nee
 	if !blocked {
 		causes = append(causes, fidelityCauses(f)...)
 	}
-	return needsOf(flow, causes)
+	return needsOf(flow, false, causes)
 }
 
 // natNeeds is a NAT answer's needs. A rule that may match instead leaves the
@@ -275,5 +311,5 @@ func natNeeds(flow simulate.Flow, r nat.Result, f simulate.Fidelity) []Need {
 	if !blocked {
 		causes = append(causes, fidelityCauses(f)...)
 	}
-	return needsOf(flow, causes)
+	return needsOf(flow, false, causes)
 }

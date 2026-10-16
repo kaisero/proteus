@@ -1,0 +1,19 @@
+10.1.0.5 -> 10.2.0.5 tcp/443
+file / vsys1   TMP
+  note: application data of content 8000-1000 from TMP
+  note: the device can match the session again when App-ID identifies it later: an earlier application, such as ssl or web-browsing, can match another rule than ssl
+  zones      from inside, to outside (configuration)
+  relevance  unknown: no stored forwarding table
+  fidelity   inferred
+  resolve-source      exact    8 10.1.0.5: 0 hits, 0 negated rules
+  resolve-destination exact    8 10.2.0.5: 0 hits, 0 negated rules
+  derive-zones        inferred 8 from inside; to outside (configuration)
+  match-application   exact    2 ssl: 1 explicit, 1 implicit, 0 kept in doubt (content 8000-1000)
+  match-service       exact    2 tcp/443; protocol tcp, from the default of ssl (tcp/443)
+  match-url           exact    2 no candidate names a URL category
+  drop-disabled       exact    2 0 disabled
+  order               exact    2 2 in order
+  first-match         exact    2 allow-outer (allow), position 4
+  4. allow-outer  allow [local vsys:vsys1]
+  8. allow-remote allow [local vsys:vsys1]
+first match: allow-outer (allow)

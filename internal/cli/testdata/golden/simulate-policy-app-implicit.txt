@@ -1,0 +1,19 @@
+10.1.0.5 -> 10.2.0.5 tcp/80
+file / vsys1   TMP
+  note: application data of content 8000-1000 from TMP
+  note: the device can match the session again when App-ID identifies it later: an earlier application, such as ssl or web-browsing, can match another rule than web-browsing
+  note: rule allow-remote matches web-browsing only through the implicit use of app-remote
+  zones      from inside, to outside (configuration)
+  relevance  unknown: no stored forwarding table
+  fidelity   inferred
+  resolve-source      exact    8 10.1.0.5: 0 hits, 0 negated rules
+  resolve-destination exact    8 10.2.0.5: 0 hits, 0 negated rules
+  derive-zones        inferred 8 from inside; to outside (configuration)
+  match-application   exact    1 web-browsing: 0 explicit, 1 implicit, 0 kept in doubt (content 8000-1000)
+  match-service       exact    1 tcp/80; protocol tcp, from the default of web-browsing (tcp/80; tcp/443/secure)
+  match-url           exact    1 no candidate names a URL category
+  drop-disabled       exact    1 0 disabled
+  order               exact    1 1 in order
+  first-match         exact    1 allow-remote (allow), position 8
+  8. allow-remote allow [local vsys:vsys1]
+first match: allow-remote (allow)

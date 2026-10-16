@@ -98,7 +98,7 @@ func TestNATInputRules(t *testing.T) {
 func TestStoreLoaderKeepsTheHoleCode(t *testing.T) {
 	t.Parallel()
 	st := newLab(t).st
-	load := storeLoader(st, estate.When{}, estate.NewNetwork(st, nil, estate.When{}), nil)
+	load := storeLoader(st, estate.When{}, estate.NewNetwork(st, nil, estate.When{}), nil, false)
 	_, err := load("fw01", "vsys1")
 	var coded *simulate.CodedError
 	if !errors.As(err, &coded) || coded.Code() != "gap.snapshot-missing" || !strings.HasPrefix(err.Error(), "fw01/vsys1: ") {

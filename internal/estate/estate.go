@@ -7,10 +7,12 @@ package estate
 import (
 	"errors"
 	"fmt"
+	"path/filepath"
 	"slices"
 	"strings"
 	"time"
 
+	"github.com/okaiser/proteus/internal/appid"
 	"github.com/okaiser/proteus/internal/config"
 	"github.com/okaiser/proteus/internal/index"
 	"github.com/okaiser/proteus/internal/reason"
@@ -22,6 +24,10 @@ import (
 
 // FileDevice is the device name a target read with --file carries.
 const FileDevice = "file"
+
+// AppsFile is the App-ID content file OpenFile reads in the directory of the
+// configuration (spec 2026-10-16 §6).
+const AppsFile = "apps.xml.gz"
 
 // Target is one scope a question runs against.
 type Target struct {
@@ -35,6 +41,12 @@ type Target struct {
 	// it keeps them; nil leaves them to the caller. It is no data of the
 	// answer, so JSON leaves it out.
 	Indexes Indexes `json:"-"`
+	// Apps loads the target's App-ID content data; nil when its snapshot
+	// names no content version. AppsPath is the content file it reads, ""
+	// for none. A question that needs no application data never calls Apps
+	// (spec 2026-10-16 §4.1).
+	Apps     func() (*appid.Data, error) `json:"-"`
+	AppsPath string                      `json:"-"`
 	// Notes qualify every answer from this target: a stale snapshot, a skipped document.
 	Notes simulate.Reasons
 }
@@ -97,6 +109,9 @@ type When struct {
 	// Configs loads the snapshots' configurations; nil loads each from the
 	// store on every ask. A server fills it with its cache.
 	Configs ConfigSource
+	// Apps loads the snapshots' App-ID content files; nil loads each from
+	// the store on every ask. A question fills it with its memo.
+	Apps AppSource
 }
 
 // Indexes gives a configuration's indexes: each scope's index of a rulebase.
@@ -111,6 +126,9 @@ type Loaded struct {
 	// Indexes builds the configuration's indexes; nil leaves them to the
 	// caller.
 	Indexes Indexes
+	// Apps loads the snapshot's App-ID content data; nil loads it with
+	// When.Apps from the snapshot's content path.
+	Apps func() (*appid.Data, error)
 }
 
 // ConfigSource loads a snapshot's configuration. The answer depends only on
@@ -129,6 +147,28 @@ type DiskConfigs struct{}
 func (DiskConfigs) Config(sn store.Snapshot) (Loaded, error) {
 	cfg, rep, err := config.Load(sn.Path(store.ConfigDoc))
 	return Loaded{Config: cfg, Report: rep}, err
+}
+
+// AppSource loads an App-ID content file. The answer depends only on the
+// path, so an implementation may cache by it. The returned data is shared: a
+// caller must not change it. A source a server shares between questions must
+// be safe for concurrent use.
+type AppSource interface {
+	Apps(path string) (*appid.Data, error)
+}
+
+// DiskApps loads each content file from disk on every ask.
+type DiskApps struct{}
+
+// Apps implements AppSource.
+func (DiskApps) Apps(path string) (*appid.Data, error) { return appid.Load(path) }
+
+// apps is the source of content files.
+func (w When) apps() AppSource {
+	if w.Apps == nil {
+		return DiskApps{}
+	}
+	return w.Apps
 }
 
 // configs is the source of configurations.
@@ -195,13 +235,23 @@ func openSnapshot(d string, sn store.Snapshot, err error, vsys []string, w When)
 		notes = append(notes, reason.New("note.snapshot-stale", StaleNote(sn.ID, age, w.MaxAge)))
 	}
 	ts, hs := scopes(d, &sn, cfg, l.Report, l.Indexes, vsys, notes)
+	path, apps := sn.ContentPath(), l.Apps
+	if apps == nil && path != "" {
+		src := w.apps()
+		apps = func() (*appid.Data, error) { return src.Apps(path) }
+	}
+	for i := range ts {
+		ts[i].Apps, ts[i].AppsPath = apps, path
+	}
 	for _, h := range hs {
 		w.Log.Warnf(runlog.TagSnap, "%s/%s: hole: %s", h.Device, h.Vsys, h.Reason)
 	}
 	return ts, hs
 }
 
-// OpenFile reads one configuration file with no inventory or store.
+// OpenFile reads one configuration file with no inventory or store. Its
+// targets read the App-ID content data from AppsFile in the directory of the
+// file, when a question needs it (spec 2026-10-16 §6).
 func OpenFile(path string, vsys []string, log *runlog.Logger) ([]Target, []Hole, error) {
 	cfg, rep, err := config.Load(path)
 	if err != nil {
@@ -209,6 +259,11 @@ func OpenFile(path string, vsys []string, log *runlog.Logger) ([]Target, []Hole,
 	}
 	log.Infof(runlog.TagSnap, "file %s: PAN-OS %s", path, cfg.Version())
 	ts, hs := scopes(FileDevice, nil, cfg, rep, nil, vsys, nil)
+	apps := filepath.Join(filepath.Dir(path), AppsFile)
+	for i := range ts {
+		ts[i].Apps = func() (*appid.Data, error) { return DiskApps{}.Apps(apps) }
+		ts[i].AppsPath = apps
+	}
 	return ts, hs, nil
 }
 

@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"strings"
@@ -21,6 +22,10 @@ type flowFlags struct {
 	sourcePort                             int
 	fromZone, toZone                       string
 	why, noDNS                             bool
+	// protocolSet says --protocol was given. Without it, simulate policy
+	// with --application takes the application's default protocol (spec
+	// 2026-10-16 §4.1); routing and NAT keep tcp (D14).
+	protocolSet bool
 }
 
 // kindCommands builds each registered simulation kind's command: each kind's
@@ -95,15 +100,20 @@ func (p policyAnswer) Text(t *textOut) error {
 
 // input is the flow as the query layer takes it.
 func (fl flowFlags) input(src, dst string) query.FlowInput {
+	proto := fl.protocol
+	if fl.application != "" && !fl.protocolSet {
+		proto = ""
+	}
 	return query.FlowInput{
-		Source: src, Destination: dst, Protocol: fl.protocol, Port: fl.port, SourcePort: fl.sourcePort,
+		Source: src, Destination: dst, Protocol: proto, Port: fl.port, SourcePort: fl.sourcePort,
 		Application: fl.application, User: fl.user, URL: fl.url, FromZone: fl.fromZone, ToZone: fl.toZone,
 		NoDNS: fl.noDNS,
 	}
 }
 
 func printRun(w *textOut, run simulate.Run, t estate.Target, v securitypolicy.Verdict, flow simulate.Flow, why bool) {
-	fmt.Fprintf(w, "%s -> %s %s", flow.Source, flow.Destination, flow.Protocol)
+	// A flow with an application and no protocol runs with its default's.
+	fmt.Fprintf(w, "%s -> %s %s", flow.Source, flow.Destination, cmp.Or(flow.Protocol, v.Protocol))
 	if flow.DestPort != 0 {
 		fmt.Fprintf(w, "/%d", flow.DestPort)
 	}
@@ -111,7 +121,11 @@ func printRun(w *textOut, run simulate.Run, t estate.Target, v securitypolicy.Ve
 		fmt.Fprintf(w, " %s", flow.URL)
 	}
 	fmt.Fprintf(w, "\n%s\n", w.pal.head(header(t, w.now)))
-	printNotes(w, t)
+	// The run's notes hold the target's and its own, such as which file
+	// the application data came from (spec 2026-10-16 §6).
+	for _, n := range run.Notes {
+		fmt.Fprintf(w, "  %s\n", noteStyle(w.pal, n)("note: "+n.Text))
+	}
 	for _, ep := range []simulate.Endpoint{flow.Source, flow.Destination} {
 		if ep.Name != "" {
 			fmt.Fprintf(w, "  dns        %s -> %v\n", ep.Name, ep.Addrs)
@@ -211,8 +225,15 @@ func orAny(zs []string) string {
 	return strings.Join(zs, "/")
 }
 
-func (fl *flowFlags) bindProtocol(cmd *cobra.Command) {
-	cmd.Flags().StringVar(&fl.protocol, "protocol", "tcp", "tcp, udp, sctp, icmp or a protocol number")
+// protocolHelp is --protocol's help text; policyProtocolHelp adds what
+// simulate policy does with --application.
+const (
+	protocolHelp       = "tcp, udp, sctp, icmp or a protocol number"
+	policyProtocolHelp = protocolHelp + "; with --application, the application's default when absent"
+)
+
+func (fl *flowFlags) bindProtocol(cmd *cobra.Command, help string) {
+	cmd.Flags().StringVar(&fl.protocol, "protocol", "tcp", help)
 }
 
 func (fl *flowFlags) bindPort(cmd *cobra.Command) {
@@ -230,7 +251,7 @@ func (fl *flowFlags) bindZones(cmd *cobra.Command) {
 
 func (fl *flowFlags) bindL7(cmd *cobra.Command) {
 	cmd.Flags().StringVar(&fl.url, "url", "", "URL, matched against URL categories")
-	cmd.Flags().StringVar(&fl.application, "application", "", "application (not evaluated yet)")
+	cmd.Flags().StringVar(&fl.application, "application", "", "application: a predefined or custom application")
 	cmd.Flags().StringVar(&fl.user, "user", "", "source user (not evaluated yet)")
 }
 
