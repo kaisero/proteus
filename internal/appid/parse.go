@@ -404,25 +404,51 @@ func readDefault(n node) (Default, error) {
 			return Default{}, fmt.Errorf("default holds the unknown form <%s>", name)
 		}
 	}
+	var ipProtocol *string
+	if k, ok := kids["ident-by-ip-protocol"]; ok {
+		ipProtocol = &k.Text
+	}
+	_, icmp := kids["ident-by-icmp-type"]
+	_, icmp6 := kids["ident-by-icmp6-type"]
+	return makeDefault(members(kids["port"]), members(kids["extended-port"]), ipProtocol, icmp, icmp6)
+}
+
+// CustomDefault reads the default block of a custom application from the
+// configuration: the members of default/port, the text of
+// default/ident-by-ip-protocol ("" for none), and whether
+// default/ident-by-icmp-type and default/ident-by-icmp6-type are present. A
+// custom application takes its default ports from that block, in the forms
+// of P1-P5 (spec 2026-10-16 P7). A block that names no form, or no block,
+// allows every protocol and port (P6).
+func CustomDefault(ports []string, ipProtocol string, icmp, icmp6 bool) (Default, error) {
+	var ip *string
+	if ipProtocol != "" {
+		ip = &ipProtocol
+	}
+	return makeDefault(ports, nil, ip, icmp, icmp6)
+}
+
+// makeDefault builds a default from its forms. ipProtocol is nil when the
+// block holds no ident-by-ip-protocol.
+func makeDefault(port, extended []string, ipProtocol *string, icmp, icmp6 bool) (Default, error) {
 	var d Default
-	for _, list := range []string{"port", "extended-port"} {
-		for _, m := range members(kids[list]) {
-			ports, err := parsePorts(m, list == "extended-port")
+	for i, list := range [][]string{port, extended} {
+		for _, m := range list {
+			ports, err := parsePorts(m, i == 1)
 			if err != nil {
 				return Default{}, err
 			}
 			d.Ports = append(d.Ports, ports...)
 		}
 	}
-	if k, ok := kids["ident-by-ip-protocol"]; ok {
-		p, err := strconv.ParseUint(strings.TrimSpace(k.Text), 10, 8)
+	if ipProtocol != nil {
+		p, err := strconv.ParseUint(strings.TrimSpace(*ipProtocol), 10, 8)
 		if err != nil {
-			return Default{}, fmt.Errorf("ident-by-ip-protocol %q: %w", k.Text, err)
+			return Default{}, fmt.Errorf("ident-by-ip-protocol %q: %w", *ipProtocol, err)
 		}
 		d.IPProtocol = int(p)
 	}
-	_, d.ICMP = kids["ident-by-icmp-type"]
-	_, d.ICMP6 = kids["ident-by-icmp6-type"]
+	d.ICMP, d.ICMP6 = icmp, icmp6
 	d.None = len(d.Ports) == 0 && d.IPProtocol == 0 && !d.ICMP && !d.ICMP6
 	return d, nil
 }

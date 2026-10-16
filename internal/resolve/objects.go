@@ -120,6 +120,24 @@ var predefinedScope = config.Scope{Sort: config.ScopePredefined}
 // service-http and service-https (L4), and a configured service of the same name
 // wins, the vsys's over shared's over the predefined one (L7).
 func objectsInChain(cfg *config.Config, chain []config.Scope, kind string, within []string) []Object {
+	elems := elementsInChain(cfg, chain, kind, within)
+	out := make([]Object, len(elems))
+	for i, e := range elems {
+		out[i] = e.Object
+	}
+	return out
+}
+
+// objectElement is an object with the element that defines it.
+type objectElement struct {
+	Object
+	elem *config.Element
+}
+
+// elementsInChain is objectsInChain with the element of each object, for a
+// reader that needs more of an entry than an Object holds. The shadowing is
+// the same: a later scope's definition replaces an earlier one.
+func elementsInChain(cfg *config.Config, chain []config.Scope, kind string, within []string) []objectElement {
 	// Where a kind sits under a scope comes from the schema: most are direct
 	// children, but a custom URL category and every security profile live under
 	// profiles/. A caller may name the path instead, for a kind whose name is
@@ -130,10 +148,10 @@ func objectsInChain(cfg *config.Config, chain []config.Scope, kind string, withi
 	if within == nil {
 		within = []string{kind}
 	}
-	byName := map[string]Object{}
+	byName := map[string]objectElement{}
 	var order []string
 	for _, sc := range append([]config.Scope{predefinedScope}, chain...) {
-		for _, o := range readObjects(cfg, sc, kind, within) {
+		for _, o := range readElements(cfg, sc, kind, within) {
 			if prev, seen := byName[o.Name]; seen {
 				prevScope := prev.Scope
 				o.ShadowedFrom = &prevScope
@@ -143,7 +161,7 @@ func objectsInChain(cfg *config.Config, chain []config.Scope, kind string, withi
 			byName[o.Name] = o
 		}
 	}
-	out := make([]Object, 0, len(order))
+	out := make([]objectElement, 0, len(order))
 	for _, n := range order {
 		out = append(out, byName[n])
 	}
@@ -185,15 +203,15 @@ func scopeElements(cfg *config.Config, sc config.Scope) []*config.Element {
 	return out
 }
 
-// readObjects reads one scope's objects of one kind.
+// readElements reads one scope's objects of one kind, each with its element.
 //
 // The container path is matched exactly.
-func readObjects(cfg *config.Config, sc config.Scope, kind string, within []string) []Object {
+func readElements(cfg *config.Config, sc config.Scope, kind string, within []string) []objectElement {
 	inner := append(append([]string{}, within...), "entry")
-	var out []Object
+	var out []objectElement
 	for _, container := range scopeElements(cfg, sc) {
 		for _, e := range container.Find(inner...) {
-			out = append(out, Object{
+			out = append(out, objectElement{elem: e, Object: Object{
 				Name:    e.Attr("name"),
 				Kind:    kind,
 				Scope:   sc,
@@ -207,7 +225,7 @@ func readObjects(cfg *config.Config, sc config.Scope, kind string, within []stri
 				Wildcard: kind == "address" && e.Child("ip-wildcard") != nil,
 
 				Description: e.Child("description").TextOr(""),
-			})
+			}})
 		}
 	}
 	return out

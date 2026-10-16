@@ -219,3 +219,36 @@ func TestPortMatchString(t *testing.T) {
 		}
 	}
 }
+
+// P7: a custom application takes its default from the configuration, in the
+// forms of P1-P5; without a form it allows everything (P6).
+func TestCustomDefault(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		ports       []string
+		ip          string
+		icmp, icmp6 bool
+		want        string
+	}{
+		{[]string{"tcp/8443"}, "", false, false, "tcp/8443"},
+		{[]string{"tcp/80,443", "udp/dynamic"}, "", false, false, "tcp/80,443; udp/any"},
+		{nil, "89", false, false, "ip-protocol/89"},
+		{nil, "", true, false, "icmp-type"},
+		{nil, "", false, true, "icmp6-type"},
+		{nil, "", false, false, "any"},
+	} {
+		d, err := appid.CustomDefault(tc.ports, tc.ip, tc.icmp, tc.icmp6)
+		if err != nil || d.String() != tc.want {
+			t.Errorf("CustomDefault(%v, %q, %v, %v) = %q, %v; want %q", tc.ports, tc.ip, tc.icmp, tc.icmp6, d, err, tc.want)
+		}
+	}
+	// A custom port member has no /secure form.
+	for _, bad := range [][]string{{"tcp/x"}, {"tcp/443/secure"}} {
+		if _, err := appid.CustomDefault(bad, "", false, false); err == nil {
+			t.Errorf("CustomDefault(%v): want an error", bad)
+		}
+	}
+	if _, err := appid.CustomDefault(nil, "300", false, false); err == nil {
+		t.Error("ident-by-ip-protocol 300: want an error")
+	}
+}

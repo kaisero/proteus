@@ -145,6 +145,7 @@ func (f Field) String() string
 func (i *Index) Candidates(f Field, value string) (*roaring.Bitmap, Report)
 func (i *Index) Containing(addr netip.Addr) []Match
 func (i *Index) Disabled() *roaring.Bitmap
+func (i *Index) GroupPath(kind, group, name string) []string
 func (i *Index) GroupsHolding(kind, name string, direct bool) []Group
 func (i *Index) Interner() *Interner
 func (i *Index) MatchWildcards(prefixes []netip.Prefix, single bool) ([]Hit, []Unresolved)
