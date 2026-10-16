@@ -20,6 +20,9 @@ config.yaml
 .swp
 /fw-live.xml
 
+# The real values of the App-ID lab placeholders: lab addresses stay out of git.
+/docs/lab/app-id-lab.vars
+
 # MkDocs build output.
 /site/
 

@@ -26,12 +26,20 @@ a model type. proteus answers questions; it never changes anything.
 A loaded index is immutable once built. A reload produces a new index and
 replaces the pointer.
 
-The fetcher is the one package that talks to a device. It asks for an API key, runs
-`<show>` commands and exports the configuration; `fetch.Client` refuses any other
-op command before it reaches the device, and has no method for anything else.
+The fetcher is the one package of proteus that talks to a device. It asks for an
+API key, runs `<show>` commands and exports the configuration; `fetch.Client`
+refuses any other op command before it reaches the device, and has no method for
+anything else.
+
+One lab tool also talks to a device, by owner decision (spec 2026-10-16 §9.1,
+plan C7): `internal/tools/applab`, which `make app-lab` runs by hand, never in CI.
+It sends only `<show>` and `<test><security-policy-match>` op commands; a function
+refuses any other command before it is sent. It never asks for a key, configures,
+or commits.
 
 Check: `go test ./internal/archtest -run TestPublicAPIIsReadOnly`
 Check: `go test ./internal/fetch -run TestOnlyReadCalls`
+Check: `go test ./internal/tools/applab -run TestOnlyShowAndPolicyMatch`
 
 ## R3 — Nothing is dropped silently
 
