@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io/fs"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
@@ -13,6 +14,7 @@ import (
 	"time"
 	"weak"
 
+	"github.com/okaiser/proteus/internal/appid"
 	"github.com/okaiser/proteus/internal/config"
 	"github.com/okaiser/proteus/internal/estate"
 	"github.com/okaiser/proteus/internal/resolve"
@@ -23,17 +25,29 @@ import (
 // cacheLab is the lab's two snapshots and a cache over them whose loads are
 // counted.
 type cacheLab struct {
-	st    *store.Store
-	fw01  store.Snapshot
-	fw02  store.Snapshot
-	cache *Cache
-	loads atomic.Int32
+	st       *store.Store
+	fw01     store.Snapshot
+	fw02     store.Snapshot
+	cache    *Cache
+	loads    atomic.Int32
+	appLoads atomic.Int32 // of content files
 }
 
 func newCacheLab(t *testing.T, maxBytes int64) *cacheLab {
 	t.Helper()
-	env := labEnv(t, snap{pathlab.FW01, pathlab.ConfigFile(pathlab.FW01)}, snap{pathlab.FW02, pathlab.ConfigFile(pathlab.FW02)})
+	return cacheLabOf(t, "", maxBytes)
+}
+
+// cacheLabOf is a cache lab whose snapshots name the content version apps,
+// "" for none.
+func cacheLabOf(t *testing.T, apps string, maxBytes int64) *cacheLab {
+	t.Helper()
+	env := labEnvApps(t, apps, snap{pathlab.FW01, pathlab.ConfigFile(pathlab.FW01)}, snap{pathlab.FW02, pathlab.ConfigFile(pathlab.FW02)})
 	l := &cacheLab{st: env.Store, cache: newCache(maxBytes, 2, 4, true)}
+	l.cache.loadApps = func(path string) (*appid.Data, error) {
+		l.appLoads.Add(1)
+		return appid.Load(path)
+	}
 	var err error
 	if l.fw01, err = env.Store.Latest(pathlab.FW01); err != nil {
 		t.Fatal(err)
@@ -473,5 +487,201 @@ func TestOperationalDataIsReadOnce(t *testing.T) {
 	}
 	if _, err := l.cache.HA(gone); err == nil {
 		t.Error("an unreadable HA state")
+	}
+}
+
+// contentKey8000 is the cache key of the fixture's content version.
+var contentKey8000 = itemKey{kind: "content", id: "8000-1000.v1.xml.gz"}
+
+// appsThrough is a snapshot's content data as a call reads it: through the
+// configuration entry.
+func appsThrough(t *testing.T, cc *callCache, sn store.Snapshot) *appid.Data {
+	t.Helper()
+	ld, err := cc.Config(sn)
+	if err != nil || ld.Apps == nil {
+		t.Fatalf("%s: %v, loader %v", sn.Device, err, ld.Apps != nil)
+	}
+	d, err := ld.Apps()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return d
+}
+
+// cached is the value of a key, or nil.
+func (l *cacheLab) cached(k itemKey) any {
+	v, _ := l.cache.get(k)
+	return v
+}
+
+// Two snapshots of one content version load its file once: the content is
+// one cache item, keyed by the file name, and both calls get one value. A
+// snapshot without a content version has no loader, and a file that does not
+// exist is not kept (spec 2026-10-16 §7).
+func TestContentIsOneItemPerVersion(t *testing.T) {
+	t.Parallel()
+	l := cacheLabOf(t, "8000-1000", 1<<30)
+	cc := l.cache.bind(context.Background())
+	a, b := appsThrough(t, cc, l.fw01), appsThrough(t, cc, l.fw02)
+	if a != b || l.appLoads.Load() != 1 || a.Version() != "8000-1000" {
+		t.Errorf("%d loads; the same value %v", l.appLoads.Load(), a == b)
+	}
+	if v := l.cached(contentKey8000); v != a {
+		t.Errorf("the item under %+v is %v", contentKey8000, v)
+	}
+	if d, err := cc.Apps(l.fw01.ContentPath()); d != a || err != nil || l.appLoads.Load() != 1 {
+		t.Errorf("Apps: %v, %d loads", err, l.appLoads.Load())
+	}
+	plain := newCacheLab(t, 1<<30)
+	if ld, err := plain.cache.bind(context.Background()).Config(plain.fw01); err != nil || ld.Apps != nil {
+		t.Errorf("a snapshot without a content version: %v, loader %v", err, ld.Apps != nil)
+	}
+	gone := filepath.Join(t.TempDir(), "8000-0999.v1.xml.gz")
+	if _, err := cc.Apps(gone); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("a missing file: %v", err)
+	}
+	if l.cached(itemKey{kind: "content", id: filepath.Base(gone)}) != nil {
+		t.Error("a missing file was kept")
+	}
+}
+
+// configSizes is the estimated size of each lab snapshot's configuration.
+func (l *cacheLab) configSizes() (int64, int64) {
+	return configBytes(fileBytes(l.fw01.Path(store.ConfigDoc))), configBytes(fileBytes(l.fw02.Path(store.ConfigDoc)))
+}
+
+// The content item counts in the size, not in the fixed part: past the
+// limit, the least recently used content goes before a newer configuration
+// (spec 2026-10-16 §7).
+func TestContentGoesFirstWhenOld(t *testing.T) {
+	t.Parallel()
+	l := cacheLabOf(t, "8000-1000", 0)
+	one, two := l.configSizes()
+	l.cache.max = digestBytes + one + two + contentBytes - 1
+	cc := l.cache.bind(context.Background())
+	appsThrough(t, cc, l.fw01)
+	if _, err := cc.Config(l.fw01); err != nil { // fw01 is now used after its content
+		t.Fatal(err)
+	}
+	if _, err := cc.Config(l.fw02); err != nil {
+		t.Fatal(err)
+	}
+	if l.cached(contentKey8000) != nil {
+		t.Error("the old content stayed")
+	}
+	for _, sn := range []store.Snapshot{l.fw01, l.fw02} {
+		if l.cached(itemKey{kind: "config", member: sn.Device, id: sn.ID}) == nil {
+			t.Errorf("%s: the configuration went", sn.Device)
+		}
+	}
+	l.cache.mu.Lock()
+	size, fixed := l.cache.size, l.cache.fixed
+	l.cache.mu.Unlock()
+	if size != one+two || fixed != digestBytes {
+		t.Errorf("size %d + fixed %d, want %d + %d", size, fixed, one+two, digestBytes)
+	}
+}
+
+// After the cache drops the content item, a call through the configuration
+// entry puts the same value back with its size: the file loads once (spec
+// 2026-10-16 §7). A call through the entry while the item is cached uses it.
+func TestAnEntryPutsItsContentBack(t *testing.T) {
+	t.Parallel()
+	l := cacheLabOf(t, "8000-1000", 0)
+	one, two := l.configSizes()
+	l.cache.max = digestBytes + one + two + contentBytes - 1
+	cc := l.cache.bind(context.Background())
+	first := appsThrough(t, cc, l.fw01)
+	if appsThrough(t, cc, l.fw01) != first {
+		t.Error("a second call through the entry got another value")
+	}
+	if _, err := cc.Config(l.fw01); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cc.Config(l.fw02); err != nil {
+		t.Fatal(err)
+	}
+	if l.cached(contentKey8000) != nil {
+		t.Fatal("the content was not dropped")
+	}
+	if got := appsThrough(t, cc, l.fw01); got != first || l.appLoads.Load() != 1 {
+		t.Errorf("the same value %v, %d loads", got == first, l.appLoads.Load())
+	}
+	if l.cached(contentKey8000) != first {
+		t.Error("the entry did not put its content back")
+	}
+	l.cache.mu.Lock()
+	size := l.cache.size
+	l.cache.mu.Unlock()
+	if size > l.cache.max || size < contentBytes {
+		t.Errorf("size %d: the content does not count", size)
+	}
+	// fw02's entry has no content yet: it takes the cached one.
+	if got := appsThrough(t, cc, l.fw02); got != first || l.appLoads.Load() != 1 {
+		t.Errorf("fw02: the same value %v, %d loads", got == first, l.appLoads.Load())
+	}
+	// Another call loads the version again after the item went: the entry
+	// then takes that value, so one value stays.
+	l.drop(contentKey8000)
+	again, err := cc.Apps(l.fw01.ContentPath())
+	if err != nil || again == first || l.appLoads.Load() != 2 {
+		t.Fatalf("a new load: %v, %d loads", err, l.appLoads.Load())
+	}
+	if got := appsThrough(t, cc, l.fw01); got != again {
+		t.Error("the entry kept its old value")
+	}
+}
+
+// drop removes an item, as the cache does past its limit.
+func (l *cacheLab) drop(k itemKey) {
+	l.cache.mu.Lock()
+	defer l.cache.mu.Unlock()
+	el := l.cache.items[k]
+	l.cache.order.Remove(el)
+	delete(l.cache.items, k)
+	l.cache.size -= el.Value.(*item).size
+}
+
+// A snapshot whose content file is gone gives the error through the entry,
+// and the entry keeps nothing: the next call tries the file again.
+// Concurrent first reads of one version share one load.
+func TestAMissingContentFileThroughTheEntry(t *testing.T) {
+	t.Parallel()
+	l := cacheLabOf(t, "8000-1000", 1<<30)
+	path := l.fw01.ContentPath()
+	saved := pathlab.Read(t, path)
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	cc := l.cache.bind(context.Background())
+	ld, err := cc.Config(l.fw01)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ld.Apps(); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("a missing file: %v", err)
+	}
+	if err := l.st.WriteContent("8000-1000", saved); err != nil {
+		t.Fatal(err)
+	}
+	var wg sync.WaitGroup
+	got := make([]*appid.Data, 8)
+	for i := range got {
+		wg.Go(func() {
+			d, err := ld.Apps()
+			if err != nil {
+				t.Error(err)
+			}
+			got[i] = d
+		})
+	}
+	wg.Wait()
+	for _, d := range got {
+		if d == nil || d != got[0] {
+			t.Fatal("the callers got different values")
+		}
+	}
+	if n := l.appLoads.Load(); n != 2 {
+		t.Errorf("%d loads, want 2: the failed one and one for all callers", n)
 	}
 }

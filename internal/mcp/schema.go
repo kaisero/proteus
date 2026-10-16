@@ -274,6 +274,10 @@ var (
 	schemaMap   = reflect.TypeFor[map[string]*jsonschema.Schema]()
 )
 
+// protocolPattern is simulate_policy's protocol: a name, or an IP protocol
+// number from 0 to 255.
+const protocolPattern = `^(tcp|udp|icmp|sctp|[0-9]|[1-9][0-9]|1[0-9][0-9]|2[0-4][0-9]|25[0-5])$`
+
 // inputSchema is a tool's input schema: the arguments' schema with the
 // protocol, detail, port and limit ranges, and the device names as an enum when
 // devices is set, as the server adds them at start (spec §3.6).
@@ -290,7 +294,14 @@ func inputSchema(args reflect.Type, devices []string) (*jsonschema.Schema, error
 		return out
 	}
 	if p := s.Properties["protocol"]; p != nil {
-		p.Enum = enum("tcp", "udp", "icmp", "sctp")
+		if args == reflect.TypeFor[policyArgs]() {
+			// simulate_policy also takes an IP protocol number, so an
+			// application identified by its IP protocol, such as ospf on
+			// 89, can be asked (spec 2026-10-16 §7, P4).
+			p.Pattern = protocolPattern
+		} else {
+			p.Enum = enum("tcp", "udp", "icmp", "sctp")
+		}
 	}
 	if p := s.Properties["detail"]; p != nil {
 		p.Enum = enum(query.DetailSummary, query.DetailFull)

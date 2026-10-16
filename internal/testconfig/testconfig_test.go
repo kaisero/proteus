@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/okaiser/proteus/internal/appid"
 	"github.com/okaiser/proteus/internal/config"
 	"github.com/okaiser/proteus/internal/resolve"
 )
@@ -108,5 +109,36 @@ func TestContentFailsOnABadDestination(t *testing.T) {
 	Content(tb, filepath.Join(t.TempDir(), "missing", "file.xml.gz"))
 	if !tb.failed {
 		t.Error("Content did not fail")
+	}
+}
+
+// AppContent parses with the count asked, every 50th application in a
+// container. Its size is about that of a real file: content 9159 has 5552
+// applications in a trimmed file of about 6 MB (spec 2026-10-16 F4).
+func TestAppContentHasTheCount(t *testing.T) {
+	t.Parallel()
+	d, err := appid.Parse(bytes.NewReader(AppContent(t, 10)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := len(d.Apps()); got != 10 || d.Version() != "8000-1000" {
+		t.Errorf("%d applications of %s, want 10 of 8000-1000", got, d.Version())
+	}
+	if a, ok := d.App("app-0"); !ok || a.Container != "c-0" || a.Default.None || !a.Flags["evasive-behavior"] {
+		t.Errorf("app-0 %+v", a)
+	}
+	if c, ok := d.Container("c-0"); !ok || len(c.Functions) != 1 || c.Functions[0] != "app-0" {
+		t.Errorf("c-0 %+v", c)
+	}
+	zr, err := gzip.NewReader(bytes.NewReader(AppContent(t, 5552)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := io.ReadAll(zr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := len(raw); n < 5<<20 || n > 7<<20 {
+		t.Errorf("5552 applications take %d bytes, not about 6 MB", n)
 	}
 }

@@ -10,7 +10,6 @@ package testconfig
 import (
 	"bytes"
 	"compress/gzip"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -127,15 +126,86 @@ func Content(tb testing.TB, dst string) {
 	_, self, _, _ := runtime.Caller(0)
 	raw, err := os.ReadFile(filepath.Join(filepath.Dir(self), "..", "..", "testdata", "appid", "content.xml"))
 	if err == nil {
-		var b bytes.Buffer
-		zw := gzip.NewWriter(&b)
-		_, werr := zw.Write(raw)
-		err = errors.Join(werr, zw.Close())
-		if err == nil {
-			err = os.WriteFile(dst, b.Bytes(), 0o600)
-		}
+		err = os.WriteFile(dst, gzipped(raw), 0o600)
 	}
 	if err != nil {
 		tb.Fatal(err)
 	}
+}
+
+// gzipped is raw, gzipped. The gzip writer fails only when the writer under
+// it fails, and a bytes.Buffer takes every write.
+func gzipped(raw []byte) []byte {
+	var b bytes.Buffer
+	zw := gzip.NewWriter(&b)
+	_, _ = zw.Write(raw)
+	_ = zw.Close()
+	return b.Bytes()
+}
+
+// appCategories are the six category values of the content answer (spec
+// 2026-10-16 F5).
+var appCategories = []string{"networking", "collaboration", "media", "business-systems", "general-internet", "saas"}
+
+// appFlags are the yes/no filter fields of an application entry (S10).
+var appFlags = []string{
+	"evasive-behavior", "consume-big-bandwidth", "used-by-malware", "able-to-transfer-file",
+	"has-known-vulnerability", "tunnel-other-application", "prone-to-misuse", "pervasive-use",
+}
+
+// AppContent is a generated App-ID content file of version 8000-1000 with
+// that many applications app-0 …, gzipped, in the trimmed format. Every
+// 50th application is a function of a container c-0 …. The entries hold every
+// kept field of a real one and about the same bytes: content 9159 has 5552
+// applications in a trimmed file of about 6 MB (spec 2026-10-16 F4). The
+// benchmark of the MCP cache measures what it retains.
+func AppContent(tb testing.TB, apps int) []byte {
+	tb.Helper()
+	var b strings.Builder
+	b.WriteString(`<content version="8000-1000" trim="1"><application>`)
+	// The description takes about 300 bytes, as in content 9159 (F4).
+	desc := strings.Repeat("Dummy description of a generated application. ", 6)
+	for i := range apps {
+		fmt.Fprintf(&b, `<entry name="app-%d"><category>%s</category><subcategory>sub-%d</subcategory>`+
+			`<technology>tech-%d</technology><description>%s%d.</description>`+
+			`<default><port><member>tcp/%d,%d</member><member>udp/%d</member></port>`,
+			i, appCategories[i%len(appCategories)], i%40, i%4, desc, i, 1024+i%60000, 2048+i%60000, 1024+i%60000)
+		if i%2 == 0 {
+			fmt.Fprintf(&b, `<extended-port><member>tcp/%d/secure</member></extended-port>`, 8443+i%1000)
+		}
+		fmt.Fprintf(&b, `</default><risk>%d</risk>`, 1+i%5)
+		for j, f := range appFlags {
+			fmt.Fprintf(&b, `<%s>%s</%s>`, f, yesNo((i+j)%3 == 0), f)
+		}
+		saas := i%6 == 5
+		fmt.Fprintf(&b, `<is-saas>%s</is-saas><new-appid>no</new-appid><ident-by-dport>%s</ident-by-dport>`+
+			`<tag><member>[Web App]</member><member>[Generated %d]</member></tag>`, yesNo(saas), yesNo(i%2 == 0), i%20)
+		if saas {
+			fmt.Fprintf(&b, `<saas><is-data-breaches>%s</is-data-breaches><is-poor-terms-of-service>no</is-poor-terms-of-service>`+
+				`<certifications><is-soc2>%s</is-soc2></certifications></saas>`, yesNo(i%4 == 0), yesNo(i%3 == 0))
+		}
+		if i%3 == 0 {
+			fmt.Fprintf(&b, `<implicit-use-applications><member>app-%d</member></implicit-use-applications>`+
+				`<use-applications><member>app-%d</member></use-applications>`, (i+1)%apps, (i+2)%apps)
+		}
+		if i%50 == 0 {
+			fmt.Fprintf(&b, `<application-container>c-%d</application-container>`, i/50)
+		}
+		b.WriteString(`</entry>`)
+	}
+	b.WriteString(`</application><application-container>`)
+	for i := 0; i < apps; i += 50 {
+		fmt.Fprintf(&b, `<entry name="c-%d"><description>%s</description><functions><member>app-%d</member></functions></entry>`,
+			i/50, desc, i)
+	}
+	b.WriteString("</application-container></content>\n")
+	return gzipped([]byte(b.String()))
+}
+
+// yesNo is a flag as the content file writes it.
+func yesNo(v bool) string {
+	if v {
+		return "yes"
+	}
+	return "no"
 }
