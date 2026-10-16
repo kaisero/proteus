@@ -1,6 +1,11 @@
 package testconfig
 
 import (
+	"bytes"
+	"compress/gzip"
+	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -57,5 +62,51 @@ func TestWriteGivesTheShape(t *testing.T) {
 	walk(src)
 	if src != "g-1999" || nodes != 364 {
 		t.Errorf("%s holds a tree of %d groups, want g-1999 and 364", src, nodes)
+	}
+}
+
+// Content writes the trimmed App-ID fixture, gzipped, so the tests of every
+// package read one file.
+func TestContentWritesTheFixture(t *testing.T) {
+	t.Parallel()
+	dst := filepath.Join(t.TempDir(), "8000-1000.v1.xml.gz")
+	Content(t, dst)
+	f, err := os.Open(dst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	zr, err := gzip.NewReader(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := io.ReadAll(zr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := os.ReadFile("../../testdata/appid/content.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, want) {
+		t.Error("the file does not unzip to testdata/appid/content.xml")
+	}
+}
+
+// fatalTB records a failure instead of stopping the test.
+type fatalTB struct {
+	testing.TB
+	failed bool
+}
+
+func (f *fatalTB) Fatal(...any) { f.failed = true }
+
+// A destination that Content cannot write fails the test.
+func TestContentFailsOnABadDestination(t *testing.T) {
+	t.Parallel()
+	tb := &fatalTB{TB: t}
+	Content(tb, filepath.Join(t.TempDir(), "missing", "file.xml.gz"))
+	if !tb.failed {
+		t.Error("Content did not fail")
 	}
 }

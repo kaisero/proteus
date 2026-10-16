@@ -2,13 +2,19 @@
 // R7 wants a benchmark behind every performance figure, and the figures for
 // group trees only appear at a size no fixture in this repository has. The
 // index and card benchmarks read the same file, so their figures describe one
-// configuration. It imports testing; only tests import it.
+// configuration. It also writes the App-ID content fixture, so the tests of
+// every package read one file. It imports testing; only tests import it. It
+// does not import internal/appid, so the appid tests can use it.
 package testconfig
 
 import (
+	"bytes"
+	"compress/gzip"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -112,4 +118,24 @@ func rule(b *strings.Builder, name, src, dst string) {
 		`<source><member>%s</member></source><destination><member>%s</member></destination>`+
 		`<application><member>any</member></application><service><member>any</member></service>`+
 		`<action>allow</action></entry>`, name, src, dst)
+}
+
+// Content gzips testdata/appid/content.xml, the trimmed App-ID content file of
+// version 8000-1000, to dst.
+func Content(tb testing.TB, dst string) {
+	tb.Helper()
+	_, self, _, _ := runtime.Caller(0)
+	raw, err := os.ReadFile(filepath.Join(filepath.Dir(self), "..", "..", "testdata", "appid", "content.xml"))
+	if err == nil {
+		var b bytes.Buffer
+		zw := gzip.NewWriter(&b)
+		_, werr := zw.Write(raw)
+		err = errors.Join(werr, zw.Close())
+		if err == nil {
+			err = os.WriteFile(dst, b.Bytes(), 0o600)
+		}
+	}
+	if err != nil {
+		tb.Fatal(err)
+	}
 }

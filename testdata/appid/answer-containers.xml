@@ -1,0 +1,11 @@
+<response status="success"><result><application-container>
+<!-- A dummy container answer in the shape of spec 2026-10-16 F1 and F7. The id,
+     the versions and the pre_ottawa_name are dummy values. -->
+<entry id="90001" name="office-suite" minver="1.0.0">
+  <description>Dummy description of office-suite.</description>
+  <functions>
+    <member pre_ottawa_name="office-docs-old">office-docs</member>
+    <member minver="2.0.0">office-mail</member>
+  </functions>
+</entry>
+</application-container></result></response>

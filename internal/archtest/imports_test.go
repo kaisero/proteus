@@ -21,9 +21,14 @@ var ioPackages = []string{"net", "net/http", "net/url", "os/exec"}
 // standard library, so every rule allows it.
 const reasonPkg = "internal/reason"
 
-// core is the read-only core, plus the schema substrate config decodes and the
-// reason codes. It is the only part of this module the core may import.
-var core = []string{"internal/config", "internal/resolve", "internal/index", "internal/schema", "internal/digest", reasonPkg}
+// appidPkg owns the App-ID content file. It imports only the standard library
+// and reason, so the core may import it (spec 2026-10-16 §8).
+const appidPkg = "internal/appid"
+
+// core is the read-only core, plus the schema substrate config decodes, the
+// App-ID content data and the reason codes. It is the only part of this module
+// the core may import.
+var core = []string{"internal/config", "internal/resolve", "internal/index", "internal/schema", "internal/digest", appidPkg, reasonPkg}
 
 // rule forbids one package from reaching a set of packages, directly or through
 // any package of this module it imports.
@@ -32,7 +37,7 @@ type rule struct {
 	forbid  []string // full import paths it must not reach
 	allowIn []string // when set, the only module-relative packages it may reach
 	direct  []string // when set, the only module-relative packages it may import directly
-	stdlib  bool     // when set, it imports only the standard library
+	stdlib  bool     // when set, it imports only the standard library and allowIn
 }
 
 // standard reports whether an import path is in the standard library: its first
@@ -75,6 +80,7 @@ var rules = []rule{
 	},
 	{from: "internal/task", forbid: ioPackages, allowIn: []string{"internal/runlog", reasonPkg}},
 	{from: reasonPkg, stdlib: true},
+	{from: appidPkg, stdlib: true, allowIn: []string{reasonPkg}, forbid: ioPackages},
 	{from: "internal/query", forbid: queryForbids, direct: queryImports},
 }
 
@@ -128,7 +134,7 @@ func violations(graph map[string][]string, rules []rule) []string {
 		}
 		if r.stdlib {
 			for _, imp := range graph[from] {
-				if !standard(imp) {
+				if !standard(imp) && !allowed[imp] {
 					out = append(out, r.from+" imports "+imp+", outside the standard library")
 				}
 			}
@@ -209,6 +215,25 @@ func TestViolationsCatchesABreach(t *testing.T) {
 	slices.Sort(want)
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Errorf("violations:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+
+	// appid imports the standard library and reason only: index and roaring
+	// are violations, reason is not.
+	graph = map[string][]string{
+		module + "/internal/appid": {"fmt", module + "/internal/index", "github.com/RoaringBitmap/roaring/v2", module + "/" + reasonPkg},
+		module + "/internal/index": {"fmt"},
+		module + "/" + reasonPkg:   {"fmt"},
+	}
+	got = violations(graph, rules)
+	want = []string{
+		"internal/appid imports " + module + "/internal/index, outside the standard library",
+		"internal/appid imports github.com/RoaringBitmap/roaring/v2, outside the standard library",
+		"internal/appid reaches " + module + "/internal/index, outside the read-only core",
+	}
+	slices.Sort(got)
+	slices.Sort(want)
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("appid violations:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
 }
 

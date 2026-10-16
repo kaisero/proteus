@@ -1,0 +1,149 @@
+<response status="success"><result><application>
+<!-- A dummy device answer in the shape of spec 2026-10-16 F1 and F7-F13. The ids,
+     countries, languages and versions are dummy values. icon, references,
+     decoder and timeout stand for the fields the trim drops (spec §3.2). -->
+<entry id="10001" name="ssl" ori_country="ZZ" ori_language="Dummy" minver="1.0.0">
+  <category>networking</category>
+  <subcategory>encrypted-tunnel</subcategory>
+  <technology>browser-based</technology>
+  <description>Dummy description of ssl.</description>
+  <icon>ZHVtbXkgaWNvbg==</icon>
+  <references>
+    <entry name="Dummy reference"><link>https://example.com/ssl</link></entry>
+  </references>
+  <decoder>ssl</decoder>
+  <timeout>1800</timeout>
+  <default><port><member>tcp/443</member></port></default>
+  <risk minver="2.0.0">4</risk>
+  <evasive-behavior>no</evasive-behavior>
+  <consume-big-bandwidth>no</consume-big-bandwidth>
+  <used-by-malware>yes</used-by-malware>
+  <able-to-transfer-file>yes</able-to-transfer-file>
+  <has-known-vulnerability>yes</has-known-vulnerability>
+  <tunnel-other-application>yes</tunnel-other-application>
+  <prone-to-misuse>no</prone-to-misuse>
+  <pervasive-use>yes</pervasive-use>
+  <is-saas>no</is-saas>
+  <ident-by-dport>yes</ident-by-dport>
+</entry>
+<entry id="10002" name="web-browsing" ori_country="ZZ" ori_language="Dummy" minver="1.0.0">
+  <category>general-internet</category>
+  <subcategory>internet-utility</subcategory>
+  <technology>browser-based</technology>
+  <description>Dummy description of web-browsing.</description>
+  <icon>ZHVtbXkgaWNvbg==</icon>
+  <decoder>http</decoder>
+  <default>
+    <port><member>tcp/80</member></port>
+    <extended-port><member>tcp/80</member><member minver="3.0.0">tcp/443/secure</member></extended-port>
+  </default>
+  <risk>4</risk>
+  <evasive-behavior>no</evasive-behavior>
+  <consume-big-bandwidth>no</consume-big-bandwidth>
+  <used-by-malware>yes</used-by-malware>
+  <able-to-transfer-file>yes</able-to-transfer-file>
+  <has-known-vulnerability>yes</has-known-vulnerability>
+  <tunnel-other-application>no</tunnel-other-application>
+  <prone-to-misuse>no</prone-to-misuse>
+  <pervasive-use>yes</pervasive-use>
+  <is-saas>no</is-saas>
+  <ident-by-dport>yes</ident-by-dport>
+</entry>
+<entry id="10003" name="app-remote" ori_country="ZZ" ori_language="Dummy" minver="1.0.0">
+  <category>networking</category>
+  <subcategory>remote-access</subcategory>
+  <technology>client-server</technology>
+  <icon>ZHVtbXkgaWNvbg==</icon>
+  <default><port><member>tcp/80, 443, 8090</member></port></default>
+  <risk>4</risk>
+  <is-saas>no</is-saas>
+  <implicit-use-applications><member minver="4.0.0">ssl</member><member>web-browsing</member></implicit-use-applications>
+  <use-applications><member>dns</member></use-applications>
+</entry>
+<entry id="10004" name="dns" ori_country="ZZ" ori_language="Dummy" minver="1.0.0">
+  <category>networking</category>
+  <subcategory>infrastructure</subcategory>
+  <technology>network-protocol</technology>
+  <decoder>dns</decoder>
+  <default><port><member>udp/53</member></port></default>
+  <risk>3</risk>
+  <is-saas>no</is-saas>
+  <ident-by-sport>yes</ident-by-sport>
+</entry>
+<entry id="10005" name="app-media" ori_country="ZZ" ori_language="Dummy" minver="1.0.0">
+  <category>media</category>
+  <subcategory>sub-a</subcategory>
+  <technology>tech-a</technology>
+  <default><port><member>tcp/8554</member></port></default>
+  <risk>4</risk>
+  <evasive-behavior>yes</evasive-behavior>
+  <consume-big-bandwidth>yes</consume-big-bandwidth>
+  <used-by-malware>no</used-by-malware>
+  <able-to-transfer-file>yes</able-to-transfer-file>
+  <has-known-vulnerability>no</has-known-vulnerability>
+  <tunnel-other-application>no</tunnel-other-application>
+  <prone-to-misuse>no</prone-to-misuse>
+  <pervasive-use>no</pervasive-use>
+  <is-saas>no</is-saas>
+  <tag><member>[Web App]</member><member minver="5.0.0">[Streaming]</member></tag>
+</entry>
+<entry id="10006" name="app-saas-a" ori_country="ZZ" ori_language="Dummy" minver="1.0.0">
+  <category>business-systems</category>
+  <subcategory>office-programs</subcategory>
+  <technology>browser-based</technology>
+  <default><port><member>tcp/443</member></port></default>
+  <risk>3</risk>
+  <is-saas>yes</is-saas>
+  <saas>
+    <is-data-breaches>yes</is-data-breaches>
+    <is-ip-based-restrictions>no</is-ip-based-restrictions>
+    <is-poor-financial-viability>no</is-poor-financial-viability>
+    <is-poor-terms-of-service>yes</is-poor-terms-of-service>
+    <is-uses-genai-to-generate-code>no</is-uses-genai-to-generate-code>
+    <certifications>
+      <is-fedramp>no</is-fedramp>
+      <is-soc1>no</is-soc1>
+      <is-soc2 minver="6.0.0">yes</is-soc2>
+    </certifications>
+  </saas>
+</entry>
+<entry id="10007" name="app-new" ori_country="ZZ" ori_language="Dummy" minver="1.0.0">
+  <category>general-internet</category>
+  <subcategory>internet-utility</subcategory>
+  <technology>browser-based</technology>
+  <default><port><member>tcp/443</member></port></default>
+  <risk>2</risk>
+  <new-appid>yes</new-appid>
+</entry>
+<entry id="10008" name="app-old" ori_country="ZZ" ori_language="Dummy" minver="1.0.0">
+  <category>media</category>
+  <subcategory>sub-a</subcategory>
+  <technology>tech-a</technology>
+  <default><port><member>tcp/8000</member></port></default>
+  <risk>1</risk>
+  <obsolete>yes</obsolete>
+</entry>
+<entry id="10009" name="app-nodefault" ori_country="ZZ" ori_language="Dummy" minver="1.0.0">
+  <category>networking</category>
+  <subcategory>ip-protocol</subcategory>
+  <technology>network-protocol</technology>
+  <risk>1</risk>
+</entry>
+<entry id="10010" name="app-parent" ori_country="ZZ" ori_language="Dummy" minver="1.0.0">
+  <category>networking</category>
+  <subcategory>encrypted-tunnel</subcategory>
+  <technology>client-server</technology>
+  <default><port><member>tcp/7000</member></port></default>
+  <risk>3</risk>
+  <parent-app>not-an-app</parent-app>
+  <tunnel-applications><member>unknown-tunnel</member></tunnel-applications>
+</entry>
+<entry id="10011" name="office-docs" ori_country="ZZ" ori_language="Dummy" minver="1.0.0">
+  <category>collaboration</category>
+  <subcategory>office-programs</subcategory>
+  <technology>browser-based</technology>
+  <default><port><member>tcp/443</member></port></default>
+  <risk>2</risk>
+  <application-container>office-suite</application-container>
+</entry>
+</application></result></response>

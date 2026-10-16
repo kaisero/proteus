@@ -1,0 +1,284 @@
+<content version="8000-1000" trim="1">
+<application>
+<entry name="ssl">
+  <category>networking</category>
+  <subcategory>encrypted-tunnel</subcategory>
+  <technology>browser-based</technology>
+  <description>Dummy description of ssl.</description>
+  <default><port><member>tcp/443</member></port></default>
+  <risk>4</risk>
+  <evasive-behavior>no</evasive-behavior>
+  <consume-big-bandwidth>no</consume-big-bandwidth>
+  <used-by-malware>yes</used-by-malware>
+  <able-to-transfer-file>yes</able-to-transfer-file>
+  <has-known-vulnerability>yes</has-known-vulnerability>
+  <tunnel-other-application>yes</tunnel-other-application>
+  <prone-to-misuse>no</prone-to-misuse>
+  <pervasive-use>yes</pervasive-use>
+  <is-saas>no</is-saas>
+  <ident-by-dport>yes</ident-by-dport>
+</entry>
+<entry name="web-browsing">
+  <category>general-internet</category>
+  <subcategory>internet-utility</subcategory>
+  <technology>browser-based</technology>
+  <description>Dummy description of web-browsing.</description>
+  <default>
+    <port><member>tcp/80</member></port>
+    <extended-port><member>tcp/80</member><member>tcp/443/secure</member></extended-port>
+  </default>
+  <risk>4</risk>
+  <evasive-behavior>no</evasive-behavior>
+  <consume-big-bandwidth>no</consume-big-bandwidth>
+  <used-by-malware>yes</used-by-malware>
+  <able-to-transfer-file>yes</able-to-transfer-file>
+  <has-known-vulnerability>yes</has-known-vulnerability>
+  <tunnel-other-application>no</tunnel-other-application>
+  <prone-to-misuse>no</prone-to-misuse>
+  <pervasive-use>yes</pervasive-use>
+  <is-saas>no</is-saas>
+  <ident-by-dport>yes</ident-by-dport>
+</entry>
+<entry name="app-ldap">
+  <category>business-systems</category>
+  <subcategory>auth-service</subcategory>
+  <technology>client-server</technology>
+  <default>
+    <port><member>tcp/389</member></port>
+    <extended-port><member>tcp/636,3269/secure</member></extended-port>
+  </default>
+  <risk>4</risk>
+  <is-saas>no</is-saas>
+</entry>
+<entry name="app-remote">
+  <category>networking</category>
+  <subcategory>remote-access</subcategory>
+  <technology>client-server</technology>
+  <default><port><member>tcp/80, 443, 8090</member></port></default>
+  <risk>4</risk>
+  <is-saas>no</is-saas>
+  <implicit-use-applications><member>ssl</member><member>web-browsing</member></implicit-use-applications>
+  <use-applications><member>dns</member></use-applications>
+</entry>
+<entry name="app-remote-b">
+  <category>networking</category>
+  <subcategory>remote-access</subcategory>
+  <technology>client-server</technology>
+  <default><port><member>tcp/9000</member></port></default>
+  <risk>3</risk>
+  <is-saas>no</is-saas>
+  <implicit-use-applications><member>ssl</member></implicit-use-applications>
+</entry>
+<entry name="app-other">
+  <category>general-internet</category>
+  <subcategory>social-networking</subcategory>
+  <technology>browser-based</technology>
+  <default><port><member>tcp/9977</member></port></default>
+  <risk>3</risk>
+  <is-saas>no</is-saas>
+  <implicit-use-applications><member>ssl</member></implicit-use-applications>
+</entry>
+<entry name="dns">
+  <category>networking</category>
+  <subcategory>infrastructure</subcategory>
+  <technology>network-protocol</technology>
+  <default><port><member>udp/53</member></port></default>
+  <risk>3</risk>
+  <is-saas>no</is-saas>
+  <ident-by-sport>yes</ident-by-sport>
+</entry>
+<entry name="app-media">
+  <category>media</category>
+  <subcategory>sub-a</subcategory>
+  <technology>tech-a</technology>
+  <default><port><member>tcp/8554</member></port></default>
+  <risk>4</risk>
+  <evasive-behavior>yes</evasive-behavior>
+  <consume-big-bandwidth>yes</consume-big-bandwidth>
+  <used-by-malware>no</used-by-malware>
+  <able-to-transfer-file>yes</able-to-transfer-file>
+  <has-known-vulnerability>no</has-known-vulnerability>
+  <tunnel-other-application>no</tunnel-other-application>
+  <prone-to-misuse>no</prone-to-misuse>
+  <pervasive-use>no</pervasive-use>
+  <is-saas>no</is-saas>
+  <tag><member>[Web App]</member><member>[Streaming]</member></tag>
+</entry>
+<entry name="app-collab">
+  <category>collaboration</category>
+  <subcategory>sub-b</subcategory>
+  <technology>tech-b</technology>
+  <default><port><member>tcp/8443</member></port></default>
+  <risk>2</risk>
+  <evasive-behavior>no</evasive-behavior>
+  <consume-big-bandwidth>no</consume-big-bandwidth>
+  <used-by-malware>yes</used-by-malware>
+  <able-to-transfer-file>no</able-to-transfer-file>
+  <has-known-vulnerability>yes</has-known-vulnerability>
+  <tunnel-other-application>yes</tunnel-other-application>
+  <prone-to-misuse>yes</prone-to-misuse>
+  <pervasive-use>yes</pervasive-use>
+  <is-saas>no</is-saas>
+  <tag><member>[Web App]</member></tag>
+</entry>
+<entry name="app-range">
+  <category>networking</category>
+  <subcategory>infrastructure</subcategory>
+  <technology>network-protocol</technology>
+  <default><port><member>tcp/1024-1030</member><member>udp/1024-1030</member></port></default>
+  <risk>2</risk>
+</entry>
+<entry name="app-dyn-tcp">
+  <category>networking</category>
+  <subcategory>infrastructure</subcategory>
+  <technology>client-server</technology>
+  <default><port><member>tcp/dynamic</member></port></default>
+  <risk>1</risk>
+</entry>
+<entry name="app-dyn-udp">
+  <category>networking</category>
+  <subcategory>infrastructure</subcategory>
+  <technology>client-server</technology>
+  <default><port><member>udp/dynamic</member></port></default>
+  <risk>1</risk>
+</entry>
+<entry name="app-tcp-mixed">
+  <category>networking</category>
+  <subcategory>infrastructure</subcategory>
+  <technology>client-server</technology>
+  <default><port><member>tcp/80,dynamic</member></port></default>
+  <risk>1</risk>
+</entry>
+<entry name="app-tcp-any">
+  <category>networking</category>
+  <subcategory>infrastructure</subcategory>
+  <technology>client-server</technology>
+  <default><port><member>tcp/any</member></port></default>
+  <risk>1</risk>
+</entry>
+<entry name="ospf">
+  <category>networking</category>
+  <subcategory>ip-protocol</subcategory>
+  <technology>network-protocol</technology>
+  <default><ident-by-ip-protocol>89</ident-by-ip-protocol></default>
+  <risk>2</risk>
+</entry>
+<entry name="ping">
+  <category>networking</category>
+  <subcategory>infrastructure</subcategory>
+  <technology>network-protocol</technology>
+  <default><ident-by-icmp-type><type>8</type></ident-by-icmp-type></default>
+  <risk>2</risk>
+</entry>
+<entry name="ping6">
+  <category>networking</category>
+  <subcategory>infrastructure</subcategory>
+  <technology>network-protocol</technology>
+  <default><ident-by-icmp6-type><type>128</type></ident-by-icmp6-type></default>
+  <risk>2</risk>
+</entry>
+<entry name="app-icmp-any">
+  <category>networking</category>
+  <subcategory>infrastructure</subcategory>
+  <technology>network-protocol</technology>
+  <default><port><member>icmp/dynamic</member><member>icmp6/dynamic</member></port></default>
+  <risk>1</risk>
+</entry>
+<entry name="app-nodefault">
+  <category>networking</category>
+  <subcategory>ip-protocol</subcategory>
+  <technology>network-protocol</technology>
+  <risk>1</risk>
+</entry>
+<entry name="app-saas-a">
+  <category>business-systems</category>
+  <subcategory>office-programs</subcategory>
+  <technology>browser-based</technology>
+  <default><port><member>tcp/443</member></port></default>
+  <risk>3</risk>
+  <is-saas>yes</is-saas>
+  <saas>
+    <is-data-breaches>yes</is-data-breaches>
+    <is-ip-based-restrictions>no</is-ip-based-restrictions>
+    <is-poor-financial-viability>no</is-poor-financial-viability>
+    <is-poor-terms-of-service>yes</is-poor-terms-of-service>
+    <is-uses-genai-to-generate-code>no</is-uses-genai-to-generate-code>
+    <certifications>
+      <is-fedramp>no</is-fedramp>
+      <is-soc1>no</is-soc1>
+      <is-soc2>yes</is-soc2>
+    </certifications>
+  </saas>
+</entry>
+<entry name="app-saas-b">
+  <category>business-systems</category>
+  <subcategory>office-programs</subcategory>
+  <technology>browser-based</technology>
+  <default><port><member>tcp/443</member></port></default>
+  <risk>3</risk>
+  <is-saas>yes</is-saas>
+  <saas>
+    <is-data-breaches>no</is-data-breaches>
+    <is-ip-based-restrictions>no</is-ip-based-restrictions>
+    <is-poor-financial-viability>no</is-poor-financial-viability>
+    <is-poor-terms-of-service>no</is-poor-terms-of-service>
+    <is-uses-genai-to-generate-code>no</is-uses-genai-to-generate-code>
+  </saas>
+</entry>
+<entry name="app-saas-c">
+  <category>business-systems</category>
+  <subcategory>office-programs</subcategory>
+  <technology>browser-based</technology>
+  <default><port><member>tcp/443</member></port></default>
+  <risk>3</risk>
+  <is-saas>yes</is-saas>
+</entry>
+<entry name="app-new">
+  <category>general-internet</category>
+  <subcategory>internet-utility</subcategory>
+  <technology>browser-based</technology>
+  <default><port><member>tcp/443</member></port></default>
+  <risk>2</risk>
+  <new-appid>yes</new-appid>
+</entry>
+<entry name="app-old">
+  <category>media</category>
+  <subcategory>sub-a</subcategory>
+  <technology>tech-a</technology>
+  <default><port><member>tcp/8000</member></port></default>
+  <risk>1</risk>
+  <obsolete>yes</obsolete>
+</entry>
+<entry name="app-parent">
+  <category>networking</category>
+  <subcategory>encrypted-tunnel</subcategory>
+  <technology>client-server</technology>
+  <default><port><member>tcp/7000</member></port></default>
+  <risk>3</risk>
+  <parent-app>not-an-app</parent-app>
+  <tunnel-applications><member>unknown-tunnel</member></tunnel-applications>
+</entry>
+<entry name="office-docs">
+  <category>collaboration</category>
+  <subcategory>office-programs</subcategory>
+  <technology>browser-based</technology>
+  <default><port><member>tcp/443</member></port></default>
+  <risk>2</risk>
+  <application-container>office-suite</application-container>
+</entry>
+<entry name="office-mail">
+  <category>collaboration</category>
+  <subcategory>email</subcategory>
+  <technology>browser-based</technology>
+  <default><port><member>tcp/443</member></port></default>
+  <risk>2</risk>
+  <application-container>office-suite</application-container>
+</entry>
+</application>
+<application-container>
+<entry name="office-suite">
+  <description>Dummy description of office-suite.</description>
+  <functions><member>office-docs</member><member>office-mail</member></functions>
+</entry>
+</application-container>
+</content>

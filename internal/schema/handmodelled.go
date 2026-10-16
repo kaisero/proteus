@@ -63,6 +63,29 @@ var handModelled = []HandModel{
 			"each entry has the shape of a configured service (as observed on fw02, PAN-OS 12.2.3, L4)",
 		Owner: "internal/resolve",
 	},
+	// The App-ID content data. Fetch reads it with a show command, and the
+	// trim of internal/appid keeps the fields of spec 2026-10-16 §3.2.
+	{
+		Path: "/config/predefined/application",
+		Reason: "the digest has no such node; fetch reads the predefined applications with " +
+			"<show><predefined><xpath>/predefined/application</xpath></predefined></show> " +
+			"(spec 2026-10-16 F1), and appid keeps the fields of the spec's §3.2 table",
+		Owner: "internal/appid",
+	},
+	{
+		Path: "/config/predefined/application-container",
+		Reason: "the digest has no such node; fetch reads the application containers with " +
+			"<show><predefined><xpath>/predefined/application-container</xpath></predefined></show> " +
+			"(spec 2026-10-16 F1), and appid keeps the fields of the spec's §3.2 table",
+		Owner: "internal/appid",
+	},
+	{
+		Path: "/config/devices/entry/vsys/entry/application-filter/entry",
+		Reason: "the schema names the fields of an application filter, not the application fields " +
+			"they select; appid.FilterField maps them by hand, as measured on the lab VM, PAN-OS 12.1.9 " +
+			"(spec 2026-10-16 S10), and the map covers the shared filters too",
+		Owner: "internal/appid",
+	},
 	// The password hashes of local users and of administrators. Their element
 	// is phash in the schema, without encrypt="yes".
 	{Path: "/config/shared/local-user-database/user/entry/phash", Reason: phashReason, Owner: "internal/drift", Secret: true},
