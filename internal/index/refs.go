@@ -33,7 +33,7 @@ type refsIndex struct {
 // edges of the device's own configuration, outside any vsys (scope config): a
 // static route or an IKE gateway can name an address object. Every scope keeps
 // them, because which vsys's object such a name means is not decided here; see
-// docs/limits.md.
+// docs/reference/limits.md.
 func newRefsIndex(in *Interner, all edgeList, sc config.Scope) *refsIndex {
 	r := &refsIndex{all: all, byTarget: map[uint32][]int32{}}
 	for i, e := range all {

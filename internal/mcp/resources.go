@@ -20,7 +20,7 @@ const (
 // schemaURI is a tool's envelope schema in one detail.
 func schemaURI(tool, detail string) string { return "proteus://schemas/" + tool + "/" + detail }
 
-// limits sums up docs/limits.md for a model: what an answer cannot know.
+// limits sums up docs/reference/limits.md for a model: what an answer cannot know.
 const limits = `# What proteus cannot know
 
 - Answers are static analysis of stored snapshots, not live tests. A note says when a snapshot is older than the freshness limit.

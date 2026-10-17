@@ -1,6 +1,7 @@
 # Limits
 
-proteus reports each of these limits in its answers. It does not hide them.
+Each answer names the limits that apply to it, as a note, a doubt or an unresolved
+entry. The sections below group the limits by command.
 
 ## Versions
 
@@ -46,9 +47,9 @@ proteus reports each of these limits in its answers. It does not hide them.
   leaves the hop undecided.
 - **Shared gateways are not verified.** A shared gateway's vsys name comes from
   routing; such a path is not verified on a device.
-- **Hidden firewalls are named, not evaluated.** A firewall in virtual wire or
-  Layer 2 mode on the path is not checked.
-- **The answer is static.** It is an analysis of stored snapshots, not of live
+- **Hidden firewalls are only named.** proteus names a firewall in virtual wire or
+  Layer 2 mode on the path, and does not check its policy.
+- **The answer is static.** It analyzes stored snapshots and never sees live
   sessions.
 - **`--file` does not check NAT.** It reads one configuration without interfaces or
   a forwarding table. A derived destination zone is the zone before destination
@@ -140,7 +141,7 @@ all 108 flows agreed: the rule, the action and the implicit marker. See
 ## simulate routing
 
 - IPv4 only.
-- Policy-based forwarding is named, not followed.
+- Policy-based forwarding is named, and the path does not follow it.
 - ECMP follows the lowest next hop and names the others.
 - A path ends where it leaves the inventory, also into a tunnel.
 - Firewalls in virtual wire or Layer 2 mode are not seen on a path.
@@ -178,7 +179,7 @@ all 108 flows agreed: the rule, the action and the implicit marker. See
 
 `proteus mcp` answers with the limits above. These limits are its own:
 
-- **No authorisation.** proteus does not decide who can call a tool. The gateway
+- **No authorization.** proteus does not decide who can call a tool. The gateway
   in front of it, such as Portkey, owns that.
 - **A token holder can forge the identity.** The token proves that a request comes
   through the gateway. proteus does not verify the identity header, and the audit
@@ -222,7 +223,7 @@ stale-snapshot note.
 
 ### Model check
 
-The [model check](guides/mcp.md#model-check) asks a model 12 questions through the
+The [model check](../commands/mcp.md#model-check) asks a model 12 questions through the
 server and checks its replies against four rules. It has not run yet. Record each
 run here: the date, the model and its version, the gateway, the proteus version,
 and the result per question.

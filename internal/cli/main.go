@@ -2,7 +2,7 @@
 // snapshot store and answers questions about them. cmd/proteus only calls Run.
 //
 // The commands, flags, output formats and exit codes are documented in
-// docs/cli-reference.md. The contract every command keeps is
+// docs/commands/ and docs/reference/. The contract every command keeps is
 // docs/specs/2026-09-30-cli-consistency.md.
 package cli
 
