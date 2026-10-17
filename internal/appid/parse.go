@@ -42,6 +42,7 @@ type App struct {
 type SaaS struct {
 	Risks          []string // children of saas, such as is-data-breaches
 	Certifications []string // children of saas/certifications, such as is-soc2
+	Block          bool     // the application has a saas block (F17)
 }
 
 // Container is an application container and its functions (S9).
@@ -52,10 +53,14 @@ type Container struct {
 
 // Default is the default block of an application (F10, P1-P6).
 type Default struct {
-	Ports       []PortRange
-	IPProtocol  int  // ident-by-ip-protocol; 0 for none (P4)
-	ICMP, ICMP6 bool // ident-by-icmp-type, ident-by-icmp6-type (P5)
-	None        bool // no default block, custom or predefined (P6)
+	Ports      []PortRange
+	IPProtocol int // ident-by-ip-protocol; 0 for none (P4)
+	// IPProtocolHigh is the end of an ident-by-ip-protocol range such as
+	// "253-254"; 0 for a single protocol. Content 9160-10295 on fw02 holds
+	// that form (docs/lab/app-id-lab.md).
+	IPProtocolHigh int
+	ICMP, ICMP6    bool // ident-by-icmp-type, ident-by-icmp6-type (P5)
+	None           bool // no default block, custom or predefined (P6)
 }
 
 // PortRange is one port or port range of a default/port or
@@ -375,7 +380,7 @@ func readApp(e node) (App, error) {
 
 // readSaaS reads the children of a saas block that hold yes (F8, S6).
 func readSaaS(n node) SaaS {
-	var s SaaS
+	s := SaaS{Block: true}
 	for name, k := range first(n) {
 		if name == "certifications" {
 			for cert, c := range first(k) {
@@ -442,15 +447,37 @@ func makeDefault(port, extended []string, ipProtocol *string, icmp, icmp6 bool) 
 		}
 	}
 	if ipProtocol != nil {
-		p, err := strconv.ParseUint(strings.TrimSpace(*ipProtocol), 10, 8)
+		lo, hi, err := parseIPProtocol(*ipProtocol)
 		if err != nil {
-			return Default{}, fmt.Errorf("ident-by-ip-protocol %q: %w", *ipProtocol, err)
+			return Default{}, err
 		}
-		d.IPProtocol = int(p)
+		d.IPProtocol, d.IPProtocolHigh = lo, hi
 	}
 	d.ICMP, d.ICMP6 = icmp, icmp6
 	d.None = len(d.Ports) == 0 && d.IPProtocol == 0 && !d.ICMP && !d.ICMP6
 	return d, nil
+}
+
+// parseIPProtocol reads an ident-by-ip-protocol value: one protocol number,
+// or a range "N-M" with N < M. hi is 0 for one protocol.
+func parseIPProtocol(v string) (lo, hi int, err error) {
+	v = strings.TrimSpace(v)
+	first, last, isRange := strings.Cut(v, "-")
+	l, err := strconv.ParseUint(strings.TrimSpace(first), 10, 8)
+	if err != nil {
+		return 0, 0, fmt.Errorf("ident-by-ip-protocol %q: %w", v, err)
+	}
+	if !isRange {
+		return int(l), 0, nil
+	}
+	h, err := strconv.ParseUint(strings.TrimSpace(last), 10, 8)
+	if err != nil {
+		return 0, 0, fmt.Errorf("ident-by-ip-protocol %q: %w", v, err)
+	}
+	if h <= l {
+		return 0, 0, fmt.Errorf("ident-by-ip-protocol %q: the range is empty", v)
+	}
+	return int(l), int(h), nil
 }
 
 // defaultForms are the children a default block can hold (F10, F11, P4, P5).

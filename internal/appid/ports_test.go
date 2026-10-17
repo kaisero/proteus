@@ -93,6 +93,28 @@ func TestDefaultIPProtocol(t *testing.T) {
 	expectMatch(t, d, "ospf", appid.PortOpen, flow{"", 0})
 }
 
+// ident-by-ip-protocol can hold a range: content 9160-10295 on fw02 gives
+// "253-254" for exp. Each protocol of the range matches with any port, as P4
+// says for one protocol (measured on fw02, PAN-OS 12.2.3; docs/lab/app-id-lab.md).
+func TestDefaultIPProtocolRange(t *testing.T) {
+	t.Parallel()
+	d := loadFixture(t)
+	expectMatch(t, d, "app-ipp-range", appid.PortYes, flow{"253", 0}, flow{"254", 1})
+	expectMatch(t, d, "app-ipp-range", appid.PortNo, flow{"252", 0}, flow{"255", 0}, flow{"tcp", 253})
+	a, _ := d.App("app-ipp-range")
+	if got := a.Default.Protocols(); !slices.Equal(got, []string{"253", "254"}) {
+		t.Errorf("Protocols() = %v, want [253 254]", got)
+	}
+	if got := a.Default.String(); got != "ip-protocol/253-254" {
+		t.Errorf("String() = %q, want ip-protocol/253-254", got)
+	}
+	for _, bad := range []string{"254-253", "1-256", "a-b", "-1"} {
+		if _, err := appid.CustomDefault(nil, bad, false, false); err == nil {
+			t.Errorf("CustomDefault(ip-protocol %q) gave no error", bad)
+		}
+	}
+}
+
 // P5: ident-by-icmp-type means protocol 1 and ident-by-icmp6-type protocol
 // 58, with any type.
 func TestDefaultICMP(t *testing.T) {

@@ -163,6 +163,13 @@
   <default><ident-by-ip-protocol>89</ident-by-ip-protocol></default>
   <risk>2</risk>
 </entry>
+<entry name="app-ipp-range">
+  <category>networking</category>
+  <subcategory>ip-protocol</subcategory>
+  <technology>network-protocol</technology>
+  <default><ident-by-ip-protocol>253-254</ident-by-ip-protocol></default>
+  <risk>1</risk>
+</entry>
 <entry name="ping">
   <category>networking</category>
   <subcategory>infrastructure</subcategory>

@@ -73,6 +73,7 @@ Every item names its **component** (the package or area it changes) and one **ta
 | 54 | bug | simulate/routing | A hairpin through another firewall is reported as a loop |
 | 55 | qa | config, query | Undescribed elements of a configuration read with its own digest reach no answer |
 | 56 | qa | config, archtest | The read-only check sees setter names only, not writable exported fields |
+| 59 | qa | appid | One unknown form in the content data hides all application data |
 | 57 | done | resolve, index, simulate/nat | ~~Verify an address and an address group of one name in two scopes~~ (lab fact L10: as services) |
 | 58 | test | index | A hidden address's tags and a dynamic group in the vsys |
 
@@ -558,3 +559,16 @@ Source for each: the code audit of 2026-10-10 and the cleanup plan
 - Check on fw02 whether a vsys dynamic group holds a shared address whose name a vsys
   group hides. If it does, the closure must hold the address by its value, not by its
   name.
+
+### 59. One unknown form in the content data hides all application data
+
+- **Tag:** qa · **Component:** appid · **Source:** App-ID lab run on fw02
+  (`docs/lab/app-id-lab.md`)
+- `appid.Parse` refuses the whole content file when one application holds a form it
+  does not know. The first lab run on fw02 met this: `exp` writes
+  `ident-by-ip-protocol` as the range `253-254`. Every answer then carried
+  `note.app-data-missing`, and rules that name an application stayed in doubt. The
+  answer was safe, not wrong, but no application was evaluated.
+- `appid` reads the range now. A later content version can bring another new form.
+  Keep the application with its unread default instead, so only rules with
+  `application-default` for that application stay in doubt, and name it in a note.

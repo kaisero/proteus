@@ -179,6 +179,45 @@ func TestParseDeviceReadsTheImplicitMarker(t *testing.T) {
 	}
 }
 
+// fw02Answer is the shape of a test security-policy-match answer on fw02,
+// PAN-OS 12.2.3, with dummy values: the winner comes first, and an
+// <Implicit> element stands right before an entry that matches through
+// implicit use. %s is the element before the first entry.
+const fw02Answer = `<response cmd="status" status="success"><result><rules>
+%s<entry name='lab-rule-a'>
+<index>2</index>
+<from>lab-zone-in</from>
+<source>198.18.0.21</source>
+<to>lab-zone-out</to>
+<application_service><member>0:app-a/tcp/any/443</member></application_service>
+<application_service_implicit_><member>0:ssl/tcp/any/443</member></application_service_implicit_>
+<action>allow</action>
+<terminal>yes</terminal>
+</entry>
+<Implicit>rule matched</Implicit>
+<entry name='lab-rule-b'>
+<index>1</index>
+<application_service_implicit_><member>0:ssl/tcp/any/443</member></application_service_implicit_>
+<action>allow</action>
+</entry>
+</rules>
+</result></response>`
+
+func TestParseDeviceReadsTheImplicitElement(t *testing.T) {
+	t.Parallel()
+	// An explicit winner: no <Implicit> before it, even when the entry lists
+	// implicit applications and a later entry is implicit.
+	a, err := ParseDevice([]byte(fmt.Sprintf(fw02Answer, "")), nil)
+	if err != nil || a != (Answer{Rule: "lab-rule-a", Action: "allow"}) {
+		t.Errorf("explicit answer = %+v, %v", a, err)
+	}
+	// An implicit winner.
+	a, err = ParseDevice([]byte(fmt.Sprintf(fw02Answer, "<Implicit>rule matched</Implicit>\n")), nil)
+	if err != nil || a != (Answer{Rule: "lab-rule-a", Action: "allow", Implicit: true}) {
+		t.Errorf("implicit answer = %+v, %v", a, err)
+	}
+}
+
 func TestParseDeviceNoRule(t *testing.T) {
 	t.Parallel()
 	for _, b := range []string{

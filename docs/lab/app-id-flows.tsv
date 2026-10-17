@@ -106,3 +106,10 @@ P13-ospf	P13,P9	lab-zone-in	lab-zone-out	${SRC_38}	${DST_1}	89	-	ospf	-
 P13-ospf-tcp	P13,P8	lab-zone-in	lab-zone-out	${SRC_38}	${DST_1}	6	22	ospf	-
 P14-custom	P14,P7	lab-zone-in	lab-zone-out	${SRC_39}	${DST_1}	6	7004	lab-app-case	-
 P15-direct	P15	lab-zone-in	lab-zone-out	${SRC_40}	${DST_1}	6	80	etelos-crm	-
+F17-no-saas-block	F17,S6,I6	lab-zone-in	lab-zone-out	${SRC_41}	${DST_1}	6	443	gotowebinar-downloading	-
+F17-saas-no-cert	F17,S6	lab-zone-in	lab-zone-out	${SRC_41}	${DST_1}	6	443	4shared	-
+F17-cert	F17,S6,I6	lab-zone-in	lab-zone-out	${SRC_41}	${DST_1}	6	443	adobe-cloud	-
+P4-range-253	P4,P9	lab-zone-in	lab-zone-out	${SRC_42}	${DST_1}	253	-	exp	-
+P4-range-254	P4,P9	lab-zone-in	lab-zone-out	${SRC_42}	${DST_1}	254	-	exp	-
+P4-range-252	P4,P9,I6	lab-zone-in	lab-zone-out	${SRC_42}	${DST_1}	252	-	exp	-
+F17-no-saas-block-b	F17,S6,I6	lab-zone-in	lab-zone-out	${SRC_41}	${DST_1}	6	443	gotowebinar-uploading	-

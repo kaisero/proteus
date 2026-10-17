@@ -106,8 +106,9 @@ func (d Default) Match(proto string, port uint16) PortMatch {
 			best = m
 		}
 	}
-	if d.IPProtocol != 0 && num == d.IPProtocol {
-		// ident-by-ip-protocol N: protocol N with any port (P4).
+	if lo, hi := d.ipProtocols(); lo != 0 && num >= lo && num <= hi {
+		// ident-by-ip-protocol N: protocol N with any port (P4). A range
+		// N-M holds each protocol from N to M.
 		better(PortYes)
 	}
 	// ident-by-icmp-type is protocol 1, ident-by-icmp6-type protocol 58, with
@@ -158,8 +159,10 @@ func (d Default) Protocols() []string {
 		n, _ := ProtocolNumber(r.Protocol)
 		add(n)
 	}
-	if d.IPProtocol != 0 {
-		add(d.IPProtocol)
+	if lo, hi := d.ipProtocols(); lo != 0 {
+		for n := lo; n <= hi; n++ {
+			add(n)
+		}
 	}
 	if d.ICMP {
 		add(1)
@@ -215,8 +218,12 @@ func (d Default) String() string {
 		}
 		parts = append(parts, s)
 	}
-	if d.IPProtocol != 0 {
-		parts = append(parts, "ip-protocol/"+strconv.Itoa(d.IPProtocol))
+	if lo, hi := d.ipProtocols(); lo != 0 {
+		s := "ip-protocol/" + strconv.Itoa(lo)
+		if hi != lo {
+			s += "-" + strconv.Itoa(hi)
+		}
+		parts = append(parts, s)
 	}
 	if d.ICMP {
 		parts = append(parts, "icmp-type")
@@ -225,4 +232,13 @@ func (d Default) String() string {
 		parts = append(parts, "icmp6-type")
 	}
 	return strings.Join(parts, "; ")
+}
+
+// ipProtocols gives the ident-by-ip-protocol range: lo 0 for none, and hi
+// equal to lo for one protocol.
+func (d Default) ipProtocols() (lo, hi int) {
+	if d.IPProtocolHigh > d.IPProtocol {
+		return d.IPProtocol, d.IPProtocolHigh
+	}
+	return d.IPProtocol, d.IPProtocol
 }

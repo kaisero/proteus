@@ -90,12 +90,13 @@ func criterion(field string, members []string, a App) (string, bool) {
 		return all(members, func(m string) bool { return slices.Contains(a.SaaS.Risks, m) })
 	case field == "saas-certifications":
 		// The yes children of saas/certifications, with AND (S6, S11).
-		// no-certifications selects the SaaS applications without a
-		// certification; an application with is-saas yes and no saas block
-		// has none (S6, F17).
+		// no-certifications selects the SaaS applications with a saas
+		// block and no certification (S6). An application with is-saas yes
+		// and no saas block is not selected, as observed on fw02, PAN-OS
+		// 12.2.3, content 9160-10295 (F17; docs/lab/app-id-lab.md).
 		return all(members, func(m string) bool {
 			if m == "no-certifications" {
-				return a.Flags["is-saas"] && len(a.SaaS.Certifications) == 0
+				return a.Flags["is-saas"] && a.SaaS.Block && len(a.SaaS.Certifications) == 0
 			}
 			return slices.Contains(a.SaaS.Certifications, m)
 		})

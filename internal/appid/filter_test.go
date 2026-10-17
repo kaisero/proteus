@@ -149,14 +149,16 @@ func TestFilterSaaSRiskCombinesWithAnd(t *testing.T) {
 
 // S6, S11, F17: saas-certifications reads the yes children of
 // saas/certifications, with AND; no-certifications selects the SaaS
-// applications without a certification.
+// applications with a saas block and no certification. An application with
+// is-saas yes and no saas block is not selected: as observed on fw02,
+// PAN-OS 12.2.3, content 9160-10295 (docs/lab/app-id-lab.md, F17 cases).
 func TestFilterSaaSCertificationsCombineWithAnd(t *testing.T) {
 	t.Parallel()
 	d := loadFixture(t)
 	expectSelected(t, d, filter(map[string][]string{"saas-certifications": {"is-soc2"}}), "app-saas-a")
 	expectSelected(t, d, filter(map[string][]string{"saas-certifications": {"is-soc1", "is-soc2"}}))
 	expectSelected(t, d, filter(map[string][]string{"saas-certifications": {"no-certifications"}}),
-		"app-saas-b", "app-saas-c")
+		"app-saas-b")
 	f := filter(map[string][]string{"saas-certifications": {"no-certifications"}})
 	if f.Selects(appid.App{Name: "c", Custom: true}).Selected {
 		t.Error("no-certifications selects an application that is no SaaS")

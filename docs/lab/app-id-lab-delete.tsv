@@ -1,5 +1,7 @@
 # Removes every entry of app-id-lab-set.tsv: one XML API delete per line,
 # the set file's entries in reverse order, so the rules go first and the zones last.
+/config/devices/entry[@name='localhost.localdomain']/vsys/entry[@name='vsys1']/rulebase/security/rules/entry[@name='lab-rule-p4-range']
+/config/devices/entry[@name='localhost.localdomain']/vsys/entry[@name='vsys1']/rulebase/security/rules/entry[@name='lab-rule-f17']
 /config/devices/entry[@name='localhost.localdomain']/vsys/entry[@name='vsys1']/rulebase/security/rules/entry[@name='lab-rule-p15']
 /config/devices/entry[@name='localhost.localdomain']/vsys/entry[@name='vsys1']/rulebase/security/rules/entry[@name='lab-rule-p14']
 /config/devices/entry[@name='localhost.localdomain']/vsys/entry[@name='vsys1']/rulebase/security/rules/entry[@name='lab-rule-p13-ospf']
@@ -49,6 +51,7 @@
 /config/devices/entry[@name='localhost.localdomain']/vsys/entry[@name='vsys1']/service/entry[@name='lab-svc-tcp2222']
 /config/devices/entry[@name='localhost.localdomain']/vsys/entry[@name='vsys1']/application-group/entry[@name='lab-group-outer']
 /config/devices/entry[@name='localhost.localdomain']/vsys/entry[@name='vsys1']/application-group/entry[@name='lab-group-inner']
+/config/devices/entry[@name='localhost.localdomain']/vsys/entry[@name='vsys1']/application-filter/entry[@name='lab-filter-nocert']
 /config/devices/entry[@name='localhost.localdomain']/vsys/entry[@name='vsys1']/application-filter/entry[@name='lab-filter-notag']
 /config/devices/entry[@name='localhost.localdomain']/vsys/entry[@name='vsys1']/application-filter/entry[@name='lab-filter-excont']
 /config/devices/entry[@name='localhost.localdomain']/vsys/entry[@name='vsys1']/application-filter/entry[@name='lab-filter-pervasive']

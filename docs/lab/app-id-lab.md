@@ -20,7 +20,7 @@ The check is not in CI. `make app-lab` runs it by hand.
 | `app-id-flows.tsv` | The flows: case, fact, from, to, source, destination, protocol, port, application, expected. |
 | `app-id-lab.vars` | The real values of the placeholders. Local only: `.gitignore` names it, and a test fails when git tracks it. |
 
-The tracked files hold placeholders only. `${SRC_1}` to `${SRC_40}` are the
+The tracked files hold placeholders only. `${SRC_1}` to `${SRC_42}` are the
 sources, `${DST_1}` is the destination, and `${APP_NEW}` is an application with
 `new-appid yes` in the device's content. A test fails when a tracked lab file holds
 an address outside the RFC 5737 and RFC 2544 ranges, or a serial.
@@ -59,11 +59,11 @@ The set file adds these entries, in this order:
 | tag | `lab-tag-sanctioned` |
 | application | `lab-app-erp` (tcp/7002), `lab-app-tagged` (tcp/7001), `lab-app-nodef` (no `default`), `lab-app-proto` (`ident-by-ip-protocol 99`), `lab-app-Case` (tcp/7004, mixed case) |
 | application-tag | `lab-app-tagged`: tag `lab-tag-sanctioned` |
-| application-filter | `lab-filter-or`, `lab-filter-risk`, `lab-filter-none`, `lab-filter-tag-and`, `lab-filter-webapp`, `lab-filter-tag`, `lab-filter-exclude`, `lab-filter-custom`, `lab-filter-saas-risk`, `lab-filter-saas-risk2`, `lab-filter-saas-cert`, `lab-filter-saas-cert2`, `lab-filter-new`, `lab-filter-s8`, `lab-filter-tunnel`, `lab-filter-pervasive`, `lab-filter-excont`, `lab-filter-notag` |
+| application-filter | `lab-filter-or`, `lab-filter-risk`, `lab-filter-none`, `lab-filter-tag-and`, `lab-filter-webapp`, `lab-filter-tag`, `lab-filter-exclude`, `lab-filter-custom`, `lab-filter-saas-risk`, `lab-filter-saas-risk2`, `lab-filter-saas-cert`, `lab-filter-saas-cert2`, `lab-filter-new`, `lab-filter-s8`, `lab-filter-tunnel`, `lab-filter-pervasive`, `lab-filter-excont`, `lab-filter-notag`, `lab-filter-nocert` (F17) |
 | application-group | `lab-group-inner` (ssh, `lab-filter-s8`), `lab-group-outer` (`lab-group-inner`, ping) |
 | service | `lab-svc-tcp2222`, `lab-svc-udp5000`, `lab-svc-tcp22` |
 | service-group | `lab-svcgrp-ssh` (`lab-svc-tcp2222`, `lab-svc-udp5000`), `lab-svcgrp-tcp22` (`lab-svc-tcp22`) |
-| security rule | `lab-rule-s1`, `lab-rule-s2`, `lab-rule-s2-none`, `lab-rule-s3`, `lab-rule-s3-web`, `lab-rule-s12`, `lab-rule-s4`, `lab-rule-s5`, `lab-rule-s6-risk`, `lab-rule-s11-risk`, `lab-rule-s6-cert`, `lab-rule-s11-cert`, `lab-rule-s7`, `lab-rule-s8`, `lab-rule-s9`, `lab-rule-s10-tunnel`, `lab-rule-s10-pervasive`, `lab-rule-s13`, `lab-rule-s14`, `lab-rule-i1`, `lab-rule-i2-implicit`, `lab-rule-i2-explicit`, `lab-rule-i3`, `lab-rule-i4-implicit`, `lab-rule-i4-deny`, `lab-rule-i5`, `lab-rule-i8`, `lab-rule-p1`, `lab-rule-p3`, `lab-rule-p4`, `lab-rule-p5`, `lab-rule-p6`, `lab-rule-p7`, `lab-rule-p8`, `lab-rule-p8-grp`, `lab-rule-p11`, `lab-rule-p12`, `lab-rule-p13-any`, `lab-rule-p13-grp`, `lab-rule-p13-ospf`, `lab-rule-p14`, `lab-rule-p15` |
+| security rule | `lab-rule-s1`, `lab-rule-s2`, `lab-rule-s2-none`, `lab-rule-s3`, `lab-rule-s3-web`, `lab-rule-s12`, `lab-rule-s4`, `lab-rule-s5`, `lab-rule-s6-risk`, `lab-rule-s11-risk`, `lab-rule-s6-cert`, `lab-rule-s11-cert`, `lab-rule-s7`, `lab-rule-s8`, `lab-rule-s9`, `lab-rule-s10-tunnel`, `lab-rule-s10-pervasive`, `lab-rule-s13`, `lab-rule-s14`, `lab-rule-i1`, `lab-rule-i2-implicit`, `lab-rule-i2-explicit`, `lab-rule-i3`, `lab-rule-i4-implicit`, `lab-rule-i4-deny`, `lab-rule-i5`, `lab-rule-i8`, `lab-rule-p1`, `lab-rule-p3`, `lab-rule-p4`, `lab-rule-p5`, `lab-rule-p6`, `lab-rule-p7`, `lab-rule-p8`, `lab-rule-p8-grp`, `lab-rule-p11`, `lab-rule-p12`, `lab-rule-p13-any`, `lab-rule-p13-grp`, `lab-rule-p13-ospf`, `lab-rule-p14`, `lab-rule-p15`, `lab-rule-f17`, `lab-rule-p4-range` |
 
 ### Coverage
 
@@ -106,6 +106,10 @@ application, and an empty entry removes no predefined tag.
 - `lab-filter-tag` (tag `lab-tag-sanctioned`) must select `lab-app-tagged` (S12,
   S5). `lab-filter-tag-and` (tags `lab-tag-sanctioned` and `[Web App]`) must select
   nothing for it, because a custom application has no predefined tag (S3).
+- fw02 had no `application-tag` element before the run. The delete file removes
+  the entry, and an empty `<application-tag/>` element stays. The run then deletes
+  that empty element too, because the run made it, and commits partially. So the
+  configuration is as before the run.
 - The part for a predefined application is not run on fw02: an `application-tag`
   entry for a predefined application has that application's name, which does not
   start with `lab-`. The empty-entry part is not run for the same reason. The lab VM
@@ -138,13 +142,17 @@ one that has the same property, in the set file and the flow list.
   `internet-utility`, `auth-service`, `photo-video` and `erp-crm`; the SaaS fields
   `is-data-breaches`, `is-poor-terms-of-service`, `is-hipaa`, `is-soc1` and
   `is-soc2`.
-- The answer shape of `test security-policy-match` through the XML API:
-  `result/rules/entry` with `@name` and `action`, and the marker `(implicit)` in
-  the entry. `ParseDevice` also reads the older form `name; index: N`. It reads a
+- The answer shape of `test security-policy-match` through the XML API. On fw02,
+  PAN-OS 12.2.3, the answer lists the first match first, as `result/rules/entry`
+  with `@name` and `action`. It can list more entries after it. An
+  `<Implicit>rule matched</Implicit>` element stands right before an entry that
+  matches through implicit use. `ParseDevice` reads that element, the marker
+  `(implicit)` of the lab VM, and the older form `name; index: N`. It reads a
   refusal by the text "Unrecognized application".
-- That the device takes the command without `application` (the P13 cases and
-  `NOAPP-doubt`).
-- That PAN-OS takes an `application-tag` entry for a custom application.
+- The device takes the command without `application` (the P13 cases and
+  `NOAPP-doubt`): checked on fw02.
+- PAN-OS takes an `application-tag` entry for a custom application: checked on
+  fw02.
 
 A wrong guess makes a case weaker, not wrong: the tool compares the device with
 proteus, and the flow list names no expected rule.
@@ -242,6 +250,38 @@ Risks on fw02:
 
 ## Results
 
-Task 12 records the run here: the date, the PAN-OS version and the content version
-of fw02, the result of each case, and every difference with its cause. Generic
-values only.
+### Run of 2026-10-17 on fw02
+
+fw02 is a PA-440 with PAN-OS 12.2.3 and content 9160-10295 (5552 applications, 453
+containers). The flow list has 108 flows. Before the run, `pending-changes` was `no`.
+The set file and two partial commits added the lab entries.
+
+| Run | Result | Cause | Change |
+|---|---|---|---|
+| 1 | 95 of 104 flows differ: proteus is undecided on each | proteus refuses the whole content file: the application `exp` has `ident-by-ip-protocol` `253-254`, a range | `appid` reads a range `N-M`. The case `lab-rule-p4-range` (rule application `exp`, `application-default`) checks it: protocols 253 and 254 match, 252 does not. |
+| 2 | 9 of 107 flows differ | 8: the lab tool missed the implicit mark of fw02, the `<Implicit>` element. 1: `saas-certifications no-certifications` does not select `gotowebinar-downloading`, which has `is-saas yes` and no `saas` block (F17) | `ParseDevice` reads the element. `appid` selects for `no-certifications` only an application with a `saas` block. |
+| 3 | all 108 flows agree | — | — |
+
+New lab facts from this run (fw02, PAN-OS 12.2.3, content 9160-10295):
+
+- **ident-by-ip-protocol range.** Content can write `ident-by-ip-protocol` as a range,
+  `253-254`. With `application-default`, each protocol of the range matches, with any
+  port. A protocol outside the range does not match.
+- **no-certifications needs a saas block.** `saas-certifications no-certifications`
+  selects a SaaS application with a `saas` block and no certification (`4shared`).
+  It does not select an application with `is-saas yes` and no `saas` block
+  (`gotowebinar-downloading`, `gotowebinar-uploading`). It does not select an
+  application with a certification (`adobe-cloud`).
+- **Implicit mark in the XML API.** The answer marks an implicit match with an
+  `<Implicit>rule matched</Implicit>` element before the entry. The first entry is
+  the match: in the I2 and I4 cases the explicit rule comes first, and the implicit
+  candidate follows it with the element.
+
+After the run, the delete file removed every lab entry, and the run removed the empty
+`<application-tag/>` element (S12 above). A partial commit followed. Then:
+
+- `pending-changes` was `no`;
+- `action=get` gave no entry for each line of the delete file;
+- the running and the candidate configuration of vsys1 were equal to the
+  configuration before the run, apart from the change attributes (`admin`, `time`);
+- the tool removed its temporary store and copy.

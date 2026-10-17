@@ -311,6 +311,11 @@ const unrecognized = "Unrecognized application"
 // observed on the lab VM, PAN-OS 12.1.9 (spec 2026-10-16 I1).
 const implicitMarker = "(implicit)"
 
+// implicitElement is the XML API form of the same mark: an <Implicit>
+// element right before the entry that matches through implicit use, as
+// observed on fw02, PAN-OS 12.2.3 (docs/lab/app-id-lab.md).
+const implicitElement = "Implicit"
+
 // ParseDevice reads the device's answer to DeviceCmd. err is the error of the
 // call; an "Unrecognized application" refusal, in the answer or in err, gives
 // Refused. An answer without a rule gives Rule "": the command never lists the
@@ -330,12 +335,19 @@ func ParseDevice(b []byte, err error) (Answer, error) {
 			Text  string   `xml:",chardata"`
 			Lines []string `xml:"line"`
 		} `xml:"msg"`
-		Rules []struct {
-			Name   string `xml:"name,attr"`
-			Text   string `xml:",chardata"`
-			Action string `xml:"action"`
-			Inner  string `xml:",innerxml"`
-		} `xml:"result>rules>entry"`
+		// Items keeps the children of rules in order, so an <Implicit>
+		// element marks the entry after it.
+		Result struct {
+			Rules struct {
+				Items []struct {
+					XMLName xml.Name
+					Name    string `xml:"name,attr"`
+					Text    string `xml:",chardata"`
+					Action  string `xml:"action"`
+					Inner   string `xml:",innerxml"`
+				} `xml:",any"`
+			} `xml:"rules"`
+		} `xml:"result"`
 	}
 	if err := xml.Unmarshal(b, &r); err != nil {
 		return Answer{}, fmt.Errorf("the device answer is not XML: %w", err)
@@ -344,17 +356,26 @@ func ParseDevice(b []byte, err error) (Answer, error) {
 		msg := strings.Join(strings.Fields(strings.Join(append(r.Msg.Lines, r.Msg.Text), " ")), " ")
 		return Answer{}, fmt.Errorf("the device refused the command: %s", msg)
 	}
-	if len(r.Rules) == 0 {
+	// The first entry is the first match: on fw02 the answer can list more.
+	first, implicit := -1, false
+	items := r.Result.Rules.Items
+	for i, it := range items {
+		if it.XMLName.Local == "entry" {
+			first = i
+			implicit = i > 0 && items[i-1].XMLName.Local == implicitElement
+			break
+		}
+	}
+	if first < 0 {
 		return Answer{}, nil
 	}
-	// The command answers the first match only.
-	e := r.Rules[0]
+	e := items[first]
 	name := e.Name
 	if name == "" {
 		// An older answer gives the rule as text: "name; index: 3".
 		name, _, _ = strings.Cut(strings.TrimSpace(e.Text), ";")
 	}
-	a := Answer{Rule: strings.TrimSpace(name), Action: strings.TrimSpace(e.Action), Implicit: strings.Contains(e.Inner, implicitMarker)}
+	a := Answer{Rule: strings.TrimSpace(name), Action: strings.TrimSpace(e.Action), Implicit: implicit || strings.Contains(e.Inner, implicitMarker)}
 	if a.Rule == "" || a.Action == "" {
 		return Answer{}, fmt.Errorf("the device answer names no rule or no action: %.200s", e.Inner)
 	}

@@ -435,6 +435,9 @@ func TestParseReadsTheShapes(t *testing.T) {
 			t.Errorf("%s is no SaaS app", name)
 		}
 	}
+	if !saasA.Block || !app("app-saas-b").SaaS.Block || app("app-saas-c").SaaS.Block {
+		t.Error("SaaS.Block does not follow the saas block: want a and b, not c")
+	}
 	media := app("app-media")
 	if !slices.Equal(media.Tags, []string{"[Web App]", "[Streaming]"}) {
 		t.Errorf("app-media tags %q", media.Tags)
