@@ -47,11 +47,11 @@ flowchart LR
   [simulate NAT](guides/simulate-nat.md),
   [simulate routing](guides/simulate-routing.md),
   [snapshots](guides/snapshots.md),
-  [scripting](guides/scripting.md) and
+  [scripting](reference/output.md) and
   [the MCP server](guides/mcp.md).
-- **[Configuration](configuration.md)**: the inventory, settings and paths.
+- **[Configuration](reference/configuration.md)**: the inventory, settings and paths.
 - **[CLI reference](cli-reference.md)**: every command and flag.
 - **[Architecture](concepts/architecture.md)**: the packages and how data flows through
   them.
-- **[Limits](limits.md)**: what proteus does not evaluate yet.
-- **[Development](development.md)**: build, test and extend proteus.
+- **[Limits](reference/limits.md)**: what proteus does not evaluate yet.
+- **[Development](reference/contributing.md)**: build, test and extend proteus.

@@ -37,11 +37,11 @@ proteus mcp --http           # Streamable HTTP on mcp.listen, behind a TLS proxy
 
 The server reads its device list from `<store>/.proteus/inventory.yaml`, the
 inventory export that `fetch` writes (see
-[Configuration](../configuration.md#the-inventory-export)). It never reads the
+[Configuration](../reference/configuration.md#the-inventory-export)). It never reads the
 inventory with credentials. A change of devices needs a new fetch and a server
 restart.
 
-The server reads the [user snapshot](../configuration.md#the-user-snapshot) that
+The server reads the [user snapshot](../reference/configuration.md#the-user-snapshot) that
 `PROTEUS_USERS` names once, at start. Every call answers from that copy, so a
 changed file needs a server restart.
 
@@ -127,7 +127,7 @@ much shorter, so it leaves more room in the model's context.
 Each tool returns structured content of the form `{envelope, error}`:
 
 - `envelope` is the JSON format 2 envelope of the
-  [scripting guide](scripting.md): `format`, `command`, `detail`, `input`,
+  [output reference](../reference/output.md): `format`, `command`, `detail`, `input`,
   `results`, `holes`, `unresolved` and `notes`, and `summary` for `search`,
   `lookup` and `snapshot_diff`. It is null when the call failed.
 - `error` is null, or `{code, text, options, needs}` when the call failed.
@@ -199,7 +199,7 @@ Over HTTP, some requests do not reach a tool:
 | --- | --- |
 | `proteus://reasons` | every reason code: code, class, description |
 | `proteus://schemas/<tool>/<detail>` | the JSON schema of a tool's envelope in one detail, for each of the six tools and both details |
-| `proteus://limits` | a summary of [Limits](../limits.md) for a model |
+| `proteus://limits` | a summary of [Limits](../reference/limits.md) for a model |
 
 The server also gives the client instructions in five sentences:
 
@@ -261,7 +261,7 @@ who can use the server.
 
 The `mcp:` section of the inventory configures the server. The export carries it
 to the server. A `PROTEUS_MCP_*` variable or a flag overrides each key. See
-[the mcp section](../configuration.md#the-mcp-section) for every key, its default,
+[the mcp section](../reference/configuration.md#the-mcp-section) for every key, its default,
 its variable and its flag, and for the token rules.
 
 | Key | Default | Meaning |
@@ -356,7 +356,7 @@ log.
 ## Limits
 
 The server answers what the command line answers, with the same
-[limits](../limits.md). [Limits of the MCP server](../limits.md#the-mcp-server)
+[limits](../reference/limits.md). [Limits of the MCP server](../reference/limits.md#the-mcp-server)
 lists those of the server itself: no authorisation, a token holder can forge the
 identity, and a timeout cannot interrupt a load.
 
@@ -419,7 +419,7 @@ A reply that states a verdict proteus did not give also fails.
 
 ### Record the result
 
-Write the result in [Limits](../limits.md#model-check) under the date:
+Write the result in [Limits](../reference/limits.md#model-check) under the date:
 
 - the model and its version, the gateway, and the proteus version;
 - for each question: the tool calls the model made, pass or fail, and for a fail

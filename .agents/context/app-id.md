@@ -205,4 +205,4 @@ func ValidVersion(v string) bool
 - [simulator](simulator.md), [fetch-and-store](fetch-and-store.md),
   [value-spaces](value-spaces.md), [questions](questions.md),
   [providers](providers.md), [testing-and-gates](testing-and-gates.md)
-- `docs/lab/app-id-lab.md`, `docs/limits.md#applications`
+- `docs/lab/app-id-lab.md`, `docs/reference/limits.md#applications`

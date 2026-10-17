@@ -55,4 +55,4 @@ data.
 
 The store keeps the newest 20 snapshots with a configuration and the newest 20
 without one, per device. Set `snapshot_keep` in the
-[configuration](../configuration.md) to change the number.
+[configuration](../reference/configuration.md) to change the number.

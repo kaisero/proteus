@@ -442,4 +442,4 @@ the store.
   application is in doubt. See [Applications](#applications).
 - Policy-based forwarding does not evaluate the application.
 - The return path is not checked.
-- See [Limits](../limits.md#simulate-policy).
+- See [Limits](../reference/limits.md#simulate-policy).

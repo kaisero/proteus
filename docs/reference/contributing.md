@@ -1,4 +1,7 @@
-# Development
+# Contributing
+
+This page describes how to build, test and extend proteus, and how to write
+these docs. Read `AGENTS.md` before you change a package.
 
 ## Setup
 
@@ -29,7 +32,7 @@ cmd/proteus/                 main only
 internal/                    every package; see Architecture
   config/schemadigest/       the committed, embedded schema digest
   tools/schemadigest/        developer tool: schema.xml -> digest
-testdata/config/             configuration fixtures, one per behaviour
+testdata/config/             configuration fixtures, one per behavior
 testdata/opdata/             operational-data fixtures (interfaces, FIB, RIB)
 testdata/schema/             a trimmed firewall schema for parser tests
 scripts/                     device probes, the coverage gate, the context refresh
@@ -120,8 +123,8 @@ with the note a refusal adds, when a release may not know the command.
 
 ## Rules
 
-`AGENTS.md` holds the mandatory rules. Each rule names the check that enforces
-it. Read it before you change a package.
+`AGENTS.md` holds the mandatory rules, and each rule names the check that enforces
+it. [Architecture](../concepts/architecture.md#rules) summarizes them.
 
 ## Build these docs
 
@@ -136,3 +139,35 @@ make docs           # build site/ and fail on a broken link or anchor
 
 A push to `main` publishes the site to GitHub Pages. A pull request builds it,
 so a broken link fails the check before the merge.
+
+## Docs style
+
+Write every page in this style:
+
+1. Write in the second person and use the imperative for steps. Use the present
+   tense and the active voice.
+2. Keep sentences between 10 and 25 words. Two related facts can share a sentence.
+3. State a property once, on its home page, and link to it from other pages.
+   Read-only behavior and fidelity live in Concepts.
+4. Do not write contrast pairs such as "X, not Y", sentences about the page
+   itself, or reassurance that another page already gives.
+5. Put facts with values in tables. Use prose for reasons and sequences.
+6. Put a term in bold only where the page defines it.
+7. Use American English, and one word for one meaning.
+
+A command page has these sections, in this order, and leaves out a section
+that has no content:
+
+| Section | Content |
+| --- | --- |
+| title | the command name, then one sentence: the question it answers |
+| Synopsis | the usage line |
+| Examples | 2–4 cases: the command, its real output, and 2–3 sentences each |
+| Reading the output | verdict lines and rows, in tables |
+| Flags | a table: flag, default, description |
+| Exit codes | a table, when the command differs from [Output and exit codes](output.md) |
+| Limits | this command's limits, short, with a link to [Limits](limits.md) |
+| See also | a plain list of links |
+
+Run every example against the current binary and paste its real output. Use a
+`text` fence for terminal output and a `bash` fence for commands to copy.

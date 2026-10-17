@@ -33,7 +33,7 @@ The **inventory** is a YAML file that lists your firewalls. Each entry is a
 | by label | `--label site=vienna` |
 | every device | no flag |
 
-[Configuration](../configuration.md) describes the file format.
+[Configuration](../reference/configuration.md) describes the file format.
 
 ## From a value to a rule
 

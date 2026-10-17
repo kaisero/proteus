@@ -138,4 +138,4 @@ with `--fresh`.
 - Learn the model behind the answers in [Concepts](concepts/index.md).
 - Read the guide for the command you need, starting with
   [search](guides/search.md).
-- Use proteus from scripts: see [Scripting](guides/scripting.md).
+- Use proteus from scripts: see [Output and exit codes](reference/output.md).

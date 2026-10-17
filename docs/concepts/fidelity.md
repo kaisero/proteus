@@ -32,7 +32,7 @@ An answer can also carry these parts:
 | note | a qualification that leaves the answer unchanged, for example an old snapshot | 0 |
 
 A script can refuse to act on an answer that exits with code 3. See
-[Scripting](../guides/scripting.md).
+[Output and exit codes](../reference/output.md).
 
 ## Relevance
 

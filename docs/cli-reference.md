@@ -8,37 +8,8 @@ Questions are verbs (`search`, `lookup`, `simulate`). Housekeeping is grouped by
 noun (`inventory`, `snapshot`). `fetch` stays at the top level because you use it
 most.
 
-## Global flags
-
-Every command takes these flags. See [Configuration](configuration.md#settings)
-for the matching variables and inventory keys.
-
-| Flag | Meaning |
-| --- | --- |
-| `--config <path>` | inventory file |
-| `--store <path>` | snapshot store |
-| `--output text\|json\|yaml` | output format |
-| `--color auto\|always\|never` | colour text output; `auto` colours only on a terminal |
-| `--max-age <duration>` | add a note to answers from older snapshots, for example `24h` or `7d` |
-| `--log-level error\|warn\|info\|debug` | run log level |
-| `--log-dir <path>` | where run logs go |
-| `--verbose` | echo the run log to stderr |
-| `-v`, `--version` | print the version |
-
-## Selection flags
-
-Questions take the same selection flags.
-
-| Flag | Meaning |
-| --- | --- |
-| `--device <name>` | only these devices; repeatable, any of them |
-| `--label key=value` | only devices with this label; repeatable, all must hold |
-| `--vsys <name>` | only these vsys; repeatable; default every vsys |
-| `--at <time>` | each device's newest snapshot at or before this time: an id, RFC 3339 or a date |
-| `--fresh` | fetch the selected devices first |
-| `--file <path>` | read one configuration file instead of the store |
-
-`--file` cannot be combined with `--device`, `--label`, `--at` or `--fresh`.
+[Global flags](reference/global-flags.md) lists the flags that every command takes.
+[Output and exit codes](reference/output.md) describes the output.
 
 ## fetch
 
@@ -193,58 +164,3 @@ Traces the path a packet takes across the inventory's firewalls. See
 | `--rib` | list the routing table's other routes at each firewall |
 | `--no-dns` | do not resolve an FQDN endpoint |
 | `--why` | show every stage |
-
-## completion
-
-```
-proteus completion bash|zsh|fish|powershell
-```
-
-Prints a shell completion script.
-
-## Output
-
-`--output text|json|yaml` picks the format. JSON and YAML share one envelope.
-
-| Key | Holds |
-| --- | --- |
-| `format` | the envelope version, always `1` |
-| `command` | the command name, for example `search` |
-| `input` | the typed input: term, selection and flags |
-| `results` | the answer; always an array, empty when there is nothing to show |
-| `holes` | devices or parts the command could not read |
-| `unresolved` | entries the command could not finish resolving |
-| `notes` | extra facts a reader should know |
-
-YAML encodes the same envelope as JSON: same keys, same values, the same array
-shape for `results`. Pick whichever a script or a person reads more easily.
-
-## Exit codes
-
-| Code | Meaning |
-| --- | --- |
-| 0 | a complete answer, which may be empty |
-| 1 | no answer exists: the command could not say which part is missing |
-| 2 | the user must change the command line |
-| 3 | an answer with holes or unresolved entries |
-| 130 | interrupted by SIGINT (Ctrl-C) |
-| 143 | interrupted by SIGTERM |
-
-`fetch` is an exception. Every device stored every document: exit 0. A device or
-document failed, and at least one device stored: exit 3. No device stored: exit 1.
-`fetch` prints its answer in all three cases.
-
-## Errors in machine modes
-
-In `json` and `yaml` mode, the last line of stderr on a non-zero exit is one JSON
-object:
-
-```json
-{"format":1,"exit":3,"log":"/home/u/.local/state/proteus/log/search-….log"}
-{"format":1,"exit":2,"error":"unknown flag: --bogus"}
-```
-
-- `error` is absent on exit 3. The answer on stdout already says what is missing.
-- `log` is absent when no run log opened, such as an error before any command ran.
-- Earlier stderr lines, such as the `--verbose` echo, can come before this line. The
-  last line is always the JSON object.
