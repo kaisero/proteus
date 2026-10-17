@@ -125,9 +125,14 @@ it. Read it before you change a package.
 
 ## Build these docs
 
-The docs use [MkDocs](https://www.mkdocs.org/) with the Material theme:
+The docs use [Zensical](https://zensical.org/). `zensical.toml` holds the
+navigation and the pages that stay out of the site. The make targets run the pinned
+version through `uvx`, so you need only [uv](https://docs.astral.sh/uv/):
 
 ```bash
-pip install mkdocs-material
-mkdocs serve        # http://127.0.0.1:8000
+make docs-serve     # http://127.0.0.1:8000, rebuilds on every change
+make docs           # build site/ and fail on a broken link or anchor
 ```
+
+A push to `main` publishes the site to GitHub Pages. A pull request builds it,
+so a broken link fails the check before the merge.

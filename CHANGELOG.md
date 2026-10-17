@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Read the docs as a website.** A push to `main` publishes the pages under
+  `docs/` to GitHub Pages; `make docs-serve` shows the same site locally.
 - **Keep a broad answer short with `--limit`.** `search`, `lookup` and
   `snapshot diff`, and their MCP tools with `limit`, can keep only the first N
   findings, cards or changes; the summary says how many it left out and what

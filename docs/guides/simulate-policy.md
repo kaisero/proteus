@@ -6,7 +6,7 @@ does, checks the security policy of every firewall and vsys on that path, and gi
 one verdict: `allowed`, `denied` or `undecided`. This is **path mode**, the default.
 
 `--file <config.xml>` checks one configuration instead. See
-[One configuration](#one-configuration---file).
+[One configuration](#one-configuration-file).
 
 ## A path
 

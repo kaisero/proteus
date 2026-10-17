@@ -95,7 +95,7 @@ proteus search 10.20.0.0/16            # ask every firewall
 | What it does not do yet | [Limits](docs/limits.md) |
 | Build, test and extend | [Development](docs/development.md) |
 
-The pages also build as a site: `mkdocs serve` (see
+The pages also build as a site: `make docs-serve` (see
 [Development](docs/development.md#build-these-docs)).
 
 ## Status

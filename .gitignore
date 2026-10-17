@@ -20,7 +20,7 @@ config.yaml
 .swp
 /fw-live.xml
 
-# MkDocs build output.
+# Zensical build output.
 /site/
 
 # Build output: the CLI binary and compiled test binaries.
