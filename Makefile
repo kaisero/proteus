@@ -23,6 +23,9 @@ APPLAB_KEY_HEADER ?=
 GOLANGCI_VERSION    := v2.14.0
 GOFUMPT_VERSION     := v0.11.0
 GOVULNCHECK_VERSION := v1.7.0
+ZENSICAL_VERSION    := 0.0.67
+
+ZENSICAL    := uvx zensical@$(ZENSICAL_VERSION)
 
 GOBIN       := $(shell go env GOPATH)/bin
 GOLANGCI    := $(GOBIN)/golangci-lint
@@ -31,7 +34,7 @@ GOVULNCHECK := $(GOBIN)/govulncheck
 
 .PHONY: help tools fmt fmt-check vet lint test test-race cover test-cov \
         bench-check vuln vuln-tool tidy-check gate ci build build-local schema-digest context context-check \
-        schema-pull app-lab hooks clean
+        schema-pull app-lab docs docs-serve hooks clean
 
 help: ## Show this help
 	@grep -hE '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | sort | \
@@ -119,6 +122,14 @@ app-lab: ## Compare proteus with the lab device (DEVICE=…), not in CI
 	@test -n "$(DEVICE)" || { echo "usage: make app-lab DEVICE=fw02 APPLAB_KEY_HEADER=<file>"; exit 1; }
 	go run ./internal/tools/applab -device '$(DEVICE)' -key-header '$(APPLAB_KEY_HEADER)'
 
+## --- docs ---
+
+docs: ## Build the docs site into site/ (fails on a warning)
+	$(ZENSICAL) build --strict --clean
+
+docs-serve: ## Serve the docs site on http://127.0.0.1:8000 with live reload
+	$(ZENSICAL) serve
+
 ## --- misc ---
 
 hooks: ## Enable the git pre-commit hook (runs `make gate`)
@@ -126,4 +137,4 @@ hooks: ## Enable the git pre-commit hook (runs `make gate`)
 	@echo "pre-commit hook enabled (core.hooksPath=.githooks)"
 
 clean: ## Remove build artifacts
-	rm -rf $(BIN_DIR) coverage.out
+	rm -rf $(BIN_DIR) coverage.out site

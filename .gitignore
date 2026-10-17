@@ -23,7 +23,7 @@ config.yaml
 # The real values of the App-ID lab placeholders: lab addresses stay out of git.
 /docs/lab/app-id-lab.vars
 
-# MkDocs build output.
+# Zensical build output.
 /site/
 
 # Build output: the CLI binary and compiled test binaries.
