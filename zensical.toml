@@ -8,17 +8,23 @@ copyright = "Copyright &copy; 2026 Oliver Kaiser"
 
 nav = [
   { "Home" = "index.md" },
-  { "Getting started" = "getting-started.md" },
-  { "Guides" = [
-    { "Search" = "guides/search.md" },
-    { "Lookup" = "guides/lookup.md" },
-    { "Simulate policy" = "guides/simulate-policy.md" },
-    { "Simulate NAT" = "guides/simulate-nat.md" },
-    { "Simulate routing" = "guides/simulate-routing.md" },
-    { "Snapshots" = "guides/snapshots.md" },
-    { "MCP server" = "guides/mcp.md" },
+  { "Get started" = [
+    { "Install" = "get-started/index.md" },
+    { "Ask a config file" = "get-started/config-file.md" },
+    { "Connect your firewalls" = "get-started/firewalls.md" },
   ] },
-  { "CLI reference" = "cli-reference.md" },
+  { "Commands" = [
+    { "Commands" = "commands/index.md" },
+    { "search" = "commands/search.md" },
+    { "lookup" = "commands/lookup.md" },
+    { "simulate policy" = "commands/simulate-policy.md" },
+    { "simulate nat" = "commands/simulate-nat.md" },
+    { "simulate routing" = "commands/simulate-routing.md" },
+    { "snapshot" = "commands/snapshot.md" },
+    { "fetch" = "commands/fetch.md" },
+    { "inventory" = "commands/inventory.md" },
+    { "mcp" = "commands/mcp.md" },
+  ] },
   { "Reference" = [
     { "Reference" = "reference/index.md" },
     { "Global flags" = "reference/global-flags.md" },
@@ -36,11 +42,16 @@ nav = [
   ] },
 ]
 
+extra_css = ["stylesheets/extra.css"]
+
 [project.theme]
 features = [
   "content.code.copy",
+  "content.tabs.link",
+  "navigation.indexes",
   "navigation.instant",
   "navigation.sections",
+  "navigation.tabs",
   "navigation.top",
   "search.suggest",
   "toc.follow",
@@ -71,7 +82,10 @@ glob = [
 
 [project.markdown_extensions]
 admonition = {}
-pymdownx.highlight = {}
+attr_list = {}
+md_in_html = {}
+pymdownx.tabbed.alternate_style = true
+pymdownx.highlight.pygments_lang_class = true
 pymdownx.superfences.custom_fences = [
   { name = "mermaid", class = "mermaid", format = "pymdownx.superfences.fence_code_format" },
 ]

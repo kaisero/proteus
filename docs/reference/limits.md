@@ -1,7 +1,7 @@
 # Limits
 
 Each answer names the limits that apply to it, as a note, a doubt or an unresolved
-entry. This page lists them by command.
+entry. The sections below group the limits by command.
 
 ## Versions
 
@@ -223,7 +223,7 @@ stale-snapshot note.
 
 ### Model check
 
-The [model check](../guides/mcp.md#model-check) asks a model 12 questions through the
+The [model check](../commands/mcp.md#model-check) asks a model 12 questions through the
 server and checks its replies against four rules. It has not run yet. Record each
 run here: the date, the model and its version, the gateway, the proteus version,
 and the result per question.

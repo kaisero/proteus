@@ -1,7 +1,7 @@
 # Configuration
 
 proteus reads its settings from the inventory file, environment variables and
-flags. This page lists every key, variable and path.
+flags, and writes its data to fixed paths.
 
 ## The inventory
 
@@ -131,7 +131,7 @@ name, because a device name starts with a letter or a digit.
 
 ## The mcp section
 
-The `mcp:` section configures [`proteus mcp`](../guides/mcp.md). Write it in the
+The `mcp:` section configures [`proteus mcp`](../commands/mcp.md). Write it in the
 inventory, and the export carries it to the server. Each key is optional. The
 values below are the defaults, except for `token_file`, `allowed_hosts` and
 `audit_log`, which have none.
@@ -229,7 +229,7 @@ the older ones. proteus also sets an existing audit file to mode 0600.
 `audit_log: -` writes the lines to standard output, for a container platform that
 collects them. With `--http`, nothing else goes to standard output. Over stdio,
 standard output carries MCP, so the server refuses `-` with exit 2. The
-[MCP guide](../guides/mcp.md#audit-and-run-logs) lists the fields of an audit
+[MCP guide](../commands/mcp.md#audit-and-run-logs) lists the fields of an audit
 line.
 
 ### Run logs of calls

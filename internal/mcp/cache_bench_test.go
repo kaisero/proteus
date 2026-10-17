@@ -200,7 +200,7 @@ type retentionSample struct {
 }
 
 // R7. The cache sizes a snapshot's configuration at configFixedBytes plus
-// configPerByte times its file's bytes, and docs/guides/mcp.md gives that
+// configPerByte times its file's bytes, and docs/commands/mcp.md gives that
 // model for max_cache. This measures it: each shape at two sizes, the
 // configuration with the security, NAT and PBF index of every vsys, live after
 // a garbage collection. A straight line through the two sizes gives a shape's

@@ -309,6 +309,6 @@ func UnresolvedOfParts(device, vsys string, rs simulate.Reasons) []Unresolved
 ## See also
 
 - `internal/cli/`, `cmd/proteus/main.go`
-- `QUICKSTART.md` — the same commands, task by task, with output
+- `docs/get-started/` — the same commands, step by step, with output
 - [fetch-and-store](fetch-and-store.md) — what `fetch` and the store do
 - [reporting](reporting.md) — what `Unresolved` means

@@ -52,7 +52,7 @@ mcp: one LRU item per content version (contentBytes)
   passes of `firstMatch`; `application-default` in `match-service`. See
   [simulator](simulator.md).
 - **Search, lookup, diff, MCP**: see [questions](questions.md) and
-  `docs/guides/mcp.md`.
+  `docs/commands/mcp.md`.
 
 ### The content file
 

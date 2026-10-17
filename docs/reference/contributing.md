@@ -1,7 +1,7 @@
 # Contributing
 
-This page describes how to build, test and extend proteus, and how to write
-these docs. Read `AGENTS.md` before you change a package.
+Build, test and extend proteus, and write these docs in one style. Read
+`AGENTS.md` before you change a package.
 
 ## Setup
 

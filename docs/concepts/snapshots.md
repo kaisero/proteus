@@ -40,7 +40,7 @@ per version in `.content/`, and every snapshot with that version shares the file
 `meta.json` names the version as `app_version`.
 
 `.content/` has mode 0700 and each file in it has mode 0600. See
-[snapshot](../guides/snapshots.md#app-id-data) for how to inspect and import the
+[snapshot](../commands/snapshot.md#app-id-data) for how to inspect and import the
 data.
 
 ## Which snapshot a question reads
