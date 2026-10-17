@@ -72,7 +72,7 @@ first match: from-inside (allow)
 
 The `fidelity` line tells you how certain the answer is. Here it says
 `overmatch`: the rule names no service, so a port cannot exclude it. See
-[Concepts](concepts.md#how-certain-an-answer-is).
+[Concepts](concepts/fidelity.md).
 
 ## Part 2: connect your firewalls
 
@@ -135,7 +135,7 @@ with `--fresh`.
 
 ## Next steps
 
-- Learn the model behind the answers in [Concepts](concepts.md).
+- Learn the model behind the answers in [Concepts](concepts/index.md).
 - Read the guide for the command you need, starting with
   [search](guides/search.md).
 - Use proteus from scripts: see [Scripting](guides/scripting.md).

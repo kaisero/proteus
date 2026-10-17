@@ -279,7 +279,7 @@ That run exits with code 3.
 ### The stages
 
 A check runs named stages. Each stage removes candidate rules and declares its
-[fidelity](../concepts.md#how-certain-an-answer-is).
+[fidelity](../concepts/fidelity.md).
 
 | Stage | What it does |
 | --- | --- |

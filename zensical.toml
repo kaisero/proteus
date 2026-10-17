@@ -9,7 +9,6 @@ copyright = "Copyright &copy; 2026 Oliver Kaiser"
 nav = [
   { "Home" = "index.md" },
   { "Getting started" = "getting-started.md" },
-  { "Concepts" = "concepts.md" },
   { "Guides" = [
     { "Search" = "guides/search.md" },
     { "Lookup" = "guides/lookup.md" },
@@ -22,9 +21,15 @@ nav = [
   ] },
   { "Configuration" = "configuration.md" },
   { "CLI reference" = "cli-reference.md" },
-  { "Architecture" = "architecture.md" },
   { "Limits" = "limits.md" },
   { "Development" = "development.md" },
+  { "Concepts" = [
+    { "How proteus works" = "concepts/index.md" },
+    { "Snapshots and the store" = "concepts/snapshots.md" },
+    { "Scope" = "concepts/scope.md" },
+    { "Fidelity" = "concepts/fidelity.md" },
+    { "Architecture" = "concepts/architecture.md" },
+  ] },
 ]
 
 [project.theme]

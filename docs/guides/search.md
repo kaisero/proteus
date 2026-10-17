@@ -89,7 +89,7 @@ file / vsys1   testdata/config/firewall-literals.xml
 ## Change how the term matches
 
 The term's type sets the default match (see
-[Concepts](../concepts.md#value-spaces)). Three flags change it. You can use only
+[Concepts](../concepts/index.md#from-a-value-to-a-rule)). Three flags change it. You can use only
 one of them at a time.
 
 | Flag | Keeps |

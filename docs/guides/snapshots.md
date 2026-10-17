@@ -10,7 +10,7 @@ proteus fetch --all              # every device in the inventory
 
 `fetch` logs in with the inventory's username and password and asks the firewall
 for an API key. It then reads the documents listed in
-[Concepts](../concepts.md#snapshots-and-the-store) and stores them as one snapshot.
+[Concepts](../concepts/snapshots.md) and stores them as one snapshot.
 
 - It fetches up to eight firewalls at the same time.
 - A failed document is recorded in `meta.json`. The rest of the snapshot is kept.

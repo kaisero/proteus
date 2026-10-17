@@ -40,7 +40,7 @@ flowchart LR
 
 - **[Getting started](getting-started.md)**: build proteus and ask your first
   questions, with or without a firewall.
-- **[Concepts](concepts.md)**: snapshots, scopes, value spaces and how certain an
+- **[Concepts](concepts/index.md)**: snapshots, scopes, value spaces and how certain an
   answer is.
 - **Guides**: [search](guides/search.md), [lookup](guides/lookup.md),
   [simulate policy](guides/simulate-policy.md),
@@ -51,7 +51,7 @@ flowchart LR
   [the MCP server](guides/mcp.md).
 - **[Configuration](configuration.md)**: the inventory, settings and paths.
 - **[CLI reference](cli-reference.md)**: every command and flag.
-- **[Architecture](architecture.md)**: the packages and how data flows through
+- **[Architecture](concepts/architecture.md)**: the packages and how data flows through
   them.
 - **[Limits](limits.md)**: what proteus does not evaluate yet.
 - **[Development](development.md)**: build, test and extend proteus.
