@@ -33,17 +33,18 @@ logs one `[STEP]` line at info and the debug lines at debug, wraps errors as
 
 ### securitypolicy
 
-Eight stages, each ANDing into the running candidate set:
+Nine stages, each ANDing into the running candidate set:
 
 | Slug | Fidelity |
 |---|---|
 | `resolve-source`, `resolve-destination` | exact for an address; inferred for an FQDN resolved by this machine's DNS; undermatch for an FQDN with no address or any unresolved value |
 | `derive-zones` | exact when given; inferred when derived (forwarding table or configuration); not evaluated when no zone was found |
-| `match-service` | exact; overmatch naming rules kept for `application-default`, a predefined service or no service; not evaluated without `--port` |
+| `match-application` | exact; a no-op without a flow application or without App-ID data; overmatch naming rules kept for an unknown name (`doubt.application-unknown`) or a filter the custom flow application cannot be judged by (`doubt.application`) |
+| `match-service` | exact; overmatch naming rules kept for `application-default` (without an evaluated application, or with the port or protocol open: `doubt.app-port-open`), a predefined service or no service; not evaluated without `--port` |
 | `match-url` | exact; overmatch naming rules kept for a category the configuration does not define; not evaluated without `--url` when a candidate names a category |
 | `drop-disabled` | exact |
 | `order` | exact; sets `Verdict.Doubts` per candidate (spec 2026-10-07 §4.7) |
-| `first-match` | exact; overmatch when earlier doubtful candidates share the action; undermatch (undecided) when one has another action, or no rule and the zones are not single and known; not evaluated: application or user only when a candidate up to the decision names one |
+| `first-match` | exact; overmatch when earlier doubtful candidates share the action; undermatch (undecided) when one has another action, or no rule and the zones are not single and known; not evaluated: user, and application when `match-application` did not evaluate it, only when a candidate up to the decision names one |
 
 `derive-zones` also applies `rule-type` when both zones are given, or derived with
 one defined zone on each side and no NAT rule in doubt (inferred, C5); that pair is
@@ -63,6 +64,47 @@ a test): application, user, HIP, schedule, `application-default`, predefined or
 absent service, a URL category without `--url` or not defined, and an EDL, region or
 dynamic group as source or destination (`index.View.Opaque`, E23). Any stage at
 undermatch leaves the flow undecided. `Verdict.Decision()` gives `Pass`, `Stop` or `Undecided`.
+
+**Application** (spec 2026-10-16, plan D6-D8, D10, D17, D19; deep-dive
+[app-id](app-id.md)). `Run` loads nothing: the caller puts the device's
+`*appid.Data` in `Providers.Apps` (`query` loads it per content version; PBF builds
+its view with empty providers, so PBF keeps `doubt.application`). With a flow
+application `Run` first makes it canonical (`flowApplication`): a custom
+application of the scope in any case, with its configured name, else the content
+name (P14). An unknown name or a container is a `*simulate.ChoiceError` of kind
+`ChoiceApplication` with empty `Options`, the suggestions in its texts (P10, D13):
+`query.PolicyFile` makes it a usage error (exit 2), `pathpolicy` the hop's
+undecided (`doubt.application-unknown`, naming the device and content version).
+With `Protocol` empty, `Run` takes the protocol of the application's default per
+check: one protocol, else open (D10); `Verdict.Protocol` names it and
+`Verdict.AppData` says whether the target had data, so `needs` judges the run's
+flow.
+
+`match-application` sorts the rules into three sets: **explicit** (`View.Candidates`
+on `Application`: by name, group at any depth, filter, container, `any`, and a rule
+without an `application` element, which takes the digest default `any`, R1),
+**kept** (a name neither the data nor the configuration holds, after the group
+closure and in filter `exclude` lists, `doubt.application-unknown`; without
+containers a container name is unknown; D8), and **implicit** (allow rules only,
+I5, reaching an application whose `implicit-use-applications` holds the flow's,
+`Data.ImpliedBy`; minus explicit and kept, so no rule is in both passes). `order`
+lists explicit ∪ kept in rule order, then implicit in rule order (D7); `firstMatch`
+runs its doubt logic unchanged on that order, and the default rules come after
+both (I6). So an explicit match wins over an earlier implicit one (I2), and an
+implicit candidate never "may match first" against an explicit winner. A deciding
+implicit rule sets `Verdict.Implicit` and `note.app-implicit`. Every evaluated run
+adds `note.app-shift` (§4.6).
+
+`match-service` with an evaluated application checks `application-default` with
+`appid.Default.Match` on the rule's applications (for an implicit rule, the union
+of the defaults of its applications that imply the flow's, I7, I8): a `/secure`
+port adds `note.app-secure-port`, an ICMP type `note.app-icmp-type`, an open port
+or protocol keeps the rule with `doubt.app-port-open`; a custom service whose port
+is not a default port adds `note.app-non-default-port`. **P13/D19:** a protocol
+without ports (icmp, 89, 47) drops every rule whose service names only custom
+services or service groups, with or without a flow application; rules with
+service `any`, and rules kept for `application-default`, a predefined or no
+service, stay.
 
 Negated rules are inverted in the resolve stages. A rule without a category matches
 any URL. Relevance (S14) comes from the zone locator: a route more specific than a
@@ -389,6 +431,7 @@ func ParseLevel(s string) (Level, error)
 
 ## See also
 
-- [commands](commands.md), [questions](questions.md), [providers](providers.md)
+- [commands](commands.md), [questions](questions.md), [providers](providers.md),
+  [app-id](app-id.md)
 - spec §11 and §17, plans `docs/plans/2026-09-29-panos-analyst-m4-simulator.md`,
   `docs/plans/2026-09-29-panos-analyst-routing.md`

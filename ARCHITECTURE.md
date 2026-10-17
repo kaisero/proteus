@@ -151,7 +151,8 @@ detail and the measurements.
 2. **Large configurations.** The parsed element tree peaks near ten times the file
    size, so a 200 MB export implies roughly 2 GB. Streaming per vsys is the
    mitigation and is not yet designed.
-3. **Runtime data.** Registered-IP group members and App-ID dependencies are not
-   in a configuration file at all.
+3. **Runtime data.** Registered-IP group members are not in a configuration file
+   at all. App-ID dependencies are not either: they come from the device's App-ID
+   content, which `fetch` stores once per content version.
 4. **NAT semantics.** The NAT rulebase is read, but translated-address fields are
    not resolved.

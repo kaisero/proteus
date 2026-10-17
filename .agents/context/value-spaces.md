@@ -77,7 +77,7 @@ a specific one.
 | `resolver_service.go` | service, service-group | protocol plus port-range interval containment |
 | `resolver_user.go` | user, user-group, dynamic-user-group | local database, then the caller's directory |
 | `resolver_zone.go` | zone | interface addresses and static routes as a routing table, longest prefix wins |
-| `resolver_app.go` | application, application-group, application-filter, application-container | custom applications only; the rest is content-database data |
+| `resolver_app.go` | application, application-group, application-filter, application-container | custom applications by name in any case; with App-ID data in `Providers.Apps` also predefined applications, the filters that select one (`appid.Filter.Selects`, with `application-tag` tags) and the containers that hold it; without data `gap.application-filter` and `gap.application-container` per filter and container, and without containers in the data the container gaps stay |
 
 `tag` has no resolver and needs none: a tag is a name, and the generic name path
 already answers it.
@@ -94,6 +94,11 @@ already answers it.
   documentation-derived and labelled as such.
 - **A service group spells its membership `members`**, an address group `static`,
   a local user group `user`. All three are read in `resolve.objectValue`.
+- **An application hit keeps its scope.** A custom application or a filter keeps
+  the scope that defines it; a content application or a container gets the
+  predefined scope (`config.ScopePredefined`), so R5 and R10 hold. A custom
+  application wins over a content one of the same name in any case (P14). See
+  [app-id](app-id.md).
 - **Zone placement has two sources.** With a `ZoneSnapshot` in `Providers` it reads
   the device's own forwarding table and is authoritative. Without one it infers from
   the configuration, reports that it did, and reports every limit: a zone with no

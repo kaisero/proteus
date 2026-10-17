@@ -15,6 +15,7 @@ access at all; `store.Snapshot.Zones()` builds a zone snapshot from a fetched on
 type Providers struct {
 	Users UserDirectory
 	Zones ZoneLocator
+	Apps  *appid.Data // the device's App-ID content data, or nil
 }
 
 type UserDirectory interface{ GroupsOf(user string) []string }
@@ -97,6 +98,21 @@ comes from one firewall, and shared belongs to none of its vsys.
 
 The format contract is `docs/zone-snapshot-format.md` and the `ZoneSnapshot` doc
 comment. `scripts/capture-zones.sh` captures one.
+
+### App-ID content data
+
+`Providers.Apps` is the parsed content file of the device's content version
+(`appid.Data`, spec 2026-10-16). It is a value, not an interface: one file is
+immutable and shared by every device and snapshot with that version. `query`
+loads it (`estate.Target.Apps`, through `Env.Apps`, an `estate.AppSource`; the MCP
+server's cache keeps one LRU item per content version) once per question per
+file (`appMemo`), only when the question needs it (plan D11): `--application`, a
+search term with the shape of a name, or a lookup that needs application kinds.
+With it, the application resolver answers predefined applications, filters and
+containers; without it, it reports `gap.application-filter` and
+`gap.application-container`, and the answer carries `note.app-data-missing`. PBF
+builds its view with empty providers, so it never sees the data (D5). See
+[app-id](app-id.md).
 
 ## Build / run pointers
 

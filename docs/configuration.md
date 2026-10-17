@@ -222,6 +222,7 @@ and stops with exit 2 when it cannot; a changed file needs a server restart.
 | --- | --- | --- |
 | `~/.config/proteus/config.yaml` | 0600 | the inventory, written once by `inventory init` |
 | `~/.local/share/proteus/<device>/<time>/` | 0700 / 0600 | one snapshot |
+| `<store>/.content/` | 0700 / 0600 | one App-ID content file per content version, `<version>.v<trim>.xml.gz` |
 | `~/.local/state/proteus/log/` | 0700 / 0600 | one log file per run, `<command>-<time>-<seq>.log` |
 | `<store>/.proteus/inventory.yaml` | 0700 / 0600 | the inventory export, with `export_inventory: true` |
 | `~/.local/state/proteus/log/mcp/` | 0700 / 0600 | one log file per MCP call, `mcp-<tool>-<time>-<seq>.log` |

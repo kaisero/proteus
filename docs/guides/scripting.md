@@ -91,10 +91,11 @@ changes left out.
 A simulate result that is undecided, or whose fidelity is `undermatch`, has a
 `needs` list: the inputs that, given in a second question, can change the
 answer. Each entry has a `code` (`input.port`, `input.protocol`, `input.url`,
-and for `--file` with derived zones `input.from-zone` and `input.to-zone`), the
-`input` name and a `text` that names the rules it decides. The list stops at the
-first rule in doubt that no input can settle, such as a rule that names only an
-application or a user: past that rule, no input changes the verdict. A rule in
+`input.application` when the device has App-ID data, and for `--file` with
+derived zones `input.from-zone` and `input.to-zone`), the `input` name and a
+`text` that names the rules it decides. The list stops at the first rule in doubt
+that no input can settle, such as a rule that names only a user, or an
+application without App-ID data: past that rule, no input changes the verdict. A rule in
 doubt for a port and for a user still lists the port, which can rule it out. An
 empty list means no input can help. A result that is decided and not
 `undermatch` has no `needs` key; a decided result with fidelity `undermatch` can

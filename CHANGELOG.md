@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Simulate a flow by its application.** `simulate policy --application` now
+  matches rules by application, group, filter and container as the firewall does,
+  with implicit use, and checks the application's default ports for
+  `application-default`.
+- **Fetch stores each firewall's App-ID data.** `fetch` now keeps the firewall's
+  predefined applications once per content version; the first fetch of a new
+  version takes longer, and a fetch that loses that data to a network or disk
+  error exits 3.
+- **Find where an application is allowed.** `search <application>` now lists the
+  rules, groups, filters and containers that select an application, and `lookup`
+  shows its category, risk, default ports and dependencies.
 - **Keep a broad answer short with `--limit`.** `search`, `lookup` and
   `snapshot diff`, and their MCP tools with `limit`, can keep only the first N
   findings, cards or changes; the summary says how many it left out and what
@@ -220,6 +231,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **`--application` sets the protocol.** Without `--protocol`, `simulate policy
+  --application` now uses the application's default protocol instead of `tcp`.
+- **A protocol without ports skips rules with custom services.** On ICMP or
+  another protocol without ports, `simulate policy` now drops rules whose service
+  is a custom service or service group, as the firewall does, instead of keeping
+  them in doubt.
 - **JSON format 2: every reason has a code, and every result says its answer.**
   Reasons are `{code, text}` objects a script can match by code, each result has a
   one-line `answer` and, when held back, the `needs` a second question can give;

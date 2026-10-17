@@ -16,7 +16,7 @@ linux/amd64.
 ## proteus
 
 ```
-fetch <device>... | --label k=v | --all     log in, fetch six documents, store a snapshot (--why: stages)
+fetch <device>... | --label k=v | --all     log in, fetch the documents and the App-ID data, store a snapshot (--why: stages)
 inventory init                              write an inventory template, mode 0600
 snapshot list <device>                      snapshots, newest first; * marks latest
 snapshot show                               per device and vsys: snapshot, age, version, rules
@@ -39,7 +39,9 @@ simulate nat <src> <dst> --device <fw>      the NAT rule and the translated pack
   override. Filters: `--kind`, `--field`, `--show objects,groups,refs,literals`,
   `--direct`.
 - **`lookup <name>`** prints a rule as the rule editor lays it out, or an object
-  with its value, members and holding groups. The kind is inferred; a name several
+  with its value, members and holding groups; with App-ID data also a predefined
+  application, a container, and a filter with the applications it selects (20 in
+  text, all with `--full`; `--kind application`). The kind is inferred; a name several
   kinds share exits 2 until `--kind` picks one; found nowhere exits 0 with empty
   `results`. `--expand`
   shows values in parentheses and groups as trees (three levels); lists stop at five
@@ -61,6 +63,14 @@ simulate nat <src> <dst> --device <fw>      the NAT rule and the translated pack
   given (both) or derived, no NAT, the first address of an FQDN checked with a
   `dns.other-addresses` note for the rest; `--device`, `--label`, `--at`,
   `--router` exit 2.
+  **`--application`** (spec 2026-10-16 §4.1) is evaluated with App-ID data: path
+  mode reads each hop's snapshot data, `--file` reads `apps.xml.gz` beside the
+  configuration (`note.app-data-file`); without data `note.app-data-missing` and
+  the answer as before. Without `--protocol`, `flowFlags.input` passes an empty
+  protocol (`protocolSet`, D14), so the check takes the application's default and
+  the header prints `Verdict.Protocol`; `simulate routing` and `nat` keep `tcp`.
+  An unknown or container application exits 2 with `--file` (up to five
+  suggestions) and leaves the hop undecided in path mode.
   Its text ends with `first match: <rule> (<action>)` or `first certain match:` and
   `undecided:`. Both modes share one JSON security block (`securityJSON`).
   `scripts/device-probe.sh <config> <vsys>` reads the `--file` text;
@@ -117,7 +127,9 @@ simulate nat <src> <dst> --device <fw>      the NAT rule and the translated pack
   line must change (unknown command, flag or topic, bad setting, a device not in the
   inventory, an empty selection); 3 holes or unresolved; 130 SIGINT; 143 SIGTERM.
   `fetch`: all stored 0, a failure with one device stored 3, none stored 1; it
-  prints its answer in all three.
+  prints its answer in all three. An App-ID call that fails on the way, or a
+  content file that cannot be written, counts as a failure of its device (3); a
+  device that refuses the data only adds `note.fetch-applications-missing` (0).
 - **Errors on stderr:** text mode prints `proteus: <message>` and `log: <path>`. In
   JSON and YAML mode the last stderr line of a non-zero exit is one JSON object,
   `{"format":2,"exit":N,"error":…,"log":…}`, also for command-line errors.
@@ -127,7 +139,7 @@ simulate nat <src> <dst> --device <fw>      the NAT rule and the translated pack
   sets the exit from the qualifiers. It also needs a row in `contractRows`
   (`contract_test.go`) and goldens.
 - **`fetch --why`** prints each device's stages, `resolve`, `login`, `ha`,
-  `documents`, `store`, with status (`ok`, `partial`, `skipped`, `failed`) and
+  `documents`, `applications`, `store`, with status (`ok`, `partial`, `skipped`, `failed`) and
   detail; JSON always carries them as `stages`. On a terminal a progress line per
   finished stage goes to stderr.
 - **Settings**, rising precedence default < inventory `defaults:` < `PROTEUS_*` <

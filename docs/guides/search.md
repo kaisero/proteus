@@ -166,6 +166,45 @@ file / vsys1   testdata/config/firewall-urlprofile.xml
 A profile inspects traffic that a rule already matched. The rule does not match
 because of the profile.
 
+## Applications
+
+With the device's App-ID data, a search for an application finds each place that
+selects it. The data comes from the snapshot, or with `--file` from `apps.xml.gz`
+beside the configuration (see
+[Simulate policy](simulate-policy.md#where-the-app-id-data-comes-from)).
+
+```
+$ proteus search ssl --file demo/config.xml
+search ssl (matches)
+
+file / vsys1   demo/config.xml
+  note: application data of content 8000-1000 from demo/apps.xml.gz
+  object    application       ssl          predefined
+  group     application-group inner        holds inner > ssl
+  group     application-group outer        holds outer > inner > ssl
+  reference application-group inner        members -> ssl
+  reference application-group outer        members -> inner
+  reference security rule     allow-outer  application -> outer
+  reference security rule     allow-remote application -> implicit use by app-remote
+1 with results, 0 without, 0 holes
+```
+
+| Finding | What it says |
+| --- | --- |
+| `object application` | the application; `predefined` marks an application of the App-ID data |
+| `object application-filter` | a filter that selects it, with the fields that select it, such as `category=media, risk=4` |
+| `object application-container` | the container that holds it |
+| `group application-group` | a group that holds it, with the path through nested groups: `outer > inner > ssl` |
+| `reference security rule` | a rule that names it, or a group, filter or container that holds it |
+| `... implicit use by <app>` | an allow rule that allows it only through the implicit use of another application |
+
+The term takes any case. The findings use the name as the data writes it. A
+filter `exclude` that names it, or its container, shows as a reference.
+
+Without App-ID data, search finds the custom applications of the configuration
+only. The note `note.app-data-missing` says what it cannot find: filters,
+containers and implicit use.
+
 ## Users
 
 A configuration does not say which directory groups a user belongs to. Give

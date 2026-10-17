@@ -60,7 +60,7 @@ Advanced Routing device the legacy route command answers success with a deprecat
 text, so the Advanced Routing command must come first (verified on fw02).
 
 `Steps()` are a device's fetch as `internal/task` steps on a `State` (`NewState`):
-`login`, `ha`, `documents`. The CLI runs them with `task.Run`, between its own
+`login`, `ha`, `documents`, `applications`. The CLI runs them with `task.Run`, between its own
 `resolve` and `store` steps, with the device's name as the task's kind, so every
 error starts `<device>/<step>: `. A failed document is recorded in
 `Result.Outcomes` and the rest continue (spec S10); the `documents` step is then
@@ -75,12 +75,34 @@ devices at once and answers one result per device named, with its stages;
 `notes`. An HA state that cannot be read skips the `ha` step as "HA state
 unreadable".
 
+The **`applications` step** (`applications.go`, spec 2026-10-16 §2.2, plan D2-D4)
+gets the App-ID data. It is no `Document`: the data needs the content version and
+the store, and it must not land raw in the snapshot. `System.AppVersion` comes
+from `show system info` (`result/system/app-version`). A version that is not
+`^[0-9]+-[0-9]+$` (`appid.ValidVersion`) gives the refusal note. A hit
+(`State.HaveApps`, the CLI's `store.HaveContent`, which touches the file's
+modification time) asks nothing and sets `Result.Apps` with the version only. A
+miss runs the two `<show><predefined><xpath>…` commands of F1 in sequence through
+the unexported `(*Client).opStream`, which shares the retry loop `send` with `do`
+and keeps the `<show>` guard, and trims each answer while it reads the stream
+(`appid.Trim`), then `appid.Encode` writes the file bytes into `Result.Apps.File`.
+The step never returns an error, so the snapshot is stored in every case (D3):
+
+- an API refusal, a `status="error"` answer or an answer without an `<entry>`
+  adds `note.fetch-applications-missing`; the step stays complete, and the fetch
+  exits 0;
+- a transport failure adds an `Outcome` named `applications` and makes the step
+  `partial`; the fetch exits 3;
+- containers that fail after the applications leave a file that records them
+  as missing (`containers="missing"`), and the step is `partial`.
+
 ### Store
 
 ```
 <root>/<device>/<timestamp>/<document>.xml
 <root>/<device>/<timestamp>/meta.json
 <root>/<device>/latest -> <timestamp>
+<root>/.content/<app-version>.v<trim>.xml.gz
 ```
 
 The root is `$PROTEUS_STORE`, else `~/.local/share/proteus`. `Write` fills a
@@ -98,6 +120,25 @@ it (an unreadable `meta.json` counts as without), and never removes the one
 `latest` names. It also removes `.<id>.partial` and `.latest-<id>` entries, where
 `<id>` is a snapshot id, whose modification time is more than an hour old: what a
 crashed write left.
+
+**Content files** (`content.go`, spec 2026-10-16 §3). `.content/` (`ContentDir`,
+mode 0700) holds one App-ID content file per content version for all devices,
+`<app-version>.v<trim>.xml.gz` (`appid.FileName`, `<trim>` is
+`appid.TrimVersion`), mode 0600. A device name cannot start with a dot, so it is
+no device. `WriteContent` writes a temporary file, syncs it and renames it, so two
+writers of one version replace each other whole. The CLI store step
+(`fetcher.storeContent`) writes the file of a miss before the snapshot and sets
+`Meta.AppVersion` (`app_version`, left out when empty) after a hit or a
+successful write only, so a snapshot never names another device's file (D4). A
+failed write adds `note.fetch-applications-missing` with the cause, makes the
+store step `partial`, and the fetch exits 3. `PruneContent` runs once per run
+after every device (`fetcher.each`), not per `Write`: it removes a file that no
+`meta.json` names and whose modification time is older than `leftoverAge` (one
+hour), since the store has no lock and a hit touches the file. A hit does not look
+inside the file, so a file without containers serves until the trim version
+changes (C11, `docs/todo.md` item 65). `Snapshot.ContentPath` is the file a
+snapshot names, or "" without `AppVersion`; a file missing at read time gives
+`note.app-data-missing` (§3.4). See [app-id](app-id.md).
 
 `Resolve("fw01")` is the latest snapshot, `Resolve("fw01@<id>")` one in particular.
 `Snapshot.Zones()` builds the index's `ZoneSnapshot` from the stored `interfaces`

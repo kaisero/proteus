@@ -102,8 +102,8 @@ The pages also build as a site: `mkdocs serve` (see
 
 proteus works against PAN-OS firewalls. It ships one schema digest, from PAN-OS
 11.2, and reads every configuration version with it.
-`simulate policy` does not evaluate application or user yet. See
-[Limits](docs/limits.md).
+`simulate policy` evaluates the application of a flow from each device's App-ID
+data. It does not evaluate the user yet. See [Limits](docs/limits.md).
 
 ## Contributing
 

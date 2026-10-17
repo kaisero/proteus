@@ -38,7 +38,7 @@ Every item names its **component** (the package or area it changes) and one **ta
 | 19 | feature | fetch, estate, simulate/routing | Active/active HA pairs |
 | 20 | feature | inventory, fetch | Skip the RIB for a device with a full BGP table |
 | 21 | feature | simulate, estate, cmd | Estate simulation for policy (M5): path mode done, fan-out open |
-| 22 | feature | simulate/securitypolicy, index | Evaluate application and user |
+| 22 | feature | simulate/securitypolicy, index | Evaluate user (application: done, App-ID support) |
 | 23 | qa | simulate/securitypolicy, index | Derived zones on overlay networks |
 | 24 | done | resolve, card, simulate/securitypolicy | ~~Table of predefined services~~ (fetched from the device, no table) |
 | 25 | feature | card, cmd | NAT and PBF rules in `lookup` |
@@ -73,9 +73,15 @@ Every item names its **component** (the package or area it changes) and one **ta
 | 54 | bug | simulate/routing | A hairpin through another firewall is reported as a loop |
 | 55 | qa | config, query | Undescribed elements of a configuration read with its own digest reach no answer |
 | 56 | qa | config, archtest | The read-only check sees setter names only, not writable exported fields |
-| 59 | qa | appid | One unknown form in the content data hides all application data |
 | 57 | done | resolve, index, simulate/nat | ~~Verify an address and an address group of one name in two scopes~~ (lab fact L10: as services) |
 | 58 | test | index | A hidden address's tags and a dynamic group in the vsys |
+| 59 | qa | appid | One unknown form in the content data hides all application data |
+| 60 | feature | search, store, cmd | Audit missing application dependencies, and export a snapshot with its content file |
+| 61 | qa | simulate/securitypolicy | The App-ID shift: a session can match another rule once App-ID knows it |
+| 62 | research | fetch, store, appid | One content version on two PAN-OS releases |
+| 63 | test | simulate/securitypolicy | A default rule after an implicit allow, with traffic |
+| 64 | qa | simulate/pathpolicy, simulate/routing, simulate/nat | The open protocol of routing and NAT in path mode |
+| 65 | qa | store, fetch | A content file without containers serves until the trim version changes |
 
 ---
 
@@ -257,11 +263,14 @@ item 7, and delete the fetched data and API keys from the scratch directory.
   not relevant, `--all-devices`, `--fresh`, and the zone flags. `--file` moves to the
   fan-out result shape.
 
-### 22. Evaluate application and user
+### 22. Evaluate user
 
 - **Tag:** feature · **Component:** simulate/securitypolicy, index · **Source:** spec §11.6, README known limits
-- The `first-match` stage reports application (and user) as not evaluated.
-  `--application` and `--user` are accepted and not used.
+- The `first-match` stage reports the user as not evaluated. `--user` is accepted
+  and not used.
+- The application is done: `match-application` evaluates it from the App-ID data
+  (spec `docs/specs/2026-10-16-app-id-design.md`). Items 59 to 65 hold what stays
+  open.
 
 ### 23. Derived zones on overlay networks
 
@@ -560,6 +569,11 @@ Source for each: the code audit of 2026-10-10 and the cleanup plan
   group hides. If it does, the closure must hold the address by its value, not by its
   name.
 
+## App-ID follow-ups
+
+Source for each: spec `docs/specs/2026-10-16-app-id-design.md`, unless the item
+names another.
+
 ### 59. One unknown form in the content data hides all application data
 
 - **Tag:** qa · **Component:** appid · **Source:** App-ID lab run on fw02
@@ -572,3 +586,71 @@ Source for each: the code audit of 2026-10-10 and the cleanup plan
 - `appid` reads the range now. A later content version can bring another new form.
   Keep the application with its unread default instead, so only rules with
   `application-default` for that application stay in doubt, and name it in a note.
+
+### 60. Audit missing application dependencies, and export a snapshot with its content file
+
+- **Tag:** feature · **Component:** search, store, cmd · **Source:** spec §6, §10
+- An allowed application can need others: its `use-applications`. A rule that
+  allows the application and not what it uses can break the application. This is
+  a configuration audit, not a simulation. List the allow rules whose applications
+  use an application that no rule allows on the same path.
+- `snapshot export` is deferred. `--file` reads `apps.xml.gz` beside the
+  configuration, and a user copies it from `<store>/.content/` by hand. An export
+  writes the configuration, `predefined.xml` and the content file of the snapshot
+  into one directory.
+
+### 61. The App-ID shift: a session can match another rule once App-ID knows it
+
+- **Tag:** qa · **Component:** simulate/securitypolicy · **Source:** spec §4.6, §10
+- The firewall identifies an application over the first packets of a session. Before
+  that, an earlier application such as `ssl` or `web-browsing` can match another
+  rule first. Then the firewall evaluates the session again. proteus evaluates one
+  application per flow, as `test security-policy-match` does, and adds
+  `note.app-shift` to every answer with an application.
+- Decide whether an answer should also name the rule that the earlier application
+  matches. Measure it with traffic on a lab device first.
+
+### 62. One content version on two PAN-OS releases
+
+- **Tag:** research · **Component:** fetch, store, appid · **Source:** spec §3.3, O1, F6
+- The content file is keyed by the content version and the trim version. The device
+  filters its content by release before it answers, so two releases with one content
+  version can answer differently. They then share a file that is right for one of
+  them only. The two captures show no kept-field difference from the release, and
+  the owner accepts the risk.
+- Fetch one content version on two releases and compare the trimmed files. If they
+  differ, add the release to the key. `meta.json` keeps `sw_version`, so no
+  migration is needed.
+
+### 63. A default rule after an implicit allow, with traffic
+
+- **Tag:** test · **Component:** simulate/securitypolicy · **Source:** spec §4.3, I6, O5
+- proteus evaluates the default rules after the implicit pass. The test command
+  never lists a default rule, so this order is measured only indirectly (I6). With
+  only an implicit candidate, the implicit rule is the result.
+- Send real traffic on a lab device where an allow rule matches only through
+  implicit use and a deny default rule follows. Check which rule the traffic log
+  names.
+
+### 64. The open protocol of routing and NAT in path mode
+
+- **Tag:** qa · **Component:** simulate/pathpolicy, simulate/routing, simulate/nat · **Source:** plan
+  `docs/plans/2026-10-16-app-id.md` D10, D14, Risks
+- With `--application` and no `--protocol`, the security check takes the
+  protocol of the application's default. Routing, NAT and PBF see the protocol as
+  given: open. A NAT or PBF rule that names a service then stays in doubt
+  (`path.nat-no-protocol`), and the hop can be undecided. `--protocol` decides it.
+- Give routing and NAT the protocol of the application's default when the default
+  has one protocol, on each hop with its own content data.
+
+### 65. A content file without containers serves until the trim version changes
+
+- **Tag:** qa · **Component:** store, fetch · **Source:** spec §2.2, plan
+  `docs/plans/2026-10-16-app-id.md` C11, Risks
+- When the device returns the applications but not the containers, the content file
+  records that the containers are missing. A later fetch of that content version
+  finds the file and does not ask again: the store does not look inside the file.
+  Every rule that names a container then stays in doubt, until a user deletes the
+  file in `<store>/.content/` or the trim version changes.
+- Let a hit read the file's header and count a file without containers as a miss,
+  or ask the device for the containers only.
