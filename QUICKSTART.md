@@ -73,7 +73,8 @@ The `fidelity` line is the important one:
   predict.
 - `kept rules whose service is ...`: the rule names no service, so the port cannot
   exclude it.
-- `not evaluated: application`: application matching is not built yet.
+- `not evaluated: application`: the question gives no `--application`, so the
+  rule's application is not checked.
 
 Add `--why` to see every stage and how many rules it kept.
 

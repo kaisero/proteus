@@ -52,7 +52,7 @@ answer rather than discovered later:
 | URL or IP external list | contents are fetched at runtime |
 | dynamic address group members | registered at runtime by User-ID or VM monitoring |
 | dynamic user group | filled in at runtime by User-ID |
-| application filter, application container | selects by content-database metadata |
+| application filter, application container | selects by content-database metadata; reported only without App-ID data (`Providers.Apps`), and containers also when the data lacks them |
 | unreadable tag filter, unreadable URL member | the parser refuses rather than guesses |
 | zone with no interface, interface in no zone | nothing can be placed there |
 | virtual router running BGP or OSPF | routes learned at runtime are not in the file |
@@ -103,6 +103,7 @@ func (f Field) String() string
 func (i *Index) Candidates(f Field, value string) (*roaring.Bitmap, Report)
 func (i *Index) Containing(addr netip.Addr) []Match
 func (i *Index) Disabled() *roaring.Bitmap
+func (i *Index) GroupPath(kind, group, name string) []string
 func (i *Index) GroupsHolding(kind, name string, direct bool) []Group
 func (i *Index) Interner() *Interner
 func (i *Index) MatchWildcards(prefixes []netip.Prefix, single bool) ([]Hit, []Unresolved)
@@ -193,7 +194,14 @@ separately.
 lists both. `path.nat-no-protocol`, a port the NAT service holds with no
 protocol given, needs `input.protocol`. A protocol given as 6, 17 or 132 counts
 as tcp, udp or sctp (`rulebase.Protocol`). `doubt.category-no-url` needs
-`input.url`. `zone.derived` and `default.zones-unknown` need `input.from-zone`
+`input.url`. `doubt.app-port-open` (an `application-default` rule judged with
+the port or protocol open) needs `input.port`, and `input.protocol` when the run's
+protocol is open. `doubt.application` and `doubt.service-application-default` need
+`input.application` only when the flow has none and the target has App-ID data
+(`Verdict.AppData`; for `--file`, `apps.xml.gz` beside it), plan C8.
+`doubt.application-unknown` needs nothing. A security run's doubts are judged
+with the run's protocol (`Verdict.Protocol`), not the flow's (`runJudged`).
+`zone.derived` and `default.zones-unknown` need `input.from-zone`
 and `input.to-zone` when no zone was given; path mode gives the zones and asks
 for none. The emitters give the unfixable code first: a service that is only
 application-default or not defined is `doubt.service-application-default` or

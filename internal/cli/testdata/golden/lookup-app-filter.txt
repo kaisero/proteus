@@ -1,0 +1,11 @@
+file / vsys1   TMP
+  note: application data of content 8000-1000 from TMP
+  file/vsys1: application-filter f-media
+application filter  f-media                      vsys:vsys1
+
+  criteria     category   media
+  applications 3 applications
+               app-media, app-old, shared-media
+  held by      inner
+
+1 with it, 0 without, 0 holes

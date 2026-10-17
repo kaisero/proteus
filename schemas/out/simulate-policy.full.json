@@ -160,7 +160,7 @@
               "properties": {
                 "code": {
                   "type": "string",
-                  "description": "the input's code: input.port, input.protocol, input.url, input.from-zone or input.to-zone"
+                  "description": "the input's code: input.port, input.protocol, input.url, input.application, input.from-zone or input.to-zone"
                 },
                 "input": {
                   "type": "string",
@@ -1227,6 +1227,32 @@
                           "action",
                           "layer",
                           "scope"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "implicit": {
+                        "type": [
+                          "null",
+                          "object"
+                        ],
+                        "properties": {
+                          "app": {
+                            "type": "string"
+                          },
+                          "via": {
+                            "type": [
+                              "null",
+                              "array"
+                            ],
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "description": "set when the rule matches only through implicit use",
+                        "required": [
+                          "app",
+                          "via"
                         ],
                         "additionalProperties": false
                       },

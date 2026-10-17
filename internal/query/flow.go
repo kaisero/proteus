@@ -21,10 +21,10 @@ const dnsTimeout = 5 * time.Second
 type FlowInput struct {
 	Source      string `json:"source" jsonschema:"an address or a host name; a host name is resolved with DNS and its first IPv4 address is checked"`
 	Destination string `json:"destination" jsonschema:"an address or a host name; a host name is resolved with DNS and its first IPv4 address is checked"`
-	Protocol    string `json:"protocol,omitempty" jsonschema:"tcp, udp, icmp or sctp"`
+	Protocol    string `json:"protocol,omitempty" jsonschema:"tcp, udp, sctp, icmp or a protocol number; with application, the application's default when absent"`
 	Port        string `json:"port,omitempty" jsonschema:"the destination port: 443, or tcp/443 with the protocol"`
 	SourcePort  int    `json:"source_port,omitempty" jsonschema:"the source port"`
-	Application string `json:"application,omitempty" jsonschema:"recorded, not evaluated; it does not change the answer"`
+	Application string `json:"application,omitempty" jsonschema:"a predefined or custom application"`
 	User        string `json:"user,omitempty" jsonschema:"the source user, such as corp\\alice"`
 	URL         string `json:"url,omitempty" jsonschema:"the URL; it decides URL categories"`
 	FromZone    string `json:"from_zone,omitempty" jsonschema:"the source zone; derived when empty"`

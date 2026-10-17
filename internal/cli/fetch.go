@@ -41,7 +41,7 @@ func (a *app) fetchCmd() *cobra.Command {
 		Short: "Fetch devices into the store",
 		Long: "Fetch logs in to each device, reads its configuration and operational state, and\n" +
 			"stores them as a snapshot. Name devices, select them with --label, or pass --all.\n\n" +
-			"Stages per device: resolve, login, ha, documents, store",
+			"Stages per device: resolve, login, ha, documents, applications, store",
 		ValidArgsFunction: a.completeDevices,
 		RunE: func(c *cobra.Command, names []string) error {
 			o.names = names
@@ -133,6 +133,8 @@ type deviceFetch struct {
 	name     string
 	resolved bool
 	snap     store.Snapshot
+	// contentFailed says that the App-ID content file could not be written.
+	contentFailed bool
 }
 
 // lift runs a fetch package step on a deviceFetch's embedded state.
@@ -157,6 +159,7 @@ func (f fetcher) resolve(_ context.Context, d *deviceFetch) (task.Result, error)
 		return task.Result{}, err
 	}
 	d.State = fetch.NewState(t, fetch.Documents, fetch.ActiveOptions{PeerHost: f.peerHost}, f.log)
+	d.HaveApps = f.st.HaveContent
 	d.resolved = true
 	verification := "on"
 	if t.InsecureTLS {
@@ -167,11 +170,13 @@ func (f fetcher) resolve(_ context.Context, d *deviceFetch) (task.Result, error)
 }
 
 func (f fetcher) store(_ context.Context, d *deviceFetch) (task.Result, error) {
+	appVersion, appNote := f.storeContent(d)
 	res := d.Result
 	meta := store.Meta{
 		Device: d.Target.Name, Host: d.Target.Host,
 		Hostname: res.System.Hostname, Model: res.System.Model,
 		Serial: res.System.Serial, SWVersion: res.System.SWVersion,
+		AppVersion:  appVersion,
 		FetchedFrom: res.FetchedFrom, Notes: simulate.Reasons(res.Notes).Texts(),
 	}
 	for _, o := range res.Outcomes {
@@ -191,7 +196,34 @@ func (f fetcher) store(_ context.Context, d *deviceFetch) (task.Result, error) {
 	if _, ok := res.Docs[store.ConfigDoc]; !ok {
 		r.Status, r.Detail = task.Partial, r.Detail+"; no configuration, so latest did not move"
 	}
+	if appNote != nil {
+		r.Status, r.Detail = task.Partial, r.Detail+"; the application data was not stored"
+		r.Notes = []reason.Reason{*appNote}
+	}
 	return r, nil
+}
+
+// storeContent writes the App-ID content file of a miss before the snapshot,
+// and returns the content version the snapshot names: the version of a hit or
+// of a file written now, else "" (spec 2026-10-16 §3.1). A file that
+// cannot be written adds the note with the cause and makes the run incomplete,
+// as a failed inventory export does.
+func (f fetcher) storeContent(d *deviceFetch) (string, *reason.Reason) {
+	a := d.Result.Apps
+	if a == nil {
+		return "", nil
+	}
+	if a.File != nil {
+		if err := f.st.WriteContent(a.Version, a.File); err != nil {
+			f.log.Errorf(runlog.TagSnap, "%s: %v", d.name, err)
+			n := reason.New("note.fetch-applications-missing",
+				"the application data was not stored, so rules that name an application stay in doubt: "+err.Error())
+			d.Result.Notes = append(d.Result.Notes, n)
+			d.contentFailed = true
+			return "", &n
+		}
+	}
+	return a.Version, nil
 }
 
 // each fetches the devices, up to fetchConcurrency at once, and returns one result per
@@ -218,6 +250,15 @@ func (f fetcher) each(ctx context.Context, names []string) []fetchResult {
 		})
 	}
 	wg.Wait()
+	// One prune per run, after every device: a prune reads every snapshot's
+	// meta.json, so a prune per device would cost the square of the devices
+	// (spec 2026-10-16 §3.4). A failed prune leaves files behind and fails
+	// nothing.
+	if err := f.st.PruneContent(); err != nil {
+		f.log.Warnf(runlog.TagSnap, "pruning the content files: %v", err)
+	} else {
+		f.log.Debugf(runlog.TagSnap, "pruned the content files")
+	}
 	return results
 }
 
@@ -229,6 +270,7 @@ func (f fetcher) one(ctx context.Context, name string) fetchResult {
 	r := fetchResult{
 		Device: name, Host: d.Target.Host, FetchedFrom: d.Result.FetchedFrom, System: d.Result.System,
 		Notes: d.Result.Notes, Documents: []documentJSON{}, Stages: taskStages(recs),
+		contentFailed: d.contentFailed,
 	}
 	if d.resolved {
 		on := !d.Target.InsecureTLS
@@ -275,6 +317,9 @@ type fetchResult struct {
 	Stages          []stageJSON      `json:"stages"`
 	Notes           simulate.Reasons `json:"notes,omitempty"`
 	Error           string           `json:"error,omitempty"`
+	// contentFailed says that the App-ID content file could not be written;
+	// its note is in Notes.
+	contentFailed bool
 }
 
 // documentJSON is one document of a device's fetch.
@@ -335,8 +380,9 @@ func (f fetchAnswer) exportNote() (reason.Reason, bool) {
 
 // Status is C11: every device stored every document → complete; a failure with at
 // least one device stored → incomplete; no device stored → an error (spec §6.4).
-// A failed inventory export makes a complete run incomplete: the snapshots are
-// stored, and the note names the part that is missing. It never makes a run an
+// An App-ID content file that could not be written counts as a failure of its
+// device. A failed inventory export makes a complete run incomplete: the
+// snapshots are stored, and the note names the part that is missing. It never makes a run an
 // error, and a run that stored nothing stays one.
 func (f fetchAnswer) Status() error {
 	stored, failed := 0, 0
@@ -344,7 +390,7 @@ func (f fetchAnswer) Status() error {
 		if r.Stored {
 			stored++
 		}
-		bad := r.Error != ""
+		bad := r.Error != "" || r.contentFailed
 		for _, d := range r.Documents {
 			bad = bad || d.Error != ""
 		}

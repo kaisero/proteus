@@ -4,16 +4,19 @@ import (
 	"context"
 	"errors"
 	"net/netip"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 
+	"github.com/okaiser/proteus/internal/appid"
 	"github.com/okaiser/proteus/internal/config"
 	"github.com/okaiser/proteus/internal/index"
 	"github.com/okaiser/proteus/internal/reason"
 	"github.com/okaiser/proteus/internal/resolve"
 	"github.com/okaiser/proteus/internal/simulate"
 	"github.com/okaiser/proteus/internal/simulate/rulebase"
+	"github.com/okaiser/proteus/internal/testconfig"
 )
 
 // policyNet is one firewall carrying firewall-routing.xml's PBF and NAT rules, and
@@ -309,5 +312,48 @@ func TestPBFStageMatchesTheService(t *testing.T) {
 		if !slices.Equal(h.PBF, tc.pbf) || detail != tc.detail {
 			t.Errorf("%s %s/%d: pbf %v, detail %q", tc.src, tc.proto, tc.port, h.PBF, detail)
 		}
+	}
+}
+
+// §4.7: PBF keeps doubt.application for a rule with an application, also with a
+// flow application and application data. App-based PBF uses the App-ID cache,
+// so the first session of an application does not match by application.
+func TestPBFKeepsTheApplicationDoubt(t *testing.T) {
+	t.Parallel()
+	cfg, _, err := config.Load("../../../testdata/config/firewall-pbf-service.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "apps.xml.gz")
+	testconfig.Content(t, path)
+	data, err := appid.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	n := netOf(dev("fw", []resolve.InterfaceState{
+		iface("ethernet1/2", "wan", "default", "10.88.9.1/24"),
+		iface("ethernet1/3", "lab", "default", "10.88.4.1/24"),
+	},
+		route("default", "10.88.9.0/24", "ethernet1/2", "0.0.0.0"),
+		route("default", "10.88.4.0/24", "ethernet1/3", "0.0.0.0"),
+	))
+	load := func(_, vsys string) (simulate.Target, error) {
+		tg := withIndexes(cfg, vsys)
+		tg.Providers.Apps = data
+		return tg, nil
+	}
+	f := flow("10.88.4.5", "10.88.9.5")
+	f.Protocol, f.DestPort, f.Application = "tcp", 22, "ssl"
+	run, err := Simulation{}.Run(context.Background(), &simulate.Env{Network: n, Load: load}, simulate.Input{Flow: f})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := run.Output.(Path).Hops[0]
+	found := false
+	for _, d := range h.PBFDoubts {
+		found = found || d.Code == "doubt.application" && strings.Contains(d.Text, "lab-app-no-pbf")
+	}
+	if !found {
+		t.Errorf("PBF doubts %v", h.PBFDoubts)
 	}
 }

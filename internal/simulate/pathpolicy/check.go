@@ -61,6 +61,15 @@ func (Security) Evaluate(ctx context.Context, env *simulate.Env, h routing.Hop, 
 		out.Verdict, out.Reason, out.Fidelity = NotEvaluated, simulate.Reasons{why}, simulate.Exact
 		return out, nil
 	}
+	if c, ok := errors.AsType[*simulate.ChoiceError](err); ok && c.Kind == simulate.ChoiceApplication {
+		// The hop's content data lacks the flow's application, or names a
+		// container (spec 2026-10-16 P10). The hops of one path can have
+		// different content versions, so the hop is undecided and the path
+		// goes on (§4.1, D13).
+		why := reason.New("doubt.application-unknown", h.Device+": "+c.Question)
+		out.Verdict, out.Reason, out.Fidelity = Undecided, simulate.Reasons{why}, simulate.UnderMatch(why)
+		return out, nil
+	}
 	if err != nil {
 		return out, err
 	}

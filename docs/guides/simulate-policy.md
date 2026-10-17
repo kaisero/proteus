@@ -103,6 +103,7 @@ hop 1: fw02 / vsys1, security stop: default rule interzone-default (deny), built
   resolve-source      exact 0 198.18.1.10: 2 hits, 0 negated rules
   resolve-destination exact 0 198.18.10.100: 1 hits, 0 negated rules
   derive-zones        exact 0 from home, to labor, as given
+  match-application   exact 0 no application given
   match-service       exact 0 tcp/443
   match-url           exact 0 no candidate names a URL category
   drop-disabled       exact 0 0 disabled
@@ -134,7 +135,9 @@ the hop is undecided.
 A hop is undecided for one of these causes:
 
 - **Doubts on a rule.** A candidate above the match names:
-  - an application, or service `application-default`;
+  - an application, or service `application-default`, when no `--application`
+    is given or the device has no App-ID data; an application that the App-ID
+    data does not hold (see [Applications](#applications));
   - a predefined service such as `service-https` that the snapshot does not
     hold (stored before this release, refused by the device, or `--file`
     without `predefined.xml`), a service group that holds one, or no service;
@@ -246,9 +249,10 @@ file / vsys1   testdata/config/firewall-doubt.xml
   zones      from labor, to dmz (given)
   relevance  unknown: no stored forwarding table
   fidelity   overmatch: earlier candidates in doubt share the action deny: labor-app; not evaluated: application
-  resolve-source      exact     13 198.19.0.254: 1 hits, 0 negated rules
-  resolve-destination exact     11 10.2.0.5: 0 hits, 0 negated rules
+  resolve-source      exact     14 198.19.0.254: 1 hits, 0 negated rules
+  resolve-destination exact     12 10.2.0.5: 0 hits, 0 negated rules
   derive-zones        exact     1  from labor, to dmz, as given
+  match-application   exact     1  no application given
   match-service       exact     1  tcp/443
   match-url           exact     1  no candidate names a URL category
   drop-disabled       exact     1  0 disabled
@@ -260,8 +264,8 @@ file / vsys1   testdata/config/firewall-doubt.xml
 first match: interzone-default (deny), default rule (built-in)
 ```
 
-`labor-app` names an application, so it is in doubt. It denies, like the default
-rule, so the answer is still decided.
+`labor-app` names an application, and the run has no `--application`, so it is
+in doubt. It denies, like the default rule, so the answer is still decided.
 
 An undecided answer ends with the first rule that surely matches, and the cause:
 
@@ -282,7 +286,8 @@ A check runs named stages. Each stage removes candidate rules and declares its
 | `resolve-source` | keeps rules whose source reaches the source address or FQDN |
 | `resolve-destination` | the same for the destination |
 | `derive-zones` | keeps rules whose zones and rule-type match, given or derived |
-| `match-service` | keeps rules whose service holds `--port` |
+| `match-application` | keeps rules whose application matches `--application`, explicit or through implicit use |
+| `match-service` | keeps rules whose service holds `--port`, or whose `application-default` holds it |
 | `match-url` | keeps rules whose URL category matches `--url` |
 | `drop-disabled` | removes disabled rules |
 | `order` | sorts the rest in evaluation order and lists each rule's doubts |
@@ -292,6 +297,128 @@ A check runs named stages. Each stage removes candidate rules and declares its
 candidate, in doubt. An FQDN resolves with this machine's DNS. The name matches
 FQDN objects, and the first address matches everything else, as in path mode. A
 note names the other addresses.
+
+## Applications
+
+`--application <name>` gives the flow's application: a predefined application or
+a custom application of the configuration. proteus then matches it as the
+firewall does, from the device's App-ID data.
+
+### Where the App-ID data comes from
+
+- **Path mode.** Each hop reads the App-ID data of its snapshot's content version.
+  `fetch` stores it (see [Snapshots](snapshots.md#fetch)). The hops of one path
+  can have different content versions.
+- **`--file`.** proteus reads `apps.xml.gz` in the directory of the configuration.
+  The note `note.app-data-file` names the file and its content version. Nothing
+  checks that the version is the device's. Copy the file from
+  `<store>/.content/<version>.v1.xml.gz`.
+- **No data.** A snapshot without a content version, a missing file or a file
+  that cannot be read gives the note `note.app-data-missing`. The answer is then as
+  without `--application`.
+
+### How a rule matches
+
+The name takes any case. A custom application of that name wins over a
+predefined one. The answer uses the name as the data or the configuration writes
+it.
+
+The `match-application` stage keeps three kinds of rule:
+
+| Kind | A rule is one when |
+| --- | --- |
+| explicit | its application is the flow's, `any`, a group that holds it at any depth, a filter that selects it, or a container that holds it |
+| implicit | it allows, and one of its predefined applications lists the flow's application in its implicit use |
+| kept in doubt | it names an application or a container that neither the data nor the configuration holds (`doubt.application-unknown`) |
+
+The first match comes in two passes. The explicit rules and the rules kept in
+doubt come first, in rule order. The implicit rules come after them, in rule
+order. So an explicit match wins over an implicit one, also when it comes later.
+The default rules come last. A deny rule never matches through implicit use, and
+a custom application never implies another. An implicit match carries
+`note.app-implicit`, which names the application that implies the flow's.
+
+A filter counts the tags that the configuration adds to an application with
+`application-tag`. A filter `exclude` removes the named applications and every
+function of a named container.
+
+### application-default
+
+A rule with service `application-default` matches when the flow's protocol and
+port are in the application's default ports. For an implicit match, the ports
+are those of the rule's applications that imply the flow's application.
+
+| Default | Matches |
+| --- | --- |
+| `tcp/80,443`, `udp/53`, ranges | that protocol and those ports |
+| a secure extended port, such as `tcp/443/secure` | that port, with `note.app-secure-port` |
+| `tcp/dynamic`, `tcp/any` | any port of that protocol |
+| an IP protocol, such as 89, or a range of them | that protocol, any port |
+| an ICMP or ICMPv6 type | protocol 1 or 58, with `note.app-icmp-type`: the type is not checked |
+| no default | any protocol and port |
+
+A rule with a custom service matches on the service's ports. When such a port is
+not a default port of the application, `note.app-non-default-port` says so.
+Without `--port`, a rule with `application-default` stays in doubt
+(`doubt.app-port-open`).
+
+### The protocol
+
+Without `--protocol`, `--application` takes the protocol of the application's
+default: `ssl` gives tcp, `ospf` gives 89. An application with several default
+protocols, or with no default, leaves the protocol open. A rule that depends on it
+then stays in doubt. The header line shows the protocol that the run used.
+`simulate routing` and `simulate nat` keep `tcp`. In path mode, routing and NAT
+see the open protocol, so a NAT or PBF rule that names a service stays in doubt.
+Give `--protocol` to decide it.
+
+A protocol without ports, such as icmp or 89, never matches a custom service or a
+service group. Such a flow drops those rules, with or without `--application`.
+
+### An example
+
+```
+$ proteus simulate policy 10.1.0.5 10.2.0.5 --application web-browsing --port 80 \
+    --why --file demo/config.xml
+10.1.0.5 -> 10.2.0.5 tcp/80
+file / vsys1   demo/config.xml
+  note: application data of content 8000-1000 from demo/apps.xml.gz
+  note: the device can match the session again when App-ID identifies it later: an earlier application, such as ssl or web-browsing, can match another rule than web-browsing
+  note: rule allow-remote matches web-browsing only through the implicit use of app-remote
+  zones      from inside, to outside (configuration)
+  relevance  unknown: no stored forwarding table
+  fidelity   inferred
+  resolve-source      exact    8 10.1.0.5: 0 hits, 0 negated rules
+  resolve-destination exact    8 10.2.0.5: 0 hits, 0 negated rules
+  derive-zones        inferred 8 from inside; to outside (configuration)
+  match-application   exact    1 web-browsing: 0 explicit, 1 implicit, 0 kept in doubt (content 8000-1000)
+  match-service       exact    1 tcp/80; protocol tcp, from the default of web-browsing (tcp/80; tcp/443/secure)
+  match-url           exact    1 no candidate names a URL category
+  drop-disabled       exact    1 0 disabled
+  order               exact    1 1 in order
+  first-match         exact    1 allow-remote (allow), position 8
+  8. allow-remote allow [local vsys:vsys1]
+first match: allow-remote (allow)
+```
+
+`allow-remote` names `app-remote`, whose implicit use holds `web-browsing`. Every
+answer with an application carries `note.app-shift`: the firewall can match the
+session again when App-ID identifies it later. proteus evaluates one application
+per flow, as `test security-policy-match` does.
+
+### A name that is no application
+
+The firewall refuses an unknown name and a container as the flow's application.
+With `--file`, proteus exits 2 and suggests up to five names. For a container, the
+suggestions are its functions:
+
+```
+$ proteus simulate policy 10.1.0.5 10.2.0.5 --application office-suite --file demo/config.xml
+proteus: --application office-suite is an application container in content 8000-1000, not an application; name one of its functions: office-docs, office-mail
+```
+
+In path mode, such a name leaves that hop undecided. The reason names the device
+and its content version, because another hop can have another content version.
 
 ## Flags that path mode refuses
 
@@ -310,7 +437,9 @@ the store.
 
 ## What is not evaluated yet
 
-- `--application` and `--user` are accepted but not evaluated. A rule that names
-  an application or a user is in doubt.
+- `--user` is accepted but not evaluated. A rule that names a user is in doubt.
+- Without `--application`, or without App-ID data, a rule that names an
+  application is in doubt. See [Applications](#applications).
+- Policy-based forwarding does not evaluate the application.
 - The return path is not checked.
 - See [Limits](../limits.md#simulate-policy).

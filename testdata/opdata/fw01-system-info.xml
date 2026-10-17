@@ -1,1 +1,1 @@
-<response status="success"><result><system><hostname>lab-fw01-vm</hostname><model>PA-VM</model><serial>007900000000001</serial><sw-version>11.2.5</sw-version><multi-vsys>off</multi-vsys></system></result></response>
+<response status="success"><result><system><hostname>lab-fw01-vm</hostname><model>PA-VM</model><serial>007900000000001</serial><sw-version>11.2.5</sw-version><app-version>8000-1000</app-version><multi-vsys>off</multi-vsys></system></result></response>

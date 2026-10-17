@@ -132,6 +132,16 @@
           "elapsed_ms": 0
         },
         {
+          "slug": "match-application",
+          "name": "Match the application",
+          "fidelity": {
+            "level": "exact"
+          },
+          "candidates": 3,
+          "detail": "no application given",
+          "elapsed_ms": 0
+        },
+        {
           "slug": "match-service",
           "name": "Match the service",
           "fidelity": {

@@ -51,6 +51,32 @@ func retained(tb testing.TB, sn store.Snapshot) uint64 {
 	return after.HeapAlloc - before.HeapAlloc
 }
 
+// contentApps is the application count of the content file the benchmark
+// measures: content 9159 has 5552 applications (spec 2026-10-16 F4).
+const contentApps = 5552
+
+// contentRetained loads a content file through a new cache and returns the
+// bytes that stay live while the cache holds it.
+func contentRetained(tb testing.TB, path string) uint64 {
+	tb.Helper()
+	var before, after runtime.MemStats
+	runtime.GC()
+	runtime.ReadMemStats(&before)
+
+	c := newCache(1<<40, 1, 1, true)
+	if _, err := c.bind(context.Background()).Apps(path); err != nil {
+		tb.Fatal(err)
+	}
+
+	runtime.GC()
+	runtime.ReadMemStats(&after)
+	runtime.KeepAlive(c)
+	if after.HeapAlloc < before.HeapAlloc {
+		return 0
+	}
+	return after.HeapAlloc - before.HeapAlloc
+}
+
 // snapshotOf stores a configuration file as a device's snapshot.
 func snapshotOf(tb testing.TB, st *store.Store, device, path string) (store.Snapshot, int64) {
 	tb.Helper()
@@ -182,11 +208,13 @@ type retentionSample struct {
 // <shape>-B/file-B.
 //
 // It also measures what the schema digest keeps, once per process, reported
-// as digest-B.
+// as digest-B, and what one App-ID content version of 5552 applications
+// keeps, reported as content-B (spec 2026-10-16 §7).
 //
 // It fails when the cache's estimate falls short of what any sample retains,
-// the multi-vsys fixture included, or when the digest keeps more than
-// digestBytes, so bench-check catches a figure that no longer holds.
+// the multi-vsys fixture included, when the digest keeps more than
+// digestBytes, or when the content keeps more than contentBytes, so
+// bench-check catches a figure that no longer holds.
 func BenchmarkCacheRetention(b *testing.B) {
 	digest := digestRetained(b)
 	if digest > digestBytes {
@@ -195,6 +223,10 @@ func BenchmarkCacheRetention(b *testing.B) {
 
 	st, err := store.Open(b.TempDir())
 	if err != nil {
+		b.Fatal(err)
+	}
+	apps := filepath.Join(b.TempDir(), "8000-1000.v1.xml.gz")
+	if err := os.WriteFile(apps, testconfig.AppContent(b, contentApps), 0o600); err != nil {
 		b.Fatal(err)
 	}
 	tiny, tinyBytes := snapshotOf(b, st, "fixture", multiVsysFixture)
@@ -213,8 +245,10 @@ func BenchmarkCacheRetention(b *testing.B) {
 	}
 
 	var samples []retentionSample
+	var content uint64
 	fixed, perByte := map[string]float64{}, map[string]float64{}
 	for b.Loop() {
+		content = contentRetained(b, apps)
 		samples = []retentionSample{{"multi-vsys fixture", tinyBytes, retained(b, tiny)}}
 		for _, s := range shapes {
 			rs, rl := retained(b, s.small), retained(b, s.large)
@@ -225,6 +259,11 @@ func BenchmarkCacheRetention(b *testing.B) {
 		}
 	}
 	b.ReportMetric(float64(digest), "digest-B") // after the loop, which clears metrics reported before
+	b.ReportMetric(float64(content), "content-B")
+	if content > contentBytes {
+		b.Errorf("a content version of %d applications retains %d, above the estimate contentBytes %d",
+			contentApps, content, contentBytes)
+	}
 	for _, s := range shapes {
 		b.ReportMetric(fixed[s.name], s.name+"-fixed-B")
 		b.ReportMetric(perByte[s.name], s.name+"-B/file-B")

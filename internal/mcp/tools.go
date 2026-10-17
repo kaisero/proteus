@@ -22,11 +22,11 @@ import (
 type policyArgs struct {
 	Source      string `json:"source" jsonschema:"an address or a host name; a host name is resolved with DNS and its first IPv4 address is checked"`
 	Destination string `json:"destination" jsonschema:"an address or a host name; a host name is resolved with DNS and its first IPv4 address is checked"`
-	Protocol    string `json:"protocol,omitempty" jsonschema:"tcp, udp, icmp or sctp; no default: a rule that needs it is held back and needs names it"`
+	Protocol    string `json:"protocol,omitempty" jsonschema:"tcp, udp, icmp, sctp or an IP protocol number such as 89; with application and no protocol, the application's default; with neither, a rule that needs it is held back and needs names it"`
 	Port        int    `json:"port,omitempty" jsonschema:"the destination port, a number; the protocol goes in protocol"`
 	SourcePort  int    `json:"source_port,omitempty" jsonschema:"the source port, a number"`
 	URL         string `json:"url,omitempty" jsonschema:"the URL; it decides the rules that name a URL category the configuration defines"`
-	Application string `json:"application,omitempty" jsonschema:"recorded, not evaluated; it does not change the answer"`
+	Application string `json:"application,omitempty" jsonschema:"a predefined or custom application; it decides the rules that name an application, a group, a filter or a container"`
 	User        string `json:"user,omitempty" jsonschema:"the source user, such as corp\\alice; it decides the rules that name a user or a group of the user snapshot"`
 	Device      string `json:"device,omitempty" jsonschema:"the firewall the path starts on; left out, the source places the start"`
 	Router      string `json:"router,omitempty" jsonschema:"the start's logical router; needs device"`
@@ -57,7 +57,7 @@ type natArgs struct {
 }
 
 type searchArgs struct {
-	Value  string   `json:"value" jsonschema:"the value or name to search for: an address, a prefix, a port or a name"`
+	Value  string   `json:"value" jsonschema:"the value or name to search for: an address, a prefix, a port, a name or an application"`
 	Kind   string   `json:"kind,omitempty" jsonschema:"an object kind to search, such as address or service; left out, every kind"`
 	Device []string `json:"device,omitempty" jsonschema:"the devices to search; left out, every device"`
 	Label  []string `json:"label,omitempty" jsonschema:"select devices by label, key=value"`
@@ -68,8 +68,8 @@ type searchArgs struct {
 }
 
 type lookupArgs struct {
-	Name   string   `json:"name" jsonschema:"the rule or object name"`
-	Kind   string   `json:"kind,omitempty" jsonschema:"pick one kind when several share the name: security-rule or an object kind"`
+	Name   string   `json:"name" jsonschema:"the rule, object or application name"`
+	Kind   string   `json:"kind,omitempty" jsonschema:"pick one kind when several share the name: security-rule, application or another object kind"`
 	Device []string `json:"device,omitempty" jsonschema:"the devices to read; left out, every device"`
 	Vsys   string   `json:"vsys,omitempty" jsonschema:"the vsys to read; left out, every vsys"`
 	At     string   `json:"at,omitempty" jsonschema:"read each device's newest snapshot at or before this time; left out, the latest"`
@@ -233,8 +233,8 @@ type calls struct {
 }
 
 // on is the env of one call: it logs to the call's run log, its
-// configurations and operational data come through the cache, and its loads
-// wait no longer than ctx. The returned
+// configurations, operational data and App-ID content data come through the
+// cache, and its loads wait no longer than ctx. The returned
 // view keeps the call's first server failure.
 func (c calls) on(ctx context.Context) (query.Env, *callCache) {
 	env := c.env
@@ -243,7 +243,7 @@ func (c calls) on(ctx context.Context) (query.Env, *callCache) {
 		return env, nil
 	}
 	cc := c.cache.bind(ctx)
-	env.Configs, env.Ops = cc, c.cache
+	env.Configs, env.Ops, env.Apps = cc, c.cache, cc
 	return env, cc
 }
 
@@ -387,7 +387,7 @@ var toolDescriptions = map[string]string{
 	"simulate_policy":  "Simulate a flow along its path through the firewalls of the stored snapshots: the security rule each firewall matches, with routing and NAT on each hop. The answer is static analysis, not a live test.",
 	"simulate_routing": "Trace the path a packet takes across the firewalls of the stored snapshots: each hop's route, NAT and policy-based forwarding.",
 	"simulate_nat":     "Simulate NAT on one firewall: the NAT rule a packet matches and its translation.",
-	"search":           "Search the stored configurations for an address, a prefix, a port or a name: the objects and rules that hold it. For a broad value, such as a large prefix, pass limit.",
-	"lookup":           "Show a rule or an object by name as the stored configurations define it, with its resolved members.",
+	"search":           "Search the stored configurations for an address, a prefix, a port, a name or an application: the objects and rules that hold it. For a broad value, such as a large prefix, pass limit.",
+	"lookup":           "Show a rule, an object or an application by name as the stored snapshots define it, with its resolved members.",
 	"snapshot_diff":    "Compare two snapshots of one device: the rules and objects added, removed and changed.",
 }

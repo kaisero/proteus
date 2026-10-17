@@ -12,9 +12,12 @@ proteus reports each of these limits in its answers. It does not hide them.
 
 ## What a configuration does not hold
 
-- **Predefined content.** Regions, predefined applications and PAN-DB URL
-  categories live in content that the firewall downloads. A rule that names one of
-  them stays in a simulation's candidate list, in doubt.
+- **Predefined content.** Regions and PAN-DB URL categories live in content that
+  the firewall downloads. A rule that names one of them stays in a simulation's
+  candidate list, in doubt.
+- **Predefined applications come from the device.** `fetch` stores the App-ID data
+  of each content version once, in the store. A snapshot without it keeps a rule
+  that names an application in doubt. See [Applications](#applications).
 - **Predefined services come from the device.** `fetch` stores `service-http` and
   `service-https` with each snapshot, in `predefined.xml`. A snapshot stored
   before, a firewall that refused them, or `--file` without `predefined.xml` next
@@ -28,11 +31,13 @@ proteus reports each of these limits in its answers. It does not hide them.
 
 - **No return path.** Only the forward path is checked. Asymmetric routing is not
   detected.
-- **Doubtful rules can leave a hop undecided.** Application, `application-default`,
-  absent services, predefined services the snapshot does not hold, user, HIP,
-  schedule, PAN-DB URL categories, regions, external dynamic lists and dynamic
-  address groups are not evaluated. A rule that names one of them before the match
-  makes the hop undecided, unless it has the same action as the match.
+- **Doubtful rules can leave a hop undecided.** Absent services, predefined
+  services the snapshot does not hold, user, HIP, schedule, PAN-DB URL categories,
+  regions, external dynamic lists and dynamic address groups are not evaluated. A
+  rule that names one of them before the match makes the hop undecided, unless it
+  has the same action as the match. The application and `application-default` are
+  evaluated with `--application` and App-ID data; see
+  [Applications](#applications).
 - **Default-rule overrides that disagree.** When the local and the pushed override
   of a default rule have different actions, the hop is undecided. The precedence is
   not verified on a Panorama-managed firewall.
@@ -66,6 +71,64 @@ hop's firewall the same question with `test security-policy-match`. On fw02,
   doubt. That rule has the same action as proteus's answer.
 - 1 hop was undecided: a rule on fw01 with service `application-default`.
 - fw01 is not probed yet.
+
+## Applications
+
+`simulate policy --application` matches the flow's application against the
+names, groups, filters and containers of each rule, with implicit use and the
+default ports of `application-default`. These cases stay in doubt or are not
+evaluated:
+
+- **No App-ID data.** A snapshot that names no content version, a content file
+  that is missing or cannot be read, or `--file` without `apps.xml.gz` beside the
+  configuration gives the note `note.app-data-missing`. The answer is then as
+  without `--application`: a rule that names an application stays in doubt.
+- **No `--application`.** A rule that names an application other than `any`, or
+  uses `application-default`, stays in doubt.
+- **A name the data does not hold.** A rule, a group or a filter `exclude` that
+  names an application or a container that neither the content data nor the
+  configuration holds stays a candidate with `doubt.application-unknown`. It never
+  decides. A content update can remove an application, and the content data does
+  not hold the internal preview applications.
+- **An unknown flow application.** With `--file`, an unknown name or a container
+  as `--application` exits 2 with up to five suggestions. In path mode the hop is
+  undecided, and the reason names the device and its content version.
+- **Policy-based forwarding.** A PBF rule that names an application stays in
+  doubt. The firewall matches PBF by application only after the App-ID cache
+  knows the application.
+- **The App-ID shift.** The firewall identifies an application over the first
+  packets of a session and can match the session again when it knows the
+  application. proteus evaluates one application per flow, as
+  `test security-policy-match` does. Every answer with an application carries
+  `note.app-shift`.
+- **An open protocol.** Without `--protocol`, the protocol comes from the
+  application's default. An application with several default protocols, or with
+  no default, leaves the protocol open. A rule that depends on it then stays in
+  doubt. In path mode, routing and NAT see the open protocol: a NAT or PBF rule
+  that names a service stays in doubt. `--protocol` decides them.
+- **An ICMP type.** An application identified by ICMP type matches its protocol.
+  The type is not checked, and a note says so.
+- **A default rule after an implicit allow.** proteus evaluates the default rules
+  after the rules that allow the application through implicit use. The lab
+  device's test command does not list default rules, so this order is not
+  verified with traffic.
+- **One content version on two releases.** The content file is stored once per
+  content version and shared by all devices. Two PAN-OS releases with the same
+  content version can answer differently. The captures show no such difference.
+- **A content file without containers.** When a device returns its applications
+  but not its containers, the file records that. A rule that names a container
+  then stays in doubt, also on later fetches of that content version. Delete the
+  file in `<store>/.content/` to fetch it again.
+- **`apps.xml.gz` is not checked.** With `--file`, nothing checks that the file
+  beside the configuration has the device's content version. The note
+  `note.app-data-file` names the file and its version.
+
+### Measured agreement on fw02
+
+`make app-lab` compares `simulate policy --file` with the device's own
+`test security-policy-match`, flow by flow. On fw02 (PAN-OS 12.2.3), 2026-10-17,
+all 108 flows agreed: the rule, the action and the implicit marker. See
+`docs/lab/app-id-lab.md`.
 
 ## simulate nat
 
@@ -123,9 +186,10 @@ hop's firewall the same question with `test security-policy-match`. On fw02,
 - **Data is as fresh as the fetch schedule.** The server reads the store and never
   contacts a firewall. A note says when a snapshot is older than
   `max_snapshot_age`.
-- **Applications stay undecidable.** A rule that names an application or
-  `application-default` can leave a flow undecided, and no input can decide it
+- **Some inputs cannot be given.** A rule that names an application the App-ID
+  data does not hold can leave a flow undecided, and no input can decide it
   (`needs: []`). So can a predefined service in a snapshot that does not hold it.
+  With App-ID data, `needs` asks for `application`.
 - **Configuration text reaches the model unchanged.** Rule names, descriptions
   and object names go into the answer as the configuration holds them.
 - **An inventory change needs a restart.** The device enum of the tools comes from

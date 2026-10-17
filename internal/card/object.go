@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/okaiser/proteus/internal/appid"
 	"github.com/okaiser/proteus/internal/config"
 	"github.com/okaiser/proteus/internal/index"
 	"github.com/okaiser/proteus/internal/resolve"
@@ -62,15 +63,25 @@ func Object(cfg *config.Config, idx *index.Index, o resolve.Object) Card {
 	return c
 }
 
-// Kinds lists what lookup can find: security rules and every object kind a rule
-// can name that the configuration can define (K10).
+// Kinds lists what lookup can find: security rules, every object kind a rule
+// can name that the configuration can define (K10), and the application
+// containers, which only the App-ID content data defines (spec 2026-10-16 §5.2).
 func Kinds(cfg *config.Config) []string {
-	return append([]string{KindRule}, resolve.ObjectKinds(cfg)...)
+	kinds := resolve.ObjectKinds(cfg)
+	if i, found := slices.BinarySearch(kinds, KindContainer); !found {
+		kinds = slices.Insert(kinds, i, KindContainer)
+	}
+	return append([]string{KindRule}, kinds...)
 }
 
 // Find returns a card for every element of that name visible in the index's scope,
 // filtered to one kind when kind is set: the kind is inferred otherwise (K11).
-func Find(cfg *config.Config, idx *index.Index, name, kind string) ([]Card, error) {
+//
+// apps is the App-ID content data, or nil. With it, Find also finds the
+// predefined applications and the containers, and a filter card lists the
+// applications the filter selects (spec 2026-10-16 §5.2). A custom
+// application has its application card either way.
+func Find(cfg *config.Config, idx *index.Index, apps *appid.Data, name, kind string) ([]Card, error) {
 	kinds := Kinds(cfg)
 	if kind != "" && !slices.Contains(kinds, kind) {
 		return nil, fmt.Errorf("unknown kind %q; lookup knows %v", kind, kinds)
@@ -89,8 +100,19 @@ func Find(cfg *config.Config, idx *index.Index, name, kind string) ([]Card, erro
 		if kind != "" && kind != k {
 			continue
 		}
-		if o, ok := b.object(k, name); ok {
+		switch o, ok := b.object(k, name); {
+		case k == KindApplication:
+			if c, ok := b.application(apps, name); ok {
+				out = append(out, c)
+			}
+		case ok && k == KindFilter:
+			out = append(out, FilterCard(cfg, idx, apps, o))
+		case ok:
 			out = append(out, Object(cfg, idx, o))
+		case k == KindContainer && apps != nil:
+			if ct, ok := apps.Container(name); ok {
+				out = append(out, containerCard(ct))
+			}
 		}
 	}
 	slices.SortStableFunc(out, func(a, b Card) int { return cmp.Compare(a.Kind, b.Kind) })

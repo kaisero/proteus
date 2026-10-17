@@ -303,6 +303,16 @@
                   "elapsed_ms": 0
                 },
                 {
+                  "slug": "match-application",
+                  "name": "Match the application",
+                  "fidelity": {
+                    "level": "exact"
+                  },
+                  "candidates": 0,
+                  "detail": "no application given",
+                  "elapsed_ms": 0
+                },
+                {
                   "slug": "match-service",
                   "name": "Match the service",
                   "fidelity": {
@@ -484,6 +494,16 @@
                   },
                   "candidates": 0,
                   "detail": "from transport, to server, as given",
+                  "elapsed_ms": 0
+                },
+                {
+                  "slug": "match-application",
+                  "name": "Match the application",
+                  "fidelity": {
+                    "level": "exact"
+                  },
+                  "candidates": 0,
+                  "detail": "no application given",
                   "elapsed_ms": 0
                 },
                 {

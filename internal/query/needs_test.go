@@ -84,7 +84,6 @@ func TestNeedsRows(t *testing.T) {
 			FlowInput{Port: "udp/443"},
 			[]string{"input.protocol protocol", "input.port port"},
 		},
-		{"icmp never needs a port", false, FlowInput{Protocol: "icmp"}, FlowInput{}, []string{}},
 		{
 			"category without a URL", true,
 			FlowInput{Protocol: "tcp", Port: "443", ToZone: "home"},
@@ -132,6 +131,13 @@ func TestNeedsOnlyHeldBack(t *testing.T) {
 	r = file(t, false, FlowInput{Protocol: "udp"})
 	if len(r.Needs) != 1 || r.Needs[0].Text != "give the destination port; it decides the service of rule block-udp-443" {
 		t.Errorf("%+v", r.Needs)
+	}
+	// icmp never needs a port: a protocol without ports never matches the
+	// custom service of block-udp-443 (spec 2026-10-16 P13), so the answer
+	// decides.
+	r = file(t, false, FlowInput{Protocol: "icmp"})
+	if r.Verdict == "undecided" || r.Needs != nil {
+		t.Errorf("icmp: %s: %+v (%s)", r.Verdict, r.Needs, r.Answer)
 	}
 }
 
@@ -308,11 +314,11 @@ func TestNeedsZones(t *testing.T) {
 		t.Errorf("given: %s, needs %+v", again.Answer, again.Needs)
 	}
 	// Without a rule, the default rule alone names no rule.
-	ns := needsOf(simulate.Flow{}, []cause{{code: "default.zones-unknown"}})
+	ns := needsOf(simulate.Flow{}, false, []cause{{code: "default.zones-unknown"}})
 	if len(ns) != 2 || ns[1].Text != "give the destination zone, with from_zone" {
 		t.Errorf("default rule: %+v", ns)
 	}
-	if ns := needsOf(simulate.Flow{FromZone: "inside", ToZone: "out"}, []cause{{code: "zone.derived"}}); len(ns) != 0 {
+	if ns := needsOf(simulate.Flow{FromZone: "inside", ToZone: "out"}, false, []cause{{code: "zone.derived"}}); len(ns) != 0 {
 		t.Errorf("given zones: %+v", ns)
 	}
 }
@@ -346,7 +352,7 @@ func TestSecurityCausesStopAtAnUnfixableDoubt(t *testing.T) {
 	if len(cs) != 2 || cs[0].rule.name != "both" || cs[1].rule.name != "next" || blocked {
 		t.Errorf("mixed: %+v %v", cs, blocked)
 	}
-	if ns := needsOf(tcp, cs); len(ns) != 1 || ns[0].Code != "input.port" {
+	if ns := needsOf(tcp, false, cs); len(ns) != 1 || ns[0].Code != "input.port" {
 		t.Errorf("mixed needs: %+v", ns)
 	}
 	v.Doubts = []securitypolicy.Doubt{{Position: 10, Rule: "after", Reasons: simulate.Reasons{user}}}

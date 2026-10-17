@@ -1,7 +1,9 @@
 # Lookup: what does a rule or object contain?
 
 `proteus lookup <name>` shows the whole element behind a name. `search` tells you
-where a name appears; `lookup` tells you what it is.
+where a name appears; `lookup` tells you what it is. With the device's App-ID
+data, it also shows predefined applications, containers and the applications of
+a filter.
 
 ## A security rule
 
@@ -77,6 +79,64 @@ address        net-vienna                   vsys:vsys1
 
 1 with it, 0 without, 0 holes
 ```
+
+## An application
+
+With the device's App-ID data, an application shows its card. The data comes
+from the snapshot, or with `--file` from `apps.xml.gz` beside the configuration:
+
+```
+$ proteus lookup app-remote --file demo/config.xml
+file / vsys1   demo/config.xml
+  note: application data of content 8000-1000 from demo/apps.xml.gz
+  file/vsys1: application app-remote
+application    app-remote                   predefined
+
+  category     networking
+  subcategory  remote-access
+  technology   client-server
+  risk         4
+  default      tcp/80,443,8090
+  uses         dns
+  implicit uses ssl, web-browsing
+
+1 with it, 0 without, 0 holes
+```
+
+The card shows the category, subcategory, technology and risk, the flags such as
+`evasive-behavior` or `ident-by-dport`, the tags, the default ports, whether the
+application is obsolete, its container and parent, the applications it uses,
+implies and tunnels, and its description. The parent and the tunnelled
+applications show as the data writes them: they can name an application the data
+does not hold. A container shows its functions.
+
+## An application filter
+
+A filter shows its criteria, the number of applications it selects, and the
+groups that hold it:
+
+```
+$ proteus lookup f-media --file demo/config.xml
+file / vsys1   demo/config.xml
+  note: application data of content 8000-1000 from demo/apps.xml.gz
+  file/vsys1: application-filter f-media
+application filter  f-media                      vsys:vsys1
+
+  criteria     category   media
+  applications 3 applications
+               app-media, app-old, shared-media
+  held by      inner
+
+1 with it, 0 without, 0 holes
+```
+
+The text shows the first 20 applications. `--full` shows all of them, and JSON
+and YAML always hold all of them. The filter counts custom applications and the
+tags that `application-tag` adds.
+
+Without App-ID data, lookup finds no predefined application and no container. A
+filter shows its criteria, and its applications read `unknown: no application
+data`. The note `note.app-data-missing` says so.
 
 ## When a name has several kinds
 

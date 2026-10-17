@@ -7,10 +7,12 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path/filepath"
 	"sync"
 
 	"golang.org/x/sync/singleflight"
 
+	"github.com/okaiser/proteus/internal/appid"
 	"github.com/okaiser/proteus/internal/config"
 	"github.com/okaiser/proteus/internal/estate"
 	"github.com/okaiser/proteus/internal/index"
@@ -36,6 +38,12 @@ import (
 // multiple of 4 MiB, the part per byte to a whole number. The schema digest
 // takes about 9 MB once per process: the benchmark measures
 // 8.8 MiB and fails above digestBytes, which leaves about 1 MiB to spare.
+//
+// One App-ID content version is one item of contentBytes, apart from the
+// configurations that read it (spec 2026-10-16 §7). The benchmark measures
+// a generated file of 5552 applications, as many as content 9159 has (F4):
+// 9.0 MiB. contentBytes is that value rounded up to a multiple of 4 MiB, and
+// the benchmark fails above it.
 const (
 	configFixedBytes = 32 << 20
 	configPerByte    = 13
@@ -47,18 +55,26 @@ const (
 	// failedBytes sizes a configuration that did not load: its error and the
 	// item. An estimate.
 	failedBytes = 1 << 10
+	// contentBytes sizes one App-ID content version: the parsed applications
+	// and containers of its file. The benchmark checks it.
+	contentBytes = 12 << 20
 )
 
 // configBytes estimates what a loaded configuration of a file's size retains
 // with its indexes.
 func configBytes(fileBytes int64) int64 { return configFixedBytes + configPerByte*fileBytes }
 
-// itemKey names a cached item: a kind and a snapshot.
+// itemKey names a cached item: a kind and a snapshot, or the content file of
+// a content version.
 type itemKey struct {
-	kind   string // "config", "ha" or "tables"
-	member string
-	id     string
+	kind   string // "config", "ha", "tables" or "content"
+	member string // "" for content
+	id     string // the snapshot id, or the content file's base name
 }
+
+// contentKey is the key of a content file: its base name,
+// <version>.v<trim>.xml.gz, names the content version (spec 2026-10-16 §3.1).
+func contentKey(path string) itemKey { return itemKey{kind: "content", id: filepath.Base(path)} }
 
 // item is one cached value and its estimated size.
 type item struct {
@@ -69,7 +85,8 @@ type item struct {
 
 // Cache keeps what the calls read of the store, per (member, snapshot id):
 // each snapshot's configuration with its indexes, and its operational
-// tables (spec §4.8). Which snapshot latest or at means is read from the store
+// tables (spec §4.8), and each App-ID content version's data (spec 2026-10-16
+// §7). Which snapshot latest or at means is read from the store
 // on each call; a snapshot's content never changes, so what the cache holds
 // for it stays true. Notes are never cached: each call builds them from the
 // snapshot meta and its clock.
@@ -84,6 +101,8 @@ type Cache struct {
 	ops   singleflight.Group
 	// load reads a configuration file; config.Load, or a test's stand-in.
 	load func(path string) (*config.Config, config.Report, error)
+	// loadApps reads a content file; appid.Load, or a test's stand-in.
+	loadApps func(path string) (*appid.Data, error)
 
 	mu    sync.Mutex
 	max   int64      // bytes
@@ -97,7 +116,7 @@ type Cache struct {
 // once with at most maxQueue waiting.
 func newCache(maxBytes int64, maxLoads, maxQueue int, strict bool) *Cache {
 	return &Cache{
-		loads: newLoader(maxLoads, maxQueue, strict), load: config.Load,
+		loads: newLoader(maxLoads, maxQueue, strict), load: config.Load, loadApps: appid.Load,
 		max: maxBytes, order: list.New(), items: map[itemKey]*list.Element{},
 	}
 }
@@ -120,6 +139,11 @@ func (c *Cache) get(k itemKey) (any, bool) {
 func (c *Cache) put(k itemKey, v any, size int64, schema bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	c.insert(k, v, size, schema)
+}
+
+// insert is put with the lock held.
+func (c *Cache) insert(k itemKey, v any, size int64, schema bool) {
 	if schema {
 		c.fixed = digestBytes
 	}
@@ -136,6 +160,19 @@ func (c *Cache) put(k itemKey, v any, size int64, schema bool) {
 		delete(c.items, it.key)
 		c.size -= it.size
 	}
+}
+
+// adopt is the value cached under k, now the most recently used. When k
+// holds none, it caches v of an estimated size and returns it.
+func (c *Cache) adopt(k itemKey, v any, size int64) any {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if el, ok := c.items[k]; ok {
+		c.order.MoveToFront(el)
+		return el.Value.(*item).val
+	}
+	c.insert(k, v, size, false)
+	return v
 }
 
 // fileBytes is a file's size, or 0 when it cannot be read.
@@ -157,6 +194,10 @@ type configEntry struct {
 
 	mu    sync.Mutex
 	built map[indexKey]*index.Index
+	// content is the snapshot's App-ID content data once a call read it
+	// through the entry, and contentKey its cache item.
+	content    *appid.Data
+	contentKey itemKey
 }
 
 type indexKey struct {
@@ -177,6 +218,21 @@ func (e *configEntry) keep(k indexKey, idx *index.Index) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.built[k] = idx
+}
+
+// apps is the content data the entry holds and its key; nil before a call
+// read it.
+func (e *configEntry) apps() (*appid.Data, itemKey) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.content, e.contentKey
+}
+
+// keepApps records the content data of the entry's snapshot.
+func (e *configEntry) keepApps(d *appid.Data, k itemKey) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.content, e.contentKey = d, k
 }
 
 // failedLoad is a configuration that did not load, cached under its
@@ -316,13 +372,64 @@ func (v *callCache) settle(err error) error {
 	return err
 }
 
-// Config implements estate.ConfigSource.
+// Config implements estate.ConfigSource. A snapshot that names a content
+// version reads its content data through the entry.
 func (v *callCache) Config(sn store.Snapshot) (estate.Loaded, error) {
 	e, err := v.c.config(v.ctx, sn)
 	if err != nil {
 		return estate.Loaded{}, v.fail(err)
 	}
-	return estate.Loaded{Config: e.cfg, Report: e.rep, Indexes: callIndexes{v: v, e: e, member: sn.Device, id: sn.ID}}, nil
+	l := estate.Loaded{Config: e.cfg, Report: e.rep, Indexes: callIndexes{v: v, e: e, member: sn.Device, id: sn.ID}}
+	if path := sn.ContentPath(); path != "" {
+		l.Apps = func() (*appid.Data, error) { return v.entryApps(e, path) }
+	}
+	return l, nil
+}
+
+// entryApps is the content data of an entry's snapshot. The entry keeps the
+// data it read. A later read gets the cache item, so the item counts as
+// used. When the cache dropped the item, the entry puts its data back with
+// its size and loads nothing: the data is in memory while the entry holds it
+// (spec 2026-10-16 §7). When another call loaded the version again since,
+// the entry takes that value, so one value stays.
+func (v *callCache) entryApps(e *configEntry, path string) (*appid.Data, error) {
+	if d, k := e.apps(); d != nil {
+		d = v.c.adopt(k, d, contentBytes).(*appid.Data)
+		e.keepApps(d, k)
+		return d, nil
+	}
+	d, err := v.Apps(path)
+	if err != nil {
+		return nil, err
+	}
+	e.keepApps(d, contentKey(path))
+	return d, nil
+}
+
+// Apps implements estate.AppSource: a content file's data, cached as one item
+// per content version, or loaded once for every caller that asks while it
+// loads. The load takes a load slot. A file that does not load is not kept:
+// a later fetch can write it.
+func (v *callCache) Apps(path string) (*appid.Data, error) {
+	k := contentKey(path)
+	if d, ok := v.c.get(k); ok {
+		return d.(*appid.Data), nil
+	}
+	d, err := v.c.loads.do(v.ctx, "content|"+k.id, func() (any, error) {
+		if d, ok := v.c.get(k); ok {
+			return d, nil
+		}
+		d, err := v.c.loadApps(path)
+		if err != nil {
+			return nil, err
+		}
+		v.c.put(k, d, contentBytes, false)
+		return d, nil
+	})
+	if err != nil {
+		return nil, v.fail(err)
+	}
+	return d.(*appid.Data), nil
 }
 
 // callIndexes is a cached configuration's indexes as one call builds them:

@@ -55,6 +55,13 @@ func TestRuleFieldsCoverTheSchema(t *testing.T) {
 			t.Errorf("the schema's %s is in %d classes", c, classes[c])
 		}
 	}
+	// The match-application stage evaluates the application with the App-ID
+	// data (spec 2026-10-16 §4.1).
+	for _, f := range ruleFields {
+		if f.name == "application" && f.class != evaluated {
+			t.Error("application is not evaluated")
+		}
+	}
 	declared := false
 	for _, h := range schema.HandModelled() {
 		declared = declared || h.Path == "/config/devices/entry/vsys/entry/rulebase/security/rules/entry" && h.Owner == "internal/simulate/securitypolicy"

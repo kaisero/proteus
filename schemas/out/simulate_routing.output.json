@@ -166,7 +166,7 @@
                       "properties": {
                         "code": {
                           "type": "string",
-                          "description": "the input's code: input.port, input.protocol, input.url, input.from-zone or input.to-zone"
+                          "description": "the input's code: input.port, input.protocol, input.url, input.application, input.from-zone or input.to-zone"
                         },
                         "input": {
                           "type": "string",
@@ -686,7 +686,7 @@
                       "properties": {
                         "code": {
                           "type": "string",
-                          "description": "the input's code: input.port, input.protocol, input.url, input.from-zone or input.to-zone"
+                          "description": "the input's code: input.port, input.protocol, input.url, input.application, input.from-zone or input.to-zone"
                         },
                         "input": {
                           "type": "string",
@@ -1746,7 +1746,7 @@
             "properties": {
               "code": {
                 "type": "string",
-                "description": "the input's code: input.port, input.protocol, input.url, input.from-zone or input.to-zone"
+                "description": "the input's code: input.port, input.protocol, input.url, input.application, input.from-zone or input.to-zone"
               },
               "input": {
                 "type": "string",

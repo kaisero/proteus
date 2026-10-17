@@ -14,6 +14,11 @@ DIGEST_DIR := internal/config/schemadigest
 # The digest records it; proteus reads every version with the one digest.
 PANOS_VERSION ?=
 
+# The lab device of make app-lab, by its inventory name, and the file that holds
+# its API key header (one line: X-PAN-KEY: <key>).
+DEVICE            ?=
+APPLAB_KEY_HEADER ?=
+
 # Pinned dev-tool versions (CI installs the same ones; keep in sync with .github).
 GOLANGCI_VERSION    := v2.14.0
 GOFUMPT_VERSION     := v0.11.0
@@ -26,7 +31,7 @@ GOVULNCHECK := $(GOBIN)/govulncheck
 
 .PHONY: help tools fmt fmt-check vet lint test test-race cover test-cov \
         bench-check vuln vuln-tool tidy-check gate ci build build-local schema-digest context context-check \
-        schema-pull hooks clean
+        schema-pull app-lab hooks clean
 
 help: ## Show this help
 	@grep -hE '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | sort | \
@@ -107,6 +112,12 @@ build: ## Cross-compile a static linux/amd64 proteus binary
 
 build-local: ## Build bin/proteus for this machine
 	CGO_ENABLED=0 go build -ldflags '$(LDFLAGS)' -o $(BIN_DIR)/$(BINARY) $(PKG)
+
+## --- lab ---
+
+app-lab: ## Compare proteus with the lab device (DEVICE=…), not in CI
+	@test -n "$(DEVICE)" || { echo "usage: make app-lab DEVICE=fw02 APPLAB_KEY_HEADER=<file>"; exit 1; }
+	go run ./internal/tools/applab -device '$(DEVICE)' -key-header '$(APPLAB_KEY_HEADER)'
 
 ## --- misc ---
 

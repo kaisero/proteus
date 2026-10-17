@@ -103,10 +103,45 @@ func (c *Client) Keygen(ctx context.Context, user, password string) error {
 // It refuses anything but a show command. An op command can also clear, test,
 // request or restart, and this library never changes a device (AGENTS.md R2).
 func (c *Client) Op(ctx context.Context, cmd string) ([]byte, error) {
-	if !strings.HasPrefix(cmd, "<show>") {
-		return nil, fmt.Errorf("fetch: refusing op command %q: only <show> commands are read-only", cmd)
+	if err := showOnly(cmd); err != nil {
+		return nil, err
 	}
 	return c.do(ctx, url.Values{"type": {"op"}, "cmd": {cmd}}, true)
+}
+
+// opStream runs one show command and hands its answer to read as a stream, so
+// a large answer is never held whole. It keeps the guard of Op: it refuses
+// anything but a show command before a request is sent (AGENTS.md R2). It is
+// unexported, so the exported method set stays the one R2 reviewed.
+//
+// An HTTP error status gives an *APIError, and read never runs. read can run
+// twice: send retries a body that breaks off, so read must first reset what it
+// wrote before.
+func (c *Client) opStream(ctx context.Context, cmd string, read func(io.Reader) error) error {
+	if err := showOnly(cmd); err != nil {
+		return err
+	}
+	return c.send(ctx, url.Values{"type": {"op"}, "cmd": {cmd}}, true, func(status int, body io.Reader) error {
+		if status >= 300 {
+			// send retries a body that breaks off whatever this returns, so
+			// the read error itself is of no use here.
+			b, _ := io.ReadAll(io.LimitReader(body, errorBodyLimit))
+			return checkResponse(status, b)
+		}
+		return read(body)
+	})
+}
+
+// errorBodyLimit bounds how much of an error answer opStream reads: enough for
+// the PAN-OS error envelope.
+const errorBodyLimit = 64 << 10
+
+// showOnly refuses a command that is not a show command.
+func showOnly(cmd string) error {
+	if !strings.HasPrefix(cmd, "<show>") {
+		return fmt.Errorf("fetch: refusing op command %q: only <show> commands are read-only", cmd)
+	}
+	return nil
 }
 
 // ExportConfig returns the running configuration as
@@ -115,13 +150,33 @@ func (c *Client) ExportConfig(ctx context.Context) ([]byte, error) {
 	return c.do(ctx, url.Values{"type": {"export"}, "category": {"configuration"}}, true)
 }
 
-// do sends one request. A transport error is retried once, after a short pause; a
-// refusal and a certificate error are not, because a second attempt fails the same
-// way. Every request is a POST: the XML API accepts it for these types, and it
-// keeps arguments out of the URL.
+// do sends one request and returns its whole body. A refusal returns the body
+// with an *APIError.
 func (c *Client) do(ctx context.Context, form url.Values, needKey bool) ([]byte, error) {
+	var body []byte
+	err := c.send(ctx, form, needKey, func(status int, r io.Reader) error {
+		b, err := io.ReadAll(r)
+		if err != nil {
+			return err
+		}
+		body = b
+		return checkResponse(status, b)
+	})
+	return body, err
+}
+
+// send sends one request and gives the answer to read. It is the one retry loop
+// of the client: do and opStream call it.
+//
+// A transport error is retried once, after a short pause, and so is a body that
+// breaks off while read reads it. A refusal and a certificate error are not
+// retried, because a second attempt fails the same way. An error that read
+// returns while the body reads well goes back at once, unchanged. Every request
+// is a POST: the XML API accepts it for these types, and it keeps arguments out
+// of the URL.
+func (c *Client) send(ctx context.Context, form url.Values, needKey bool, read func(status int, body io.Reader) error) error {
 	if needKey && c.key == "" {
-		return nil, errors.New("fetch: no API key; call Keygen first")
+		return errors.New("fetch: no API key; call Keygen first")
 	}
 	what := form.Get("type")
 	if cmd := form.Get("cmd"); cmd != "" {
@@ -132,13 +187,13 @@ func (c *Client) do(ctx context.Context, form url.Values, needKey bool) ([]byte,
 		if attempt > 0 {
 			select {
 			case <-ctx.Done():
-				return nil, fmt.Errorf("fetch: %s: %w", c.base, ctx.Err())
+				return fmt.Errorf("fetch: %s: %w", c.base, ctx.Err())
 			case <-time.After(c.retryWait):
 			}
 		}
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.base, strings.NewReader(form.Encode()))
 		if err != nil {
-			return nil, err
+			return err
 		}
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 		if needKey {
@@ -148,7 +203,7 @@ func (c *Client) do(ctx context.Context, form url.Values, needKey bool) ([]byte,
 		resp, err := c.http.Do(req)
 		if err != nil {
 			if ctx.Err() != nil {
-				return nil, err
+				return err
 			}
 			lastErr = err
 			c.log.Debugf(runlog.TagAPI, "%s: %s: attempt %d: %v", c.name, what, attempt+1, err)
@@ -157,22 +212,39 @@ func (c *Client) do(ctx context.Context, form url.Values, needKey bool) ([]byte,
 			}
 			continue
 		}
-		body, err := io.ReadAll(resp.Body)
+		body := &bodyReader{r: resp.Body}
+		err = read(resp.StatusCode, body)
 		_ = resp.Body.Close()
-		if err != nil {
-			lastErr = err
-			c.log.Debugf(runlog.TagAPI, "%s: %s: attempt %d: reading the body: %v", c.name, what, attempt+1, err)
+		if body.err != nil {
+			lastErr = body.err
+			c.log.Debugf(runlog.TagAPI, "%s: %s: attempt %d: reading the body: %v", c.name, what, attempt+1, body.err)
 			continue
 		}
-		err = checkResponse(resp.StatusCode, body)
-		c.log.Debugf(runlog.TagAPI, "%s: %s -> HTTP %d, %d bytes, %s", c.name, what, resp.StatusCode, len(body), time.Since(start).Round(time.Millisecond))
+		c.log.Debugf(runlog.TagAPI, "%s: %s -> HTTP %d, %d bytes, %s", c.name, what, resp.StatusCode, body.n, time.Since(start).Round(time.Millisecond))
 		if err != nil {
 			// The caller decides what a refusal means and logs it at warn.
 			c.log.Debugf(runlog.TagAPI, "%s: %s: refused: %v", c.name, what, err)
 		}
-		return body, err
+		return err
 	}
-	return nil, fmt.Errorf("fetch: %s: %w", c.base, lastErr)
+	return fmt.Errorf("fetch: %s: %w", c.base, lastErr)
+}
+
+// bodyReader reads the body of an answer and keeps its own read error, so send
+// can tell a connection that broke off from an error of the caller's read.
+type bodyReader struct {
+	r   io.Reader
+	n   int
+	err error
+}
+
+func (b *bodyReader) Read(p []byte) (int, error) {
+	n, err := b.r.Read(p)
+	b.n += n
+	if err != nil && !errors.Is(err, io.EOF) {
+		b.err = err
+	}
+	return n, err
 }
 
 // isCertificateError reports whether a transport error is the device's certificate

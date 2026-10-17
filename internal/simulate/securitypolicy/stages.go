@@ -22,6 +22,9 @@ var steps = []simulate.Step[state]{
 	{Name: "Resolve the source", Slug: "resolve-source", Do: resolveSource},
 	{Name: "Resolve the destination", Slug: "resolve-destination", Do: resolveDestination},
 	{Name: "Derive the zones", Slug: "derive-zones", Do: deriveZones},
+	// Before the service: application-default needs the application (spec
+	// 2026-10-16 D6).
+	{Name: "Match the application", Slug: "match-application", Do: matchApplication},
 	{Name: "Match the service", Slug: "match-service", Do: matchService},
 	{Name: "Match the URL category", Slug: "match-url", Do: matchURL},
 	{Name: "Drop disabled rules", Slug: "drop-disabled", Do: dropDisabled},
@@ -386,27 +389,74 @@ func viaDefault(via string) bool {
 	return err == nil && p.Bits() == 0
 }
 
-// matchService narrows by port. Rules naming application-default, or a service no
-// scope defines, such as service-https in a snapshot without the predefined
-// services, cannot be evaluated from a configuration; they stay, and the stage says
-// so.
+// matchService narrows by protocol and port. A rule whose service the
+// configuration defines matches when the service holds the flow's port. Rules
+// naming application-default, or a service no scope defines, such as
+// service-https in a snapshot without the predefined services, cannot be
+// evaluated from a configuration; they stay, and the stage says so.
+//
+// A protocol without ports, such as icmp or 89, never matches a custom
+// service or a service group, with application any or a named one, as
+// observed on the lab VM, PAN-OS 12.1.9 (spec 2026-10-16 P13). So such a flow
+// drops the rules whose service names only those, with and without a flow
+// application (D19); rules with any match.
+//
+// With an evaluated application, application-default compares the flow's
+// protocol and port with the application's default (§4.4, §4.5), and a rule
+// whose custom service holds a port outside the default gets a note (P8).
 func matchService(_ context.Context, s *state) (simulate.Outcome, error) {
-	term, ok := rulebase.ServiceTerm(s.in.Flow.Protocol, s.in.Flow.DestPort)
-	if !ok {
-		return simulate.Outcome{Fidelity: simulate.NotEvaluated("service"), Detail: "no port given"}, nil
+	term, ok := rulebase.ServiceTerm(s.proto, s.in.Flow.DestPort)
+	noPorts := !ok && portless(s.proto)
+	if !ok && !noPorts && !s.evaluated {
+		return simulate.Outcome{Fidelity: simulate.NotEvaluated("service"), Detail: s.serviceDetail("no port given")}, nil
 	}
-	b, rep := s.view.Candidates(index.Service, term)
+	var b *roaring.Bitmap
+	var rep index.Report
+	detail := term
+	switch {
+	case ok:
+		b, rep = s.view.Candidates(index.Service, term)
+	case noPorts:
+		b = s.idx.RulesWithAny(index.Service)
+		detail = s.proto + " has no ports, so no custom service or service group matches it"
+	default:
+		b = s.idx.RulesWithAny(index.Service)
+		detail = "no port given"
+	}
 	// A rule whose service holds the port through an object the
 	// configuration defines matches on it, whatever else the field names, as
 	// a service group with one undefined member does.
 	s.serviceHits = b.Clone()
 	kept := s.unevaluable("service", "application-default")
 	kept.AndNot(s.serviceHits)
+	// Without a port, a rule whose service names only defined objects is not
+	// judged: it stays, and the stage is not evaluated.
+	unjudged := roaring.New()
+	if !ok && !noPorts {
+		unjudged = roaring.AndNot(s.cand, b)
+		unjudged.AndNot(kept)
+	}
+	open := roaring.New()
+	if s.evaluated {
+		s.svcDoubts, s.portNotes = map[uint32]reason.Reason{}, map[uint32][]reason.Reason{}
+		if ok {
+			s.nonDefaultPorts(b)
+		}
+		open = s.applicationDefault(kept, b)
+	}
 	b.Or(kept)
+	b.Or(unjudged)
 	s.cand.And(b)
-	out := simulate.Outcome{Fidelity: simulate.Exact, Detail: term, Candidates: s.cand}
+	out := simulate.Outcome{Fidelity: simulate.Exact, Detail: s.serviceDetail(detail), Candidates: s.cand}
 	out.Unresolved = rep.Unresolved
-	if still := roaring.And(kept, s.cand); !still.IsEmpty() {
+	if still := roaring.And(unjudged, s.cand); !still.IsEmpty() {
+		out.Fidelity = simulate.NotEvaluated("service")
+	}
+	if still := roaring.And(open, s.cand); !still.IsEmpty() {
+		out.Fidelity = simulate.Weakest(out.Fidelity, simulate.OverMatchBecause(reason.New("doubt.app-port-open",
+			"kept rules whose service is application-default, and the question leaves the port or the protocol open: "+names(s.rules, still))))
+	}
+	if still := roaring.And(roaring.AndNot(kept, open), s.cand); !still.IsEmpty() {
 		out.Fidelity = simulate.Weakest(out.Fidelity, simulate.OverMatchBecause(reason.New("doubt.service-kept",
 			"kept rules whose service is application-default, predefined or absent: "+names(s.rules, still))))
 	}
@@ -415,6 +465,15 @@ func matchService(_ context.Context, s *state) (simulate.Outcome, error) {
 	}
 	out.Debug = []string{"left: " + names(s.rules, s.cand)}
 	return out, nil
+}
+
+// serviceDetail adds to the stage detail where the run's protocol came from,
+// when the flow did not give it (spec 2026-10-16 §4.1).
+func (s *state) serviceDetail(detail string) string {
+	if s.protoFrom == "" {
+		return detail
+	}
+	return detail + "; " + s.protoFrom
 }
 
 // matchURL narrows by URL category. A rule naming a category the configuration does
@@ -497,10 +556,20 @@ func dropDisabled(_ context.Context, s *state) (simulate.Outcome, error) {
 }
 
 // order lists the candidates in evaluation order: a rule's bit is its position.
+// With an evaluated application, the explicit candidates and the rules kept in
+// doubt come first, in rule order, then the implicit candidates, in rule order:
+// an explicit match wins over an implicit one, also when it comes later (spec
+// 2026-10-16 I2, D7). The default rules follow both in firstMatch (I6).
 func order(_ context.Context, s *state) (simulate.Outcome, error) {
 	s.verdict.Candidates = nil
-	for it := s.cand.Iterator(); it.HasNext(); {
-		s.verdict.Candidates = append(s.verdict.Candidates, s.rules[it.Next()])
+	passes := []*roaring.Bitmap{s.cand}
+	if s.evaluated {
+		passes = []*roaring.Bitmap{roaring.And(roaring.Or(s.explicit, s.kept), s.cand), roaring.And(s.implicit, s.cand)}
+	}
+	for _, b := range passes {
+		for it := b.Iterator(); it.HasNext(); {
+			s.verdict.Candidates = append(s.verdict.Candidates, s.rules[it.Next()])
+		}
 	}
 	s.verdict.Doubts = s.doubts()
 	return simulate.Outcome{Fidelity: simulate.Exact, Detail: fmt.Sprintf("%d in order", len(s.verdict.Candidates))}, nil
@@ -528,7 +597,7 @@ func firstMatch(_ context.Context, s *state) (simulate.Outcome, error) {
 		upto, before = cands[:at+1], cands[:at]
 	}
 	out := simulate.Outcome{Fidelity: simulate.Exact}
-	if skipped := notEvaluated(upto); len(skipped) > 0 {
+	if skipped := notEvaluated(upto, s.evaluated); len(skipped) > 0 {
 		out.Fidelity = simulate.NotEvaluated(skipped...)
 	}
 	var action string
@@ -538,6 +607,8 @@ func firstMatch(_ context.Context, s *state) (simulate.Outcome, error) {
 		s.verdict.Rule = &r
 		action = r.Action
 		out.Detail = fmt.Sprintf("%s (%s), position %d", r.Name, r.Action, r.Position)
+		s.implicitWinner(r)
+		s.notes = append(s.notes, s.portNotes[uint32(r.Position-1)]...) //nolint:gosec // a rule position cannot reach 2^32
 	default:
 		lead := "no enabled rule matches"
 		if len(cands) > 0 {
@@ -575,9 +646,13 @@ func firstMatch(_ context.Context, s *state) (simulate.Outcome, error) {
 
 // notEvaluated names the matching dimensions no stage evaluates that a candidate
 // at or before the decision sets: only those can change which rule decides.
-func notEvaluated(upto []resolve.Rule) []string {
+// application says whether match-application evaluated the application.
+func notEvaluated(upto []resolve.Rule, application bool) []string {
 	var out []string
 	for _, c := range []struct{ field, dim string }{{"application", "application"}, {"source-user", "user"}} {
+		if application && c.field == "application" {
+			continue
+		}
 		for _, r := range upto {
 			if len(notAny(r.Fields[c.field])) > 0 {
 				out = append(out, c.dim)

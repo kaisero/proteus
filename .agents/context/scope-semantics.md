@@ -91,6 +91,8 @@ possibly a zone of its own.
 
 <!-- GENERATED:api ./internal/resolve -->
 ```go
+type Application struct{ ... }
+type ApplicationFilter struct{ ... }
 type DefaultRule struct{ ... }
 type DestinationTranslation struct{ ... }
 type FIBRoute struct{ ... }
@@ -130,6 +132,9 @@ func (t *Target) Rules(rb Rulebase) []Rule
 func (t *Target) Scope() config.Scope
 func (t *Target) Serial() string
 func (t *Target) Vsys() string
+func ApplicationFilters(cfg *config.Config, sc config.Scope) []ApplicationFilter
+func ApplicationTags(cfg *config.Config, sc config.Scope) map[string][]string
+func Applications(cfg *config.Config, sc config.Scope) []Application
 func DynamicRoutingProtocols(cfg *config.Config) []string
 func InterfaceAddresses(cfg *config.Config) []InterfaceAddress
 func Namesakes(kind string) []string

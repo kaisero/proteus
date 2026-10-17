@@ -37,7 +37,16 @@ The **store** keeps the snapshots:
       predefined.xml
       meta.json
     latest -> 2026-09-27T17-05-00Z
+  .content/
+    8000-1000.v1.xml.gz
 ```
+
+The **App-ID data** of a device is not a document of its snapshot. `.content/`
+holds one file per App-ID content version: the predefined applications and
+containers, with the fields that proteus needs. Every device and snapshot with
+that content version shares the file. `meta.json` names the version as
+`app_version`. The directory has mode 0700, and each file has mode 0600. See
+[Snapshots](guides/snapshots.md#app-id-data).
 
 Questions read `latest` by default. `--at <time>` reads the newest snapshot at or
 before that time. The store keeps the newest 20 snapshots with a configuration

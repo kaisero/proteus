@@ -332,6 +332,48 @@ func (i *Index) GroupsHolding(kind, name string, direct bool) []Group {
 	return out
 }
 
+// GroupPath returns the shortest chain of groups of a kind from group down to
+// a member it holds: [group, ..., name]. outer > inner > ssl is
+// ["outer", "inner", "ssl"]. It is nil when group does not hold name, or when
+// the kind has no groups. A search shows it for nested application groups
+// (spec 2026-10-16 §5.1).
+func (i *Index) GroupPath(kind, group, name string) []string {
+	idx := slices.IndexFunc(i.families, func(f *groupFamily) bool { return f.kind == kind })
+	if _, known := i.in.Lookup(name); idx < 0 || !known {
+		return nil
+	}
+	c := i.families[idx].closure
+	// Breadth first, upward from the member: the first time the walk meets
+	// group, the chain is a shortest one. below maps each group reached to
+	// the member it was reached from.
+	below := map[string]string{}
+	seen := map[string]bool{name: true}
+	queue := []string{name}
+	for len(queue) > 0 {
+		cur := queue[0]
+		queue = queue[1:]
+		// Every name in the queue is known: name was checked, and a group
+		// name comes from the interner.
+		id, _ := i.in.Lookup(cur)
+		for _, g := range c.directGroups(id, i.in) {
+			if seen[g] {
+				continue
+			}
+			seen[g], below[g] = true, cur
+			if g == group {
+				path := []string{g}
+				for n := g; n != name; {
+					n = below[n]
+					path = append(path, n)
+				}
+				return path
+			}
+			queue = append(queue, g)
+		}
+	}
+	return nil
+}
+
 // groupsReaching returns the groups of the field's families holding a name.
 func (i *Index) groupsReaching(f Field, name string) []string {
 	id, known := i.in.Lookup(name)

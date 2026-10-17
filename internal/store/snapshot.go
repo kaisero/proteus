@@ -22,6 +22,17 @@ type Snapshot struct {
 // Path returns where a document of this snapshot is stored.
 func (sn Snapshot) Path(doc string) string { return filepath.Join(sn.Dir, doc+".xml") }
 
+// ContentPath returns where the App-ID content file of this snapshot is
+// stored, from its AppVersion and the trim version, or "" when the snapshot
+// names no valid content version (spec 2026-10-16 §3.1). The file may be gone:
+// the reader reports a missing file.
+func (sn Snapshot) ContentPath() string {
+	if sn.Dir == "" {
+		return ""
+	}
+	return contentPath(filepath.Dir(filepath.Dir(sn.Dir)), sn.Meta.AppVersion)
+}
+
 // ConfigPath returns where this snapshot's configuration is stored, or an error
 // that matches ErrNoConfig when the configuration did not arrive.
 // A configuration that is there but cannot be read gives one that matches

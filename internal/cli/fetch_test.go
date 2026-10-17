@@ -733,7 +733,7 @@ func TestSimulatePolicy(t *testing.T) {
 		}
 	}
 	if err := json.Unmarshal([]byte(out), &env); err != nil || len(env.Results) != 1 || env.Results[0].FirstMatch == nil ||
-		env.Results[0].FirstMatch.Name != "from-inside" || len(env.Results[0].Stages) != 8 || env.Results[0].Fidelity.Level == "" {
+		env.Results[0].FirstMatch.Name != "from-inside" || len(env.Results[0].Stages) != 9 || env.Results[0].Fidelity.Level == "" {
 		t.Errorf("json: %v %s", err, out)
 	}
 }
@@ -1093,7 +1093,7 @@ func TestFetchWhyShowsTheStages(t *testing.T) {
 	c := newCLI(t)
 	c.inventory(inventoryFor(lab(t).Start(t)))
 	out := c.want(0, "fetch", "fw01", "--why")
-	for _, slug := range []string{"resolve", "login", "ha", "documents", "store"} {
+	for _, slug := range []string{"resolve", "login", "ha", "documents", "applications", "store"} {
 		if !strings.Contains(out, "  "+slug+" ") {
 			t.Errorf("missing stage %s:\n%s", slug, out)
 		}
@@ -1246,5 +1246,139 @@ func TestAFailedExportMakesTheFetchIncomplete(t *testing.T) {
 				t.Errorf("json:\n%s", out)
 			}
 		})
+	}
+}
+
+// contentFiles lists the files in the store's content directory.
+func contentFiles(t *testing.T, c *cli) []string {
+	t.Helper()
+	entries, err := os.ReadDir(filepath.Join(c.env["PROTEUS_STORE"], store.ContentDir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for _, e := range entries {
+		names = append(names, e.Name())
+	}
+	return names
+}
+
+// metaJSON is a device's latest snapshot and its raw meta.json.
+func metaJSON(t *testing.T, c *cli, device string) (store.Snapshot, string) {
+	t.Helper()
+	sn, err := store.At(c.env["PROTEUS_STORE"]).Latest(device)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return sn, read(t, filepath.Join(sn.Dir, "meta.json"))
+}
+
+// Two devices of one content version share one content file, and each snapshot
+// names it. A later fetch reuses it without asking the device (spec 2026-10-16
+// §3.1, §2.2).
+func TestFetchStoresContentOnce(t *testing.T) {
+	t.Parallel()
+	c := newCLI(t)
+	d1, d2 := lab(t), lab(t)
+	c.inventory(inventoryFor(d1.Start(t), d2.Start(t)))
+	c.want(0, "fetch", "--all")
+	if got := contentFiles(t, c); !slices.Equal(got, []string{"8000-1000.v1.xml.gz"}) {
+		t.Errorf("content files = %v", got)
+	}
+	for _, dev := range []string{"fw01", "fw02"} {
+		if sn, _ := metaJSON(t, c, dev); sn.Meta.AppVersion != "8000-1000" || sn.ContentPath() == "" {
+			t.Errorf("%s: meta = %+v", dev, sn.Meta)
+		}
+	}
+	before := len(d1.Requests())
+	c.want(0, "fetch", "fw01")
+	for _, r := range d1.Requests()[before:] {
+		if r.Cmd == fakepanos.ApplicationsCmd || r.Cmd == fakepanos.ContainersCmd {
+			t.Errorf("a stored content file was fetched again: %s", r.Cmd)
+		}
+	}
+	if sn, _ := metaJSON(t, c, "fw01"); sn.Meta.AppVersion != "8000-1000" {
+		t.Errorf("a hit names the file too: %+v", sn.Meta)
+	}
+}
+
+// A device that refuses its application data is stored without app_version,
+// and the fetch is complete (spec 2026-10-16 §3.1).
+func TestFetchRefusedLeavesAppVersionEmpty(t *testing.T) {
+	t.Parallel()
+	c := newCLI(t)
+	d := lab(t)
+	d.Ops[fakepanos.ApplicationsCmd] = fakepanos.Refusal("17", "show -> application is unexpected")
+	c.inventory(inventoryFor(d.Start(t)))
+	out := c.want(0, "fetch", "fw01", "--output", "json")
+	if _, raw := metaJSON(t, c, "fw01"); strings.Contains(raw, "app_version") {
+		t.Errorf("meta.json:\n%s", raw)
+	}
+	if !slices.ContainsFunc(fetchNotes(t, out), func(n note) bool { return n.Code == "note.fetch-applications-missing" }) {
+		t.Errorf("no note:\n%s", out)
+	}
+}
+
+// A content file that cannot be written leaves the snapshot without
+// app_version, adds the note with the cause and makes the run incomplete
+// (spec 2026-10-16 §3.1). The prune of the same run fails, and the run goes on.
+func TestFetchContentWriteFailureIsANote(t *testing.T) {
+	t.Parallel()
+	c := newCLI(t)
+	c.inventory(inventoryFor(lab(t).Start(t)))
+	root := c.env["PROTEUS_STORE"]
+	if err := os.MkdirAll(root, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, store.ContentDir), []byte("not a directory"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	out := c.want(exitIncomplete, "fetch", "fw01", "--output", "json")
+	sn, raw := metaJSON(t, c, "fw01")
+	if sn.ID == "" || strings.Contains(raw, "app_version") || !strings.Contains(raw, "application data") {
+		t.Errorf("meta.json:\n%s", raw)
+	}
+	if !slices.ContainsFunc(fetchNotes(t, out), func(n note) bool {
+		return n.Code == "note.fetch-applications-missing" && strings.Contains(n.Note, "not a directory")
+	}) {
+		t.Errorf("no note with the cause:\n%s", out)
+	}
+	if !strings.Contains(out, `"slug": "store",
+          "name": "store the snapshot",
+          "status": "partial"`) {
+		t.Errorf("the store stage must be partial:\n%s", out)
+	}
+	if !strings.Contains(c.logFile(), "pruning the content files") {
+		t.Errorf("the failed prune is not logged:\n%s", c.logFile())
+	}
+}
+
+// One prune per run, after every device, removes an old file that no snapshot
+// names (spec 2026-10-16 §3.4).
+func TestFetchPrunesContentOnce(t *testing.T) {
+	t.Parallel()
+	c := newCLI(t)
+	c.inventory(inventoryFor(lab(t).Start(t), lab(t).Start(t)))
+	dir := filepath.Join(c.env["PROTEUS_STORE"], store.ContentDir)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	old := filepath.Join(dir, "7000-0001.v1.xml.gz")
+	if err := os.WriteFile(old, []byte("old"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	then := time.Now().Add(-2 * time.Hour)
+	if err := os.Chtimes(old, then, then); err != nil {
+		t.Fatal(err)
+	}
+	c.want(0, "fetch", "--all", "--log-level", "debug")
+	if _, err := os.Stat(old); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("the old file is still there: %v", err)
+	}
+	if got := contentFiles(t, c); !slices.Equal(got, []string{"8000-1000.v1.xml.gz"}) {
+		t.Errorf("content files = %v", got)
+	}
+	if n := strings.Count(c.logFile(), "pruned the content files"); n != 1 {
+		t.Errorf("pruned %d times:\n%s", n, c.logFile())
 	}
 }

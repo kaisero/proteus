@@ -8,8 +8,12 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
+
+	"github.com/okaiser/proteus/internal/estate"
+	"github.com/okaiser/proteus/internal/testconfig"
 )
 
 var update = flag.Bool("update", false, "rewrite the golden files in testdata/golden")
@@ -306,6 +310,83 @@ func TestGoldenFQDN(t *testing.T) {
 			goldenText(t, g.name, fqdnCLI(t, g.addr).want(0, append(args, "--why")...))
 			golden(t, g.name, fqdnCLI(t, g.addr).want(0, append(args, "--output", "json")...))
 			goldenFile(t, g.name+".yaml", fqdnCLI(t, g.addr).want(0, append(args, "--output", "yaml")...))
+		})
+	}
+}
+
+// appConfig copies firewall-appid.xml into a new directory, with the content
+// file of version 8000-1000 beside it as apps.xml.gz, and returns the copy's
+// path (spec 2026-10-16 §6). No binary fixture is committed (D15).
+func appConfig(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.xml")
+	if err := os.WriteFile(path, []byte(read(t, fixture("firewall-appid.xml"))), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	testconfig.Content(t, filepath.Join(dir, estate.AppsFile))
+	return path
+}
+
+// appPolicy runs simulate policy from inside to outside on the App-ID
+// fixture and returns what its golden holds: stdout, or stderr for a usage
+// error, which prints nothing on stdout.
+func appPolicy(t *testing.T, code int, args ...string) string {
+	t.Helper()
+	argv := append([]string{"simulate", "policy", "10.1.0.5", "10.2.0.5", "--file", appConfig(t)}, args...)
+	out, errOut, got := newCLI(t).run(argv...)
+	if got != code {
+		t.Fatalf("%v: exit %d, want %d\nstdout:\n%s\nstderr:\n%s", argv, got, code, out, errOut)
+	}
+	if code == exitUsage {
+		return errOut
+	}
+	return out
+}
+
+// simulate policy with an application on a file (spec 2026-10-16 §4.1): an
+// explicit match on the default port, an implicit match (I1), and a name the
+// data lacks, which is a usage error with the nearest names (P10).
+func TestGoldenApp(t *testing.T) {
+	t.Parallel()
+	for _, g := range []struct {
+		name string
+		code int
+		args []string
+	}{
+		{"simulate-policy-app", 0, []string{"--application", "ssl", "--port", "443"}},
+		{"simulate-policy-app-implicit", 0, []string{"--application", "web-browsing", "--port", "80"}},
+		{"simulate-policy-app-unknown", exitUsage, []string{"--application", "app-medai", "--port", "443"}},
+	} {
+		t.Run(g.name, func(t *testing.T) {
+			t.Parallel()
+			golden(t, g.name, appPolicy(t, g.code, append(g.args, "--output", "json")...))
+			goldenFile(t, g.name+".yaml", appPolicy(t, g.code, append(g.args, "--output", "yaml")...))
+			goldenText(t, g.name, appPolicy(t, g.code, append(g.args, "--why")...))
+		})
+	}
+}
+
+// search and lookup with the App-ID data on a file (spec 2026-10-16 §5): ssl
+// found through nested groups and implicit use, the card of an application,
+// and the card of a filter with the applications it selects.
+func TestGoldenAppFind(t *testing.T) {
+	t.Parallel()
+	for _, g := range []struct {
+		name string
+		args []string
+	}{
+		// With --why, so the JSON twin's answers are lines of the text.
+		{"search-app", []string{"search", "ssl", "--why"}},
+		{"lookup-app", []string{"lookup", "app-remote"}},
+		{"lookup-app-filter", []string{"lookup", "f-media"}},
+	} {
+		t.Run(g.name, func(t *testing.T) {
+			t.Parallel()
+			args := append(slices.Clone(g.args), "--file", appConfig(t))
+			golden(t, g.name, newCLI(t).want(0, append(args, "--output", "json")...))
+			goldenFile(t, g.name+".yaml", newCLI(t).want(0, append(args, "--output", "yaml")...))
+			goldenText(t, g.name, newCLI(t).want(0, args...))
 		})
 	}
 }

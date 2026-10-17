@@ -24,6 +24,7 @@ import (
 	"github.com/okaiser/proteus/internal/simulate"
 	"github.com/okaiser/proteus/internal/simulate/pathlab"
 	"github.com/okaiser/proteus/internal/store"
+	"github.com/okaiser/proteus/internal/testconfig"
 )
 
 // clock is when the first snapshot is taken; the questions run an hour later.
@@ -40,6 +41,13 @@ type snap struct{ device, config string }
 // and fw02.
 func labEnv(t *testing.T, snaps ...snap) query.Env {
 	t.Helper()
+	return labEnvApps(t, "", snaps...)
+}
+
+// labEnvApps is labEnv whose snapshots name the content version apps, ""
+// for none. A version's file holds the App-ID fixture.
+func labEnvApps(t *testing.T, apps string, snaps ...snap) query.Env {
+	t.Helper()
 	now := clock
 	root := t.TempDir()
 	st, err := store.Open(root)
@@ -47,13 +55,20 @@ func labEnv(t *testing.T, snaps ...snap) query.Env {
 		t.Fatal(err)
 	}
 	st = st.WithClock(func() time.Time { return now })
+	if apps != "" {
+		gz := filepath.Join(t.TempDir(), "content.xml.gz")
+		testconfig.Content(t, gz)
+		if err := st.WriteContent(apps, pathlab.Read(t, gz)); err != nil {
+			t.Fatal(err)
+		}
+	}
 	for i, s := range snaps {
 		docs := map[string][]byte{
 			store.ConfigDoc:     pathlab.Read(t, s.config),
 			store.InterfacesDoc: pathlab.Read(t, pathlab.OpdataFile(s.device+"-interface-all.xml")),
 			store.FIBDoc:        pathlab.Read(t, pathlab.OpdataFile(s.device+"-advanced-routing-fib.xml")),
 		}
-		meta := store.Meta{Device: s.device, Host: s.device + ".example.test", Serial: "00000000000" + string(rune('1'+i))}
+		meta := store.Meta{Device: s.device, Host: s.device + ".example.test", Serial: "00000000000" + string(rune('1'+i)), AppVersion: apps}
 		if _, err := st.Write(meta, docs, 20); err != nil {
 			t.Fatal(err)
 		}
@@ -596,7 +611,9 @@ func TestResourcesAndInstructions(t *testing.T) {
 			}
 		}
 	}
-	if got := read(limitsURI); !strings.Contains(got, "undermatch") {
+	// The limits say that the application is evaluated (spec 2026-10-16 §7).
+	if got := read(limitsURI); !strings.Contains(got, "undermatch") || !strings.Contains(got, "evaluated with implicit use") ||
+		strings.Contains(got, "recorded only") {
 		t.Errorf("limits %q", got)
 	}
 }
@@ -969,5 +986,141 @@ func TestVerdictOf(t *testing.T) {
 		if len(got) != tc.kept || n != tc.count || !slices.Equal(got, viewOf(tc.doc).answers()[:tc.kept]) {
 			t.Errorf("%v: kept %d of %d", tc.doc, len(got), n)
 		}
+	}
+}
+
+// appRules allow ssl and ospf on their default ports, between any zones.
+const appRules = `<entry name="allow-ssl"><from><member>any</member></from><to><member>any</member></to>` +
+	`<source><member>any</member></source><destination><member>any</member></destination>` +
+	`<application><member>ssl</member></application><service><member>application-default</member></service>` +
+	`<action>allow</action></entry>` +
+	`<entry name="allow-ospf"><from><member>any</member></from><to><member>any</member></to>` +
+	`<source><member>any</member></source><destination><member>any</member></destination>` +
+	`<application><member>ospf</member></application><service><member>application-default</member></service>` +
+	`<action>allow</action></entry>`
+
+// appLab is the path lab whose devices hold appRules, each snapshot with the
+// App-ID fixture of content 8000-1000.
+func appLab(t *testing.T) query.Env {
+	t.Helper()
+	var snaps []snap
+	for _, d := range pathlab.Devices {
+		cfg := bytes.Replace(pathlab.Read(t, pathlab.ConfigFile(d)), []byte("</zone>"),
+			[]byte("</zone><rulebase><security><rules>"+appRules+"</rules></security></rulebase>"), 1)
+		path := filepath.Join(t.TempDir(), d+".xml")
+		if err := os.WriteFile(path, cfg, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		snaps = append(snaps, snap{d, path})
+	}
+	return labEnvApps(t, "8000-1000", snaps...)
+}
+
+// pathAnswer is a simulate_policy answer in summary, as far as the App-ID
+// tests read it.
+type pathAnswer struct {
+	Envelope struct {
+		Results []struct {
+			Verdict string `json:"verdict"`
+			Hops    []struct {
+				Device string `json:"device"`
+				Checks []struct {
+					Verdict string          `json:"verdict"`
+					Rule    string          `json:"rule"`
+					Reasons []reason.Reason `json:"reasons"`
+				} `json:"checks"`
+			} `json:"hops"`
+		} `json:"results"`
+	} `json:"envelope"`
+	Error *toolError `json:"error"`
+}
+
+// askApp calls simulate_policy along the lab path with args added to the
+// endpoints, and fails unless it answers one result.
+func askApp(t *testing.T, cs *sdk.ClientSession, args map[string]any) pathAnswer {
+	t.Helper()
+	args["source"], args["destination"] = pathlab.Source, pathlab.Destination
+	res, err := cs.CallTool(context.Background(), &sdk.CallToolParams{Name: "simulate_policy", Arguments: args})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var a pathAnswer
+	b, err := json.Marshal(res.StructuredContent)
+	if err == nil {
+		err = json.Unmarshal(b, &a)
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.IsError || len(a.Envelope.Results) != 1 {
+		t.Fatalf("%s", text(res))
+	}
+	return a
+}
+
+// simulate_policy decides by the application: ssl on its default port passes
+// allow-ssl on both hops, and another application on that port is denied
+// (spec 2026-10-16 §7).
+func TestPolicyToolEvaluatesTheApplication(t *testing.T) {
+	t.Parallel()
+	cs := connect(t, appLab(t))
+	a := askApp(t, cs, map[string]any{"application": "ssl", "port": 443})
+	r := a.Envelope.Results[0]
+	if r.Verdict != "allowed" || len(r.Hops) != 2 {
+		t.Fatalf("%+v", r)
+	}
+	for _, h := range r.Hops {
+		if c := h.Checks[0]; c.Verdict != "pass" || c.Rule != "allow-ssl" {
+			t.Errorf("%s: %s %s", h.Device, c.Verdict, c.Rule)
+		}
+	}
+	if r := askApp(t, cs, map[string]any{"application": "app-media", "port": 443}).Envelope.Results[0]; r.Verdict != "denied" {
+		t.Errorf("app-media: %+v", r)
+	}
+}
+
+// simulate_policy takes an IP protocol number: ospf on protocol 89 matches
+// allow-ospf, whose application-default is ident-by-ip-protocol 89 (spec
+// 2026-10-16 §7, P4).
+func TestPolicyToolTakesAProtocolNumber(t *testing.T) {
+	t.Parallel()
+	cs := connect(t, appLab(t))
+	r := askApp(t, cs, map[string]any{"application": "ospf", "protocol": "89"}).Envelope.Results[0]
+	if r.Verdict != "allowed" || len(r.Hops) == 0 {
+		t.Fatalf("%+v", r)
+	}
+	for _, h := range r.Hops {
+		if c := h.Checks[0]; c.Verdict != "pass" || c.Rule != "allow-ospf" {
+			t.Errorf("%s: %s %s", h.Device, c.Verdict, c.Rule)
+		}
+	}
+	// A number past 255 or another name is refused by the schema.
+	for _, p := range []string{"256", "ftp", "089"} {
+		res, err := cs.CallTool(context.Background(), &sdk.CallToolParams{Name: "simulate_policy", Arguments: map[string]any{
+			"source": pathlab.Source, "destination": pathlab.Destination, "protocol": p,
+		}})
+		if err != nil || !res.IsError || !strings.Contains(text(res), "validating") {
+			t.Errorf("protocol %s: %v %s", p, err, text(res))
+		}
+	}
+}
+
+// A container as the flow application is no usage error in path mode: the
+// hop is undecided, and its reason lists the container's functions (P10,
+// D13).
+func TestPolicyToolHoldsAnUnknownApplicationAtTheHop(t *testing.T) {
+	t.Parallel()
+	cs, rec := serve(t, appLab(t), true)
+	a := askApp(t, cs, map[string]any{"application": "office-suite", "port": 443})
+	r := a.Envelope.Results[0]
+	if a.Error != nil || r.Verdict != "undecided" || len(r.Hops) == 0 {
+		t.Fatalf("%+v %+v", a.Error, r)
+	}
+	c := r.Hops[0].Checks[0]
+	if c.Verdict != "undecided" || len(c.Reasons) == 0 || !strings.Contains(c.Reasons[0].Text, "office-docs") {
+		t.Errorf("%s: %+v", c.Verdict, c.Reasons)
+	}
+	if call := rec.last(t); call.Status != StatusOK {
+		t.Errorf("audit %+v", call)
 	}
 }

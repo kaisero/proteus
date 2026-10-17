@@ -26,12 +26,20 @@ a model type. proteus answers questions; it never changes anything.
 A loaded index is immutable once built. A reload produces a new index and
 replaces the pointer.
 
-The fetcher is the one package that talks to a device. It asks for an API key, runs
-`<show>` commands and exports the configuration; `fetch.Client` refuses any other
-op command before it reaches the device, and has no method for anything else.
+The fetcher is the one package of proteus that talks to a device. It asks for an
+API key, runs `<show>` commands and exports the configuration; `fetch.Client`
+refuses any other op command before it reaches the device, and has no method for
+anything else.
+
+One lab tool also talks to a device, by owner decision (spec 2026-10-16 §9.1,
+plan C7): `internal/tools/applab`, which `make app-lab` runs by hand, never in CI.
+It sends only `<show>` and `<test><security-policy-match>` op commands; a function
+refuses any other command before it is sent. It never asks for a key, configures,
+or commits.
 
 Check: `go test ./internal/archtest -run TestPublicAPIIsReadOnly`
 Check: `go test ./internal/fetch -run TestOnlyReadCalls`
+Check: `go test ./internal/tools/applab -run TestOnlyShowAndPolicyMatch`
 
 ## R3 — Nothing is dropped silently
 
@@ -99,7 +107,12 @@ Today these nodes are registered:
   administrator: a secret the schema does not mark `encrypt="yes"`;
 - the credentials the schema keeps in clear text, in shared and in a vsys: the
   SNMP v2c trap community, the SCEP fixed challenge, the URL, payload, header
-  and parameter values of an HTTP log server profile and the values of an MFA server profile.
+  and parameter values of an HTTP log server profile and the values of an MFA server profile;
+- the predefined applications under `predefined/application` and the application
+  containers under `predefined/application-container`, which fetch reads with a
+  `<show>` command and `internal/appid` trims to the kept fields;
+- the fields of an application filter, which `internal/appid` maps by hand to the
+  application fields they select, for the shared and the vsys filters.
 
 Check: `go test ./internal/schema -run TestHandModelledIsDeclared`
 
@@ -146,8 +159,9 @@ Check: `go test ./internal/index -run TestClosureRepresentation`
 
 `config`, `resolve` and `index` import no `net`, `net/http`, `net/url` or `os/exec`,
 and no package of this module except each other, `internal/schema`,
-`internal/digest` and `internal/reason`. `index` does not import `simulate`. `fetch`
-imports neither `simulate` nor `estate`. `store` does not import `fetch`. `search`
+`internal/digest`, `internal/appid` and `internal/reason`. `internal/appid` owns the
+App-ID content file; it imports only the standard library and `internal/reason`.
+`index` does not import `simulate`. `fetch` imports neither `simulate` nor `estate`. `store` does not import `fetch`. `search`
 and `drift` answer from one configuration and import none of `fetch`, `store` or
 `estate`. `card` builds lookup's cards from one configuration and imports none of
 `fetch`, `store`, `estate` or `simulate`. `simulate` is a leaf: it imports no
@@ -167,7 +181,7 @@ I/O. `internal/simulate/pathpolicy` answers a flow along its path: it may import
 `simulate/topology`, `config`, `index` and `reason`, and imports none of `estate`,
 `store`, `fetch`, `search`, `drift`, `card`, and no I/O package. `internal/query`
 answers the questions for every front end: it may import the simulations, `estate`,
-`store`, `inventory`, `search`, `drift`, `card`, `resolve`, `index`, `config`,
+`store`, `inventory`, `search`, `drift`, `card`, `resolve`, `index`, `config`, `appid`,
 `runlog` and `reason`, and reaches none of `fetch`, `cli`, `mcp`, Cobra or a
 terminal package; `cli` imports it. `internal/reason` names the reason codes answers
 carry. It imports only the standard library, and every package may import it: each

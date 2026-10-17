@@ -8,6 +8,7 @@ import (
 
 	"github.com/RoaringBitmap/roaring/v2"
 
+	"github.com/okaiser/proteus/internal/appid"
 	"github.com/okaiser/proteus/internal/config"
 )
 
@@ -74,6 +75,10 @@ type Hit struct {
 type Providers struct {
 	Users UserDirectory
 	Zones ZoneLocator
+	// Apps is the App-ID content data of the device. With it, the application
+	// value space answers filters and containers; without it, it reports them
+	// (spec 2026-10-16 §4.8).
+	Apps *appid.Data
 }
 
 // UserDirectory maps a user to the groups holding it, from User-ID or a snapshot.

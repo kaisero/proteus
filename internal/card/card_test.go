@@ -4,9 +4,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
+	"github.com/okaiser/proteus/internal/appid"
 	"github.com/okaiser/proteus/internal/config"
 	"github.com/okaiser/proteus/internal/index"
 	"github.com/okaiser/proteus/internal/resolve"
@@ -23,7 +25,7 @@ func find(t *testing.T, fixture, name, kind string) []Card {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cs, err := Find(cfg, idx, name, kind)
+	cs, err := Find(cfg, idx, nil, name, kind)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -193,10 +195,10 @@ func TestFindInfersTheKind(t *testing.T) {
 	}
 	cfg, _, _ := config.Load("../../testdata/config/firewall-lookup.xml")
 	idx, _ := index.New(cfg, config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}, resolve.Security)
-	if _, err := Find(cfg, idx, "x", "rule"); err == nil || !strings.Contains(err.Error(), "security-rule") {
+	if _, err := Find(cfg, idx, nil, "x", "rule"); err == nil || !strings.Contains(err.Error(), "security-rule") {
 		t.Errorf("an unknown kind must list the valid ones: %v", err)
 	}
-	if cs, _ := Find(cfg, idx, "dc-to-pve", KindRule); len(cs) != 1 {
+	if cs, _ := Find(cfg, idx, nil, "dc-to-pve", KindRule); len(cs) != 1 {
 		t.Error("--kind security-rule")
 	}
 }
@@ -326,7 +328,7 @@ func TestAGroupOpensAtItsShallowestPlace(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cs, err := Find(cfg, idx, "r1", KindRule)
+	cs, err := Find(cfg, idx, nil, "r1", KindRule)
 	if err != nil || len(cs) != 1 {
 		t.Fatalf("Find: %d cards, %v", len(cs), err)
 	}
@@ -378,7 +380,7 @@ func TestACardOpensEachGroupOnce(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cs, err := Find(cfg, idx, "d-0", "address-group")
+	cs, err := Find(cfg, idx, nil, "d-0", "address-group")
 	if err != nil || len(cs) != 1 {
 		t.Fatalf("Find: %d cards, %v", len(cs), err)
 	}
@@ -424,5 +426,187 @@ func TestApplicationGroupAndExternalListCards(t *testing.T) {
 	e := one(t, "firewall-opaque.xml", "edl-bad")
 	if e.Kind != "external-list" || row(e, "value", "").Text != "external list, ip" {
 		t.Errorf("external list = %+v", e)
+	}
+}
+
+// findApps finds a name in vsys1 of firewall-appid.xml with the App-ID content
+// data of testdata/appid/content.xml, or without it when apps is false.
+func findApps(t *testing.T, name, kind string, apps bool) []Card {
+	t.Helper()
+	return findAppsIn(t, "../../testdata/config/firewall-appid.xml", name, kind, apps)
+}
+
+// findAppsIn is findApps on another configuration.
+func findAppsIn(t *testing.T, path, name, kind string, apps bool) []Card {
+	t.Helper()
+	cfg, _, err := config.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	idx, err := index.New(cfg, config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}, resolve.Security)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var data *appid.Data
+	if apps {
+		gz := filepath.Join(t.TempDir(), "apps.xml.gz")
+		testconfig.Content(t, gz)
+		if data, err = appid.Load(gz); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cs, err := Find(cfg, idx, data, name, kind)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return cs
+}
+
+// oneApp is the one card of a name with the App-ID data.
+func oneApp(t *testing.T, name string) Card {
+	t.Helper()
+	cs := findApps(t, name, "", true)
+	if len(cs) != 1 {
+		t.Fatalf("%s: %d cards", name, len(cs))
+	}
+	return cs[0]
+}
+
+// The application card shows the default ports and the applications the
+// application uses and implies (spec 2026-10-16 §5.2).
+func TestLookupAppCard(t *testing.T) {
+	t.Parallel()
+	c := oneApp(t, "app-remote")
+	if c.Kind != KindApplication || c.Scope.String() != "predefined" {
+		t.Fatalf("header = %+v", c)
+	}
+	for _, tc := range []struct{ section, want string }{
+		{"category", "networking"},
+		{"subcategory", "remote-access"},
+		{"technology", "client-server"},
+		{"risk", "4"},
+		{"default", "tcp/80,443,8090"},
+	} {
+		if got := row(c, tc.section, "").Text; got != tc.want {
+			t.Errorf("%s = %q, want %q", tc.section, got, tc.want)
+		}
+	}
+	if got := flat(row(c, "implicit uses", "").Items); got != "ssl, web-browsing" {
+		t.Errorf("implicit uses = %s", got)
+	}
+	if got := flat(row(c, "uses", "").Items); got != "dns" {
+		t.Errorf("uses = %s", got)
+	}
+	// The flags hold ident-by-dport (F12); obsolete and the container show
+	// when set; the tags count application-tag (S12).
+	ssl := oneApp(t, "SSL")
+	if ssl.Name != "ssl" || !strings.Contains(flat(row(ssl, "flags", "").Items), "ident-by-dport") || ssl.Description == "" {
+		t.Errorf("ssl = %+v", ssl)
+	}
+	if old := oneApp(t, "app-old"); row(old, "obsolete", "").Text != "yes" {
+		t.Errorf("app-old = %+v", old)
+	}
+	if docs := oneApp(t, "office-docs"); row(docs, "container", "").Text != "office-suite" {
+		t.Errorf("office-docs = %+v", docs)
+	}
+	if media := oneApp(t, "app-media"); flat(row(media, "tags", "").Items) != "[Web App], [Streaming], t-sanctioned" {
+		t.Errorf("app-media tags = %s", flat(row(media, "tags", "").Items))
+	}
+}
+
+// parent and tunnels show the names as the content writes them: the parent is
+// no application, and the tunnel name is unknown (spec 2026-10-16 F15).
+func TestLookupAppCardShowsNamesAsWritten(t *testing.T) {
+	t.Parallel()
+	c := oneApp(t, "app-parent")
+	if row(c, "parent", "").Text != "not-an-app" || flat(row(c, "tunnels", "").Items) != "unknown-tunnel" {
+		t.Errorf("app-parent = %+v", c)
+	}
+}
+
+// A custom application has its application card from the configuration, with
+// or without data; a predefined application and a container need the data.
+func TestLookupAppCardOfACustomApplication(t *testing.T) {
+	t.Parallel()
+	cs := findApps(t, "erp-custom", "", false)
+	if len(cs) != 1 || cs[0].Kind != KindApplication || cs[0].Scope.String() != "vsys:vsys1" ||
+		row(cs[0], "default", "").Text != "tcp/8443" || !strings.Contains(flat(row(cs[0], "flags", "").Items), "able-to-transfer-file") {
+		t.Errorf("erp-custom = %+v", cs)
+	}
+	if cs := findApps(t, "erp-nodefault", "", false); len(cs) != 1 || row(cs[0], "default", "").Text != "any" {
+		t.Errorf("erp-nodefault = %+v", cs)
+	}
+	for _, name := range []string{"ssl", "office-suite"} {
+		if cs := findApps(t, name, "", false); len(cs) != 0 {
+			t.Errorf("%s without data = %+v", name, cs)
+		}
+	}
+	ct := oneApp(t, "office-suite")
+	if ct.Kind != KindContainer || flat(row(ct, "functions", "").Items) != "office-docs, office-mail" {
+		t.Errorf("office-suite = %+v", ct)
+	}
+	if cs := findApps(t, "office-suite", KindContainer, true); len(cs) != 1 {
+		t.Errorf("--kind %s = %+v", KindContainer, cs)
+	}
+}
+
+// The filter card shows the criteria and the applications the filter
+// selects, by name, with their count: custom ones too (S5). Without data the
+// applications are unknown (spec 2026-10-16 §5.2).
+func TestLookupFilterCard(t *testing.T) {
+	t.Parallel()
+	c := oneApp(t, "f-media")
+	if c.Kind != KindFilter || row(c, "criteria", "category").Text != "media" {
+		t.Fatalf("f-media = %+v", c)
+	}
+	apps := c.Sections[slices.IndexFunc(c.Sections, func(s Section) bool { return s.Title == "applications" })]
+	if len(apps.Rows) != 2 || apps.Rows[0].Text != "3 applications" || flat(apps.Rows[1].Items) != "app-media, app-old, shared-media" {
+		t.Errorf("applications = %+v", apps)
+	}
+	if flat(row(c, "held by", "").Items) != "inner" {
+		t.Errorf("held by = %+v", row(c, "held by", ""))
+	}
+	risky := oneApp(t, "f-risky")
+	if row(risky, "criteria", "exclude").Text != "app-old, office-suite" || row(risky, "criteria", "tag").Text != "[Streaming]" {
+		t.Errorf("f-risky = %+v", risky)
+	}
+	cs := findApps(t, "f-media", "", false)
+	if len(cs) != 1 || row(cs[0], "applications", "").Text != "unknown: no application data" {
+		t.Errorf("f-media without data = %+v", cs)
+	}
+}
+
+// A vsys application and a vsys filter that hide shared ones of their name
+// say so, as every object card does.
+func TestAppCardsNameWhatTheyShadow(t *testing.T) {
+	t.Parallel()
+	raw, err := os.ReadFile("../../testdata/config/firewall-appid.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	shared := `<application-filter><entry name="f-media"><risk><member>1</member></risk></entry></application-filter>` +
+		`<application><entry name="erp-custom"><category>media</category><risk>1</risk></entry>`
+	out := strings.Replace(string(raw), "<shared>\n    <application>", "<shared>"+shared, 1)
+	path := filepath.Join(t.TempDir(), "config.xml")
+	if err := os.WriteFile(path, []byte(out), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"f-media", "erp-custom"} {
+		if cs := findAppsIn(t, path, name, "", true); len(cs) != 1 || cs[0].Shadows != "shared" {
+			t.Errorf("%s = %+v", name, cs)
+		}
+	}
+}
+
+// Lookup knows the container kind, which no configuration defines.
+func TestKindsNameTheContainer(t *testing.T) {
+	t.Parallel()
+	cfg, _, err := config.Load("../../testdata/config/firewall-appid.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	kinds := Kinds(cfg)
+	if !slices.Contains(kinds, KindContainer) || !slices.IsSorted(kinds[1:]) || kinds[0] != KindRule {
+		t.Errorf("kinds = %v", kinds)
 	}
 }

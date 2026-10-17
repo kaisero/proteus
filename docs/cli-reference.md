@@ -46,7 +46,8 @@ proteus fetch [device...] [--label key=value] [--all]
 ```
 
 Logs in to each device, reads its configuration and operational state, and stores
-them as a snapshot. Name devices, select them with `--label`, or pass `--all`.
+them as a snapshot. It also stores the device's App-ID data, once per content
+version. Name devices, select them with `--label`, or pass `--all`.
 See [Snapshots](guides/snapshots.md#fetch).
 
 ## inventory init
@@ -80,8 +81,9 @@ documents.
 proteus snapshot diff [selection flags] [--from <time>] [--to <time>]
 ```
 
-Compares objects and rules per vsys and shared. The default compares the snapshot
-before `latest` with `latest`.
+Compares objects and rules per vsys and shared. A note says when the App-ID
+content version changed. The default compares the snapshot before `latest` with
+`latest`.
 
 | Flag | Meaning |
 | --- | --- |
@@ -94,7 +96,9 @@ before `latest` with `latest`.
 proteus search <term> [selection flags] [flags]
 ```
 
-Finds every place a value or name appears. See [Search](guides/search.md).
+Finds every place a value or name appears. For an application, it also finds the
+filters, containers and implicit use that select it. See
+[Search](guides/search.md).
 
 | Flag | Meaning |
 | --- | --- |
@@ -114,13 +118,14 @@ Finds every place a value or name appears. See [Search](guides/search.md).
 proteus lookup <name> [selection flags] [flags]
 ```
 
-Shows the whole rule or object behind a name. See [Lookup](guides/lookup.md).
+Shows the whole rule, object or application behind a name. See
+[Lookup](guides/lookup.md).
 
 | Flag | Meaning |
 | --- | --- |
-| `--kind <kind>` | `security-rule` or an object kind, when several kinds share the name |
+| `--kind <kind>` | `security-rule`, `application` or another object kind, when several kinds share the name |
 | `--expand` | show each name's value and every group's members |
-| `--full` | show every item of a list |
+| `--full` | show every item of a list, and every application of a filter |
 
 ## simulate policy
 
@@ -134,11 +139,12 @@ Names the security rule a flow would hit. See
 | Flag | Meaning |
 | --- | --- |
 | `--port <port>` | destination port: `443` or `tcp/443` |
-| `--protocol <proto>` | `tcp`, `udp`, `sctp`, `icmp` or a number; default `tcp` |
+| `--protocol <proto>` | `tcp`, `udp`, `sctp`, `icmp` or a number; default `tcp`, or with `--application` the application's default |
 | `--source-port <n>` | source port |
 | `--from-zone`, `--to-zone` | zones; derived when absent |
 | `--url <url>` | URL, matched against URL categories |
-| `--application`, `--user` | accepted, not evaluated yet |
+| `--application <name>` | a predefined or custom application; matched with App-ID data |
+| `--user` | accepted, not evaluated yet |
 | `--no-dns` | do not resolve an FQDN endpoint |
 | `--why` | show every stage: its fidelity, what it kept and why |
 

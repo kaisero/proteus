@@ -493,6 +493,75 @@ func TestVerdictLineEdges(t *testing.T) {
 	}
 }
 
+// --application without --protocol: the flow keeps no protocol, and the run
+// takes tcp from ssl's default, so allow-outer decides on tcp/443 (spec
+// 2026-10-16 §4.1). A given --protocol stays.
+func TestApplicationWithoutProtocolTakesTheDefault(t *testing.T) {
+	t.Parallel()
+	var e struct {
+		Input struct {
+			Flow struct {
+				Protocol string `json:"protocol"`
+			} `json:"flow"`
+		} `json:"input"`
+		Results []struct {
+			Rule string `json:"rule"`
+		} `json:"results"`
+	}
+	if err := json.Unmarshal([]byte(appPolicy(t, 0, "--application", "ssl", "--port", "443", "--output", "json")), &e); err != nil {
+		t.Fatal(err)
+	}
+	if e.Input.Flow.Protocol != "" || len(e.Results) != 1 || e.Results[0].Rule != "allow-outer" {
+		t.Errorf("%+v", e)
+	}
+	if err := json.Unmarshal([]byte(appPolicy(t, 0, "--application", "ssl", "--port", "443", "--protocol", "udp", "--output", "json")), &e); err != nil {
+		t.Fatal(err)
+	}
+	if e.Input.Flow.Protocol != "udp" || len(e.Results) != 1 || e.Results[0].Rule == "allow-outer" {
+		t.Errorf("udp: %+v", e)
+	}
+}
+
+// The text header names the protocol the run used when the flow has none.
+func TestTextHeaderNamesTheRunProtocol(t *testing.T) {
+	t.Parallel()
+	out := appPolicy(t, 0, "--application", "ssl", "--port", "443")
+	if first, _, _ := strings.Cut(out, "\n"); first != "10.1.0.5 -> 10.2.0.5 tcp/443" {
+		t.Errorf("header %q", first)
+	}
+}
+
+// simulate routing and simulate nat keep tcp without --protocol (D14).
+func TestRoutingKeepsTCP(t *testing.T) {
+	t.Parallel()
+	var e struct {
+		Input struct {
+			Flow struct {
+				Protocol string `json:"protocol"`
+			} `json:"flow"`
+		} `json:"input"`
+	}
+	out := routingLab(t, false).want(0, "simulate", "routing", "198.18.10.5", "8.8.8.8", "--output", "json")
+	if err := json.Unmarshal([]byte(out), &e); err != nil || e.Input.Flow.Protocol != "tcp" {
+		t.Errorf("routing: %v %+v", err, e)
+	}
+	out = natLab(t).want(0, "simulate", "nat", "198.18.1.10", "198.18.250.10", "--device", "fw01",
+		"--router", "default", "--from-zone", "transport", "--port", "8443", "--output", "json")
+	if err := json.Unmarshal([]byte(out), &e); err != nil || e.Input.Flow.Protocol != "tcp" {
+		t.Errorf("nat: %v %+v", err, e)
+	}
+}
+
+// Path mode with --application and no --protocol names the application's
+// default in its title: each hop runs with it (spec 2026-10-16 §4.1).
+func TestPathTitleNamesTheApplicationsDefault(t *testing.T) {
+	t.Parallel()
+	out := pathLab(t).want(0, "simulate", "policy", pathlab.Source, pathlab.Destination, "--application", "ssl", "--port", "443")
+	if !strings.Contains(out, "simulate policy "+pathlab.Source+" -> "+pathlab.Destination+" default of ssl, port 443") {
+		t.Errorf("title:\n%s", out)
+	}
+}
+
 // A composite reason's parts are one unresolved line of text, as one reason.
 func TestUnresolvedPartsShareALine(t *testing.T) {
 	t.Parallel()

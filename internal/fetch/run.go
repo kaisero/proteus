@@ -23,4 +23,19 @@ type Result struct {
 	// Notes say what a reader of the snapshot should know, such as an HA state that
 	// was not followed.
 	Notes []reason.Reason
+	// Apps is the device's App-ID data: nil when the device refused it or the
+	// step failed.
+	Apps *AppData
+}
+
+// AppData is the App-ID data of one fetch (spec 2026-10-16 §2.2).
+type AppData struct {
+	// Version is the content version, such as 8000-1000.
+	Version string
+	// File is the gzip content file to store; nil on a hit, when the store
+	// holds the file of Version already.
+	File []byte
+	// ContainersMissing says that the device answered the applications and
+	// not the containers. The file records it too.
+	ContainersMissing bool
 }

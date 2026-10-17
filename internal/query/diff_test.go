@@ -235,3 +235,34 @@ func TestConfigGap(t *testing.T) {
 		t.Errorf("with: %s", got)
 	}
 }
+
+// Two snapshots of different content versions give a note; equal versions,
+// or a snapshot without one, give none (spec 2026-10-16 §5.3). The newer
+// version's file is built here: no binary fixture is committed (D15).
+func TestDiffNotesTheContentVersion(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		older, newer string
+		want         bool
+	}{{"8000-1000", "8001-1001", true}, {"8000-1000", "8000-1000", false}, {"", "8001-1001", false}} {
+		l := newLab(t)
+		for _, v := range []string{tc.older, tc.newer} {
+			if v == "" {
+				continue
+			}
+			if err := l.st.WriteContent(v, contentOf(t, v)); err != nil {
+				t.Fatal(err)
+			}
+		}
+		l.write(store.Meta{Device: "fw01", AppVersion: tc.older}, pathlab.Read(t, fixture("firewall-lab.xml")))
+		l.write(store.Meta{Device: "fw01", AppVersion: tc.newer}, pathlab.Read(t, fixture("firewall-lab-changed.xml")))
+		e, err := SnapshotDiff(context.Background(), l.env(), DiffInput{Selection: Selection{Device: []string{"fw01"}}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		n, ok := noteWith(e.Notes, "note.app-version-changed")
+		if ok != tc.want || ok && (n.Note != "content version 8000-1000 → 8001-1001" || n.Device != "fw01") {
+			t.Errorf("%s → %s: notes %+v", tc.older, tc.newer, e.Notes)
+		}
+	}
+}

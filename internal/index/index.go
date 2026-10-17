@@ -98,8 +98,9 @@ func build(cfg *config.Config, edges edgeList, sc config.Scope, rb resolve.Ruleb
 	userGroups := resolve.ObjectsInScope(cfg, sc, "user-group")
 	dynUsers := resolve.ObjectsInScope(cfg, sc, "dynamic-user-group")
 
-	apps := resolve.ObjectsInScope(cfg, sc, "application")
-	appFilters := resolve.ObjectsInScope(cfg, sc, "application-filter")
+	apps := resolve.Applications(cfg, sc)
+	appFilters := resolve.ApplicationFilters(cfg, sc)
+	appTags := resolve.ApplicationTags(cfg, sc)
 	appContainers := resolve.ObjectsInScope(cfg, sc, "application-container")
 
 	zones := resolve.ZonesInScope(cfg, sc)
@@ -115,7 +116,7 @@ func build(cfg *config.Config, edges edgeList, sc config.Scope, rb resolve.Ruleb
 		newServiceResolver(svcs, ri),
 		newUserResolver(localUsers, userGroups, dynUsers),
 		newZoneResolver(sc, zones, ifAddrs, routes, resolve.DynamicRoutingProtocols(cfg)),
-		newAppResolver(apps, appFilters, appContainers),
+		newAppResolver(apps, appFilters, appTags, appContainers),
 	} {
 		for _, k := range r.kinds() {
 			byKind[k] = r

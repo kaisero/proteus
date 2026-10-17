@@ -79,6 +79,7 @@ func Targets(ctx context.Context, env Env, sel Selection) ([]estate.Target, []es
 		return nil, nil, u
 	}
 	when.Now, when.MaxAge, when.Log, when.Ops, when.Configs = env.now(), env.MaxAge, env.Log, env.Ops, env.Configs
+	when.Apps = env.appSource()
 	if env.Store == nil {
 		return nil, nil, errNoStore
 	}
@@ -162,6 +163,7 @@ func openEstate(env Env, at string) (fetchedEstate, error) {
 		return fetchedEstate{}, u
 	}
 	when.Now, when.MaxAge, when.Log, when.Ops, when.Configs = env.now(), env.MaxAge, env.Log, env.Ops, env.Configs
+	when.Apps = env.appSource()
 	if env.Store == nil {
 		return fetchedEstate{}, errNoStore
 	}
@@ -171,7 +173,7 @@ func openEstate(env Env, at string) (fetchedEstate, error) {
 // simEnv is a simulation environment over the estate, resolving FQDNs with
 // the env's resolver.
 func (e fetchedEstate) simEnv(env Env) *simulate.Env {
-	return &simulate.Env{Log: env.Log, Network: e.network, Load: storeLoader(e.st, e.when, e.network, nil), Resolve: env.Resolve}
+	return &simulate.Env{Log: env.Log, Network: e.network, Load: storeLoader(e.st, e.when, e.network, nil, false), Resolve: env.Resolve}
 }
 
 // storeLoader loads a device's vsys configuration and index from the store, as
@@ -180,7 +182,9 @@ func (e fetchedEstate) simEnv(env Env) *simulate.Env {
 // the first member's (spec 2026-10-07 §3.4). Each member, snapshot and vsys
 // loads once, and the vsys of one snapshot share its configuration and index set,
 // so the edge list of a snapshot is read once however many vsys a run visits.
-func storeLoader(st *store.Store, when estate.When, net *estate.Network, users index.UserDirectory) func(dev, vsys string) (simulate.Target, error) {
+// With withApps, each target carries its snapshot's App-ID content data and
+// the notes of appsOf, so a hop without data says so (spec 2026-10-16 §4.1).
+func storeLoader(st *store.Store, when estate.When, net *estate.Network, users index.UserDirectory, withApps bool) func(dev, vsys string) (simulate.Target, error) {
 	type key struct{ member, snapshot, vsys string }
 	type snap struct{ member, id string }
 	cache := map[key]simulate.Target{}
@@ -233,6 +237,11 @@ func storeLoader(st *store.Store, when estate.When, net *estate.Network, users i
 		t := simulate.Target{
 			Config: ts[0].Config, Indexes: provider(set, ts[0].Scope),
 			Providers: index.Providers{Users: users}, Notes: ts[0].Notes,
+		}
+		if withApps {
+			var notes simulate.Reasons
+			t.Providers.Apps, notes = appsOf(ts[0])
+			t.Notes = append(slices.Clone(t.Notes), notes...)
 		}
 		cache[k] = t
 		return t, nil

@@ -140,7 +140,7 @@ func Policy(ctx context.Context, env Env, in PolicyInput) (Envelope[PolicyInput,
 		return none, err
 	}
 	sim := es.simEnv(env)
-	sim.Load = storeLoader(es.st, es.when, es.network, users)
+	sim.Load = storeLoader(es.st, es.when, es.network, users, flow.Application != "")
 	if in.Flow.NoDNS {
 		sim.Resolve = nil // NAT does not resolve a translated FQDN either
 	}
@@ -212,7 +212,8 @@ func PolicyFile(ctx context.Context, env Env, in PolicyFileInput) (Envelope[Poli
 			fmt.Sprintf("the file has %d vsys; select one with vsys", len(ts)))
 	}
 	t := ts[0]
-	sim, err := fileEnv(env, t, in.Flow.NoDNS)
+	withApps := flow.Application != ""
+	sim, err := fileEnv(env, t, in.Flow.NoDNS, withApps)
 	if err != nil {
 		return none, err
 	}
@@ -220,15 +221,27 @@ func PolicyFile(ctx context.Context, env Env, in PolicyFileInput) (Envelope[Poli
 	// The first address of each endpoint is checked, as path mode checks it
 	// (spec 2026-10-07 D1b); a note names the others.
 	run, err := securitypolicy.Simulation{}.Run(ctx, sim, simulate.Input{Flow: flow.FirstAddresses(), Device: t.Device, Vsys: t.Vsys})
+	if c, ok := errors.AsType[*simulate.ChoiceError](err); ok && c.Kind == simulate.ChoiceApplication {
+		// A container or an unknown name: the user names another (spec
+		// 2026-10-16 P10, D13). The texts end with the suggestions.
+		return none, usageOf(err, c.Question, c.ToolText)
+	}
 	if err != nil {
 		return none, err
 	}
 	env.Log.Infof(runlog.TagStep, "%s: fidelity %s", securitypolicy.Kind, run.Fidelity)
 	v, _ := run.Output.(securitypolicy.Verdict)
+	if !withApps {
+		// No data is loaded without an application (D11); the needs ask for
+		// one only when a file beside could decide it (C8).
+		v.AppData = hasAppFile(t)
+	}
 	e.Results = []SecurityResult{securityResultOf(run, t, v)}
 	e.Results[0].Needs = securityNeeds(flow, e.Results[0].Verdict, &v, run.Fidelity)
 	e.Targets, e.Read = ts, readOf(ts)
-	for _, n := range t.Notes {
+	// The run's notes are the target's and the run's own, such as the
+	// application data's.
+	for _, n := range run.Notes {
 		e.Notes = append(e.Notes, NoteOf(t.Device, t.Vsys, n))
 	}
 	for _, n := range simulate.DNSNotes(flow, "checked") {
@@ -266,13 +279,21 @@ func givenZones(ts []estate.Target, flow simulate.Flow) ([]estate.Target, []esta
 
 // fileEnv is the simulation environment for one target read from a file: its
 // configuration and the user directory. A file has no stored tables, so zones
-// derive from the configuration.
-func fileEnv(env Env, t estate.Target, noDNS bool) (*simulate.Env, error) {
+// derive from the configuration. With withApps, the target carries the
+// App-ID content data beside the file and the notes of appsOf (spec
+// 2026-10-16 §6).
+func fileEnv(env Env, t estate.Target, noDNS, withApps bool) (*simulate.Env, error) {
 	users, err := env.users()
 	if err != nil {
 		return nil, err
 	}
 	set := index.NewSet(t.Config)
+	providers, notes := index.Providers{Users: users}, t.Notes
+	if withApps {
+		var more simulate.Reasons
+		providers.Apps, more = appsOf(t)
+		notes = append(slices.Clone(notes), more...)
+	}
 	sim := &simulate.Env{Log: env.Log, Load: func(string, string) (simulate.Target, error) {
 		// Built here, so a failed build is the load's error.
 		if _, err := set.Index(t.Scope, resolve.Security); err != nil {
@@ -280,7 +301,7 @@ func fileEnv(env Env, t estate.Target, noDNS bool) (*simulate.Env, error) {
 		}
 		return simulate.Target{
 			Config: t.Config, Indexes: set.Provider(t.Scope),
-			Providers: index.Providers{Users: users}, Notes: t.Notes,
+			Providers: providers, Notes: notes,
 		}, nil
 	}, Resolve: env.Resolve}
 	if noDNS {
@@ -527,7 +548,10 @@ type Security struct {
 	DefaultSource string            `json:"default_source" jsonschema:"where the default action came from: built-in, local or pushed"`
 	Fidelity      simulate.Fidelity `json:"fidelity" jsonschema:"how certain the result is: exact, overmatch, inferred or undermatch, with the reasons; never report undermatch or inferred as a firm answer"`
 	FirstMatch    *Rule             `json:"first_match" jsonschema:"the first certain match; null when none"`
-	Candidates    []Rule            `json:"candidates" jsonschema:"the rules that may match the flow, in order"`
+	// Implicit is set when FirstMatch matches the flow's application only
+	// through the implicit use of the rule's applications (spec 2026-10-16 I1).
+	Implicit   *securitypolicy.Implicit `json:"implicit,omitempty" jsonschema:"set when the rule matches only through implicit use"`
+	Candidates []Rule                   `json:"candidates" jsonschema:"the rules that may match the flow, in order"`
 	// Doubts names the candidates that set a matching field no stage evaluates.
 	Doubts []securitypolicy.Doubt        `json:"doubts" jsonschema:"rules that may match first, with the reasons the answer cannot rule them out"`
 	Zones  securitypolicy.ZoneDerivation `json:"zones" jsonschema:"the zones used and where they came from"`
@@ -549,6 +573,7 @@ func securityOf(v *securitypolicy.Verdict, verdict string, why simulate.Reasons,
 		r := ruleOf(*v.Rule)
 		out.FirstMatch = &r
 	}
+	out.Implicit = v.Implicit
 	for _, r := range v.Candidates {
 		out.Candidates = append(out.Candidates, ruleOf(r))
 	}

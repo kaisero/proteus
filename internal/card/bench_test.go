@@ -25,7 +25,7 @@ func benchCard(b *testing.B, g testconfig.Groups, name, kind string) {
 	}
 	b.ReportAllocs()
 	for b.Loop() {
-		cs, err := Find(cfg, idx, name, kind)
+		cs, err := Find(cfg, idx, nil, name, kind)
 		if err != nil || len(cs) != 1 {
 			b.Fatalf("Find: %d cards, %v", len(cs), err)
 		}

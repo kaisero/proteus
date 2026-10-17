@@ -1,14 +1,15 @@
 fw01: TLS certificate verification OFF (insecure_tls: true)
   config      2993 bytes
-  system-info 216 bytes
+  system-info 252 bytes
   interfaces  7786 bytes
   fib         7295 bytes
   rib         15939 bytes
   ha          163 bytes
   predefined  245 bytes
   stored fw01@2026-09-28T10-00-00Z (PA-VM, PAN-OS 11.2.5, serial 007900000000001)
-  resolve   ok      127.0.0.1:PORT, TLS verification off
-  login     ok      logged in as reader
-  ha        skipped HA is not enabled
-  documents ok      7 of 7 documents
-  store     ok      fw01@2026-09-28T10-00-00Z
+  resolve      ok      127.0.0.1:PORT, TLS verification off
+  login        ok      logged in as reader
+  ha           skipped HA is not enabled
+  documents    ok      7 of 7 documents
+  applications ok      content 8000-1000, 4 applications, 1 container
+  store        ok      fw01@2026-09-28T10-00-00Z

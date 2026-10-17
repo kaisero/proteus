@@ -78,12 +78,20 @@ before `at`. A date in `at` means the end of that day.
 - `source` and `destination` are an address or a host name. The server resolves a
   host name with its own DNS and checks the first IPv4 address.
 - `port` and `source_port` are numbers from 1 to 65535. `protocol` is a separate
-  input: `tcp`, `udp`, `icmp` or `sctp`. The command line form `tcp/443` is not
-  accepted.
+  input: `tcp`, `udp`, `icmp` or `sctp`. `simulate_policy` also takes an IP
+  protocol number from 0 to 255, such as 89 for `ospf`. The command line form
+  `tcp/443` is not accepted.
 - `simulate_routing` and `simulate_nat` use `tcp` when `protocol` is left out.
-  `simulate_policy` has no default: a rule that needs the protocol holds the answer
-  back, and `needs` asks for it.
-- `application` is recorded, not evaluated. It does not change the answer.
+  `simulate_policy` with `application` takes the protocol of the application's
+  default. Without either, it has no default: a rule that needs the protocol holds
+  the answer back, and `needs` asks for it.
+- `application` is a predefined or custom application. It decides the rules that
+  name an application, a group, a filter or a container, from the App-ID data of
+  each hop's snapshot. See
+  [Simulate policy](simulate-policy.md#applications). A name that a hop's data
+  does not hold leaves that hop undecided.
+- `search` and `lookup` find applications, filters and containers with the App-ID
+  data, as the command line does.
 - `device` is an enum of the exported devices. The client sees the names in the
   tool's input schema, and the server refuses another name.
 - `limit` keeps the first N results, in the answer's usual order, over all
@@ -148,10 +156,12 @@ carries `needs`: the inputs that can decide it. Each entry is
 | `input.protocol` | `protocol` | a rule's service needs the protocol and the call gave none |
 | `input.port` | `port` | a rule's service, a NAT rule or a PBF rule on the path needs the destination port |
 | `input.url` | `url` | a rule names a URL category that the configuration defines |
+| `input.application` | `application` | a rule names an application or uses `application-default`, the call gave no application, and the snapshot has App-ID data |
 
 `needs: []` means that no input can decide the result. A predefined service that
 the snapshot does not hold (stored before this release, or refused by the
-device), an application or a PAN-DB category is an example. A decided result has
+device), an application that the App-ID data does not hold, an application
+without App-ID data, or a PAN-DB category is an example. A decided result has
 no `needs` key.
 
 ## Errors
@@ -274,9 +284,12 @@ its variable and its flag, and for the token rules.
 | `max_cache` | `2048` | the cache of loaded snapshots, in MB |
 
 The cache keeps each loaded snapshot and its indexes. The cache counts a loaded
-configuration as 32 MB plus 13 times its file size, and the one schema digest as
-10 MB once. Size `max_cache` with that model and the number of devices:
-20 devices with 8 MB configurations need about 20 × (32 + 13 × 8) + 10 = 2,730 MB.
+configuration as 32 MB plus 13 times its file size, the one schema digest as
+10 MB once, and each App-ID content version as 12 MB. The devices with one
+content version share its item. The cache frees an old content version as it
+frees an old snapshot. Size `max_cache` with that model and the number of
+devices: 20 devices with 8 MB configurations and two content versions need about
+20 × (32 + 13 × 8) + 10 + 2 × 12 = 2,754 MB.
 
 `BenchmarkCacheRetention` in `internal/mcp` measures the model on two generated
 shapes at about 4 and 8 MB. One vsys with 2,000 nested address groups retains 29.3 MB
@@ -285,7 +298,8 @@ nested groups and NAT and PBF rules retain 0.35 MB plus 12.7 bytes per file byte
 model takes the larger value of each part, rounded up, so it overstates most
 configurations: a small one by up to 32 MB. The benchmark also fails when the schema
 digest retains more than the 10 MB that the cache counts for it; it retains about
-9 MB.
+9 MB. It fails too when one content version of 5,552 applications retains more
+than the 12 MB that the cache counts for it; it retains about 9 MB.
 
 ## Audit and run logs
 

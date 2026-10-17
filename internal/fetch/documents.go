@@ -152,6 +152,9 @@ type System struct {
 	Serial    string `xml:"result>system>serial" json:"serial,omitempty"`
 	SWVersion string `xml:"result>system>sw-version" json:"sw_version,omitempty"`
 	MultiVsys string `xml:"result>system>multi-vsys" json:"multi_vsys,omitempty"`
+	// AppVersion is the App-ID content version; the application data belongs
+	// to it (spec 2026-10-16 F2).
+	AppVersion string `xml:"result>system>app-version" json:"app_version,omitempty"`
 }
 
 // ParseSystemInfo reads the response to show system info.

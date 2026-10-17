@@ -63,6 +63,7 @@ Repo map:
 - `internal/schema`, `internal/digest` — schema parsing and the digest format;
   `internal/tools/schemadigest` — the dev tool that writes a digest. `internal/archtest` — the R12 import check.
 - `internal/reason/` — reason codes: `{code, text}` and the closed registry; stdlib only.
+- `internal/appid/` — the App-ID content file: `format.go` (`Trim`, `Encode`, `TrimVersion`, `FileName`), `parse.go` (`Parse`, `Load`, `Data`, `CustomDefault`), `filter.go` (`Filter.Selects`), `ports.go` (`Default.Match`, `ProtocolNumber`); stdlib and `reason` only. `internal/tools/applab` — the App-ID lab check, `make app-lab`, never in CI.
 - `internal/task/` — staged operations: `Run` runs named steps in order, records
   each step's status, detail and time, logs them, and stops at the first error.
   `fetch` uses it per device.
@@ -94,6 +95,9 @@ Hard invariants:
   schema digest, and the schema questions `config` answers.
 - [scope-semantics](scope-semantics.md): targets, rule order, scoped visibility,
   shadowing, group membership.
+- [app-id](app-id.md): `internal/appid`, the App-ID content file per content
+  version, how fetch stores it, and how the simulator, search, lookup and MCP use
+  it.
 - [simulator](simulator.md): `simulate`, `internal/simulate/securitypolicy`, `internal/simulate/routing`, `internal/simulate/nat`, `internal/simulate/topology`, `internal/simulate/rulebase`, `runlog` — the staged simulator, fidelity, the routing path, NAT, and the run log.
 - [questions](questions.md): `estate`, `search`, `card`, `drift` — how a question becomes targets, findings, cards and changes.
 - [fetch-and-store](fetch-and-store.md): the inventory, the read-only fetcher, and

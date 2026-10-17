@@ -1,0 +1,2 @@
+proteus: --application app-medai: no application of that name in content 8000-1000 or in the configuration; nearest: app-media, app-ldap
+log: TMP

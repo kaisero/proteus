@@ -17,12 +17,46 @@ for an API key. It then reads the documents listed in
 - The predefined services are optional. A firewall that refuses them gives a note,
   and the fetch is still complete. Rules that name them then stay in doubt.
 - A failed firewall does not stop the others. `fetch` then exits with code 3.
+- It stores the App-ID data of the firewall's content version: the predefined
+  applications and containers. See [App-ID data](#app-id-data).
 - When a device is the passive member of an HA pair, `fetch` reads the active peer
   instead and says so. Set `ha_peer` in the inventory when the peer's reported
   address is not reachable from your machine.
 
 `fetch` is read-only. It runs `<show>` commands and a configuration export,
 nothing else. The client refuses any other command before it reaches the device.
+
+### App-ID data
+
+The applications that a rule, a filter or a container selects come from the
+firewall's App-ID content, not from its configuration. `fetch` reads the content
+version in `show system info`. When the store holds no file of that version, it
+asks the firewall for its predefined applications and containers, keeps the
+fields that proteus needs, and writes one file:
+
+```
+<store>/.content/<content version>.v1.xml.gz
+```
+
+- One file serves every device and snapshot with that content version. The next
+  fetch of the same version does not ask the firewall again.
+- The first fetch of a new content version takes longer: the answer is large.
+- `meta.json` records the version as `app_version`. The answers read the file of
+  that version.
+- The directory has mode 0700, and each file has mode 0600.
+- Each run removes the files that no snapshot names and that are older than one
+  hour.
+- A firewall that refuses the data, or whose content version has an unknown form,
+  gives the note `note.fetch-applications-missing`. The fetch is still complete.
+  Rules that name an application then stay in doubt.
+- When the call fails on the way, or the file cannot be written, the snapshot is
+  still stored, and `fetch` exits with code 3.
+- When the firewall returns the applications but not the containers, the file
+  records that. A rule that names a container then stays in doubt. Delete the file
+  to fetch it again.
+
+To use the data with `--file`, copy the file beside the configuration as
+`apps.xml.gz`.
 
 ## List
 
@@ -109,6 +143,10 @@ How it shows a change:
   action and lists.
 - In JSON and YAML, a changed entry has `fields`, each with `path`, `old` and
   `new`; an absent side is empty. An added or removed entry has `new` or `old`.
+
+When the App-ID content version differs between the two snapshots, a note says
+so: `note.app-version-changed`, with the two versions. The diff does not compare
+the applications.
 
 By default it compares the snapshot before `latest` with `latest`. `--from` and
 `--to` take a snapshot id, an RFC 3339 time or a date. A value that is none of

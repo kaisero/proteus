@@ -22,6 +22,13 @@ missing snapshot, an unreadable configuration or an absent vsys is a `Hole`. A
 snapshot older than `When.MaxAge` becomes a `Target.Notes` entry.
 `OpenFile` does the same for one file with no store.
 
+App-ID data (spec 2026-10-16): each target carries `Apps`, a lazy loader, and
+`AppsPath`. For a snapshot it reads `Snapshot.ContentPath()` (nil without
+`app_version`) through `When.Apps`, an `AppSource` (`DiskApps` by default, the MCP
+cache in the server, a per-question memo in `query`); a `Loaded.Apps` from the
+config source wins. `OpenFile` reads `AppsFile`, `apps.xml.gz` in the directory of
+the configuration. A question that needs no application data never calls `Apps`.
+
 ### search
 
 `Run(cfg, idx, Query)` runs five stages in order: objects by value (address terms
@@ -31,12 +38,27 @@ lists), groups (`GroupsHolding` per kind a name was found as, one level up with
 `Direct`), references
 (`Refs` and `ProfileUses`), literals (`RulesWithAddr`/`RulesWithPrefix`). Modes
 `Exact`, `Within`, `Contains` change stage one; `Kinds`, `Fields`, `Show` filter.
+With App-ID data in `Query.Providers.Apps` (spec 2026-10-16 §5.1), an
+application term also finds, through the resolver, the filters that select it
+(the finding's `Via` names the selecting fields, `category=media, risk=4`) and the
+containers that hold it; an application group finding shows the path through
+nested groups (`Index.GroupPath`, `outer > inner > ssl`, D12); and `implicitUse`
+adds the allow rules that reach it only through the implicit use of another
+application (`Via` `implicit use by <app>`), leaving out any-rules and rules an
+explicit finding already holds. `query.Search` makes the term canonical first
+(D17): `Refs` and the interner match case exactly.
 
 ### card
 
-`Find(cfg, idx, name, kind)` returns one `Card` per element of that name visible in
+`Find(cfg, idx, apps, name, kind)` returns one `Card` per element of that name visible in
 the scope: a security rule (`idx.Rules()`) or an object of any kind
-`resolve.ObjectKinds` lists. `Rule` lays a rule out in the rule editor's sections;
+`resolve.ObjectKinds` lists. With App-ID data (`apps`, may be nil) it also finds
+a predefined application (`App`: category, subcategory, technology, risk, flags,
+tags, default, obsolete, container, parent, use, implicit use, tunnel,
+description; parent and tunnel as written, F15) and a container with its
+functions; an application filter is a `FilterCard` (criteria, the count and the
+applications it selects, `KindFilter`). The text cuts a filter's applications at
+20 (`maxFilterApps`), `--full` lifts it; the summary drops the card (C5). `Rule` lays a rule out in the rule editor's sections;
 `Object` gives a value, members, profiles and the groups of its kind holding it
 (`GroupsHolding` with direct). A group's members come from the builder's object
 cache, read once per kind; a dynamic group shows its filter as written. Every `Item` carries its value and children to full depth; a
@@ -73,7 +95,8 @@ removed one a short line in
 action and described member lists. `resolve` does not read the schema, so an
 object whose form holds a secret or an undescribed value has no short line.
 Position is not compared. Predefined services are never
-read.
+read. `query.Diff` adds `note.app-version-changed` when the two snapshots'
+`app_version` differ; it never compares applications (spec 2026-10-16 §5.3).
 
 ## Build / run pointers
 
@@ -84,7 +107,9 @@ read.
 
 <!-- GENERATED:api ./internal/estate -->
 ```go
+type AppSource interface{ ... }
 type ConfigSource interface{ ... }
+type DiskApps struct{}
 type DiskConfigs struct{}
 type DiskOps struct{}
 type Hole struct{ ... }
@@ -96,6 +121,7 @@ type OpTables struct{ ... }
 type Target struct{ ... }
 type When struct{ ... }
 
+func (DiskApps) Apps(path string) (*appid.Data, error)
 func (DiskConfigs) Config(sn store.Snapshot) (Loaded, error)
 func (DiskOps) HA(sn store.Snapshot) (resolve.HAState, error)
 func (DiskOps) Tables(sn store.Snapshot) (OpTables, error)
@@ -134,7 +160,9 @@ type Item struct{ ... }
 type Row struct{ ... }
 type Section struct{ ... }
 
-func Find(cfg *config.Config, idx *index.Index, name, kind string) ([]Card, error)
+func App(a appid.App, sc config.Scope) Card
+func FilterCard(cfg *config.Config, idx *index.Index, apps *appid.Data, o resolve.Object) Card
+func Find(cfg *config.Config, idx *index.Index, apps *appid.Data, name, kind string) ([]Card, error)
 func Kinds(cfg *config.Config) []string
 func Object(cfg *config.Config, idx *index.Index, o resolve.Object) Card
 func Rule(cfg *config.Config, idx *index.Index, r resolve.Rule, rules int) Card
