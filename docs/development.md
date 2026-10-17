@@ -27,7 +27,7 @@ does not check the coverage floors.
 ```
 cmd/proteus/                 main only
 internal/                    every package; see Architecture
-  config/schemadigest/       the committed, embedded schema digests
+  config/schemadigest/       the committed, embedded schema digest
   tools/schemadigest/        developer tool: schema.xml -> digest
 testdata/config/             configuration fixtures, one per behaviour
 testdata/opdata/             operational-data fixtures (interfaces, FIB, RIB)
@@ -91,23 +91,26 @@ PANOS_HOST=... PANOS_API_KEY=... scripts/device-probe.sh /tmp/fw-live.xml vsys1
 `device-probe.sh` compares the first match of `proteus simulate policy` with the
 firewall's own `test security-policy-match`.
 
-## Add a PAN-OS version
+## Update the schema digest
 
-1. Copy the schema off a firewall of that version. The files are vendor files.
+proteus embeds one digest and reads every PAN-OS version with it. Replace it with
+the schema of a newer release when that release changes a field proteus reads.
+
+1. Copy the schema off a firewall of that release. The files are vendor files.
    Do not commit them.
 
     ```bash
     make schema-pull HOST=admin@fw.example.net     # into schemas/
     ```
 
-2. Build the digest:
+2. Build the digest. It replaces `internal/config/schemadigest/firewall.json.gz`:
 
     ```bash
-    make schema-digest PANOS_VERSION=12.2.0        # into internal/config/schemadigest/
+    make schema-digest PANOS_VERSION=12.2.0
     ```
 
-3. Commit the new digest. proteus embeds it, and configurations of that version
-   load without the version-gap warning.
+3. Run `make ci` and read the golden diff. Answers for older configurations must
+   not lose a reference. Then commit the new digest.
 
 ## Add a fetched document
 

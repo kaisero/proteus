@@ -133,12 +133,8 @@ path.
 
 Every PAN-OS firewall carries its configuration schema. The schema says which
 fields exist, which lists hold named entries, and which objects a field can
-reference. proteus embeds a compact **digest** of that schema for each supported
-PAN-OS version.
-
-When a configuration comes from a version without a digest, proteus reads it with
-the nearest digest and marks every answer as possibly incomplete. A field that
-moved between the two versions can hide a reference.
+reference. proteus embeds one compact **digest** of that schema and reads every
+PAN-OS version with it. The schema changes little between releases.
 
 ## Run log
 

@@ -26,17 +26,10 @@ type Index struct {
 	addrRes *addressResolver
 	// opaque records the rules naming addresses the configuration does not hold.
 	opaque *opaqueIndex
-	// gap is the configuration's version gap, empty when its schema matched.
-	gap string
 }
 
 // Scope returns the scope the index covers.
 func (i *Index) Scope() config.Scope { return i.scope }
-
-// VersionGap returns the configuration's version gap, empty when it was read with
-// its own version's schema. Answers without a report, such as Refs and Containing,
-// are subject to it too; this is how a caller of those finds out.
-func (i *Index) VersionGap() string { return i.gap }
 
 // Interner returns the index's name table, so a caller can turn names into the
 // ids RulesWith takes.
@@ -45,7 +38,7 @@ func (i *Index) Interner() *Interner { return i.in }
 // Build builds the index of one scope's rulebase from a configuration and the
 // edges read from it. The security index answers every field; the NAT and PBF
 // indexes answer which of their rules a value can reach with the same matching:
-// groups, negation left to the caller, FQDNs, lists and version gaps alike. Only
+// groups, negation left to the caller, FQDNs and lists alike. Only
 // the address fields are meaningful for those rulebases; zones and interfaces are
 // the caller's to compare.
 //
@@ -159,7 +152,6 @@ func build(cfg *config.Config, edges edgeList, sc config.Scope, rb resolve.Ruleb
 		profiles:      newProfileIndex(rules, profs, pgroups),
 		addrRes:       addrRes,
 		opaque:        opaque,
-		gap:           cfg.VersionGap(),
 	}, nil
 }
 

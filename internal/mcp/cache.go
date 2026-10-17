@@ -33,8 +33,8 @@ import (
 //     0.35 MB fixed and 12.74 bytes per file byte.
 //
 // Each part takes the larger shape's value, rounded up: the fixed part to a
-// multiple of 4 MiB, the part per byte to a whole number. The digest of each
-// PAN-OS version takes about 9 MB once per process: the benchmark measures
+// multiple of 4 MiB, the part per byte to a whole number. The schema digest
+// takes about 9 MB once per process: the benchmark measures
 // 8.8 MiB and fails above digestBytes, which leaves about 1 MiB to spare.
 const (
 	configFixedBytes = 32 << 20
@@ -85,13 +85,12 @@ type Cache struct {
 	// load reads a configuration file; config.Load, or a test's stand-in.
 	load func(path string) (*config.Config, config.Report, error)
 
-	mu      sync.Mutex
-	max     int64 // bytes
-	size    int64 // the items' estimated bytes
-	fixed   int64 // the schema digests' estimated bytes, never freed
-	digests map[string]bool
-	order   *list.List // of *item, the most recently used first
-	items   map[itemKey]*list.Element
+	mu    sync.Mutex
+	max   int64      // bytes
+	size  int64      // the items' estimated bytes
+	fixed int64      // the schema digest's estimated bytes once a configuration loaded, never freed
+	order *list.List // of *item, the most recently used first
+	items map[itemKey]*list.Element
 }
 
 // newCache is a cache of at most maxBytes, whose loads run at most maxLoads at
@@ -99,7 +98,7 @@ type Cache struct {
 func newCache(maxBytes int64, maxLoads, maxQueue int, strict bool) *Cache {
 	return &Cache{
 		loads: newLoader(maxLoads, maxQueue, strict), load: config.Load,
-		max: maxBytes, digests: map[string]bool{}, order: list.New(), items: map[itemKey]*list.Element{},
+		max: maxBytes, order: list.New(), items: map[itemKey]*list.Element{},
 	}
 }
 
@@ -116,14 +115,13 @@ func (c *Cache) get(k itemKey) (any, bool) {
 }
 
 // put caches a value of an estimated size and drops the least recently used
-// items while the cache is past its limit. digest, when not empty, is the
-// schema digest version the value was read with; each version counts once.
-func (c *Cache) put(k itemKey, v any, size int64, digest string) {
+// items while the cache is past its limit. schema is true when the value was
+// read with the schema digest, which then counts once.
+func (c *Cache) put(k itemKey, v any, size int64, schema bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if digest != "" && !c.digests[digest] {
-		c.digests[digest] = true
-		c.fixed += digestBytes
+	if schema {
+		c.fixed = digestBytes
 	}
 	if el, ok := c.items[k]; ok {
 		c.size -= el.Value.(*item).size
@@ -214,12 +212,12 @@ func (c *Cache) config(ctx context.Context, sn store.Snapshot) (*configEntry, er
 		cfg, rep, err := c.load(path)
 		if err != nil {
 			if _, ioErr := errors.AsType[*fs.PathError](err); !ioErr {
-				c.put(k, failedLoad{err}, failedBytes, "")
+				c.put(k, failedLoad{err}, failedBytes, false)
 			}
 			return nil, err
 		}
 		e := &configEntry{cfg: cfg, rep: rep, set: index.NewSet(cfg), built: map[indexKey]*index.Index{}}
-		c.put(k, e, configBytes(fileBytes(path)), cfg.DigestVersion())
+		c.put(k, e, configBytes(fileBytes(path)), true)
 		return e, nil
 	})
 	if err != nil {
@@ -268,7 +266,7 @@ func (c *Cache) op(k itemKey, read func() (any, int64, error)) (any, error) {
 		if err != nil {
 			return nil, err
 		}
-		c.put(k, v, size, "")
+		c.put(k, v, size, false)
 		return v, nil
 	})
 	return v, err

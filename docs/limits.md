@@ -4,10 +4,9 @@ proteus reports each of these limits in its answers. It does not hide them.
 
 ## Versions
 
-- **Only PAN-OS 11.2 digests ship.** A configuration from another version loads
-  with the nearest digest. Every answer then carries an unresolved entry that names
-  both versions, and the command exits with code 3. `simulate policy` is the
-  exception: the gap is a note, and it lowers the fidelity to `inferred`.
+- **One schema digest reads every version.** It comes from PAN-OS 11.2. A field
+  that a release added or moved, and that the digest does not describe, gives no
+  reference. The answer does not say so.
 - **Panorama configurations are refused.** Read each firewall's own export
   instead. A managed firewall already carries the rules that Panorama pushed to it.
 

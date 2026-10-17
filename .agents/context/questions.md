@@ -19,7 +19,7 @@ scope's index as findings. `card` builds the whole element behind one name.
 `When.At` the newest at or before that time (`store.AtOrBefore`), loads its
 configuration once, and returns one `Target` per vsys, filtered by `vsys`. A
 missing snapshot, an unreadable configuration or an absent vsys is a `Hole`. A
-snapshot older than `When.MaxAge` and a version gap become `Target.Notes`.
+snapshot older than `When.MaxAge` becomes a `Target.Notes` entry.
 `OpenFile` does the same for one file with no store.
 
 ### search
@@ -179,7 +179,7 @@ func Compare(before, after *config.Config, sc config.Scope) []Change
   a member list whose members carry attributes are compared by raw value, but
   `FieldChange.Undescribed` is set and `old`/`new` stay empty; the text line is
   `<path>: changed (not described by the schema; values not shown)`. The lab's
-  12.2.3 configuration is read with the 11.2 digest, so this is common
+  12.2.3 configuration is read with the one 11.2 digest, so this is common
   (`drift.TestCompareHidesAnUndescribedChild`).
 - **R12:** `search`, `card` and `drift` import none of `fetch`, `store`, `estate`.
 

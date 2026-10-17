@@ -218,12 +218,14 @@ func TestServicesAndTypes(t *testing.T) {
 	}
 }
 
-func TestAVersionGapIsNoted(t *testing.T) {
+// A configuration of another PAN-OS version reads with the one schema: no note,
+// and the fidelity stays exact.
+func TestAnotherVersionIsNotNoted(t *testing.T) {
 	t.Parallel()
 	in := input(natConfig(t, "firewall-version-12.2.xml"), probe{src: "10.0.0.1", dst: "10.0.0.2", port: 443, from: "trust", to: "untrust"})
 	m := Match(in)
-	if m.Rule != nil || len(m.Notes) != 1 || !strings.Contains(m.Notes[0].Text, "NAT checked with the") || m.Notes[0].Code != "gap.version" || m.Fidelity.Level() != "inferred" {
-		t.Errorf("gap: %+v", m)
+	if m.Rule != nil || len(m.Notes) != 0 || m.Fidelity.Level() != "exact" {
+		t.Errorf("12.2: %+v", m)
 	}
 	// A destination-only flow, and an unknown egress zone.
 	in = caseInput(t, "198.51.100.1", "tcp", 443)

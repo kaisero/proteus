@@ -155,17 +155,19 @@ func TestDestinationNAT(t *testing.T) {
 	}
 }
 
-func TestAVersionGapIsInferredNotUnresolved(t *testing.T) {
+// A configuration of another PAN-OS version checks PBF with the one schema: no
+// note, nothing unresolved.
+func TestAnotherVersionChecksPBFExactly(t *testing.T) {
 	t.Parallel()
 	cfg, _, err := config.Load("../../../testdata/config/firewall-version-12.2.xml")
-	if err != nil || cfg.VersionGap() == "" {
+	if err != nil {
 		t.Fatalf("fixture: %v", err)
 	}
 	n, _ := policyNet(t, "firewall-routing.xml")
 	load := func(_, vsys string) (simulate.Target, error) { return withIndexes(cfg, vsys), nil }
 	run, err := Simulation{}.Run(context.Background(), &simulate.Env{Network: n, Load: load}, simulate.Input{Flow: flow("10.1.5.5", "10.30.0.9")})
 	h := run.Output.(Path).Hops[0]
-	if err != nil || !strings.HasPrefix(notes(h), "schema: PBF checked with the 11.2") || h.Fidelity.Level() != "inferred" {
+	if err != nil || notes(h) != "" || h.Fidelity.Level() != "exact" {
 		t.Errorf("hop = %+v, %v", h, err)
 	}
 	for _, st := range run.Stages {

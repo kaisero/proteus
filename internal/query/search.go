@@ -265,8 +265,7 @@ func Search(ctx context.Context, env Env, in SearchInput) (Envelope[SearchInput,
 	}
 	e.Summary.Without = len(ts) - e.Summary.With
 	e.Summary.Answer = searchCount(e.Summary, len(e.Holes))
-	un, notes := TargetQualifiers(ts)
-	e.Unresolved, e.Notes = append(un, e.Unresolved...), notes
+	e.Notes = TargetNotes(ts)
 	cut(&e, in.ResultLimit, "device, vsys or kind")
 	return e, nil
 }

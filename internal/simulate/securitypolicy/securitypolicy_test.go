@@ -28,7 +28,7 @@ func env(t *testing.T, fixture string, zones bool) *simulate.Env {
 func envPath(t *testing.T, path string, zones bool) *simulate.Env {
 	t.Helper()
 	return &simulate.Env{Load: func(_, vsys string) (simulate.Target, error) {
-		cfg, rep, err := config.Load(path)
+		cfg, _, err := config.Load(path)
 		if err != nil {
 			return simulate.Target{}, err
 		}
@@ -49,11 +49,7 @@ func envPath(t *testing.T, path string, zones bool) *simulate.Env {
 			}
 			p.Zones = z
 		}
-		var notes simulate.Reasons
-		if rep.VersionGap != "" {
-			notes = append(notes, reason.New("gap.version", rep.VersionGap))
-		}
-		return simulate.Target{Config: cfg, Indexes: set.Provider(sc), Providers: p, Notes: notes}, nil
+		return simulate.Target{Config: cfg, Indexes: set.Provider(sc), Providers: p}, nil
 	}}
 }
 
@@ -259,24 +255,24 @@ func TestURLCategories(t *testing.T) {
 	}
 }
 
-// A version gap lowers the address stages to inferred and stays a note; it is not
-// an unresolved entry (spec E25).
-func TestAVersionGapIsInferred(t *testing.T) {
+// A configuration of another PAN-OS version reads with the one schema: the
+// address stages stay exact and the run has no note.
+func TestAnotherVersionIsExact(t *testing.T) {
 	t.Parallel()
 	r, v := run(t, env(t, "firewall-version-12.2.xml", false), simulate.Flow{Source: ep("198.18.10.100"), Destination: ep("198.18.1.5"), DestPort: 443})
-	for _, slug := range []string{"resolve-source", "resolve-destination", "match-service"} {
-		if st := stage(r, slug); st.Fidelity.Level() != "inferred" || len(st.Unresolved) != 0 {
+	for _, slug := range []string{"resolve-source", "resolve-destination"} {
+		if st := stage(r, slug); st.Fidelity.Level() != "exact" || len(st.Unresolved) != 0 {
 			t.Errorf("%s: %s, unresolved %v", slug, st.Fidelity, st.Unresolved)
 		}
 	}
-	if len(r.Notes) != 1 || !strings.Contains(r.Notes[0].Text, "12.2.0") {
+	if len(r.Notes) != 0 {
 		t.Errorf("notes = %v", r.Notes)
 	}
 	if head(v) != "dc-to-home" {
 		t.Errorf("candidates = %s", ruleNames(v))
 	}
 	r, _ = run(t, env(t, "firewall-version-12.2.xml", false), simulate.Flow{Source: ep("198.18.10.100"), Destination: ep("198.18.1.5"), URL: "shop.example.com"})
-	if st := stage(r, "match-url"); st.Fidelity.Level() != "inferred" || len(st.Unresolved) != 0 {
+	if st := stage(r, "match-url"); st.Fidelity.Level() != "exact" || len(st.Unresolved) != 0 {
 		t.Errorf("match-url: %s, unresolved %v", st.Fidelity, st.Unresolved)
 	}
 }

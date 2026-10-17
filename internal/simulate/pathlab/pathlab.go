@@ -198,7 +198,6 @@ func Env(tb testing.TB, d Defaults) *simulate.Env {
 		if !ok {
 			return nil, fmt.Errorf("no device %q in the inventory", device)
 		}
-		// Both configurations are 11.2 and read with their own digest: no version gap.
 		cfg, _, err := config.Load(path)
 		if err != nil {
 			return nil, err

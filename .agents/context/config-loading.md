@@ -5,7 +5,7 @@ Validated against 86fd84f on 2026-09-27 · Purpose: how a configuration file bec
 ## Purpose & responsibilities
 
 `config` owns the file and the schema. It parses the XML into an element tree,
-attaches the schema digest for that PAN-OS version, and answers the questions only
+attaches the one schema digest, and answers the questions only
 the schema can answer: which object kinds a field may name, where a kind sits under
 a scope, and every reference edge the file contains.
 
@@ -40,19 +40,15 @@ or a well-formed file without `<service>`, loads without them (the doubt stays);
 file that cannot be read or parsed fails the load and names the file.
 The node is hand-modelled (R8, `schema.HandModelled`).
 
-Only 11.2 digests ship. Another version is read with the nearest digest: the
-highest not above it, else the lowest (spec §9). `Report.VersionGap` and
-`Config.VersionGap()` name both versions, and every index `Candidates` report
-carries it as an `Unresolved`, because a field that moved between releases yields
-no reference and a lookup can then miss rules without looking incomplete.
+One digest ships (`schemadigest/firewall.json.gz`, from 11.2) and reads every
+version. `Load` does not check the `version` attribute; a configuration without
+one loads. `Version()` and `DetailVersion()` are for display only.
 
 **Nothing is dropped silently (R3).** `Load` walks the tree against the digest and
-lists each element the digest does not describe in `Report.Untyped` (instance path
-and digest version), once at its top: a field a newer release added counts as one.
-The element stays in the tree, so a reader that wants it still finds it. With a
-version gap, `VersionGap()` adds the count ("that schema does not describe N
-elements"), so the `gap.version` note carries it; without a gap the count stays in
-the report only. "Described" has one definition: `schema.Node.Step`, plus the
+lists each element the digest does not describe in `Report.Untyped` (instance
+path), once at its top: a field a newer release added counts as one. The element
+stays in the tree, so a reader that wants it still finds it. The count stays in the
+report; no answer shows it (todo 55). "Described" has one definition: `schema.Node.Step`, plus the
 hand-modelled shared pushed rulebases in `Config.ChildNode`; snapshot diff uses the
 same two. The walk costs about 3% of a load (`BenchmarkUndescribedLarge` against
 `BenchmarkLoadLarge`). `TestRoundTripLosesNothing` writes each fixture's tree back
@@ -130,7 +126,6 @@ type Untyped struct{ ... }
 func (c *Config) ChildNode(n *schema.Node, child *Element) *schema.Node
 func (c *Config) DetailVersion() string
 func (c *Config) Digest() *schema.Node
-func (c *Config) DigestVersion() string
 func (c *Config) FieldKinds(suffix string) map[string][]string
 func (c *Config) KindContainer(kind string) []string
 func (c *Config) KindContainers(kind string) [][]string
@@ -139,7 +134,6 @@ func (c *Config) Predefined() *Element
 func (c *Config) Root() *Element
 func (c *Config) SchemaNode(el *Element) *schema.Node
 func (c *Config) Version() string
-func (c *Config) VersionGap() string
 func (c *Config) WalkPaths(fn func(Event) bool) error
 func (e *Element) Attr(name string) string
 func (e *Element) Child(name string) *Element

@@ -64,7 +64,6 @@ type lab struct {
 	config   map[string][]byte           // by device; wins over defaults
 	net      simulate.Network
 	fail     string // a device whose configuration cannot be read
-	quiet    bool   // the loader gives no notes, not even a version gap
 	// predefined puts the device's predefined services (testdata/predefined)
 	// next to each configuration.
 	predefined bool
@@ -97,7 +96,7 @@ func (l lab) env(t testing.TB) *simulate.Env {
 		if device == l.fail {
 			return simulate.Target{}, errors.New("snapshot unreadable")
 		}
-		cfg, rep, err := config.Load(paths[device])
+		cfg, _, err := config.Load(paths[device])
 		if err != nil {
 			return simulate.Target{}, err
 		}
@@ -106,11 +105,7 @@ func (l lab) env(t testing.TB) *simulate.Env {
 		if _, err := set.Index(sc, resolve.Security); err != nil {
 			return simulate.Target{}, err
 		}
-		var notes simulate.Reasons
-		if rep.VersionGap != "" && !l.quiet {
-			notes = append(notes, reason.New("gap.version", rep.VersionGap))
-		}
-		return simulate.Target{Config: cfg, Indexes: set.Provider(sc), Notes: notes}, nil
+		return simulate.Target{Config: cfg, Indexes: set.Provider(sc)}, nil
 	}
 	return &simulate.Env{Network: l.net, Load: load}
 }
@@ -309,24 +304,18 @@ func TestANATDoubtLeavesThePathUndecided(t *testing.T) {
 	}
 }
 
-// A version gap lowers the hop's check to inferred; the hop still decides (E25).
-func TestAVersionGapIsInferredNotUndecided(t *testing.T) {
+// A hop of another PAN-OS version decides as an 11.2 hop does: exact, no note.
+func TestAnotherVersionDecidesExactly(t *testing.T) {
 	t.Parallel()
 	b := pathlab.Config(t, pathlab.FW02, pathlab.Defaults{})
 	b = bytes.Replace(b, []byte(`version="11.2.0"`), []byte(`version="12.2.0"`), 1)
-	// The check names the gap once, whether the loader's notes carry it or not.
-	for _, quiet := range []bool{false, true} {
-		r := runLab(t, lab{config: map[string][]byte{pathlab.FW02: b}, quiet: quiet}, pathlab.Destination)
-		c := r.Hops[0].Checks[0]
-		if r.Verdict != VerdictDenied || c.Verdict != Stop || c.Fidelity.Level() != "inferred" || r.Fidelity.Level() != "inferred" {
-			t.Errorf("verdict %s, hop 1 %s %s, run %s", r.Verdict, c.Verdict, c.Fidelity, r.Fidelity)
-		}
-		if len(c.Notes) != 1 || !strings.Contains(c.Notes[0].Text, "12.2.0") {
-			t.Errorf("the gap stays a note: %v", c.Notes)
-		}
-		if c2 := r.Hops[1].Checks[0]; c2.Fidelity.Level() != "exact" || len(c2.Notes) != 0 {
-			t.Errorf("fw01 has no gap: %s %v", c2.Fidelity, c2.Notes)
-		}
+	r := runLab(t, lab{config: map[string][]byte{pathlab.FW02: b}}, pathlab.Destination)
+	c := r.Hops[0].Checks[0]
+	if r.Verdict != VerdictDenied || c.Verdict != Stop || c.Fidelity.Level() != "exact" || r.Fidelity.Level() != "exact" {
+		t.Errorf("verdict %s, hop 1 %s %s, run %s", r.Verdict, c.Verdict, c.Fidelity, r.Fidelity)
+	}
+	if len(c.Notes) != 0 {
+		t.Errorf("notes: %v", c.Notes)
 	}
 }
 

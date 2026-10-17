@@ -189,17 +189,15 @@ func TestDetail(t *testing.T) {
 	}
 }
 
-// A version gap is unresolved by its code, not by its text: a note that reads
-// the same with another code stays a note.
-func TestTargetQualifiersUseTheCode(t *testing.T) {
+// Every target note stays a note, with its device and vsys.
+func TestTargetNotesKeepEveryNote(t *testing.T) {
 	t.Parallel()
-	gap := "the configuration is PAN-OS 12.2.0"
 	tg := estate.Target{Device: "fw01", Vsys: "vsys1", Notes: simulate.Reasons{
-		reason.New("gap.version", gap), reason.New("note.ha-peer", gap),
+		reason.New("note.snapshot-stale", "old"), reason.New("note.ha-peer", "peer"),
 	}}
-	un, notes := TargetQualifiers([]estate.Target{tg})
-	if len(un) != 1 || un[0].Code != "gap.version" || len(notes) != 1 || notes[0].Code != "note.ha-peer" {
-		t.Errorf("unresolved %+v, notes %+v", un, notes)
+	notes := TargetNotes([]estate.Target{tg})
+	if len(notes) != 2 || notes[0].Device != "fw01" || notes[1].Code != "note.ha-peer" {
+		t.Errorf("notes %+v", notes)
 	}
 }
 

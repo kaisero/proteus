@@ -56,8 +56,8 @@ func TestQualifiersCarryTheCode(t *testing.T) {
 	if err != nil || string(b) != `[{"device":"fw01","vsys":"vsys1","code":"note.snapshot-stale","text":"old"},{"device":"fw01","code":"note.snapshot-stale","text":"old"}]` {
 		t.Errorf("%s %v", b, err)
 	}
-	parts := UnresolvedOfParts("fw01", "vsys1", simulate.Reasons{r, reason.New("gap.version", "new")})
-	if len(parts) != 2 || parts[0].Part || !parts[1].Part || parts[1].Code != "gap.version" {
+	parts := UnresolvedOfParts("fw01", "vsys1", simulate.Reasons{r, reason.New("gap.load-failed", "new")})
+	if len(parts) != 2 || parts[0].Part || !parts[1].Part || parts[1].Code != "gap.load-failed" {
 		t.Errorf("parts %+v", parts)
 	}
 	// A composite goes or stays whole: here the second is a copy of the first.

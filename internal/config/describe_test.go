@@ -19,8 +19,7 @@ func writeConfig(t *testing.T, doc string) string {
 }
 
 // R3. An element the digest does not describe, such as a field a newer release
-// added, is counted once at its top, with its path and the digest that did not
-// describe it. What the digest describes is not counted: the pushed rulebases
+// added, is counted once at its top, with its path. What the digest describes is not counted: the pushed rulebases
 // are read as a vsys rulebase, a member list's members are its own, and a vsys
 // user-group's entry, an array rather than an entry sequence, is a field.
 func TestLoadCountsUndescribedElements(t *testing.T) {
@@ -44,9 +43,6 @@ func TestLoadCountsUndescribedElements(t *testing.T) {
 	}
 	var got []string
 	for _, u := range rep.Untyped {
-		if u.Digest != "11.2.0" {
-			t.Errorf("%s: digest %q, want 11.2.0", u.XPath, u.Digest)
-		}
 		got = append(got, u.XPath)
 	}
 	want := []string{
@@ -57,12 +53,6 @@ func TestLoadCountsUndescribedElements(t *testing.T) {
 	if !slices.Equal(got, want) {
 		t.Errorf("untyped = %q, want %q", got, want)
 	}
-	if !strings.Contains(rep.VersionGap, "does not describe 3 elements") {
-		t.Errorf("the gap must give the count, got %q", rep.VersionGap)
-	}
-	if cfg.VersionGap() != rep.VersionGap {
-		t.Error("the config and the report must describe the same gap")
-	}
 	if n := cfg.SchemaNode(cfg.Root().Find("shared", "post-rulebase", "security")[0]); n == nil || n.Path() !=
 		"/config/devices/entry/vsys/entry/rulebase/security" {
 		t.Errorf("a pushed rulebase reads as a vsys rulebase, got %v", n)
@@ -72,27 +62,19 @@ func TestLoadCountsUndescribedElements(t *testing.T) {
 	}
 }
 
-// One undescribed element is counted in the singular. With no version gap the
-// count stays in the report and the gap stays empty: the gap note says the
-// answer can miss rules, which an exact digest does not.
+// One undescribed element is counted, whatever the configuration's version.
 func TestLoadCountsOneUndescribedElement(t *testing.T) {
 	t.Parallel()
-	gap := writeConfig(t, `<config version="12.2.0"><shared><new-field>x</new-field></shared></config>`)
-	_, rep, err := Load(gap)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(rep.Untyped) != 1 || !strings.Contains(rep.VersionGap, "does not describe 1 element of") {
-		t.Errorf("untyped %v, gap %q", rep.Untyped, rep.VersionGap)
-	}
-
-	exact := writeConfig(t, `<config version="11.2.0"><shared><new-field>x</new-field></shared></config>`)
-	_, rep, err = Load(exact)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(rep.Untyped) != 1 || rep.VersionGap != "" {
-		t.Errorf("untyped %v, gap %q", rep.Untyped, rep.VersionGap)
+	var rep Report
+	for _, v := range []string{"11.2.0", "12.2.0"} {
+		var err error
+		_, rep, err = Load(writeConfig(t, `<config version="`+v+`"><shared><new-field>x</new-field></shared></config>`))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(rep.Untyped) != 1 {
+			t.Errorf("%s: untyped %v", v, rep.Untyped)
+		}
 	}
 	if !strings.Contains(rep.String(), "1 untyped elements, first at /config/shared/new-field") {
 		t.Errorf("String = %q", rep.String())

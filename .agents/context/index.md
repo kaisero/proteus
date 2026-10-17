@@ -16,7 +16,7 @@ snapshots; see [fetch-and-store](fetch-and-store.md).
 Three packages, dependency order strictly one-way — `config` <- `resolve` <- `index`:
 
 - **`config`** — the file. `Load(path)` parses the XML into an element tree and
-  attaches the schema digest for that PAN-OS version. It answers schema questions:
+  attaches the one schema digest. It answers schema questions:
   which object kinds a field may name (`FieldKinds`), where a kind sits under a
   scope (`KindContainer`), and every reference edge in the file (`WalkPaths`).
 - **`resolve`** — PAN-OS semantics. Targets per vsys, rule order, scoped object
@@ -54,7 +54,7 @@ Repo map:
 - `internal/config/` — `load.go` (Load, Panorama refusal, digest cache), `tree.go` (element tree),
   `walk.go` (`Event`, `FieldKinds`, `KindContainers`), `walkpath.go` (`WalkPaths`),
   `describe.go` (`SchemaNode`, `ChildNode`, the undescribed count), `embed.go`,
-  `schemadigest/` (embedded digests).
+  `schemadigest/` (the embedded digest).
 - `internal/resolve/` — `target.go`, `rules.go`, `objects.go`,
   `filter.go` (tag filters), `urlpattern.go`, `profiles.go`, `zones.go`.
 - `internal/index/` — `index.go` (build + cache), `candidates.go` (the driver),

@@ -45,7 +45,7 @@ Every item names its **component** (the package or area it changes) and one **ta
 | 26 | feature | search, drift, cmd | `--compare` across devices and time |
 | 27 | done | mcp, cmd | ~~MCP server~~ (`proteus mcp`, spec `docs/specs/2026-10-09-mcp-server.md`) |
 | 28 | research | resolve | Panorama pushed rules on a managed firewall |
-| 29 | research | config, fetch, internal/digest | A digest for PAN-OS 12.2, possibly from the device |
+| 29 | research | config, internal/digest | Replace the one digest with the newest release's schema |
 | 30 | research | index | URL matching beyond the documentation |
 | 31 | research | schema | Design of the public `schema` package |
 | 32 | perf | config | Memory of large configurations |
@@ -306,15 +306,17 @@ item 7, and delete the fetched data and API keys from the scratch directory.
   pre- and post-rules. Needs one managed firewall's export. Decides how much of
   `resolve/rules.go` survives.
 
-### 29. A digest for PAN-OS 12.2, possibly from the device
+### 29. Replace the one digest with the newest release's schema
 
-- **Tag:** research · **Component:** config, fetch, internal/digest · **Source:** spec §14 item 3, S13
-- fw02 (12.2.2) loads with the 11.2 digest and a version-gap warning. Ship a 12.2
-  digest, and decide whether `fetch` should pull a device's own `schema.xml` to
-  generate one.
-- Since E25 (spec `docs/specs/2026-10-07-estate-policy-simulation.md`), the gap
-  makes `simulate policy` `inferred` with a note, not undecided. Other commands
-  still report it as unresolved.
+- **Tag:** research · **Component:** config, internal/digest · **Source:** plan `docs/plans/2026-10-15-single-schema.md` task 6
+- proteus reads every version with one digest, from 11.2. Replace it with the
+  schema of the newest lab release (12.2): `make schema-pull`, then
+  `make schema-digest PANOS_VERSION=12.2.0`.
+- Before the swap is committed, check it against other versions:
+  - every 11.2 fixture gives the same answers with the 12.2 digest, and no
+    reference is lost (`make ci`, golden diff);
+  - the untyped counts of the fixtures do not grow;
+  - `rulebase.pbfDefaults` reads the same defaults from the 12.2 digest.
 
 ### 30. URL matching beyond the documentation
 
@@ -514,14 +516,13 @@ Source for each: the code audit of 2026-10-10 and the cleanup plan
   and 2026-10-11): build the path with a DNAT on fw01 and confirm with the device
   probes that the packet arrives.
 
-### 55. Undescribed elements of a configuration read with its own digest reach no answer
+### 55. Undescribed elements of a configuration reach no answer
 
 - **Tag:** qa · **Component:** config, query · **Source:** cleanup plan T31 (R3)
-- `config.Load` counts the elements the digest does not describe, and the
-  `gap.version` note names the count. Without a version gap (a patch release read
-  with the digest of its own version) the count reaches no answer. A separate
-  `gap.undescribed` note would show it, but it marks the answer unresolved (exit 3).
-  Decide whether that is wanted.
+- `config.Load` counts the elements the digest does not describe. The count
+  reaches no answer: one digest reads every version, and no version note exists.
+  A separate `gap.undescribed` note would show it, but it marks the answer
+  unresolved (exit 3). Decide whether that is wanted.
 
 ### 56. The read-only check sees setter names only, not writable exported fields
 

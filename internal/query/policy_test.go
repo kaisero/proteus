@@ -313,8 +313,8 @@ func TestPolicyFileWithADecidingRule(t *testing.T) {
 	}
 }
 
-// A file read with an older schema is a note on its target, and the answer keeps it.
-func TestPolicyFileNotesAVersionGap(t *testing.T) {
+// A file of another PAN-OS version answers as the 11.2 file does, with no note.
+func TestPolicyFileOfAnotherVersionHasNoNote(t *testing.T) {
 	t.Parallel()
 	b := bytes.Replace(pathlab.Read(t, fixture("firewall-zones.xml")), []byte(`<config version="11.2.0"`), []byte(`<config version="12.2.0"`), 1)
 	file := filepath.Join(t.TempDir(), "newer.xml")
@@ -326,7 +326,7 @@ func TestPolicyFileNotesAVersionGap(t *testing.T) {
 		Selection: Selection{File: file, Vsys: []string{"vsys1"}},
 	}
 	e, err := PolicyFile(context.Background(), Env{}, in)
-	if err != nil || len(e.Notes) != 1 || e.Notes[0].Code != "gap.version" || len(e.Unresolved) != 0 {
+	if err != nil || len(e.Notes) != 0 || len(e.Unresolved) != 0 {
 		t.Errorf("notes %+v, unresolved %+v, %v", e.Notes, e.Unresolved, err)
 	}
 }

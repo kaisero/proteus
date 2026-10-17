@@ -30,10 +30,9 @@ type Digest struct {
 	Root          *schema.Node `json:"root"`
 }
 
-// Filename returns the committed name for a digest.
-func Filename(platform, version string) string {
-	return fmt.Sprintf("panos-%s-%s.json.gz", version, platform)
-}
+// Filename is the committed name of the one digest proteus embeds. Version in
+// the digest records the release its schema came from.
+const Filename = "firewall.json.gz"
 
 func (d *Digest) validate() error {
 	switch {

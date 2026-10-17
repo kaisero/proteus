@@ -136,13 +136,6 @@ func TestWriteIsGzipped(t *testing.T) {
 	}
 }
 
-func TestFilename(t *testing.T) {
-	t.Parallel()
-	if got, want := Filename(PlatformFirewall, "11.2.0"), "panos-11.2.0-firewall.json.gz"; got != want {
-		t.Errorf("got %q, want %q", got, want)
-	}
-}
-
 func TestReadRejectsGarbage(t *testing.T) {
 	t.Parallel()
 	if _, err := Read(bytes.NewReader([]byte("not gzip"))); err == nil {
@@ -155,5 +148,19 @@ func TestWriteRejectsAnUnknownPlatform(t *testing.T) {
 	var buf bytes.Buffer
 	if err := Write(&buf, &Digest{Platform: "router", Version: "11.2.0", Root: fixture(t)}); err == nil {
 		t.Error("want an error for an unknown platform")
+	}
+}
+
+// A digest without a version or a root, or none at all, is not written.
+func TestWriteRejectsAnIncompleteDigest(t *testing.T) {
+	t.Parallel()
+	for name, d := range map[string]*Digest{
+		"nil":        nil,
+		"no version": {Platform: PlatformFirewall, Root: fixture(t)},
+		"no root":    {Platform: PlatformFirewall, Version: "11.2.0"},
+	} {
+		if err := Write(&bytes.Buffer{}, d); err == nil {
+			t.Errorf("%s: want an error", name)
+		}
 	}
 }

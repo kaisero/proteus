@@ -42,7 +42,7 @@ func (Security) Evaluate(ctx context.Context, env *simulate.Env, h routing.Hop, 
 		out.Verdict, out.Reason, out.Fidelity = NotEvaluated, simulate.Reasons{reason.New(code, "the hop's vsys or zones are not known")}, simulate.Exact
 		return out, nil
 	}
-	t, miss := load(env, h)
+	_, miss := load(env, h)
 	if miss != nil {
 		out.Verdict, out.Reason, out.Fidelity = Undecided, simulate.Reasons{miss.Why()}, simulate.UnderMatch(miss.Why())
 		return out, &simulate.UnavailableError{Missing: []simulate.Missing{*miss}}
@@ -72,13 +72,6 @@ func (Security) Evaluate(ctx context.Context, env *simulate.Env, h routing.Hop, 
 	for _, st := range run.Stages {
 		if slices.Contains(decisionStages, st.Slug) || st.Fidelity.Level() == "undermatch" {
 			fs = append(fs, st.Fidelity)
-		}
-	}
-	if gap := t.Config.VersionGap(); gap != "" {
-		// Read with the nearest older schema: inferred, not undecided (spec E25).
-		fs = append(fs, simulate.Inferred)
-		if !slices.ContainsFunc(out.Notes, func(n reason.Reason) bool { return n.Code == "gap.version" }) {
-			out.Notes = append(out.Notes, reason.New("gap.version", gap))
 		}
 	}
 	out.Fidelity = simulate.Weakest(fs...)

@@ -104,7 +104,7 @@ func Lookup(ctx context.Context, env Env, in LookupInput) (Envelope[LookupInput,
 	}
 	e.Summary.Without = len(ts) - e.Summary.With
 	e.Summary.Answer = lookupCount(e.Summary, len(e.Holes))
-	e.Unresolved, e.Notes = TargetQualifiers(ts)
+	e.Notes = TargetNotes(ts)
 	cut(&e, in.ResultLimit, "device or vsys")
 	return e, nil
 }

@@ -308,13 +308,6 @@ These flags exit 2 in path mode. The message names the flag.
 With `--file`, `--device`, `--label`, `--at` and `--router` exit 2: they select from
 the store.
 
-## Schema version gap
-
-A configuration from a PAN-OS version without its own schema digest is read with
-the nearest digest. For `simulate policy` this is a note, not an unresolved entry.
-The check's fidelity is `inferred`, and the answer can still be `allowed` or
-`denied`.
-
 ## What is not evaluated yet
 
 - `--application` and `--user` are accepted but not evaluated. A rule that names
