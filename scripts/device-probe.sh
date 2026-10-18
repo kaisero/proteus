@@ -6,10 +6,13 @@
 # library over-matches, which is the safe direction for a candidate set. This
 # script exists to show where they disagree and why, not to require agreement.
 #
-# Usage: PANOS_HOST=... PANOS_API_KEY=... scripts/device-probe.sh <config.xml> <vsys> [proteus]
-#        PANOS_HOST=... PANOS_API_KEY=... scripts/device-probe.sh --routing <device> <router> <destination>...
-#        PANOS_HOST=... PANOS_API_KEY=... scripts/device-probe.sh --nat <device> <router> <src,dst,port[,from-zone]>...
-#        PANOS_HOST_<NAME>=... PANOS_API_KEY_<NAME>=... scripts/device-probe.sh --path <flows-file>
+# Usage: PANOS_HOST=... PANOS_KEY_HEADER=<file> scripts/device-probe.sh <config.xml> <vsys> [proteus]
+#        PANOS_HOST=... PANOS_KEY_HEADER=<file> scripts/device-probe.sh --routing <device> <router> <destination>...
+#        PANOS_HOST=... PANOS_KEY_HEADER=<file> scripts/device-probe.sh --nat <device> <router> <src,dst,port[,from-zone]>...
+#        PANOS_HOST_<NAME>=... PANOS_KEY_HEADER_<NAME>=<file> scripts/device-probe.sh --path <flows-file>
+#
+# A key header file holds one line, "X-PAN-KEY: <key>". Each call is a POST that
+# sends the key in that header, so the key never goes in a URL.
 #
 # <vsys> is vsys1 or vsys:vsys1.
 #
@@ -31,18 +34,18 @@ routing_probe() {
   shift 2
   local analyst=${PROTEUS_BIN:-bin/proteus} agreed=0 total=0
   local live
-  live=$(curl -sk --max-time 40 -G "https://$PANOS_HOST/api/" \
-    --data-urlencode "type=op" --data-urlencode "key=$PANOS_API_KEY" \
+  live=$(curl -sk --max-time 40 -H @"$PANOS_KEY_HEADER" "https://$PANOS_HOST/api/" \
+    --data-urlencode "type=op" \
     --data-urlencode "cmd=<show><advanced-routing><fib><afi>ipv4</afi></fib></advanced-routing></show>")
   printf '%-16s %-40s %-40s %s\n' DESTINATION DEVICE LIBRARY AGREE
   for dst in "$@"; do
     local ref lib
-    ref=$( { curl -sk --max-time 40 -G "https://$PANOS_HOST/api/" \
-      --data-urlencode "type=op" --data-urlencode "key=$PANOS_API_KEY" \
+    ref=$( { curl -sk --max-time 40 -H @"$PANOS_KEY_HEADER" "https://$PANOS_HOST/api/" \
+      --data-urlencode "type=op" \
       --data-urlencode "cmd=<test><advanced-routing><fib-lookup><ip>$dst</ip><logical-router>$router</logical-router></fib-lookup></advanced-routing></test>"
       echo "<!--next-->"
-      curl -sk --max-time 40 -G "https://$PANOS_HOST/api/" \
-      --data-urlencode "type=op" --data-urlencode "key=$PANOS_API_KEY" \
+      curl -sk --max-time 40 -H @"$PANOS_KEY_HEADER" "https://$PANOS_HOST/api/" \
+      --data-urlencode "type=op" \
       --data-urlencode "cmd=<test><routing><fib-lookup><ip>$dst</ip><virtual-router>$router</virtual-router></fib-lookup></routing></test>"
       } | LIVE="$live" python3 -c '
 import ipaddress, os, sys, xml.etree.ElementTree as ET
@@ -143,8 +146,8 @@ print(rule, r["in"].get("zone") or "-", pre.get("zone") or "-", pre.get("interfa
     [ "$ifc" != "-" ] && cmd+="<to-interface>$ifc</to-interface>"
     cmd+="</nat-policy-match></test>"
     local ref
-    ref=$(curl -sk --max-time 40 -G "https://$PANOS_HOST/api/" \
-      --data-urlencode "type=op" --data-urlencode "key=$PANOS_API_KEY" --data-urlencode "cmd=$cmd" \
+    ref=$(curl -sk --max-time 40 -H @"$PANOS_KEY_HEADER" "https://$PANOS_HOST/api/" \
+      --data-urlencode "type=op" --data-urlencode "cmd=$cmd" \
       | python3 -c '
 import sys, xml.etree.ElementTree as ET
 t = ET.fromstring(sys.stdin.read())
@@ -162,7 +165,7 @@ print((e.text or "").strip() if e is not None else "none")')
 # --path runs simulate policy in path mode for each flow of <flows-file> and asks
 # each hop's device the same question with test security-policy-match. A flows
 # file has one flow per line, "<src> <dst> <protocol> <port>"; "#" starts a comment.
-# Each hop's device is reached through PANOS_HOST_<NAME> and PANOS_API_KEY_<NAME>,
+# Each hop's device is reached through PANOS_HOST_<NAME> and PANOS_KEY_HEADER_<NAME>,
 # NAME being the device name upper-cased with every non-alphanumeric as "_"; a hop
 # whose variables are missing is reported "not probed". Only hops proteus decides
 # (security check pass or stop) are compared; undecided and not-evaluated hops are
@@ -183,7 +186,7 @@ xml_escape() {
 }
 
 device_env() {
-  # device_env <device>: the suffix of its PANOS_HOST_/PANOS_API_KEY_ variables.
+  # device_env <device>: the suffix of its PANOS_HOST_/PANOS_KEY_HEADER_ variables.
   printf '%s' "$1" | tr '[:lower:]' '[:upper:]' | sed 's/[^A-Z0-9]/_/g'
 }
 
@@ -248,10 +251,10 @@ for h in r.get("hops") or []:
           theirs="see --routing $dev $router $hdst" ;;
         pass|stop)
           decided=$((decided + 1))
-          local name host key
+          local name host header
           name=$(device_env "$dev")
-          host=PANOS_HOST_$name key=PANOS_API_KEY_$name
-          if [ -z "${!host:-}" ] || [ -z "${!key:-}" ]; then
+          host=PANOS_HOST_$name header=PANOS_KEY_HEADER_$name
+          if [ -z "${!host:-}" ] || [ -z "${!header:-}" ]; then
             unprobed=$((unprobed + 1)); theirs="not probed"
           elif [ "$vsys" != vsys1 ]; then
             unprobed=$((unprobed + 1)); theirs="not probed ($vsys)"
@@ -264,8 +267,8 @@ for h in r.get("hops") or []:
             cmd+="<protocol>$pnum</protocol>"
             [ "$hport" != - ] && cmd+="<destination-port>$hport</destination-port>"
             cmd+="</security-policy-match></test>"
-            theirs=$(curl -sk --max-time 40 -G "https://${!host}/api/" \
-              --data-urlencode "type=op" --data-urlencode "key=${!key}" --data-urlencode "cmd=$cmd" \
+            theirs=$(curl -sk --max-time 40 -H @"${!header}" "https://${!host}/api/" \
+              --data-urlencode "type=op" --data-urlencode "cmd=$cmd" \
               | python3 -c '
 import sys, xml.etree.ElementTree as ET
 try:
@@ -311,7 +314,7 @@ fi
 
 if [ "${1:-}" = "--nat" ]; then
   : "${PANOS_HOST:?set PANOS_HOST}"
-  : "${PANOS_API_KEY:?set PANOS_API_KEY}"
+  : "${PANOS_KEY_HEADER:?set PANOS_KEY_HEADER}"
   shift
   nat_probe "$@"
   exit 0
@@ -319,7 +322,7 @@ fi
 
 if [ "${1:-}" = "--routing" ]; then
   : "${PANOS_HOST:?set PANOS_HOST}"
-  : "${PANOS_API_KEY:?set PANOS_API_KEY}"
+  : "${PANOS_KEY_HEADER:?set PANOS_KEY_HEADER}"
   shift
   routing_probe "$@"
   exit 0
@@ -331,7 +334,7 @@ vsys=${vsys#vsys:}
 analyst=${3:-bin/proteus}
 
 : "${PANOS_HOST:?set PANOS_HOST}"
-: "${PANOS_API_KEY:?set PANOS_API_KEY}"
+: "${PANOS_KEY_HEADER:?set PANOS_KEY_HEADER}"
 
 # Each probe is source destination from-zone to-zone application port, then the
 # rule it is aimed at. Zones and ports are taken from that rule, because
@@ -353,8 +356,8 @@ probes=(
 
 device_match() {
   local src=$1 dst=$2 fz=$3 tz=$4 app=$5 port=$6
-  curl -sk --max-time 40 -G "https://$PANOS_HOST/api/" \
-    --data-urlencode "type=op" --data-urlencode "key=$PANOS_API_KEY" \
+  curl -sk --max-time 40 -H @"$PANOS_KEY_HEADER" "https://$PANOS_HOST/api/" \
+    --data-urlencode "type=op" \
     --data-urlencode "cmd=<test><security-policy-match><source>$src</source><destination>$dst</destination><from>$fz</from><to>$tz</to><application>$app</application><protocol>6</protocol><destination-port>$port</destination-port></security-policy-match></test>" \
   | python3 -c '
 import sys, xml.etree.ElementTree as ET

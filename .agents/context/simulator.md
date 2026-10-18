@@ -177,7 +177,7 @@ two-firewall fixture its tests share with the CLI's.
 - `scripts/device-probe.sh --nat <device> <router> <src,dst,port>...` against the device
 - `scripts/device-probe.sh --path <flows-file>` compares each decided path hop with
   the hop device's `test security-policy-match` (`PANOS_HOST_<NAME>`,
-  `PANOS_API_KEY_<NAME>`)
+  `PANOS_KEY_HEADER_<NAME>`, a key header file per device)
 - `--log-level debug`, then `grep '\[STEP\]'` in the run log: the rules each stage left.
 
 ## Public API

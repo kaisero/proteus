@@ -233,6 +233,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **`scripts/device-probe.sh` reads the API key from a header file.** Set
+  `PANOS_KEY_HEADER`, or `PANOS_KEY_HEADER_<NAME>` in path mode, to a file with the
+  line `X-PAN-KEY: <key>`; the key no longer goes in a request URL.
 - **A snapshot holds the template values the firewall runs.** `fetch` now merges
   the template that Panorama pushed into the running configuration, so zones,
   profiles and identity sources of a template are part of each snapshot; the

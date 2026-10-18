@@ -109,7 +109,8 @@ results: on fw02 all 108 flows agreed.
 
 `scripts/device-probe.sh <cfg> <scope> [binary]` compares proteus's first match
 against a firewall's own `test security-policy-match`. It needs `PANOS_HOST` and
-`PANOS_API_KEY`.
+`PANOS_KEY_HEADER`, a file with the one line `X-PAN-KEY: <key>`. Each call is a
+POST with the key in that header, never in a URL.
 
 Each probe carries the zones and ports of the rule it aims at, because the device
 command **requires real zone names** and rejects `any`. Probes built without that
