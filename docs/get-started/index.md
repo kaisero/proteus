@@ -1,13 +1,13 @@
 # Install
 
-proteus is a single Go binary with no runtime dependency. Build it from source,
+Proteus is a single Go binary with no runtime dependency. Build it from source,
 then [ask a config file](config-file.md) to see your first answer.
 
 ## Requirements
 
 | Requirement | For |
 | --- | --- |
-| Go, at the version in `go.mod` | building proteus; the code is pure Go and needs no C compiler |
+| Go, at the version in `go.mod` | building Proteus; the code is pure Go and needs no C compiler |
 | network access to the firewall management interface | [connecting your firewalls](firewalls.md) |
 | an account that can use the XML API | [connecting your firewalls](firewalls.md) |
 

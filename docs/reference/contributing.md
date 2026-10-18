@@ -1,6 +1,6 @@
 # Contributing
 
-Build, test and extend proteus, and write these docs in one style. Read
+Build, test and extend Proteus, and write these docs in one style. Read
 `AGENTS.md` before you change a package.
 
 ## Setup
@@ -96,8 +96,8 @@ firewall's own `test security-policy-match`.
 
 ## Update the schema digest
 
-proteus embeds one digest and reads every PAN-OS version with it. Replace it with
-the schema of a newer release when that release changes a field proteus reads.
+Proteus embeds one digest and reads every PAN-OS version with it. Replace it with
+the schema of a newer release when that release changes a field Proteus reads.
 
 1. Copy the schema off a firewall of that release. The files are vendor files.
    Do not commit them.

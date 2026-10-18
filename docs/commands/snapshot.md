@@ -49,8 +49,8 @@ file   testdata/config/firewall-multivsys.xml
   vsys3    PAN-OS 11.2.5, security rules: 0
 ```
 
-With `--file`, proteus reads one configuration file and needs no store. Use it to
-confirm that proteus finds every vsys before you ask a question about the file.
+With `--file`, Proteus reads one configuration file and needs no store. Use it to
+confirm that Proteus finds every vsys before you ask a question about the file.
 
 ### Compare the last two snapshots
 
@@ -250,7 +250,7 @@ The applications that a rule, a filter or a container selects come from the
 firewall's App-ID content. The configuration does not hold them. `fetch` reads the
 content version from `show system info`. When the store holds no file of that
 version, `fetch` asks the firewall for its predefined applications and
-containers. It keeps the fields that proteus needs and writes one file:
+containers. It keeps the fields that Proteus needs and writes one file:
 
 ```text
 <store>/.content/<content version>.v1.xml.gz
@@ -280,7 +280,7 @@ before that time. A date means the end of that day.
 | --- | --- |
 | a damaged snapshot at the asked time, whose `meta.json` cannot be read | the answer reads the next older one, with `note.snapshot-skipped` naming the skipped one |
 | no older snapshot can be read | the device is a hole that names the damaged snapshots |
-| a damaged `latest`, without `--at` | the device is a hole; proteus does not fall back to an older snapshot |
+| a damaged `latest`, without `--at` | the device is a hole; Proteus does not fall back to an older snapshot |
 | a snapshot older than `max_snapshot_age` (default 24h) | the answer carries `note.snapshot-stale`; change the limit with `--max-age 7d` |
 
 ## Flags

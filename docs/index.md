@@ -1,7 +1,10 @@
-# proteus
+# Proteus
 
-Ask your PAN-OS firewalls questions. proteus answers from a stored copy of each
-firewall's configuration and operational state.
+Analyse your Palo Alto Networks NetSec estate using CLI and MCP. Find configuration references and simulate
+Traffic to find out how data flows through your network and what policy rules actually match. 
+
+Proteus takes care of the heavy lifting to connect your LLM to PAN-OS so you can find out what’s actually working and why.
+Empower your agents with near real-time data without hammering your devices directly with API Calls.
 
 ```text
 $ proteus search 10.124.0.1 --file testdata/config/firewall-multivsys.xml
@@ -23,7 +26,7 @@ file / vsys1   testdata/config/firewall-multivsys.xml
 
     ---
 
-    Use when you install proteus, ask your first question, or connect your
+    Use when you install Proteus, ask your first question, or connect your
     firewalls.
 
 -   **[Commands](commands/index.md)**
@@ -42,6 +45,6 @@ file / vsys1   testdata/config/firewall-multivsys.xml
 
     ---
 
-    Use when you want to know how proteus reaches an answer and how certain it is.
+    Use when you want to know how Proteus reaches an answer and how certain it is.
 
 </div>

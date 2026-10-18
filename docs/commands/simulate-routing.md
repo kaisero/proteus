@@ -9,7 +9,7 @@ proteus simulate routing <source> <destination> [flags]
 proteus simulate routing <destination> --device <name> [flags]
 ```
 
-The source and the destination are IPv4 addresses or FQDNs. proteus resolves an FQDN with the DNS of this machine.
+The source and the destination are IPv4 addresses or FQDNs. Proteus resolves an FQDN with the DNS of this machine.
 
 ## Examples
 
@@ -173,11 +173,11 @@ Add `--why` to see every stage of every hop. Add `--output json --detail summary
     }
     ```
 
-`may be incomplete` names what proteus cannot see. Here it is the network behind 192.168.0.1, which no firewall in the inventory owns.
+`may be incomplete` names what Proteus cannot see. Here it is the network behind 192.168.0.1, which no firewall in the inventory owns.
 
 ## Reading the output
 
-The path starts where the source is connected, or where the most specific route to the source leaves. With `--device`, the path starts on that firewall. proteus then follows the stored forwarding table of each firewall to the next firewall.
+The path starts where the source is connected, or where the most specific route to the source leaves. With `--device`, the path starts on that firewall. Proteus then follows the stored forwarding table of each firewall to the next firewall.
 
 | Line | Meaning |
 | --- | --- |
@@ -185,8 +185,8 @@ The path starts where the source is connected, or where the most specific route 
 | `│ <prefix>` | the link between two boxes, with the addresses at each end |
 | last line of the path | where the path ends, such as `delivered` or `leaves the estate` |
 | `firewalls on the path` | each firewall with the zone pair that its security rule must allow |
-| `may be on the path, not detected` | a firewall that can be on the path but that proteus cannot see, such as one in virtual wire or Layer 2 mode |
-| `may be incomplete` | the reasons the answer can be incomplete, and the stages that proteus did not evaluate |
+| `may be on the path, not detected` | a firewall that can be on the path but that Proteus cannot see, such as one in virtual wire or Layer 2 mode |
+| `may be incomplete` | the reasons the answer can be incomplete, and the stages that Proteus did not evaluate |
 
 Each box shows one firewall, its vsys, its logical router and the age of its snapshot. Each row has a label:
 
@@ -196,16 +196,16 @@ Each box shows one firewall, its vsys, its logical router and the age of its sna
 | `in` | the ingress interface and its address |
 | `out` | the egress interface and its address |
 | `route` | the route the lookup uses, with its protocol, or `connected` |
-| `ecmp` | the other equal-cost next hops that proteus does not follow |
+| `ecmp` | the other equal-cost next hops that Proteus does not follow |
 | `pbf` | a policy-based forwarding rule that could take the packet |
 | `nat` | a NAT rule that changes the packet, or may change it |
 | `alt` | with `--rib`, another route to the destination; the active route is marked `(active)` |
-| `schema` | the schema that proteus uses to check PBF and NAT |
+| `schema` | the schema that Proteus uses to check PBF and NAT |
 | `note` | another fact about the hop |
 
-proteus handles these cases as follows:
+Proteus handles these cases as follows:
 
-| Case | What proteus does |
+| Case | What Proteus does |
 | --- | --- |
 | ECMP | follows the lowest next hop and names the others (`ecmp`) |
 | policy-based forwarding | names a PBF rule that could take the packet (`pbf`) and still follows the forwarding table |
@@ -227,7 +227,7 @@ With `--output json`, each hop carries its flow: device, vsys, zones, source and
 
 ## Flags
 
-`simulate routing` takes `--device` and `--at`. See [selection flags](../reference/global-flags.md#selection-flags). With `--at`, proteus reads the newest snapshot of each device at or before that time. It also takes [`--detail`](../reference/output.md#detail).
+`simulate routing` takes `--device` and `--at`. See [selection flags](../reference/global-flags.md#selection-flags). With `--at`, Proteus reads the newest snapshot of each device at or before that time. It also takes [`--detail`](../reference/output.md#detail).
 
 | Flag | Default | Description |
 | --- | --- | --- |
@@ -242,10 +242,10 @@ The command needs fetched snapshots. It does not take `--file`, because a path c
 
 ## Limits
 
-- proteus traces IPv4 only.
-- proteus names policy-based forwarding, and the path does not follow it.
+- Proteus traces IPv4 only.
+- Proteus names policy-based forwarding, and the path does not follow it.
 - A path ends where it leaves the inventory, also into a tunnel.
-- proteus does not see a firewall in virtual wire or Layer 2 mode on a path. The answer names it.
+- Proteus does not see a firewall in virtual wire or Layer 2 mode on a path. The answer names it.
 
 See [Limits: simulate routing](../reference/limits.md#simulate-routing) and [Limits: host names](../reference/limits.md#host-names).
 

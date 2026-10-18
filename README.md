@@ -1,32 +1,40 @@
-# proteus
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/images/readme-banner-dark.svg">
+    <img alt="Proteus: ground truth for NetSec agents" src="docs/assets/images/readme-banner-light.svg">
+  </picture>
+</p>
 
 [![CI](https://github.com/kaisero/proteus/actions/workflows/ci.yml/badge.svg)](https://github.com/kaisero/proteus/actions/workflows/ci.yml)
 [![Go](https://img.shields.io/badge/go-1.26%2B-00ADD8)](go.mod)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-Ask your PAN-OS firewalls questions. proteus answers from a stored copy of each
-firewall's configuration and operational state, and never writes to a device.
+Analyse your Palo Alto Networks NetSec estate using CLI and MCP. Find configuration references and simulate
+Traffic to find out how data flows through your network and what policy rules actually match. 
+
+Proteus takes care of the heavy lifting to connect your LLM to PAN-OS so you can find out what’s actually working and why.
+Empower your agents with near real-time data without hammering your devices directly with API Calls.
 
 **[Full documentation →](https://kaisero.github.io/proteus/)**
 
 ## Features
 
-Use proteus to
+Use Proteus to
 
 - Find every object, group, rule and profile that uses an address, prefix, port,
-  URL, user or name, across all firewalls
+  URL, user or name, across multiple firewalls
 - Show a rule or an object in full, laid out like the firewall's rule editor
 - Check which security rule a flow hits, on one firewall or along its whole path
 - Trace what NAT does to a packet and which zones the security policy must match
-- Trace the path of a packet across your firewalls
+- Trace the path of a packet across your whole estate
 - Compare two snapshots of a firewall to see which objects and rules changed
-- See how certain each answer is, and which parts proteus could not evaluate
+- See how certain each answer is, and which parts Proteus could not evaluate
 - Script with `--output json` and exit codes, or serve the same answers to an
   agent over MCP
 
 ## Quick start
 
-Build proteus. You need Go at the version in [`go.mod`](go.mod).
+Build Proteus. You need Go at the version in [`go.mod`](go.mod).
 
 ```bash
 git clone https://github.com/kaisero/proteus.git && cd proteus
@@ -59,11 +67,6 @@ export PANOS_PASSWORD='...'
 proteus fetch --all                    # store a snapshot of each firewall
 proteus search 10.20.0.0/16
 ```
-
-## Development
-
-Read [AGENTS.md](AGENTS.md) for the rules every change follows. Run `make ci`
-before you push.
 
 ## License
 
