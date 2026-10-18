@@ -5,7 +5,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/okaiser/proteus/internal/inventory"
+	"github.com/kaisero/proteus/internal/inventory"
 )
 
 // registerCompletions teaches shell completion the values proteus knows: device

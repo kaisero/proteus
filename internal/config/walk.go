@@ -5,7 +5,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/okaiser/proteus/internal/schema"
+	"github.com/kaisero/proteus/internal/schema"
 )
 
 // Keywords are values that appear in reference fields but name no object. They

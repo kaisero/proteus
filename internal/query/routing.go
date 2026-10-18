@@ -4,9 +4,9 @@ import (
 	"cmp"
 	"context"
 
-	"github.com/okaiser/proteus/internal/runlog"
-	"github.com/okaiser/proteus/internal/simulate"
-	"github.com/okaiser/proteus/internal/simulate/routing"
+	"github.com/kaisero/proteus/internal/runlog"
+	"github.com/kaisero/proteus/internal/simulate"
+	"github.com/kaisero/proteus/internal/simulate/routing"
 )
 
 // RoutingInput is simulate routing: the path a packet takes across the

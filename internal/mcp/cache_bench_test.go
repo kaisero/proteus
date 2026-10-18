@@ -12,10 +12,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/okaiser/proteus/internal/config"
-	"github.com/okaiser/proteus/internal/resolve"
-	"github.com/okaiser/proteus/internal/store"
-	"github.com/okaiser/proteus/internal/testconfig"
+	"github.com/kaisero/proteus/internal/config"
+	"github.com/kaisero/proteus/internal/resolve"
+	"github.com/kaisero/proteus/internal/store"
+	"github.com/kaisero/proteus/internal/testconfig"
 )
 
 // retained loads a snapshot through a new cache, builds the three rulebase

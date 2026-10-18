@@ -6,10 +6,10 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/okaiser/proteus/internal/estate"
-	"github.com/okaiser/proteus/internal/query"
-	"github.com/okaiser/proteus/internal/reason"
-	"github.com/okaiser/proteus/internal/runlog"
+	"github.com/kaisero/proteus/internal/estate"
+	"github.com/kaisero/proteus/internal/query"
+	"github.com/kaisero/proteus/internal/reason"
+	"github.com/kaisero/proteus/internal/runlog"
 )
 
 // answer is what one command found. emit renders it; a command never writes to

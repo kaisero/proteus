@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/okaiser/proteus/internal/appid"
-	"github.com/okaiser/proteus/internal/config"
-	"github.com/okaiser/proteus/internal/resolve"
+	"github.com/kaisero/proteus/internal/appid"
+	"github.com/kaisero/proteus/internal/config"
+	"github.com/kaisero/proteus/internal/resolve"
 )
 
 // The generated file loads, and holds the shape the benchmarks name.

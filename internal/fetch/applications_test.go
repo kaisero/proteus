@@ -8,9 +8,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/okaiser/proteus/internal/appid"
-	"github.com/okaiser/proteus/internal/fakepanos"
-	"github.com/okaiser/proteus/internal/task"
+	"github.com/kaisero/proteus/internal/appid"
+	"github.com/kaisero/proteus/internal/fakepanos"
+	"github.com/kaisero/proteus/internal/task"
 )
 
 const appVersion = "8000-1000"

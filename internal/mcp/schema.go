@@ -10,11 +10,11 @@ import (
 
 	"github.com/google/jsonschema-go/jsonschema"
 
-	"github.com/okaiser/proteus/internal/card"
-	"github.com/okaiser/proteus/internal/query"
-	"github.com/okaiser/proteus/internal/resolve"
-	"github.com/okaiser/proteus/internal/simulate"
-	"github.com/okaiser/proteus/internal/simulate/securitypolicy"
+	"github.com/kaisero/proteus/internal/card"
+	"github.com/kaisero/proteus/internal/query"
+	"github.com/kaisero/proteus/internal/resolve"
+	"github.com/kaisero/proteus/internal/simulate"
+	"github.com/kaisero/proteus/internal/simulate/securitypolicy"
 )
 
 // The schemas are generated from the query layer's types when the server

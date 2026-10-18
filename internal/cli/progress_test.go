@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/okaiser/proteus/internal/task"
+	"github.com/kaisero/proteus/internal/task"
 )
 
 func TestIsTerminal(t *testing.T) {

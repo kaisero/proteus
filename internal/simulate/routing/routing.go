@@ -8,11 +8,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/okaiser/proteus/internal/reason"
-	"github.com/okaiser/proteus/internal/resolve"
-	"github.com/okaiser/proteus/internal/simulate"
-	natsim "github.com/okaiser/proteus/internal/simulate/nat"
-	"github.com/okaiser/proteus/internal/simulate/topology"
+	"github.com/kaisero/proteus/internal/reason"
+	"github.com/kaisero/proteus/internal/resolve"
+	"github.com/kaisero/proteus/internal/simulate"
+	natsim "github.com/kaisero/proteus/internal/simulate/nat"
+	"github.com/kaisero/proteus/internal/simulate/topology"
 )
 
 // Kind is the registry key and the command name.

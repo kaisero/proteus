@@ -6,9 +6,9 @@ import (
 	"net/netip"
 	"strings"
 
-	"github.com/okaiser/proteus/internal/config"
-	"github.com/okaiser/proteus/internal/reason"
-	"github.com/okaiser/proteus/internal/resolve"
+	"github.com/kaisero/proteus/internal/config"
+	"github.com/kaisero/proteus/internal/reason"
+	"github.com/kaisero/proteus/internal/resolve"
 )
 
 // wildcard is an ip-wildcard address object: an IPv4 address and a wildcard mask.

@@ -9,10 +9,10 @@ import (
 
 	"github.com/RoaringBitmap/roaring/v2"
 
-	"github.com/okaiser/proteus/internal/config"
-	"github.com/okaiser/proteus/internal/index"
-	"github.com/okaiser/proteus/internal/resolve"
-	"github.com/okaiser/proteus/internal/runlog"
+	"github.com/kaisero/proteus/internal/config"
+	"github.com/kaisero/proteus/internal/index"
+	"github.com/kaisero/proteus/internal/resolve"
+	"github.com/kaisero/proteus/internal/runlog"
 )
 
 // Endpoint is one side of a flow: an address, or an FQDN and the addresses it

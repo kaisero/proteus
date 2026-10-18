@@ -7,8 +7,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/okaiser/proteus/internal/digest"
-	"github.com/okaiser/proteus/internal/schema"
+	"github.com/kaisero/proteus/internal/digest"
+	"github.com/kaisero/proteus/internal/schema"
 )
 
 // schemaFile is the vendor file a firewall carries at /opt/pancfg/mgmt/factory.

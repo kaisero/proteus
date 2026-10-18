@@ -16,8 +16,8 @@ import (
 
 	"github.com/google/jsonschema-go/jsonschema"
 
-	"github.com/okaiser/proteus/internal/query"
-	"github.com/okaiser/proteus/internal/resolve"
+	"github.com/kaisero/proteus/internal/query"
+	"github.com/kaisero/proteus/internal/resolve"
 )
 
 // update rewrites the checked-in schemas: go test ./internal/mcp -update.

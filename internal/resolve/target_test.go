@@ -3,7 +3,7 @@ package resolve
 import (
 	"testing"
 
-	"github.com/okaiser/proteus/internal/config"
+	"github.com/kaisero/proteus/internal/config"
 )
 
 // A firewall's policy targets are its vsys, one each, keyed by device and vsys.

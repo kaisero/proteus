@@ -7,10 +7,10 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/okaiser/proteus/internal/appid"
-	"github.com/okaiser/proteus/internal/reason"
-	"github.com/okaiser/proteus/internal/runlog"
-	"github.com/okaiser/proteus/internal/task"
+	"github.com/kaisero/proteus/internal/appid"
+	"github.com/kaisero/proteus/internal/reason"
+	"github.com/kaisero/proteus/internal/runlog"
+	"github.com/kaisero/proteus/internal/task"
 )
 
 // The show commands of the App-ID data. Each answers all predefined entries of

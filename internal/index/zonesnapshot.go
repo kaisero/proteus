@@ -11,7 +11,7 @@ import (
 
 	"github.com/gaissmai/bart"
 
-	"github.com/okaiser/proteus/internal/resolve"
+	"github.com/kaisero/proteus/internal/resolve"
 )
 
 // ZoneSnapshot is a firewall's forwarding table and interface list, as the device

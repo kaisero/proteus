@@ -19,9 +19,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/okaiser/proteus/internal/config"
-	"github.com/okaiser/proteus/internal/estate"
-	"github.com/okaiser/proteus/internal/store"
+	"github.com/kaisero/proteus/internal/config"
+	"github.com/kaisero/proteus/internal/estate"
+	"github.com/kaisero/proteus/internal/store"
 )
 
 // The lab files, relative to the repository root.

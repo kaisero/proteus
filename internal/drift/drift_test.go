@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/okaiser/proteus/internal/config"
+	"github.com/kaisero/proteus/internal/config"
 )
 
 func load(t *testing.T, name string) *config.Config {

@@ -8,7 +8,7 @@ package digest
 import (
 	"fmt"
 
-	"github.com/okaiser/proteus/internal/schema"
+	"github.com/kaisero/proteus/internal/schema"
 )
 
 // PlatformFirewall is the platform every digest is built from: a firewall's

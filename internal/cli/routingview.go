@@ -6,10 +6,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/okaiser/proteus/internal/resolve"
-	"github.com/okaiser/proteus/internal/simulate"
-	"github.com/okaiser/proteus/internal/simulate/routing"
-	"github.com/okaiser/proteus/internal/simulate/topology"
+	"github.com/kaisero/proteus/internal/resolve"
+	"github.com/kaisero/proteus/internal/simulate"
+	"github.com/kaisero/proteus/internal/simulate/routing"
+	"github.com/kaisero/proteus/internal/simulate/topology"
 )
 
 // minBox is the narrowest box; a longer row widens it, never wraps.

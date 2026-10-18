@@ -8,8 +8,8 @@ import (
 
 	"github.com/RoaringBitmap/roaring/v2"
 
-	"github.com/okaiser/proteus/internal/reason"
-	"github.com/okaiser/proteus/internal/resolve"
+	"github.com/kaisero/proteus/internal/reason"
+	"github.com/kaisero/proteus/internal/resolve"
 )
 
 // The reasons a rule's address field value has addresses the configuration does

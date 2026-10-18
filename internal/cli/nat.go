@@ -6,8 +6,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/okaiser/proteus/internal/query"
-	"github.com/okaiser/proteus/internal/simulate"
+	"github.com/kaisero/proteus/internal/query"
+	"github.com/kaisero/proteus/internal/simulate"
 )
 
 // natOptions are simulate nat's flags.

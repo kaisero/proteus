@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/okaiser/proteus/internal/reason"
+	"github.com/kaisero/proteus/internal/reason"
 )
 
 // under and over are reasons for tests; their code is a valid one.

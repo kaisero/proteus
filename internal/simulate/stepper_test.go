@@ -10,8 +10,8 @@ import (
 
 	"github.com/RoaringBitmap/roaring/v2"
 
-	"github.com/okaiser/proteus/internal/index"
-	"github.com/okaiser/proteus/internal/runlog"
+	"github.com/kaisero/proteus/internal/index"
+	"github.com/kaisero/proteus/internal/runlog"
 )
 
 type state struct {

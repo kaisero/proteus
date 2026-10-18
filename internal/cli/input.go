@@ -1,6 +1,6 @@
 package cli
 
-import "github.com/okaiser/proteus/internal/query"
+import "github.com/kaisero/proteus/internal/query"
 
 // The input block of each command's JSON envelope (spec §15 C10). The envelope is a
 // contract, so each command has a struct rather than a map: a renamed key is then a

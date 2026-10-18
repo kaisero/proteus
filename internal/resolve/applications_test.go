@@ -6,7 +6,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/okaiser/proteus/internal/config"
+	"github.com/kaisero/proteus/internal/config"
 )
 
 var vsys1Scope = config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}

@@ -18,13 +18,13 @@ import (
 
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/okaiser/proteus/internal/inventory"
-	"github.com/okaiser/proteus/internal/query"
-	"github.com/okaiser/proteus/internal/reason"
-	"github.com/okaiser/proteus/internal/simulate"
-	"github.com/okaiser/proteus/internal/simulate/pathlab"
-	"github.com/okaiser/proteus/internal/store"
-	"github.com/okaiser/proteus/internal/testconfig"
+	"github.com/kaisero/proteus/internal/inventory"
+	"github.com/kaisero/proteus/internal/query"
+	"github.com/kaisero/proteus/internal/reason"
+	"github.com/kaisero/proteus/internal/simulate"
+	"github.com/kaisero/proteus/internal/simulate/pathlab"
+	"github.com/kaisero/proteus/internal/store"
+	"github.com/kaisero/proteus/internal/testconfig"
 )
 
 // clock is when the first snapshot is taken; the questions run an hour later.

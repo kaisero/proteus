@@ -8,9 +8,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/okaiser/proteus/internal/reason"
-	"github.com/okaiser/proteus/internal/resolve"
-	"github.com/okaiser/proteus/internal/simulate"
+	"github.com/kaisero/proteus/internal/reason"
+	"github.com/kaisero/proteus/internal/resolve"
+	"github.com/kaisero/proteus/internal/simulate"
 )
 
 // The decision tree of spec §4.7, on the doubt fixture as PAN-OS 11.2 and as

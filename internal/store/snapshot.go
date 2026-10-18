@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/okaiser/proteus/internal/index"
+	"github.com/kaisero/proteus/internal/index"
 )
 
 // Snapshot is one stored fetch.

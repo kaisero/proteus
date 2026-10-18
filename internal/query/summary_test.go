@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/okaiser/proteus/internal/simulate/pathlab"
+	"github.com/kaisero/proteus/internal/simulate/pathlab"
 )
 
 // summaryJSON is an envelope's summary results as JSON.

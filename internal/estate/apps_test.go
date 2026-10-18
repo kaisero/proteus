@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/okaiser/proteus/internal/appid"
-	"github.com/okaiser/proteus/internal/store"
-	"github.com/okaiser/proteus/internal/testconfig"
+	"github.com/kaisero/proteus/internal/appid"
+	"github.com/kaisero/proteus/internal/store"
+	"github.com/kaisero/proteus/internal/testconfig"
 )
 
 // appStore holds one fw01 snapshot whose meta names content version 8000-1000,

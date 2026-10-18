@@ -1,11 +1,11 @@
 package query
 
 import (
-	"github.com/okaiser/proteus/internal/reason"
-	"github.com/okaiser/proteus/internal/simulate"
-	"github.com/okaiser/proteus/internal/simulate/nat"
-	"github.com/okaiser/proteus/internal/simulate/routing"
-	"github.com/okaiser/proteus/internal/simulate/securitypolicy"
+	"github.com/kaisero/proteus/internal/reason"
+	"github.com/kaisero/proteus/internal/simulate"
+	"github.com/kaisero/proteus/internal/simulate/nat"
+	"github.com/kaisero/proteus/internal/simulate/routing"
+	"github.com/kaisero/proteus/internal/simulate/securitypolicy"
 )
 
 // The summary forms (spec 2026-10-09 §3.5). A summary keeps the verdict, the

@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/okaiser/proteus/internal/inventory"
-	"github.com/okaiser/proteus/internal/simulate/pathlab"
-	"github.com/okaiser/proteus/internal/store"
+	"github.com/kaisero/proteus/internal/inventory"
+	"github.com/kaisero/proteus/internal/simulate/pathlab"
+	"github.com/kaisero/proteus/internal/store"
 )
 
 // clock is when the lab's snapshots are taken; the queries run an hour later.

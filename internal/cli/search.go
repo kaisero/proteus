@@ -8,9 +8,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/okaiser/proteus/internal/estate"
-	"github.com/okaiser/proteus/internal/index"
-	"github.com/okaiser/proteus/internal/query"
+	"github.com/kaisero/proteus/internal/estate"
+	"github.com/kaisero/proteus/internal/index"
+	"github.com/kaisero/proteus/internal/query"
 )
 
 // searchOptions are search's flags.

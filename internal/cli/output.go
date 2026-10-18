@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"io"
 
-	"github.com/okaiser/proteus/internal/estate"
-	"github.com/okaiser/proteus/internal/query"
-	"github.com/okaiser/proteus/internal/reason"
+	"github.com/kaisero/proteus/internal/estate"
+	"github.com/kaisero/proteus/internal/query"
+	"github.com/kaisero/proteus/internal/reason"
 )
 
 // formatVersion is the JSON envelope's format, the query layer's: 2 since every

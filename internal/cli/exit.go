@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/okaiser/proteus/internal/inventory"
-	"github.com/okaiser/proteus/internal/query"
+	"github.com/kaisero/proteus/internal/inventory"
+	"github.com/kaisero/proteus/internal/query"
 )
 
 // exitCode maps a command's error to the exit code and the message to print; a nil

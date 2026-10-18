@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/okaiser/proteus/internal/config"
+	"github.com/kaisero/proteus/internal/config"
 )
 
 // longLists is a vsys with two long lists of n items: an LDAP server

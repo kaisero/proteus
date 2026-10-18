@@ -17,7 +17,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/okaiser/proteus/internal/reason"
+	"github.com/kaisero/proteus/internal/reason"
 )
 
 // The auth modes and identity sources of an audit line (spec §4.9).

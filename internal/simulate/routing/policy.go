@@ -6,11 +6,11 @@ import (
 	"net/netip"
 	"strings"
 
-	"github.com/okaiser/proteus/internal/reason"
-	"github.com/okaiser/proteus/internal/resolve"
-	"github.com/okaiser/proteus/internal/simulate"
-	natsim "github.com/okaiser/proteus/internal/simulate/nat"
-	"github.com/okaiser/proteus/internal/simulate/rulebase"
+	"github.com/kaisero/proteus/internal/reason"
+	"github.com/kaisero/proteus/internal/resolve"
+	"github.com/kaisero/proteus/internal/simulate"
+	natsim "github.com/kaisero/proteus/internal/simulate/nat"
+	"github.com/kaisero/proteus/internal/simulate/rulebase"
 )
 
 // Policy-based forwarding and NAT are detected, not simulated (spec §17 R10): a

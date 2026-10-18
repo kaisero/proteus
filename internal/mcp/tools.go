@@ -11,9 +11,9 @@ import (
 
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/okaiser/proteus/internal/query"
-	"github.com/okaiser/proteus/internal/reason"
-	"github.com/okaiser/proteus/internal/simulate"
+	"github.com/kaisero/proteus/internal/query"
+	"github.com/kaisero/proteus/internal/reason"
+	"github.com/kaisero/proteus/internal/simulate"
 )
 
 // The tools' arguments (spec 2026-10-09 §4.5). Each maps onto a query input.

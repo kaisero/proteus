@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/okaiser/proteus/internal/config"
-	"github.com/okaiser/proteus/internal/resolve"
+	"github.com/kaisero/proteus/internal/config"
+	"github.com/kaisero/proteus/internal/resolve"
 )
 
 // Set builds the indexes of one configuration on demand: each (scope, rulebase)

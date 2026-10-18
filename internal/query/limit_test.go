@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/okaiser/proteus/internal/simulate/pathlab"
-	"github.com/okaiser/proteus/internal/store"
+	"github.com/kaisero/proteus/internal/simulate/pathlab"
+	"github.com/kaisero/proteus/internal/store"
 )
 
 // twoLabs is fw01 and fw02, each with the lab configuration, their snapshots

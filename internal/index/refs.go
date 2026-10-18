@@ -1,6 +1,6 @@
 package index
 
-import "github.com/okaiser/proteus/internal/config"
+import "github.com/kaisero/proteus/internal/config"
 
 // Ref is one reference edge.
 //

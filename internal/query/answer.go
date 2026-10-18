@@ -5,12 +5,12 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/okaiser/proteus/internal/drift"
-	"github.com/okaiser/proteus/internal/simulate"
-	"github.com/okaiser/proteus/internal/simulate/nat"
-	"github.com/okaiser/proteus/internal/simulate/pathpolicy"
-	"github.com/okaiser/proteus/internal/simulate/routing"
-	"github.com/okaiser/proteus/internal/simulate/securitypolicy"
+	"github.com/kaisero/proteus/internal/drift"
+	"github.com/kaisero/proteus/internal/simulate"
+	"github.com/kaisero/proteus/internal/simulate/nat"
+	"github.com/kaisero/proteus/internal/simulate/pathpolicy"
+	"github.com/kaisero/proteus/internal/simulate/routing"
+	"github.com/kaisero/proteus/internal/simulate/securitypolicy"
 )
 
 // The answer builders (spec 2026-10-09 §3.3). Each result carries its answer:

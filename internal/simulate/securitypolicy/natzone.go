@@ -6,9 +6,9 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/okaiser/proteus/internal/simulate"
-	"github.com/okaiser/proteus/internal/simulate/nat"
-	"github.com/okaiser/proteus/internal/simulate/topology"
+	"github.com/kaisero/proteus/internal/simulate"
+	"github.com/kaisero/proteus/internal/simulate/nat"
+	"github.com/kaisero/proteus/internal/simulate/topology"
 )
 
 // natZone is what destination NAT makes of the destination zone (spec §18 N10):

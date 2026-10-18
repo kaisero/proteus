@@ -5,7 +5,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/okaiser/proteus/internal/reason"
+	"github.com/kaisero/proteus/internal/reason"
 )
 
 // level orders how certain an output is, strongest first. The zero value is

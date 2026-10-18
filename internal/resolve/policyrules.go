@@ -3,7 +3,7 @@ package resolve
 import (
 	"strconv"
 
-	"github.com/okaiser/proteus/internal/config"
+	"github.com/kaisero/proteus/internal/config"
 )
 
 // PBFRule is a policy-based forwarding rule: Rule's member lists, plus what the

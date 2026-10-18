@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/okaiser/proteus/internal/resolve"
-	"github.com/okaiser/proteus/internal/simulate"
+	"github.com/kaisero/proteus/internal/resolve"
+	"github.com/kaisero/proteus/internal/simulate"
 )
 
 // iface is "name zone router address...".
