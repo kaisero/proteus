@@ -12,7 +12,7 @@ import (
 
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/okaiser/proteus/internal/simulate/pathlab"
+	"github.com/kaisero/proteus/internal/simulate/pathlab"
 )
 
 // More calls than slots wait in the queue; one more is busy at once.

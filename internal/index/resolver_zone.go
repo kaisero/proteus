@@ -9,9 +9,9 @@ import (
 	"github.com/RoaringBitmap/roaring/v2"
 	"github.com/gaissmai/bart"
 
-	"github.com/okaiser/proteus/internal/config"
-	"github.com/okaiser/proteus/internal/reason"
-	"github.com/okaiser/proteus/internal/resolve"
+	"github.com/kaisero/proteus/internal/config"
+	"github.com/kaisero/proteus/internal/reason"
+	"github.com/kaisero/proteus/internal/resolve"
 )
 
 // zoneResolver answers which zone an address could arrive on, from the configuration

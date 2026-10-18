@@ -9,8 +9,8 @@ import (
 
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/okaiser/proteus/internal/query"
-	"github.com/okaiser/proteus/internal/simulate/pathlab"
+	"github.com/kaisero/proteus/internal/query"
+	"github.com/kaisero/proteus/internal/simulate/pathlab"
 )
 
 // Spec §7 race row: 16 calls of mixed tools at once over HTTP, each from its

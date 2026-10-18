@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/okaiser/proteus/internal/appid"
-	"github.com/okaiser/proteus/internal/inventory"
+	"github.com/kaisero/proteus/internal/appid"
+	"github.com/kaisero/proteus/internal/inventory"
 )
 
 const fixtureVersion = "8000-1000"

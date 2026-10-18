@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"strings"
 
-	"github.com/okaiser/proteus/internal/query"
-	"github.com/okaiser/proteus/internal/reason"
+	"github.com/kaisero/proteus/internal/query"
+	"github.com/kaisero/proteus/internal/reason"
 )
 
 // view is what the text content reads of an envelope, in either detail: the

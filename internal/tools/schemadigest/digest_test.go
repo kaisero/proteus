@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/okaiser/proteus/internal/digest"
+	"github.com/kaisero/proteus/internal/digest"
 )
 
 // seedSchema copies the trimmed fixture in as schema.xml.

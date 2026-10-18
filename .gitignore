@@ -27,5 +27,6 @@ config.yaml
 /site/
 
 # Build output: the CLI binary and compiled test binaries.
+/dist/
 /proteus
 *.test

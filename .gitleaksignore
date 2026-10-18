@@ -1,0 +1,3 @@
+# Dummy bearer tokens of the MCP tests (0123456789...), not secrets.
+7a76291997b5deda5766284f01a89cf02b8c166d:internal/cli/mcp_test.go:generic-api-key:26
+e9d5ff17553335ae37a95af9fb83d3886443a535:internal/mcp/http_test.go:generic-api-key:30

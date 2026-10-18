@@ -4,9 +4,9 @@ import (
 	"context"
 	"time"
 
-	"github.com/okaiser/proteus/internal/runlog"
-	"github.com/okaiser/proteus/internal/simulate"
-	"github.com/okaiser/proteus/internal/simulate/nat"
+	"github.com/kaisero/proteus/internal/runlog"
+	"github.com/kaisero/proteus/internal/simulate"
+	"github.com/kaisero/proteus/internal/simulate/nat"
 )
 
 // NATInput is simulate nat: one firewall, a flow, and optionally the ingress

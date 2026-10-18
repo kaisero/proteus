@@ -1,9 +1,9 @@
 package card
 
 import (
-	"github.com/okaiser/proteus/internal/config"
-	"github.com/okaiser/proteus/internal/index"
-	"github.com/okaiser/proteus/internal/resolve"
+	"github.com/kaisero/proteus/internal/config"
+	"github.com/kaisero/proteus/internal/index"
+	"github.com/kaisero/proteus/internal/resolve"
 )
 
 // Rule builds the card of one security rule, as the firewall's rule editor lays

@@ -3,7 +3,7 @@ package resolve
 import (
 	"slices"
 
-	"github.com/okaiser/proteus/internal/config"
+	"github.com/kaisero/proteus/internal/config"
 )
 
 // ObjectKinds returns every object kind a configuration can define under a scope and

@@ -1,7 +1,7 @@
 package resolve
 
 import (
-	"github.com/okaiser/proteus/internal/config"
+	"github.com/kaisero/proteus/internal/config"
 )
 
 // Rulebase is which rulebase to read.

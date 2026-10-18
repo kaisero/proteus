@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/okaiser/proteus/internal/estate"
-	"github.com/okaiser/proteus/internal/simulate"
-	"github.com/okaiser/proteus/internal/simulate/nat"
+	"github.com/kaisero/proteus/internal/estate"
+	"github.com/kaisero/proteus/internal/simulate"
+	"github.com/kaisero/proteus/internal/simulate/nat"
 )
 
 // natEnv is fw01 with the NAT fixture.

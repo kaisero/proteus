@@ -10,17 +10,17 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/okaiser/proteus/internal/estate"
-	"github.com/okaiser/proteus/internal/index"
-	"github.com/okaiser/proteus/internal/reason"
-	"github.com/okaiser/proteus/internal/resolve"
-	"github.com/okaiser/proteus/internal/runlog"
-	"github.com/okaiser/proteus/internal/simulate"
-	"github.com/okaiser/proteus/internal/simulate/pathpolicy"
-	"github.com/okaiser/proteus/internal/simulate/routing"
-	"github.com/okaiser/proteus/internal/simulate/rulebase"
-	"github.com/okaiser/proteus/internal/simulate/securitypolicy"
-	"github.com/okaiser/proteus/internal/simulate/topology"
+	"github.com/kaisero/proteus/internal/estate"
+	"github.com/kaisero/proteus/internal/index"
+	"github.com/kaisero/proteus/internal/reason"
+	"github.com/kaisero/proteus/internal/resolve"
+	"github.com/kaisero/proteus/internal/runlog"
+	"github.com/kaisero/proteus/internal/simulate"
+	"github.com/kaisero/proteus/internal/simulate/pathpolicy"
+	"github.com/kaisero/proteus/internal/simulate/routing"
+	"github.com/kaisero/proteus/internal/simulate/rulebase"
+	"github.com/kaisero/proteus/internal/simulate/securitypolicy"
+	"github.com/kaisero/proteus/internal/simulate/topology"
 )
 
 // policyCommand is simulate policy's command name.

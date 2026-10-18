@@ -7,8 +7,8 @@ import (
 
 	"github.com/gaissmai/bart"
 
-	"github.com/okaiser/proteus/internal/config"
-	"github.com/okaiser/proteus/internal/resolve"
+	"github.com/kaisero/proteus/internal/config"
+	"github.com/kaisero/proteus/internal/resolve"
 )
 
 // Match is one object whose value covers or overlaps an address.

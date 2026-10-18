@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/okaiser/proteus/internal/query"
+	"github.com/kaisero/proteus/internal/query"
 )
 
 // name returns a completion value's command name, without its tab-separated

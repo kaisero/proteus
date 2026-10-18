@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/okaiser/proteus/internal/simulate"
-	"github.com/okaiser/proteus/internal/simulate/pathlab"
+	"github.com/kaisero/proteus/internal/simulate"
+	"github.com/kaisero/proteus/internal/simulate/pathlab"
 )
 
 // BenchmarkPathWithNAT answers one path question across the two firewalls of

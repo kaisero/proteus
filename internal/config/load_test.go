@@ -7,7 +7,7 @@ import (
 	"testing"
 	"testing/fstest"
 
-	"github.com/okaiser/proteus/internal/digest"
+	"github.com/kaisero/proteus/internal/digest"
 )
 
 func TestLoadBareConfig(t *testing.T) {

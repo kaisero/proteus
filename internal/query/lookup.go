@@ -7,11 +7,11 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/okaiser/proteus/internal/card"
-	"github.com/okaiser/proteus/internal/estate"
-	"github.com/okaiser/proteus/internal/reason"
-	"github.com/okaiser/proteus/internal/resolve"
-	"github.com/okaiser/proteus/internal/runlog"
+	"github.com/kaisero/proteus/internal/card"
+	"github.com/kaisero/proteus/internal/estate"
+	"github.com/kaisero/proteus/internal/reason"
+	"github.com/kaisero/proteus/internal/resolve"
+	"github.com/kaisero/proteus/internal/runlog"
 )
 
 // LookupInput is lookup: the whole rule or object a name refers to.

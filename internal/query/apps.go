@@ -7,10 +7,10 @@ import (
 	"os"
 	"sync"
 
-	"github.com/okaiser/proteus/internal/appid"
-	"github.com/okaiser/proteus/internal/estate"
-	"github.com/okaiser/proteus/internal/reason"
-	"github.com/okaiser/proteus/internal/simulate"
+	"github.com/kaisero/proteus/internal/appid"
+	"github.com/kaisero/proteus/internal/estate"
+	"github.com/kaisero/proteus/internal/reason"
+	"github.com/kaisero/proteus/internal/simulate"
 )
 
 // appMemo loads each content file once per question, through the env's

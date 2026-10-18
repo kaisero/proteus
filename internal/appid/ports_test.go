@@ -4,7 +4,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/okaiser/proteus/internal/appid"
+	"github.com/kaisero/proteus/internal/appid"
 )
 
 // flow is one protocol and port of a flow; port 0 gives none.

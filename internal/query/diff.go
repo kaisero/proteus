@@ -7,12 +7,12 @@ import (
 	"slices"
 	"time"
 
-	"github.com/okaiser/proteus/internal/config"
-	"github.com/okaiser/proteus/internal/drift"
-	"github.com/okaiser/proteus/internal/estate"
-	"github.com/okaiser/proteus/internal/reason"
-	"github.com/okaiser/proteus/internal/resolve"
-	"github.com/okaiser/proteus/internal/store"
+	"github.com/kaisero/proteus/internal/config"
+	"github.com/kaisero/proteus/internal/drift"
+	"github.com/kaisero/proteus/internal/estate"
+	"github.com/kaisero/proteus/internal/reason"
+	"github.com/kaisero/proteus/internal/resolve"
+	"github.com/kaisero/proteus/internal/store"
 )
 
 // DiffInput is snapshot diff: what changed between two snapshots of each

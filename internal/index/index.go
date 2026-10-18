@@ -4,8 +4,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/okaiser/proteus/internal/config"
-	"github.com/okaiser/proteus/internal/resolve"
+	"github.com/kaisero/proteus/internal/config"
+	"github.com/kaisero/proteus/internal/resolve"
 )
 
 // Index is the lookup structures for one scope. It is immutable once built, so

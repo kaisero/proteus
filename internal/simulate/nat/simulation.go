@@ -7,11 +7,11 @@ import (
 	"net/netip"
 	"strings"
 
-	"github.com/okaiser/proteus/internal/reason"
-	"github.com/okaiser/proteus/internal/resolve"
-	"github.com/okaiser/proteus/internal/simulate"
-	"github.com/okaiser/proteus/internal/simulate/rulebase"
-	"github.com/okaiser/proteus/internal/simulate/topology"
+	"github.com/kaisero/proteus/internal/reason"
+	"github.com/kaisero/proteus/internal/resolve"
+	"github.com/kaisero/proteus/internal/simulate"
+	"github.com/kaisero/proteus/internal/simulate/rulebase"
+	"github.com/kaisero/proteus/internal/simulate/topology"
 )
 
 // Kind is the registry key and the command name.

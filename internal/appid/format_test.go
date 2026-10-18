@@ -12,8 +12,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/okaiser/proteus/internal/appid"
-	"github.com/okaiser/proteus/internal/testconfig"
+	"github.com/kaisero/proteus/internal/appid"
+	"github.com/kaisero/proteus/internal/testconfig"
 )
 
 const fixtures = "../../testdata/appid/"

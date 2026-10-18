@@ -6,7 +6,7 @@ import (
 	"regexp"
 	"testing"
 
-	"github.com/okaiser/proteus/internal/fakepanos"
+	"github.com/kaisero/proteus/internal/fakepanos"
 )
 
 // Every document is stored as <name>.xml, so a name must be unique and file-safe.

@@ -36,7 +36,7 @@ import (
 	"path/filepath"
 	"syscall"
 
-	"github.com/okaiser/proteus/internal/inventory"
+	"github.com/kaisero/proteus/internal/inventory"
 )
 
 // options are the flags. Each flag can also come from the variable its help

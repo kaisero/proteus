@@ -7,8 +7,8 @@ import (
 
 	"github.com/RoaringBitmap/roaring/v2"
 
-	"github.com/okaiser/proteus/internal/index"
-	"github.com/okaiser/proteus/internal/runlog"
+	"github.com/kaisero/proteus/internal/index"
+	"github.com/kaisero/proteus/internal/runlog"
 )
 
 // Step is one stage's work over a simulation's state. It returns what the stage

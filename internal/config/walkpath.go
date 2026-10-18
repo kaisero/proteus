@@ -3,7 +3,7 @@ package config
 import (
 	"strings"
 
-	"github.com/okaiser/proteus/internal/schema"
+	"github.com/kaisero/proteus/internal/schema"
 )
 
 // pathNode is one segment of an entry array's reference paths, held as a trie so

@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/okaiser/proteus/internal/fakepanos"
-	"github.com/okaiser/proteus/internal/simulate/pathlab"
+	"github.com/kaisero/proteus/internal/fakepanos"
+	"github.com/kaisero/proteus/internal/simulate/pathlab"
 )
 
 // labFW02 is fw02 as captured: a PA-440 on PAN-OS 12.2 joined to fw01 by

@@ -5,9 +5,9 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/okaiser/proteus/internal/simulate"
-	"github.com/okaiser/proteus/internal/simulate/pathlab"
-	"github.com/okaiser/proteus/internal/simulate/routing"
+	"github.com/kaisero/proteus/internal/simulate"
+	"github.com/kaisero/proteus/internal/simulate/pathlab"
+	"github.com/kaisero/proteus/internal/simulate/routing"
 )
 
 // The lab path crosses fw02 and fw01; the result keeps the native run.

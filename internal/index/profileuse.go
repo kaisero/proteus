@@ -3,8 +3,8 @@ package index
 import (
 	"strings"
 
-	"github.com/okaiser/proteus/internal/config"
-	"github.com/okaiser/proteus/internal/resolve"
+	"github.com/kaisero/proteus/internal/config"
+	"github.com/kaisero/proteus/internal/resolve"
 )
 
 // ProfileUse is one path from a rule to a URL category through its security

@@ -5,7 +5,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/okaiser/proteus/internal/config"
+	"github.com/kaisero/proteus/internal/config"
 )
 
 func zonesCfg(t *testing.T) *config.Config {

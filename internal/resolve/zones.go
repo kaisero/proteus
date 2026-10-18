@@ -5,7 +5,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/okaiser/proteus/internal/config"
+	"github.com/kaisero/proteus/internal/config"
 )
 
 // Zone is one security zone and the interfaces assigned to it.

@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/okaiser/proteus/internal/config"
+	"github.com/kaisero/proteus/internal/config"
 )
 
 // Target is one firewall vsys and the policy it evaluates.

@@ -15,11 +15,11 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/okaiser/proteus/internal/index"
-	"github.com/okaiser/proteus/internal/inventory"
-	"github.com/okaiser/proteus/internal/mcp"
-	"github.com/okaiser/proteus/internal/query"
-	"github.com/okaiser/proteus/internal/runlog"
+	"github.com/kaisero/proteus/internal/index"
+	"github.com/kaisero/proteus/internal/inventory"
+	"github.com/kaisero/proteus/internal/mcp"
+	"github.com/kaisero/proteus/internal/query"
+	"github.com/kaisero/proteus/internal/runlog"
 )
 
 // minToken is the shortest bearer token --http accepts (spec 2026-10-09 §4.3).

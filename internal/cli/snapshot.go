@@ -7,13 +7,13 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/okaiser/proteus/internal/config"
-	"github.com/okaiser/proteus/internal/drift"
-	"github.com/okaiser/proteus/internal/estate"
-	"github.com/okaiser/proteus/internal/query"
-	"github.com/okaiser/proteus/internal/reason"
-	"github.com/okaiser/proteus/internal/resolve"
-	"github.com/okaiser/proteus/internal/store"
+	"github.com/kaisero/proteus/internal/config"
+	"github.com/kaisero/proteus/internal/drift"
+	"github.com/kaisero/proteus/internal/estate"
+	"github.com/kaisero/proteus/internal/query"
+	"github.com/kaisero/proteus/internal/reason"
+	"github.com/kaisero/proteus/internal/resolve"
+	"github.com/kaisero/proteus/internal/store"
 )
 
 // snapshotListOptions are snapshot list's flags.

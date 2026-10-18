@@ -4,7 +4,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/okaiser/proteus/internal/appid"
+	"github.com/kaisero/proteus/internal/appid"
 )
 
 // S9: a container holds its functions.

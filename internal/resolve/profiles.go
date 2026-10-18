@@ -1,7 +1,7 @@
 package resolve
 
 import (
-	"github.com/okaiser/proteus/internal/config"
+	"github.com/kaisero/proteus/internal/config"
 )
 
 // URLFilteringProfile is one url-filtering profile visible in a scope.

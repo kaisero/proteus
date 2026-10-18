@@ -22,7 +22,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/okaiser/proteus/internal/inventory"
+	"github.com/kaisero/proteus/internal/inventory"
 )
 
 // The document names the store reads itself. They must equal the names fetch gives

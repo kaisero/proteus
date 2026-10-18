@@ -6,6 +6,8 @@
 </p>
 
 [![CI](https://github.com/kaisero/proteus/actions/workflows/ci.yml/badge.svg)](https://github.com/kaisero/proteus/actions/workflows/ci.yml)
+[![Docs](https://github.com/kaisero/proteus/actions/workflows/docs.yml/badge.svg)](https://kaisero.github.io/proteus/)
+[![Release](https://img.shields.io/github/v/release/kaisero/proteus)](https://github.com/kaisero/proteus/releases/latest)
 [![Go](https://img.shields.io/badge/go-1.26%2B-00ADD8)](go.mod)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
@@ -32,9 +34,20 @@ Use Proteus to
 - Script with `--output json` and exit codes, or serve the same answers to an
   agent over MCP
 
-## Quick start
+## Install
 
-Build Proteus. You need Go at the version in [`go.mod`](go.mod).
+Download the archive for your platform from the
+[latest release](https://github.com/kaisero/proteus/releases/latest). Each
+archive holds one static binary for Linux, macOS or Windows, on amd64 or arm64.
+`SHA256SUMS` lists the checksum of each archive.
+
+```bash
+tar -xzf proteus_<version>_darwin_arm64.tar.gz
+sudo mv proteus_<version>_darwin_arm64/proteus /usr/local/bin/
+proteus --version
+```
+
+To build from source instead, you need Go at the version in [`go.mod`](go.mod):
 
 ```bash
 git clone https://github.com/kaisero/proteus.git && cd proteus
@@ -42,7 +55,10 @@ make build-local                 # writes bin/proteus
 go install ./cmd/proteus         # or install into $(go env GOPATH)/bin
 ```
 
-Ask a test configuration where an address is used. You need no firewall:
+## Quick start
+
+From a clone of the repository, ask a test configuration where an address is
+used. You need no firewall:
 
 ```text
 $ proteus search 10.124.0.1 --file testdata/config/firewall-multivsys.xml

@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/okaiser/proteus/internal/config"
-	"github.com/okaiser/proteus/internal/resolve"
-	"github.com/okaiser/proteus/internal/testconfig"
+	"github.com/kaisero/proteus/internal/config"
+	"github.com/kaisero/proteus/internal/resolve"
+	"github.com/kaisero/proteus/internal/testconfig"
 )
 
 // benchBuild measures the index build of vsys1 of a generated configuration. The

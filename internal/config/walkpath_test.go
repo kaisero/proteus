@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/okaiser/proteus/internal/schema"
+	"github.com/kaisero/proteus/internal/schema"
 )
 
 type edge struct{ entry, field, value string }
