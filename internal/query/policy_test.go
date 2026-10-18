@@ -17,6 +17,7 @@ import (
 	"github.com/okaiser/proteus/internal/simulate"
 	"github.com/okaiser/proteus/internal/simulate/pathlab"
 	"github.com/okaiser/proteus/internal/simulate/pathpolicy"
+	"github.com/okaiser/proteus/internal/store"
 )
 
 func labFlow() FlowInput {
@@ -469,5 +470,117 @@ func TestFileModeRefusesAnUndefinedZone(t *testing.T) {
 	if len(e.Holes) != 1 || e.Holes[0].Vsys != "vsys2" || e.Holes[0].Code != "zone.undefined" ||
 		e.Holes[0].Reason != "not checked: the from zone out is not a zone of vsys2 (its zones: dmz, inside)" {
 		t.Errorf("holes %+v", e.Holes)
+	}
+}
+
+// userPolicy asks simulate policy on the User-ID fixture with its identity
+// file, from inside to outside on tcp/443.
+func userPolicy(t *testing.T, env Env, src, dst, user string) (Envelope[PolicyFileInput, SecurityResult], error) {
+	t.Helper()
+	return PolicyFile(context.Background(), env, PolicyFileInput{
+		Flow: FlowInput{
+			Source: src, Destination: dst, Port: "443", User: user, FromZone: "inside", ToZone: "outside",
+		},
+		Selection: Selection{File: identityConfig(t, "firewall-identity.xml", identityGzip(t))},
+	})
+}
+
+// Path mode loads a device's identity data only for a question that needs
+// it: one with a user, or a rule that names one (spec 2026-10-17 §4.2, PD10).
+// The path fixture names no user, so only --user loads, on each hop; an
+// application alone loads none.
+func TestPolicyPathLoadsIdentityOnlyWhenNeeded(t *testing.T) {
+	t.Parallel()
+	l := newLab(t)
+	for _, d := range pathlab.Devices {
+		l.writeWith(store.Meta{Device: d, Host: d + ".example.test"}, pathlab.Read(t, pathlab.ConfigFile(d)), identityGzip(t))
+	}
+	for _, tc := range []struct {
+		name  string
+		flow  FlowInput
+		loads int
+	}{
+		{"no user", labFlow(), 0},
+		{"a user", FlowInput{Source: pathlab.Source, Destination: pathlab.Destination, Port: "443", User: `example.com\alice`}, 2},
+		{"an application", FlowInput{Source: pathlab.Source, Destination: pathlab.Destination, Port: "443", Application: "ssl"}, 0},
+	} {
+		src := newCountingIdentity()
+		env := l.env()
+		env.Identity = src
+		e, err := Policy(context.Background(), env, PolicyInput{Flow: tc.flow})
+		if err != nil || len(e.Results) != 1 {
+			t.Fatalf("%s: %+v, %v", tc.name, e, err)
+		}
+		if src.total() != tc.loads {
+			t.Errorf("%s: loads %v, want %d", tc.name, src.loads, tc.loads)
+		}
+		if tc.loads > 0 {
+			u := e.Results[0].Hops[0].Checks[0].Security.User
+			if u == nil || u.Name != `example.com\alice` || u.From != "given" {
+				t.Errorf("%s: hop 1 user %+v", tc.name, u)
+			}
+		}
+	}
+}
+
+// PD18: simulate and search read an email the same way, through one
+// function: both take robert@example.com as bob.
+func TestSearchAndSimulateReadAnEmailAlike(t *testing.T) {
+	t.Parallel()
+	e, err := userPolicy(t, Env{}, "203.0.113.5", "192.0.2.18", "robert@example.com")
+	if err != nil || len(e.Results) != 1 {
+		t.Fatalf("%+v, %v", e, err)
+	}
+	u := e.Results[0].User
+	if u == nil || u.Name != `example.com\bob` || u.Given != "robert@example.com" || e.Results[0].Rule != "u-multi" {
+		t.Errorf("user %+v, rule %s", u, e.Results[0].Rule)
+	}
+	s := searchFile(t, Env{}, identityConfig(t, "firewall-identity.xml", identityGzip(t)), "robert@example.com")
+	if !ruleFindings(s)["u-multi"] || !slices.ContainsFunc(answers(s), func(a string) bool { return strings.Contains(a, u.Name) }) {
+		t.Errorf("search: %v", answers(s))
+	}
+}
+
+// PD17, M6: a rule keyword is no user, in any case: any, known-user and
+// unknown are usage errors. pre-logon is a user state the device matches.
+func TestARuleKeywordIsNoUser(t *testing.T) {
+	t.Parallel()
+	for _, kw := range []string{"known-user", "ANY", "unknown", " Unknown "} {
+		_, err := userPolicy(t, Env{}, "203.0.113.5", "192.0.2.13", kw)
+		usageOK(t, err, "--user "+strings.TrimSpace(kw))
+		if u, ok := errors.AsType[*UsageError](err); !ok || !strings.Contains(u.ToolText, "user "+strings.TrimSpace(kw)) {
+			t.Errorf("%s: %v", kw, err)
+		}
+		_, err = Policy(context.Background(), Env{}, PolicyInput{Flow: FlowInput{Source: pathlab.Source, Destination: pathlab.Destination, User: kw}})
+		usageOK(t, err, "is a rule keyword")
+	}
+	e, err := userPolicy(t, Env{}, "203.0.113.5", "192.0.2.15", "pre-logon")
+	if err != nil || len(e.Results) != 1 || e.Results[0].Rule != "u-prelogon" {
+		t.Errorf("pre-logon: %+v, %v", e, err)
+	}
+}
+
+// §5.1: the JSON answer holds the user and where it came from.
+func TestSecurityJSONHoldsTheUser(t *testing.T) {
+	t.Parallel()
+	e, err := userPolicy(t, Env{}, "198.51.100.11", "192.0.2.10", "")
+	if err != nil || len(e.Results) != 1 {
+		t.Fatalf("%+v, %v", e, err)
+	}
+	b, err := json.Marshal(e.Results[0])
+	want := `"user":{"name":"example.com\\alice","from":"mapping","ip":"198.51.100.11","directory":true}`
+	if err != nil || !strings.Contains(string(b), want) {
+		t.Errorf("JSON: %v %s", err, b)
+	}
+	if !hasNote(e.Notes, "note.user-from-mapping") {
+		t.Errorf("notes %+v", e.Notes)
+	}
+	// Without identity data, the answer has no user.
+	e, err = PolicyFile(context.Background(), Env{}, PolicyFileInput{
+		Flow:      FlowInput{Source: "198.51.100.11", Destination: "192.0.2.10", Port: "443", FromZone: "inside", ToZone: "outside"},
+		Selection: Selection{File: identityConfig(t, "firewall-identity.xml", nil)},
+	})
+	if b, _ := json.Marshal(e.Results[0]); err != nil || strings.Contains(string(b), `"user":`) {
+		t.Errorf("without data: %v %s", err, b)
 	}
 }

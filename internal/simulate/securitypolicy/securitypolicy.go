@@ -12,7 +12,16 @@
 // matches on the default ports of the application (P1-P8, P11, P12, I7, I8).
 // A protocol without ports never matches a custom service, with or without an
 // application (P13). Without a flow application or without the data,
-// a rule that names an application stays in doubt. The user is not evaluated.
+// a rule that names an application stays in doubt.
+//
+// The user is evaluated with the device's identity data (spec 2026-10-17 §5),
+// as observed on fw01, PAN-OS 11.2.5: the mapping of the source address wins
+// over the user given (M1); a mapped user stays as stored, so the form
+// example\alice matches no directory name (M2); a rule matches a user in any
+// case (N1) and a UPN (N2); a group or a DUG matches the users that U3 lists
+// in it (M7, M8, M11, M12, D13); known-user matches an identified user (M3),
+// unknown no user (D6, M5), and pre-logon only itself (M6). Without the data,
+// a rule that names a user stays in doubt, as before (§5.5).
 package securitypolicy
 
 import (
@@ -25,6 +34,7 @@ import (
 	"github.com/RoaringBitmap/roaring/v2"
 
 	"github.com/okaiser/proteus/internal/appid"
+	"github.com/okaiser/proteus/internal/identity"
 	"github.com/okaiser/proteus/internal/index"
 	"github.com/okaiser/proteus/internal/reason"
 	"github.com/okaiser/proteus/internal/resolve"
@@ -87,6 +97,9 @@ type Verdict struct {
 	// AppData is whether the target had App-ID content data. The needs read
 	// it: only with data does an application decide a doubt (C8).
 	AppData bool `json:"-"`
+	// User is the user of the flow and where it came from; set when the
+	// target has identity data (spec 2026-10-17 §5.1).
+	User *FlowUser `json:"user,omitempty"`
 }
 
 // Outcome is what a decided flow meets: it passes, or it stops.
@@ -209,6 +222,14 @@ type state struct {
 	// of a rule's match on the application's ports; the winner's join notes.
 	svcDoubts map[uint32]reason.Reason
 	portNotes map[uint32][]reason.Reason
+	// users is the target's identity data, nil without it. userEvaluated is
+	// whether match-user evaluated the user: the data is there. userKept are
+	// the rules it kept for a member the data cannot judge, and userDoubts
+	// gives each its reasons (spec 2026-10-17 §5.5).
+	users         *identity.Data
+	userEvaluated bool
+	userKept      *roaring.Bitmap
+	userDoubts    map[uint32][]reason.Reason
 	// notes are the run's own notes, after the target's.
 	notes   simulate.Reasons
 	verdict Verdict
@@ -240,7 +261,7 @@ func (Simulation) Run(ctx context.Context, env *simulate.Env, in simulate.Input)
 	if r := rulebase.UndefinedZones(t.Config, idx.Scope(), in.Flow.FromZone, in.Flow.ToZone); r != nil {
 		return run, r.Choice
 	}
-	s := &state{env: env, in: in, target: t, idx: idx, view: idx.With(t.Providers), rules: idx.Rules(), apps: t.Providers.Apps}
+	s := &state{env: env, in: in, target: t, idx: idx, view: idx.With(t.Providers), rules: idx.Rules(), apps: t.Providers.Apps, users: t.Providers.Users}
 	s.verdict.AppData = s.apps != nil
 	// With data, the flow's application is checked and made canonical before
 	// the stages (spec 2026-10-16 P10, P14, P15).

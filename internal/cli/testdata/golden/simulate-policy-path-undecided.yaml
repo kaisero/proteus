@@ -233,6 +233,13 @@ results:
                 candidates: 0
                 detail: no application given
                 elapsed_ms: 0
+              - slug: match-user
+                name: Match the user
+                fidelity:
+                  level: exact
+                candidates: 0
+                detail: no identity data
+                elapsed_ms: 0
               - slug: match-service
                 name: Match the service
                 fidelity:
@@ -375,6 +382,13 @@ results:
                   level: exact
                 candidates: 0
                 detail: no application given
+                elapsed_ms: 0
+              - slug: match-user
+                name: Match the user
+                fidelity:
+                  level: exact
+                candidates: 0
+                detail: no identity data
                 elapsed_ms: 0
               - slug: match-service
                 name: Match the service

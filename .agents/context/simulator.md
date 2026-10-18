@@ -246,6 +246,7 @@ func Weakest(fs ...Fidelity) Fidelity
 <!-- GENERATED:api ./internal/simulate/securitypolicy -->
 ```go
 type Doubt struct{ ... }
+type FlowUser struct{ ... }
 type Implicit struct{ ... }
 type Outcome string
 type Relevance struct{ ... }

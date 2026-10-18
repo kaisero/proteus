@@ -12,6 +12,7 @@ import (
 
 	"github.com/okaiser/proteus/internal/config"
 	"github.com/okaiser/proteus/internal/reason"
+	"github.com/okaiser/proteus/internal/resolve"
 	"github.com/okaiser/proteus/internal/schema"
 	"github.com/okaiser/proteus/internal/simulate"
 )
@@ -61,6 +62,26 @@ func TestRuleFieldsCoverTheSchema(t *testing.T) {
 		if f.name == "application" && f.class != evaluated {
 			t.Error("application is not evaluated")
 		}
+		// Without identity data, the user keeps its doubt (spec 2026-10-17
+		// §5.5), so source-user stays doubtful, with its code and label.
+		if f.name == "source-user" && f.class != doubtful {
+			t.Error("source-user is not doubtful")
+		}
+	}
+	if doubtCodes["source-user"] != "doubt.not-evaluated.user" || doubtLabel["source-user"] != "user" {
+		t.Error("the user doubt is gone")
+	}
+	// With the data, match-user evaluates the user: no candidate keeps the
+	// old doubt, and first-match skips no user.
+	r, v := userRun(t, idData(t), userFlow("198.51.100.11", "192.0.2.13", ""))
+	if codes := doubtCodesOf(v, "u-known"); slices.Contains(codes, "doubt.not-evaluated.user") || len(v.Candidates) == 0 {
+		t.Errorf("doubts %s", doubtList(v))
+	}
+	if slices.Contains(stage(r, "first-match").Fidelity.Skipped(), "user") {
+		t.Errorf("first-match %s", stage(r, "first-match").Fidelity)
+	}
+	if got := notEvaluated([]resolve.Rule{{Fields: map[string][]string{"source-user": {"x"}, "application": {"y"}}}}, true, true); len(got) != 0 {
+		t.Errorf("not evaluated %v", got)
 	}
 	declared := false
 	for _, h := range schema.HandModelled() {

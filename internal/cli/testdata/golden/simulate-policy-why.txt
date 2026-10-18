@@ -7,6 +7,7 @@ file / vsys1   ../../testdata/config/firewall-zones.xml
   resolve-destination exact    2 10.2.0.5: 0 hits, 0 negated rules
   derive-zones        inferred 1 from inside; to dmz (configuration)
   match-application   exact    1 no application given
+  match-user          exact    1 no identity data
   match-service       exact    1 tcp/443
   match-url           exact    1 no candidate names a URL category
   drop-disabled       exact    1 0 disabled

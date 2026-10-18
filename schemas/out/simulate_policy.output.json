@@ -2050,6 +2050,35 @@
                                 ],
                                 "additionalProperties": false
                               },
+                              "user": {
+                                "type": [
+                                  "null",
+                                  "object"
+                                ],
+                                "properties": {
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "from": {
+                                    "type": "string"
+                                  },
+                                  "given": {
+                                    "type": "string"
+                                  },
+                                  "ip": {
+                                    "type": "string"
+                                  },
+                                  "directory": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "description": "the flow's user and where it came from: the mapping of the source address or the user given",
+                                "required": [
+                                  "from",
+                                  "directory"
+                                ],
+                                "additionalProperties": false
+                              },
                               "stages": {
                                 "type": [
                                   "null",

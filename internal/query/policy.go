@@ -555,7 +555,9 @@ type Security struct {
 	// Doubts names the candidates that set a matching field no stage evaluates.
 	Doubts []securitypolicy.Doubt        `json:"doubts" jsonschema:"rules that may match first, with the reasons the answer cannot rule them out"`
 	Zones  securitypolicy.ZoneDerivation `json:"zones" jsonschema:"the zones used and where they came from"`
-	Stages []Stage                       `json:"stages" jsonschema:"the run's stages: what each one did, its fidelity and its candidate count"`
+	// User is set when the target has identity data (spec 2026-10-17 §5.1).
+	User   *securitypolicy.FlowUser `json:"user,omitempty" jsonschema:"the flow's user and where it came from: the mapping of the source address or the user given"`
+	Stages []Stage                  `json:"stages" jsonschema:"the run's stages: what each one did, its fidelity and its candidate count"`
 }
 
 // securityOf is a security answer. v is nil when the check did not run.
@@ -583,6 +585,7 @@ func securityOf(v *securitypolicy.Verdict, verdict string, why simulate.Reasons,
 	out.Default, out.DefaultAction, out.DefaultSource = v.Default, v.DefaultAction, v.DefaultSource
 	out.Zones = v.Zones
 	out.Zones.From, out.Zones.To = nonNil(v.Zones.From), nonNil(v.Zones.To)
+	out.User = v.User
 	return out
 }
 

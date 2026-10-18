@@ -10,6 +10,7 @@ file / vsys1   TMP
   resolve-destination exact    8 10.2.0.5: 0 hits, 0 negated rules
   derive-zones        inferred 8 from inside; to outside (configuration)
   match-application   exact    1 web-browsing: 0 explicit, 1 implicit, 0 kept in doubt (content 8000-1000)
+  match-user          exact    1 no identity data
   match-service       exact    1 tcp/80; protocol tcp, from the default of web-browsing (tcp/80; tcp/443/secure)
   match-url           exact    1 no candidate names a URL category
   drop-disabled       exact    1 0 disabled

@@ -130,6 +130,11 @@ var registry = []Entry{
 	{Code: "note.snapshot-skipped", Class: Note, Description: "a damaged snapshot was passed over at the asked time, and an older one answers"},
 	{Code: "note.snapshot-stale", Class: Note, Description: "the snapshot is older than the freshness limit"},
 	{Code: "note.tls-off", Class: Note, Description: "the device was fetched without TLS certificate verification"},
+	{Code: "note.user-after-nat", Class: Note, Description: "a hop looks up a source address that an earlier hop translated"},
+	{Code: "note.user-from-mapping", Class: Note, Description: "the user comes from the mapping of the source address"},
+	{Code: "note.user-not-in-directory", Class: Note, Description: "the user is no primary name of the directory"},
+	{Code: "note.user-resolved", Class: Note, Description: "an alternate name or an email was read as its primary name"},
+	{Code: "note.user-unknown-inferred", Class: Note, Description: "no identified user: unknown and known-user are inferred, and the device's test command matches known-user here"},
 
 	{Code: "path.delivered", Class: Path, Description: "the path reaches the destination"},
 	{Code: "path.ecmp", Class: Path, Description: "a hop has equal-cost next hops and the path follows one"},

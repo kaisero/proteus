@@ -330,7 +330,9 @@ func withDefaults(fields map[string][]string, defaults map[string]string) map[st
 }
 
 // notEvaluated is why a rule only may match for the dimensions a PBF check does not
-// evaluate: the application, the source user (todo item 22) and the schedule.
+// evaluate: the application, the source user and the schedule. PBF builds its
+// view without providers, so it keeps the user doubt, as it keeps the
+// application doubt (spec 2026-10-16 D5, spec 2026-10-17 §5.3).
 func notEvaluated(fields map[string][]string, schedule string) []reason.Reason {
 	var out []reason.Reason
 	if names(fields["application"]) {

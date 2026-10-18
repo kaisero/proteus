@@ -151,6 +151,16 @@ func run(ctx context.Context, env *simulate.Env, in simulate.Input, checks []Che
 				return res, rr.Stages, err
 			}
 			r.Fidelity = simulate.Weakest(append([]simulate.Fidelity{r.Fidelity}, caps...)...)
+			if sourceTranslated(p, h.Index) && r.Security != nil && r.Security.User != nil && r.Security.User.Judged {
+				// The hop looks up the translated source in its own
+				// mappings (spec 2026-10-17 D11). No lab path with NAT and
+				// User-ID exists (O2), so the answer is inferred (owner
+				// decision, PD12).
+				r.Notes = append(r.Notes, reason.New("note.user-after-nat", fmt.Sprintf(
+					"%s looks up the user of %s, a source address that an earlier hop translated; no lab path showed this",
+					rh.Device, rh.Flow.Source)))
+				r.Fidelity = simulate.Weakest(r.Fidelity, simulate.Inferred)
+			}
 			env.Stepf("hop%d: %s (%s)", h.Index, r.Verdict, r.Reason.Text())
 			h.Checks = append(h.Checks, r)
 		}
@@ -235,6 +245,17 @@ func pathDoubts(p routing.Path, n int, stages []simulate.Stage) (simulate.Reason
 		}
 	}
 	return doubts, caps
+}
+
+// sourceTranslated reports whether a hop before hop n translated the source:
+// its post-NAT flow holds another source address than its flow.
+func sourceTranslated(p routing.Path, n int) bool {
+	for _, h := range p.Hops[:n-1] {
+		if h.PostNAT != nil && !slices.Equal(h.PostNAT.Source.Addrs, h.Flow.Source.Addrs) {
+			return true
+		}
+	}
+	return false
 }
 
 // stageFidelity is the fidelity of hop n's routing stage of that name.

@@ -25,6 +25,7 @@ var steps = []simulate.Step[state]{
 	// Before the service: application-default needs the application (spec
 	// 2026-10-16 D6).
 	{Name: "Match the application", Slug: "match-application", Do: matchApplication},
+	{Name: "Match the user", Slug: "match-user", Do: matchUser},
 	{Name: "Match the service", Slug: "match-service", Do: matchService},
 	{Name: "Match the URL category", Slug: "match-url", Do: matchURL},
 	{Name: "Drop disabled rules", Slug: "drop-disabled", Do: dropDisabled},
@@ -597,7 +598,7 @@ func firstMatch(_ context.Context, s *state) (simulate.Outcome, error) {
 		upto, before = cands[:at+1], cands[:at]
 	}
 	out := simulate.Outcome{Fidelity: simulate.Exact}
-	if skipped := notEvaluated(upto, s.evaluated); len(skipped) > 0 {
+	if skipped := notEvaluated(upto, s.evaluated, s.userEvaluated); len(skipped) > 0 {
 		out.Fidelity = simulate.NotEvaluated(skipped...)
 	}
 	var action string
@@ -646,11 +647,12 @@ func firstMatch(_ context.Context, s *state) (simulate.Outcome, error) {
 
 // notEvaluated names the matching dimensions no stage evaluates that a candidate
 // at or before the decision sets: only those can change which rule decides.
-// application says whether match-application evaluated the application.
-func notEvaluated(upto []resolve.Rule, application bool) []string {
+// application says whether match-application evaluated the application, and
+// user whether match-user evaluated the user.
+func notEvaluated(upto []resolve.Rule, application, user bool) []string {
 	var out []string
 	for _, c := range []struct{ field, dim string }{{"application", "application"}, {"source-user", "user"}} {
-		if application && c.field == "application" {
+		if application && c.field == "application" || user && c.field == "source-user" {
 			continue
 		}
 		for _, r := range upto {

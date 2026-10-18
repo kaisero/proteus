@@ -13,6 +13,8 @@ import (
 	"testing"
 
 	"github.com/okaiser/proteus/internal/estate"
+	"github.com/okaiser/proteus/internal/simulate/pathpolicy"
+	"github.com/okaiser/proteus/internal/simulate/securitypolicy"
 	"github.com/okaiser/proteus/internal/testconfig"
 )
 
@@ -364,6 +366,79 @@ func TestGoldenApp(t *testing.T) {
 			goldenFile(t, g.name+".yaml", appPolicy(t, g.code, append(g.args, "--output", "yaml")...))
 			goldenText(t, g.name, appPolicy(t, g.code, append(g.args, "--why")...))
 		})
+	}
+}
+
+// userConfig is the User-ID fixture with its identity file beside it.
+func userConfig(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.xml")
+	if err := os.WriteFile(path, []byte(read(t, fixture("firewall-identity.xml"))), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	testconfig.Identity(t, filepath.Join(dir, estate.IdentityFile))
+	return path
+}
+
+// simulate policy with the identity data on a file (spec 2026-10-17 §5.1,
+// §5.4): a user from the mapping of the source, a UPN given as --user, and
+// no user.
+func TestGoldenUser(t *testing.T) {
+	t.Parallel()
+	for _, g := range []struct {
+		name string
+		args []string
+	}{
+		{"simulate-policy-user", []string{"198.51.100.11", "192.0.2.10"}},
+		{"simulate-policy-user-given", []string{"203.0.113.5", "192.0.2.11", "--user", "alice@example.com"}},
+		{"simulate-policy-user-none", []string{"203.0.113.5", "192.0.2.14"}},
+	} {
+		t.Run(g.name, func(t *testing.T) {
+			t.Parallel()
+			args := append([]string{"simulate", "policy"}, g.args...)
+			args = append(args, "--port", "443", "--from-zone", "inside", "--to-zone", "outside", "--file", userConfig(t))
+			golden(t, g.name, newCLI(t).want(0, append(args, "--output", "json")...))
+			goldenFile(t, g.name+".yaml", newCLI(t).want(0, append(args, "--output", "yaml")...))
+			goldenText(t, g.name, newCLI(t).want(0, append(args, "--why")...))
+		})
+	}
+}
+
+// The user line names where the user came from, and a path hop with a user
+// gets a user row (spec 2026-10-17 §5.1).
+func TestUserLine(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		u    securitypolicy.FlowUser
+		want string
+	}{
+		{securitypolicy.FlowUser{From: "none"}, "none"},
+		{securitypolicy.FlowUser{Name: `example.com\alice`, From: "mapping", IP: "198.51.100.11"}, `example.com\alice (from the mapping of 198.51.100.11)`},
+		{
+			securitypolicy.FlowUser{Name: `example.com\alice`, From: "mapping", IP: "198.51.100.11", Given: `example.com\bob`},
+			`example.com\alice (from the mapping of 198.51.100.11, which wins over --user example.com\bob)`,
+		},
+		{securitypolicy.FlowUser{Name: `example.com\alice`, From: "given"}, `example.com\alice (from --user)`},
+		{securitypolicy.FlowUser{Name: `example.com\alice`, From: "given", Given: "alice@example.com"}, `example.com\alice (from --user alice@example.com)`},
+	} {
+		if got := userLine(tc.u); got != tc.want {
+			t.Errorf("%+v: %s, want %s", tc.u, got, tc.want)
+		}
+	}
+	check := func(u *securitypolicy.FlowUser) pathpolicy.Hop {
+		return pathpolicy.Hop{Checks: []pathpolicy.CheckResult{{
+			Name: "security", Verdict: pathpolicy.Pass, Rule: "r1", Security: &securitypolicy.Verdict{User: u},
+		}}}
+	}
+	rows := policyRows(check(&securitypolicy.FlowUser{Name: `example.com\alice`, From: "given"}))
+	if len(rows) != 2 || rows[1] != [2]string{"user", `example.com\alice (from --user)`} {
+		t.Errorf("rows %v", rows)
+	}
+	for _, u := range []*securitypolicy.FlowUser{nil, {From: "none"}} {
+		if rows := policyRows(check(u)); len(rows) != 1 {
+			t.Errorf("%+v: rows %v", u, rows)
+		}
 	}
 }
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/netip"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -25,7 +26,7 @@ type FlowInput struct {
 	Port        string `json:"port,omitempty" jsonschema:"the destination port: 443, or tcp/443 with the protocol"`
 	SourcePort  int    `json:"source_port,omitempty" jsonschema:"the source port"`
 	Application string `json:"application,omitempty" jsonschema:"a predefined or custom application"`
-	User        string `json:"user,omitempty" jsonschema:"the source user, such as corp\\alice"`
+	User        string `json:"user,omitempty" jsonschema:"the source user: a primary name such as example.com\\alice, a UPN or an email; a mapping of the source address wins over user"`
 	URL         string `json:"url,omitempty" jsonschema:"the URL; it decides URL categories"`
 	FromZone    string `json:"from_zone,omitempty" jsonschema:"the source zone; derived when empty"`
 	ToZone      string `json:"to_zone,omitempty" jsonschema:"the destination zone; derived when empty"`
@@ -43,6 +44,14 @@ func (f FlowInput) flow() (simulate.Flow, *UsageError) {
 	}
 	if strings.TrimSpace(f.Destination) == "" {
 		return out, usage("give a destination", "")
+	}
+	// A rule keyword is no user: the index matches a value by its name, so
+	// --user unknown would match the rules that name unknown (spec
+	// 2026-10-17 §5.2, PD17). pre-logon is a user state the device matches
+	// (M6).
+	if kw := strings.TrimSpace(f.User); slices.ContainsFunc([]string{"any", "known-user", "unknown"}, func(k string) bool { return strings.EqualFold(k, kw) }) {
+		return out, usage(fmt.Sprintf("--user %s is a rule keyword, not a user; give a user, or leave --user out for no user", kw),
+			fmt.Sprintf("user %s is a rule keyword, not a user; give a user, or leave user out for no user", kw))
 	}
 	if f.SourcePort < 0 || f.SourcePort > 65535 {
 		return out, usage(fmt.Sprintf("--source-port %d is not a port", f.SourcePort),

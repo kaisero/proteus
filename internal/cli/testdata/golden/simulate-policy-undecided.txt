@@ -7,6 +7,7 @@ file / vsys1   ../../testdata/config/firewall-doubt.xml
   resolve-destination exact      11 203.0.113.5: 0 hits, 0 negated rules
   derive-zones        exact      9  from dmz, to wan, as given
   match-application   exact      9  no application given
+  match-user          exact      9  no identity data
   match-service       overmatch  9  tcp/443
   match-url           overmatch  9  no URL given
   drop-disabled       exact      9  0 disabled

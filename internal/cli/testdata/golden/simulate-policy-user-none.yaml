@@ -1,0 +1,144 @@
+format: 2
+command: simulate policy
+detail: full
+input:
+  flow:
+    source:
+      addrs:
+        - 203.0.113.5
+      resolved: false
+    destination:
+      addrs:
+        - 192.0.2.14
+      resolved: false
+    protocol: tcp
+    port: 443
+    from_zone: inside
+    to_zone: outside
+  selection:
+    file: TMP
+results:
+  - answer: 'first match: u-unknown (deny)'
+    verdict: stop
+    reasons:
+      - code: verdict.rule
+        text: rule u-unknown (deny)
+    rule: u-unknown
+    default: ""
+    default_action: ""
+    default_source: ""
+    fidelity:
+      level: inferred
+    first_match:
+      position: 5
+      name: u-unknown
+      action: deny
+      layer: local
+      scope: vsys:vsys1
+    candidates:
+      - position: 5
+        name: u-unknown
+        action: deny
+        layer: local
+        scope: vsys:vsys1
+    doubts: []
+    zones:
+      from:
+        - inside
+      to:
+        - outside
+      source: given
+    user:
+      from: none
+      directory: false
+    stages:
+      - slug: resolve-source
+        name: Resolve the source
+        fidelity:
+          level: exact
+        candidates: 18
+        detail: '203.0.113.5: 0 hits, 0 negated rules'
+        elapsed_ms: 0
+      - slug: resolve-destination
+        name: Resolve the destination
+        fidelity:
+          level: exact
+        candidates: 1
+        detail: '192.0.2.14: 0 hits, 0 negated rules'
+        elapsed_ms: 0
+      - slug: derive-zones
+        name: Derive the zones
+        fidelity:
+          level: exact
+        candidates: 1
+        detail: from inside, to outside, as given
+        elapsed_ms: 0
+      - slug: match-application
+        name: Match the application
+        fidelity:
+          level: exact
+        candidates: 1
+        detail: no application given
+        elapsed_ms: 0
+      - slug: match-user
+        name: Match the user
+        fidelity:
+          level: inferred
+        candidates: 1
+        detail: 'no user; candidates that name a user: 1, kept in doubt: 0'
+        elapsed_ms: 0
+      - slug: match-service
+        name: Match the service
+        fidelity:
+          level: exact
+        candidates: 1
+        detail: tcp/443
+        elapsed_ms: 0
+      - slug: match-url
+        name: Match the URL category
+        fidelity:
+          level: exact
+        candidates: 1
+        detail: no candidate names a URL category
+        elapsed_ms: 0
+      - slug: drop-disabled
+        name: Drop disabled rules
+        fidelity:
+          level: exact
+        candidates: 1
+        detail: 0 disabled
+        elapsed_ms: 0
+      - slug: order
+        name: Order by evaluation
+        fidelity:
+          level: exact
+        candidates: 1
+        detail: 1 in order
+        elapsed_ms: 0
+      - slug: first-match
+        name: Take the first match
+        fidelity:
+          level: exact
+        candidates: 1
+        detail: u-unknown (deny), position 5
+        elapsed_ms: 0
+    kind: policy
+    relevance:
+      known: false
+      relevant: false
+      code: gap.fib-missing
+      text: no stored forwarding table
+    target:
+      device: file
+      vsys: vsys1
+holes: []
+unresolved: []
+notes:
+  - device: file
+    vsys: vsys1
+    code: note.identity-file
+    text: identity data taken 2026-10-17T20:00:00Z from TMP
+  - device: file
+    vsys: vsys1
+    code: note.user-unknown-inferred
+    text: 'no user: the flow matches any and unknown, not known-user, as the PAN-OS admin guide defines them ("Security Policy Rule"); the device''s test command matches known-user here (spec 2026-10-17 M4), and no traffic test confirms unknown'

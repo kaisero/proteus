@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Simulate a flow by its user.** `simulate policy` now matches the source user of
+  a rule as the firewall does: the mapping of the source address wins over
+  `--user`, and directory, XML API and dynamic user groups decide the rule.
 - **Fetch stores each firewall's User-ID data.** `fetch` now keeps the
   user-to-address mappings, the users with their groups and the identity sources
   of each single-vsys firewall with its snapshot; `identity: false` on a device

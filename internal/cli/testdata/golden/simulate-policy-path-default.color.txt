@@ -42,6 +42,7 @@ hop 1: fw02 / vsys1, security stop: default rule interzone-default (deny), built
   resolve-destination ‹ok›exact‹/› 0 198.18.10.100: 1 hits, 0 negated rules
   derive-zones        ‹ok›exact‹/› 0 from home, to labor, as given
   match-application   ‹ok›exact‹/› 0 no application given
+  match-user          ‹ok›exact‹/› 0 no identity data
   match-service       ‹ok›exact‹/› 0 tcp/443
   match-url           ‹ok›exact‹/› 0 no candidate names a URL category
   drop-disabled       ‹ok›exact‹/› 0 0 disabled
@@ -54,6 +55,7 @@ hop 2: fw01 / vsys1, security stop: default rule interzone-default (deny), built
   resolve-destination ‹ok›exact‹/› 0 198.18.10.100: 1 hits, 0 negated rules
   derive-zones        ‹ok›exact‹/› 0 from transport, to server, as given
   match-application   ‹ok›exact‹/› 0 no application given
+  match-user          ‹ok›exact‹/› 0 no identity data
   match-service       ‹ok›exact‹/› 0 tcp/443
   match-url           ‹ok›exact‹/› 0 no candidate names a URL category
   drop-disabled       ‹ok›exact‹/› 0 0 disabled
