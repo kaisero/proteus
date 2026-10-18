@@ -34,7 +34,7 @@ GOVULNCHECK := $(GOBIN)/govulncheck
 
 .PHONY: help tools fmt fmt-check vet lint test test-race cover test-cov \
         bench-check vuln vuln-tool tidy-check gate ci build build-local schema-digest context context-check \
-        schema-pull app-lab docs docs-serve hooks clean
+        schema-pull app-lab docs docs-serve release-build hooks clean
 
 help: ## Show this help
 	@grep -hE '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | sort | \
@@ -116,6 +116,9 @@ build: ## Cross-compile a static linux/amd64 proteus binary
 build-local: ## Build bin/proteus for this machine
 	CGO_ENABLED=0 go build -ldflags '$(LDFLAGS)' -o $(BIN_DIR)/$(BINARY) $(PKG)
 
+release-build: ## Build the release archives and SHA256SUMS into dist/ (version from VERSION)
+	scripts/release-build.sh
+
 ## --- lab ---
 
 app-lab: ## Compare proteus with the lab device (DEVICE=…), not in CI
@@ -137,4 +140,4 @@ hooks: ## Enable the git pre-commit hook (runs `make gate`)
 	@echo "pre-commit hook enabled (core.hooksPath=.githooks)"
 
 clean: ## Remove build artifacts
-	rm -rf $(BIN_DIR) coverage.out site
+	rm -rf $(BIN_DIR) coverage.out site dist
