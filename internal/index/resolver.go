@@ -10,6 +10,7 @@ import (
 
 	"github.com/okaiser/proteus/internal/appid"
 	"github.com/okaiser/proteus/internal/config"
+	"github.com/okaiser/proteus/internal/identity"
 )
 
 // A resolver turns a query value into the object names in its own value space that
@@ -70,27 +71,19 @@ type Hit struct {
 // that reason: an Index is built once per scope and kept by its caller, and is
 // immutable so that concurrent readers need no lock.
 //
-// The library performs no network access. These are interfaces, and fetching the
-// data behind them belongs to the caller.
+// The library performs no network access. Fetching and loading the data behind
+// them belongs to the caller.
 type Providers struct {
-	Users UserDirectory
+	// Users is the identity data of the device: its users, groups, dynamic
+	// user groups and mappings. With it, the user value space judges the
+	// directory users and groups that rules name; without it, it reports
+	// them (spec 2026-10-17 §5.3, §5.5).
+	Users *identity.Data
 	Zones ZoneLocator
 	// Apps is the App-ID content data of the device. With it, the application
 	// value space answers filters and containers; without it, it reports them
 	// (spec 2026-10-16 §4.8).
 	Apps *appid.Data
-}
-
-// UserDirectory maps a user to the groups holding it, from User-ID or a snapshot.
-type UserDirectory interface {
-	GroupsOf(user string) []string
-}
-
-// A StaleReporter is a provider that knows its data may be out of date. A lookup asks,
-// and passes the answer on rather than trusting the data silently. UserSnapshot
-// implements it.
-type StaleReporter interface {
-	Stale() (reason string, stale bool)
 }
 
 // ZoneLocator maps an address to the zones it can arrive on.

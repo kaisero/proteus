@@ -72,7 +72,7 @@ func (a *app) checkDetail(c *cobra.Command) error {
 // a question on a file needs none.
 func (a *app) queryEnv(s settings) query.Env {
 	return query.Env{
-		Inventory: s.inv, Now: a.now, MaxAge: s.maxAge, Resolve: a.lookup, CanonicalName: a.canonical, Log: a.log, Users: a.userSnapshot,
+		Inventory: s.inv, Now: a.now, MaxAge: s.maxAge, Resolve: a.lookup, CanonicalName: a.canonical, Log: a.log,
 	}
 }
 

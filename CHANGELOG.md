@@ -317,6 +317,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+- **`PROTEUS_USERS` is gone.** The user directory now comes with each snapshot, or
+  from `identity.json.gz` next to a `--file` configuration.
 - **`panos-demo` and `panos-schemagen` are gone.** `proteus` is now the only
   binary; a schema digest for a new PAN-OS version is made with `make
   schema-digest`.

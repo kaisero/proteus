@@ -57,12 +57,16 @@ func parseTime(name, value string) (time.Time, *UsageError) {
 
 // Targets opens what a question runs against: one file, or the selected devices'
 // snapshots. What a fresh fetch found becomes notes on that device's targets.
+// The targets load each identity file once, through one memo of the question
+// (spec 2026-10-17 §4.2).
 func Targets(ctx context.Context, env Env, sel Selection) ([]estate.Target, []estate.Hole, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, nil, err
 	}
 	if sel.File != "" {
-		return estate.OpenFile(sel.File, sel.Vsys, env.Log)
+		ts, holes, err := estate.OpenFile(sel.File, sel.Vsys, env.Log)
+		identityThrough(ts, env.identitySource())
+		return ts, holes, err
 	}
 	if env.Inventory == nil {
 		return nil, nil, errNoInventory
@@ -79,7 +83,7 @@ func Targets(ctx context.Context, env Env, sel Selection) ([]estate.Target, []es
 		return nil, nil, u
 	}
 	when.Now, when.MaxAge, when.Log, when.Ops, when.Configs = env.now(), env.MaxAge, env.Log, env.Ops, env.Configs
-	when.Apps = env.appSource()
+	when.Apps, when.Identity = env.appSource(), env.identitySource()
 	if env.Store == nil {
 		return nil, nil, errNoStore
 	}
@@ -163,7 +167,7 @@ func openEstate(env Env, at string) (fetchedEstate, error) {
 		return fetchedEstate{}, u
 	}
 	when.Now, when.MaxAge, when.Log, when.Ops, when.Configs = env.now(), env.MaxAge, env.Log, env.Ops, env.Configs
-	when.Apps = env.appSource()
+	when.Apps, when.Identity = env.appSource(), env.identitySource()
 	if env.Store == nil {
 		return fetchedEstate{}, errNoStore
 	}
@@ -171,9 +175,11 @@ func openEstate(env Env, at string) (fetchedEstate, error) {
 }
 
 // simEnv is a simulation environment over the estate, resolving FQDNs with
-// the env's resolver.
+// the env's resolver. Its loader reads no identity data: routing and NAT judge
+// no user, and PBF builds its view without providers (spec 2026-10-17 §4.2).
+// simulate policy replaces it with a storeLoader.
 func (e fetchedEstate) simEnv(env Env) *simulate.Env {
-	return &simulate.Env{Log: env.Log, Network: e.network, Load: storeLoader(e.st, e.when, e.network, nil, false), Resolve: env.Resolve}
+	return &simulate.Env{Log: env.Log, Network: e.network, Load: snapshotLoader(e.st, e.when, e.network, false, nil), Resolve: env.Resolve}
 }
 
 // storeLoader loads a device's vsys configuration and index from the store, as
@@ -184,7 +190,16 @@ func (e fetchedEstate) simEnv(env Env) *simulate.Env {
 // so the edge list of a snapshot is read once however many vsys a run visits.
 // With withApps, each target carries its snapshot's App-ID content data and
 // the notes of appsOf, so a hop without data says so (spec 2026-10-16 §4.1).
-func storeLoader(st *store.Store, when estate.When, net *estate.Network, users index.UserDirectory, withApps bool) func(dev, vsys string) (simulate.Target, error) {
+// With withUser, or a rule of the vsys that names a user, it carries the
+// snapshot's identity data and the notes of identityFor, as a policy check
+// needs (spec 2026-10-17 §4.2, PD10).
+func storeLoader(st *store.Store, when estate.When, net *estate.Network, withApps, withUser bool) func(dev, vsys string) (simulate.Target, error) {
+	return snapshotLoader(st, when, net, withApps, func(rules []resolve.Rule) bool { return withUser || namesUser(rules) })
+}
+
+// snapshotLoader is storeLoader with the choice of the identity data as a
+// function of the rules of the vsys; nil reads none.
+func snapshotLoader(st *store.Store, when estate.When, net *estate.Network, withApps bool, users func([]resolve.Rule) bool) func(dev, vsys string) (simulate.Target, error) {
 	type key struct{ member, snapshot, vsys string }
 	type snap struct{ member, id string }
 	cache := map[key]simulate.Target{}
@@ -231,16 +246,19 @@ func storeLoader(st *store.Store, when estate.When, net *estate.Network, users i
 			sets[sk] = set
 		}
 		// Built here, so a failed build is the load's error.
-		if _, err := set.Index(ts[0].Scope, resolve.Security); err != nil {
+		idx, err := set.Index(ts[0].Scope, resolve.Security)
+		if err != nil {
 			return simulate.Target{}, err
 		}
-		t := simulate.Target{
-			Config: ts[0].Config, Indexes: provider(set, ts[0].Scope),
-			Providers: index.Providers{Users: users}, Notes: ts[0].Notes,
-		}
+		t := simulate.Target{Config: ts[0].Config, Indexes: provider(set, ts[0].Scope), Notes: ts[0].Notes}
 		if withApps {
 			var notes simulate.Reasons
 			t.Providers.Apps, notes = appsOf(ts[0])
+			t.Notes = append(slices.Clone(t.Notes), notes...)
+		}
+		if users != nil && users(idx.Rules()) {
+			var notes simulate.Reasons
+			t.Providers.Users, notes = identityFor(ts[0], when.MaxAge, when.Now)
 			t.Notes = append(slices.Clone(t.Notes), notes...)
 		}
 		cache[k] = t

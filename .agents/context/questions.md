@@ -111,8 +111,10 @@ type AppSource interface{ ... }
 type ConfigSource interface{ ... }
 type DiskApps struct{}
 type DiskConfigs struct{}
+type DiskIdentity struct{}
 type DiskOps struct{}
 type Hole struct{ ... }
+type IdentitySource interface{ ... }
 type Indexes interface{ ... }
 type Loaded struct{ ... }
 type Network struct{ ... }
@@ -123,6 +125,7 @@ type When struct{ ... }
 
 func (DiskApps) Apps(path string) (*appid.Data, error)
 func (DiskConfigs) Config(sn store.Snapshot) (Loaded, error)
+func (DiskIdentity) Identity(path string) (*identity.Data, error)
 func (DiskOps) HA(sn store.Snapshot) (resolve.HAState, error)
 func (DiskOps) Tables(sn store.Snapshot) (OpTables, error)
 func (h Hole) Why() reason.Reason

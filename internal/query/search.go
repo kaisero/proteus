@@ -175,22 +175,22 @@ func nameShaped(term string) bool {
 	return len(index.PrefixesOf(term)) == 0 && !portTerm.MatchString(term) && !strings.ContainsAny(term, "/ ")
 }
 
-// canonicalApp is the name of the application a term names in any case: the
-// custom application's name as configured, or the content name (spec
-// 2026-10-16 P14). Refs and the interner match names exactly, so the search
-// runs on it (D17). Any other term stays as it is.
-func canonicalApp(t estate.Target, apps *appid.Data, term string) string {
+// canonicalApp is the name of the application a term names in any case, and
+// whether the term names one: the custom application's name as configured, or
+// the content name (spec 2026-10-16 P14). Refs and the interner match names
+// exactly, so the search runs on it (D17). Any other term stays as it is.
+func canonicalApp(t estate.Target, apps *appid.Data, term string) (string, bool) {
 	for _, a := range resolve.Applications(t.Config, t.Scope) {
 		if strings.EqualFold(a.Name, term) {
-			return a.Name
+			return a.Name, true
 		}
 	}
 	if apps != nil {
 		if a, ok := apps.App(term); ok {
-			return a.Name
+			return a.Name, true
 		}
 	}
-	return term
+	return term, false
 }
 
 // Matching says how the term is matched: the mode asked, or what the term's type
@@ -246,10 +246,6 @@ func Search(ctx context.Context, env Env, in SearchInput) (Envelope[SearchInput,
 	if u := in.checkKinds(ts); u != nil {
 		return none, u
 	}
-	users, err := env.users()
-	if err != nil {
-		return none, err
-	}
 	e := envelope[SearchInput, Finding]("search", in)
 	e.Holes, e.Targets, e.Read, e.Summary = holes, ts, readOf(ts), &Summary{}
 	matching := in.Matching()
@@ -258,7 +254,7 @@ func Search(ctx context.Context, env Env, in SearchInput) (Envelope[SearchInput,
 		if err := ctx.Err(); err != nil {
 			return none, err
 		}
-		q.Providers = index.Providers{Users: users}
+		q.Providers = index.Providers{}
 		if t.Snapshot != nil {
 			if z, err := t.Snapshot.Zones(); err == nil {
 				q.Providers.Zones = z
@@ -275,9 +271,28 @@ func Search(ctx context.Context, env Env, in SearchInput) (Envelope[SearchInput,
 			q.Providers.Apps, notes = appsFor(t, noAppDataSearch)
 			// A copy: the target's notes may share their array with a cached load.
 			ts[i].Notes = append(slices.Clone(t.Notes), notes...)
-			q.Term = canonicalApp(t, q.Providers.Apps, in.Term)
+			q.Term, _ = canonicalApp(t, q.Providers.Apps, in.Term)
+		}
+		// The identity data loads for a term that can name a user, a group
+		// or a mapped address, and else for a term the first search finds
+		// nothing for (spec 2026-10-17 §4.2, PD10).
+		withIdentity := func() {
+			var notes simulate.Reasons
+			q.Providers.Users, notes = identityFor(t, env.MaxAge, env.now())
+			ts[i].Notes = append(slices.Clone(ts[i].Notes), notes...)
+			q.Term = userTerm(t, q.Providers.Users, q.Providers.Apps, q.Term)
+		}
+		loaded := searchNeedsIdentity(in.Term, idx.Rules())
+		if loaded {
+			withIdentity()
 		}
 		fs, un, err := search.Run(t.Config, idx, q)
+		if err == nil && len(fs) == 0 && !loaded {
+			withIdentity()
+			if q.Providers.Users != nil {
+				fs, un, err = search.Run(t.Config, idx, q)
+			}
+		}
 		if err != nil {
 			// Only a term --within cannot read is the caller's to fix.
 			if errors.Is(err, search.ErrWithinNeedsAddress) {

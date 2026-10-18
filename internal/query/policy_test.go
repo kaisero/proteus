@@ -13,7 +13,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/okaiser/proteus/internal/index"
 	"github.com/okaiser/proteus/internal/reason"
 	"github.com/okaiser/proteus/internal/simulate"
 	"github.com/okaiser/proteus/internal/simulate/pathlab"
@@ -140,11 +139,6 @@ func TestPolicyNeedsTheEstate(t *testing.T) {
 	if _, err := Policy(context.Background(), env, PolicyInput{Flow: labFlow()}); !errors.Is(err, errNoStore) {
 		t.Errorf("no store: %v", err)
 	}
-	env = labEnv(t, pathlab.FW01, pathlab.FW02)
-	env.Users = func() (index.UserDirectory, error) { return nil, errors.New("PROTEUS_USERS: unreadable") }
-	if _, err := Policy(context.Background(), env, PolicyInput{Flow: labFlow()}); err == nil || err.Error() != "PROTEUS_USERS: unreadable" {
-		t.Errorf("users: %v", err)
-	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	if _, err := Policy(ctx, labEnv(t, pathlab.FW01, pathlab.FW02), PolicyInput{Flow: labFlow()}); !errors.Is(err, context.Canceled) {
@@ -181,9 +175,12 @@ func TestPolicyFile(t *testing.T) {
 	_, err = PolicyFile(context.Background(), Env{}, in)
 	usageOK(t, err, "vsys; select one with --vsys")
 	in.Selection.Vsys = []string{"vsys1"}
-	env := Env{Users: func() (index.UserDirectory, error) { return nil, errors.New("PROTEUS_USERS: unreadable") }}
-	if _, err := PolicyFile(context.Background(), env, in); err == nil || !strings.Contains(err.Error(), "PROTEUS_USERS") {
-		t.Errorf("users: %v", err)
+	// Identity data that does not load is no error: the answer is as
+	// without it, with a note (spec 2026-10-17 §4.2, PD11).
+	user := in
+	user.Flow.User = `example.com\alice`
+	if e, err := PolicyFile(context.Background(), Env{Identity: failingIdentity{}}, user); err != nil || len(e.Results) != 1 || !hasNote(e.Notes, "gap.no-user-directory") {
+		t.Errorf("identity: %v, notes %+v", err, e.Notes)
 	}
 	in.Selection.File = fixture("absent.xml")
 	if _, err := PolicyFile(context.Background(), Env{}, in); err == nil {

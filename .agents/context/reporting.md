@@ -89,11 +89,8 @@ type Providers struct{ ... }
 type Ref struct{ ... }
 type Report struct{ ... }
 type Set struct{ ... }
-type StaleReporter interface{ ... }
 type UnparsedFilter struct{ ... }
 type Unresolved struct{ ... }
-type UserDirectory interface{ ... }
-type UserSnapshot struct{ ... }
 type View struct{ ... }
 type ZoneLocator interface{ ... }
 type ZonePlacement struct{ ... }
@@ -127,8 +124,6 @@ func (in *Interner) Name(id uint32) string
 func (s *Set) Config() *config.Config
 func (s *Set) Index(sc config.Scope, rb resolve.Rulebase) (*Index, error)
 func (s *Set) Provider(sc config.Scope) func(resolve.Rulebase) (*Index, error)
-func (s *UserSnapshot) GroupsOf(user string) []string
-func (s *UserSnapshot) Stale() (string, bool)
 func (s *ZoneSnapshot) Describe() string
 func (s *ZoneSnapshot) Routers() []string
 func (s *ZoneSnapshot) UnroutedInterfaces() []string
@@ -138,7 +133,6 @@ func (u Unresolved) Why() reason.Reason
 func (v *View) Candidates(f Field, value string) (*roaring.Bitmap, Report)
 func (v *View) Opaque(f Field) (*roaring.Bitmap, map[uint32][]reason.Reason)
 func Build(cfg *config.Config, edges *Edges, sc config.Scope, rb resolve.Rulebase) (*Index, error)
-func LoadUserSnapshot(r io.Reader) (*UserSnapshot, error)
 func LoadZoneSnapshot(r io.Reader) (*ZoneSnapshot, error)
 func New(cfg *config.Config, sc config.Scope, rb resolve.Rulebase) (*Index, error)
 func NewInterner() *Interner

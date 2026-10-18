@@ -15,7 +15,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/okaiser/proteus/internal/index"
 	"github.com/okaiser/proteus/internal/inventory"
 	"github.com/okaiser/proteus/internal/mcp"
 	"github.com/okaiser/proteus/internal/query"
@@ -275,13 +274,6 @@ func (a *app) runMCP(c *cobra.Command, useHTTP bool) error {
 			return usageErr("--http needs audit_log: set it in the mcp: section, PROTEUS_MCP_AUDIT_LOG or --audit-log")
 		}
 	}
-	// The server reads PROTEUS_USERS once: every call answers from this one
-	// snapshot, and a change needs a restart. A file that does not read
-	// stops the start, as a call could not answer from it.
-	users, err := a.userSnapshot()
-	if err != nil {
-		return &exitErr{code: exitUsage, err: err}
-	}
 	st, err := a.openStore(a.storeRoot)
 	if err != nil {
 		return err
@@ -304,7 +296,6 @@ func (a *app) runMCP(c *cobra.Command, useHTTP bool) error {
 		Env: query.Env{
 			Store: st, Inventory: export, Now: a.now, MaxAge: maxAge,
 			Resolve: a.lookup, CanonicalName: a.canonical,
-			Users: func() (index.UserDirectory, error) { return users, nil },
 		},
 		Version: a.version, Now: a.now, Log: a.log,
 		Limits: limitsOf(m),

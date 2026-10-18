@@ -21,6 +21,7 @@ import (
 	"github.com/okaiser/proteus/internal/inventory"
 	"github.com/okaiser/proteus/internal/resolve"
 	"github.com/okaiser/proteus/internal/store"
+	"github.com/okaiser/proteus/internal/testconfig"
 )
 
 func read(t *testing.T, p string) string {
@@ -925,21 +926,39 @@ func TestAgo(t *testing.T) {
 	}
 }
 
-func TestSearchWithAUserSnapshot(t *testing.T) {
+// identityFile copies the User-ID fixture configuration into a directory of
+// the harness and returns its path; with data, the identity fixture lies
+// beside it as identity.json.gz (spec 2026-10-17 §7).
+func (c *cli) identityFile(data bool) string {
+	c.t.Helper()
+	dir, err := os.MkdirTemp(c.dir, "file-")
+	if err != nil {
+		c.t.Fatal(err)
+	}
+	path := filepath.Join(dir, "config.xml")
+	if err := os.WriteFile(path, []byte(read(c.t, "../../testdata/config/firewall-identity.xml")), 0o600); err != nil {
+		c.t.Fatal(err)
+	}
+	if data {
+		testconfig.Identity(c.t, filepath.Join(dir, identity.FileName))
+	}
+	return path
+}
+
+// search --file reads identity.json.gz beside the configuration: carol
+// reaches the rule of her XML API group, and the note names the file.
+// Without the file, the group is unknown.
+func TestSearchWithTheIdentityFile(t *testing.T) {
 	t.Parallel()
 	c := newCLI(t)
-	file := "../../testdata/config/firewall-users.xml"
-	if out := c.want(0, "search", `ACME\carol`, "--file", file); strings.Contains(out, "engineering-allowed") {
-		t.Errorf("without PROTEUS_USERS carol reaches nothing:\n%s", out)
+	if out := c.want(0, "search", `example.com\carol`, "--file", c.identityFile(false)); strings.Contains(out, "u-xmlapi") {
+		t.Errorf("without the identity file carol reaches nothing:\n%s", out)
 	}
-	c.env["PROTEUS_USERS"] = "../../testdata/users-snapshot.json"
-	if out := c.want(0, "search", `ACME\carol`, "--file", file); !strings.Contains(out, "engineering-allowed") {
-		t.Errorf("with PROTEUS_USERS carol reaches engineering-allowed:\n%s", out)
+	file := c.identityFile(true)
+	out := c.want(0, "search", `example.com\carol`, "--file", file)
+	if !strings.Contains(out, "u-xmlapi") || !strings.Contains(out, filepath.Join(filepath.Dir(file), identity.FileName)) {
+		t.Errorf("with the identity file carol reaches u-xmlapi:\n%s", out)
 	}
-	c.env["PROTEUS_USERS"] = "../../testdata/missing.json"
-	c.want(1, "search", "x", "--file", file)
-	c.env["PROTEUS_USERS"] = "../../testdata/config/firewall-lab.xml"
-	c.want(1, "search", "x", "--file", file)
 }
 
 // Every run writes a log with its command, settings, snapshots and exit; a run that

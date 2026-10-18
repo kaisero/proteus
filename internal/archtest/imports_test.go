@@ -96,7 +96,7 @@ var queryImports = []string{
 	"internal/simulate/nat", "internal/simulate/pathpolicy", "internal/simulate/topology",
 	"internal/simulate/rulebase", "internal/estate", "internal/store", "internal/inventory",
 	"internal/search", "internal/drift", "internal/card", "internal/resolve", "internal/index",
-	"internal/config", appidPkg, "internal/runlog", reasonPkg,
+	"internal/config", appidPkg, identityPkg, "internal/runlog", reasonPkg,
 }
 
 // queryForbids are the front ends and the fetcher: the query layer serves the
@@ -314,6 +314,16 @@ func TestImportDirection(t *testing.T) {
 	}
 	for _, v := range violations(graph, rules) {
 		t.Error(v)
+	}
+	// query loads the identity file and passes its data in, so it imports
+	// identity directly (spec 2026-10-17 §9).
+	direct := map[string][]string{
+		module + "/internal/query": {module + "/" + identityPkg},
+		module + "/" + identityPkg: {"fmt", module + "/" + reasonPkg},
+		module + "/" + reasonPkg:   {"fmt"},
+	}
+	for _, v := range violations(direct, rules) {
+		t.Errorf("query may import identity: %s", v)
 	}
 }
 

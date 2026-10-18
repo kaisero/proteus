@@ -11,6 +11,7 @@ import (
 
 	"github.com/okaiser/proteus/internal/appid"
 	"github.com/okaiser/proteus/internal/config"
+	"github.com/okaiser/proteus/internal/identity"
 	"github.com/okaiser/proteus/internal/index"
 	"github.com/okaiser/proteus/internal/resolve"
 	"github.com/okaiser/proteus/internal/testconfig"
@@ -373,26 +374,32 @@ func TestReferrer(t *testing.T) {
 	}
 }
 
-// A directory user reaches the rules naming its directory groups when a user
-// snapshot supplies them.
-func TestAUserSnapshotResolvesDirectoryGroups(t *testing.T) {
+// A directory user finds the groups of the rules that hold it, with their
+// source and member count, and the rules that name them, when the identity
+// data is loaded (spec 2026-10-17 §6.1). Without the data its XML API group is
+// unknown.
+func TestSearchAUserFindsItsRules(t *testing.T) {
 	t.Parallel()
-	f, err := os.Open("../../testdata/users-snapshot.json")
+	p := filepath.Join(t.TempDir(), identity.FileName)
+	testconfig.Identity(t, p)
+	users, err := identity.Load(p)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer f.Close()
-	users, err := index.LoadUserSnapshot(f)
-	if err != nil {
-		t.Fatal(err)
+	without := run(t, "firewall-identity.xml", "vsys1", Query{Term: `example.com\carol`})
+	with := run(t, "firewall-identity.xml", "vsys1", Query{Term: `example.com\carol`, Providers: index.Providers{Users: users}})
+	if has(without, "reference security rule u-xmlapi") {
+		t.Errorf("without the data carol's XML API group is unknown:\n%s", dump(without))
 	}
-	without := run(t, "firewall-users.xml", "vsys1", Query{Term: `ACME\carol`})
-	with := run(t, "firewall-users.xml", "vsys1", Query{Term: `ACME\carol`, Providers: index.Providers{Users: users}})
-	if has(without, "reference security rule engineering-allowed") {
-		t.Errorf("without a snapshot carol's directory group is unknown:\n%s", dump(without))
-	}
-	if !has(with, "reference security rule engineering-allowed source-user engineering") {
-		t.Errorf("with a snapshot carol reaches engineering-allowed:\n%s", dump(with))
+	for _, want := range []string{
+		"object user-group engineering  xmlapi, 1 members",
+		"reference security rule u-xmlapi source-user engineering",
+		"object dynamic-user-group dug-a  dug, 1 members",
+		"reference security rule u-dug source-user dug-a",
+	} {
+		if !has(with, want) {
+			t.Errorf("with the data, missing %q in:\n%s", want, dump(with))
+		}
 	}
 }
 

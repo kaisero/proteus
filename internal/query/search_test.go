@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/okaiser/proteus/internal/estate"
-	"github.com/okaiser/proteus/internal/index"
 	"github.com/okaiser/proteus/internal/reason"
 	"github.com/okaiser/proteus/internal/search"
 	"github.com/okaiser/proteus/internal/simulate"
@@ -66,9 +65,11 @@ func TestSearchAFile(t *testing.T) {
 	if !errors.Is(err, search.ErrWithinNeedsAddress) {
 		t.Errorf("%v", err)
 	}
-	env := Env{Users: func() (index.UserDirectory, error) { return nil, errors.New("PROTEUS_USERS: unreadable") }}
-	if _, err := Search(context.Background(), env, in); err == nil || err.Error() != "PROTEUS_USERS: unreadable" {
-		t.Errorf("users: %v", err)
+	// Identity data that does not load is no error: the search is as
+	// without it, with a note (spec 2026-10-17 §4.2, PD11).
+	user := SearchInput{Term: `example.com\carol`, Selection: in.Selection}
+	if e, err := Search(context.Background(), Env{Identity: failingIdentity{}}, user); err != nil || !hasNote(e.Notes, "gap.no-user-directory") {
+		t.Errorf("identity: %v, notes %+v", err, e.Notes)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()

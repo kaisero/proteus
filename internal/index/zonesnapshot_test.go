@@ -143,7 +143,7 @@ func TestZoneSnapshotDoesNotEnforceAge(t *testing.T) {
 	s := zoneSnap(t)
 	s.TakenAt = time.Now().Add(-365 * 24 * time.Hour)
 
-	if _, ok := any(s).(StaleReporter); ok {
+	if _, ok := any(s).(interface{ Stale() (string, bool) }); ok {
 		t.Error("a zone snapshot should not report staleness; see the plan's D3")
 	}
 	if got := s.ZonesOf(netip.MustParseAddr("198.18.0.5")); len(got) == 0 {

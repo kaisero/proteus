@@ -45,13 +45,20 @@ func (l *lab) fetch(device, config string) {
 // write stores a snapshot with meta and a configuration's content.
 func (l *lab) write(meta store.Meta, config []byte) {
 	l.t.Helper()
+	l.writeWith(meta, config, nil)
+}
+
+// writeWith stores a snapshot with meta, a configuration's content and, when
+// not empty, an identity file.
+func (l *lab) writeWith(meta store.Meta, config, identityFile []byte) {
+	l.t.Helper()
 	device := meta.Device
 	docs := map[string][]byte{
 		store.ConfigDoc:     config,
 		store.InterfacesDoc: pathlab.Read(l.t, pathlab.OpdataFile(device+"-interface-all.xml")),
 		store.FIBDoc:        pathlab.Read(l.t, pathlab.OpdataFile(device+"-advanced-routing-fib.xml")),
 	}
-	if _, err := l.st.Write(meta, docs, nil, 20); err != nil {
+	if _, err := l.st.Write(meta, docs, identityFile, 20); err != nil {
 		l.t.Fatal(err)
 	}
 	l.now = l.now.Add(time.Minute)
