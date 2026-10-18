@@ -138,13 +138,15 @@ func TestParseMappingsRefusesAnUnreadableEntry(t *testing.T) {
 
 const userHeader = "User Name                         Vsys    Groups"
 
-// userTable is a U3 answer in the columns of X1. A row is a user and its
-// groups; the first group goes on the user line.
+// userTable is a U3 answer in the layout of fw01 (X1 and the long names of
+// the Task 4 fix round). A row is a user and its groups. The user line holds
+// the name in a field of 32, two spaces, the vsys in a field of 30, two
+// spaces and the first group; a further group is at 64.
 func userTable(total int, rows ...[]string) []byte {
 	var b strings.Builder
 	b.WriteString("\n" + userHeader + "\n" + strings.Repeat("-", 66) + "\n")
 	for _, r := range rows {
-		fmt.Fprintf(&b, "%-34s%-32s%s \n", r[0], "vsys1", r[1])
+		fmt.Fprintf(&b, "%-32s  %-30s  %s \n", r[0], "vsys1", r[1])
 		for _, g := range r[2:] {
 			fmt.Fprintf(&b, "%64s%s \n", "", g)
 		}
@@ -180,11 +182,35 @@ func TestParseUserIDsReadsTheTable(t *testing.T) {
 	if err != nil || len(none) != 0 {
 		t.Errorf("the empty table: %v, %v", none, err)
 	}
-	// A user line without a group lists the user with no group.
-	alone, err := identity.ParseUserIDs(cdata("\n" + userHeader + "\n" + strings.Repeat("-", 66) + "\n" +
-		fmt.Sprintf("%-34s%s\n", `example.com\dave`, "vsys1") + "\nTotal: 1\n"))
-	if g, ok := alone[`example.com\dave`]; err != nil || !ok || g != nil {
-		t.Errorf("a user without a group: %v, %v", alone, err)
+}
+
+// The long names of the Task 4 fix round, as observed on fw01, PAN-OS
+// 11.2.5: a name of 33 characters or more is printed whole and moves the vsys
+// to two places after the name, and the first group stays 32 places after
+// the vsys. A further group stays at 64. The names of the fixture have 32,
+// 33, 40 and 63 characters; 63 was the longest name that fw01 took as an XML
+// API member.
+func TestParseUserIDsReadsLongNames(t *testing.T) {
+	t.Parallel()
+	got, err := identity.ParseUserIDs(answer(t, "answer-user-ids-long.xml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string][]string{
+		`example.com\alice`:                            {domainUsers},
+		`example.com\bob.` + strings.Repeat("x", 16):   {"team-x"},
+		`example.com\carol.` + strings.Repeat("x", 15): {domainUsers, "engineering"},
+		`example.com\dave.` + strings.Repeat("x", 23):  {"team-x", "help desk", "dug-a"},
+		`other\ghost.` + strings.Repeat("x", 51):       {"engineering"},
+	}
+	if !maps.EqualFunc(got, want, slices.Equal) {
+		t.Errorf("users %v\nwant %v", got, want)
+	}
+	// match-user answers a long name in the same layout.
+	long := `example.com\dave.` + strings.Repeat("x", 23)
+	match, err := identity.ParseUserIDsMatch(userTable(26, []string{long, "team-x", "help desk"}))
+	if err != nil || !slices.Equal(match[long], []string{"team-x", "help desk"}) || len(match) != 1 {
+		t.Errorf("match-user of a long name: %v, %v", match, err)
 	}
 }
 
@@ -208,24 +234,34 @@ func TestParseUserIDsRefusesABrokenTable(t *testing.T) {
 	t.Parallel()
 	head := "\n" + userHeader + "\n" + strings.Repeat("-", 66) + "\n"
 	alice := fmt.Sprintf("%-34s%-32s%s \n", `example.com\alice`, "vsys1", domainUsers)
+	long := `example.com\alice.` + strings.Repeat("x", 22) // 40 characters
 	for name, c := range map[string]struct {
 		body string
 		line int
 	}{
-		"empty":               {"\n\n", 0},
-		"no table":            {"\nexample.com\\alice\n", 2},
-		"header shifted":      {"\nUser Name     Vsys    Groups\n", 2},
-		"long name":           {head + fmt.Sprintf("%-34s%-32s%s \n", `example.com\`+strings.Repeat("a", 30), "vsys1", domainUsers), 4},
-		"vsys too long":       {head + fmt.Sprintf("%-34s%s %s \n", `example.com\alice`, strings.Repeat("v", 32), domainUsers), 4},
-		"group off column":    {head + fmt.Sprintf("%-34s%-33s%s \n", `example.com\alice`, "vsys1", domainUsers), 4},
-		"text in the gap":     {head + fmt.Sprintf("%-34s%-20s%-12s%s \n", `example.com\alice`, "vsys1", "x", domainUsers), 4},
-		"group without user":  {head + fmt.Sprintf("%64s%s \n", "", "team-x"), 4},
-		"group after a break": {head + alice + "\n" + fmt.Sprintf("%64s%s \n", "", "team-x"), 6},
-		"group off its line":  {head + alice + fmt.Sprintf("%60s%s \n", "", "team-x"), 5},
-		"marker only":         {head + alice + fmt.Sprintf("%64s%s \n", "", "*"), 5},
-		"total no number":     {head + alice + "\nTotal: many\n", 6},
-		"two totals":          {head + alice + "\nTotal: 1\nTotal: 1\n", 7},
-		"line after total":    {head + "\nTotal: 1\n" + alice, 6},
+		"empty":                {"\n\n", 0},
+		"no table":             {"\nexample.com\\alice\n", 2},
+		"header shifted":       {"\nUser Name     Vsys    Groups\n", 2},
+		"name runs into vsys":  {head + fmt.Sprintf("%-34s%-32s%s \n", `example.com\`+strings.Repeat("a", 30), "vsys1", domainUsers), 4},
+		"long name, one space": {head + fmt.Sprintf("%s %-30s  %s \n", long, "vsys1", domainUsers), 4},
+		"long name, no vsys":   {head + long + "\n", 4},
+		"long name, group off": {head + fmt.Sprintf("%s  %-31s  %s \n", long, "vsys1", domainUsers), 4},
+		// Two spaces at the end of the name field read as the short layout, and
+		// the rest of the name then fills the gap before the first group.
+		"spaces at the field end": {head + fmt.Sprintf("%-32s  %s  %-30s  %s \n", `example.com\alice.`+strings.Repeat("x", 14), "tail", "vsys1", domainUsers), 4},
+		"short line":              {head + `example.com\alice` + "\n", 4},
+		"no group":                {head + fmt.Sprintf("%-34s%s\n", `example.com\dave`, "vsys1"), 4},
+		"no group, padded":        {head + fmt.Sprintf("%-34s%-32s\n", `example.com\dave`, "vsys1"), 4},
+		"vsys too long":           {head + fmt.Sprintf("%-34s%s %s \n", `example.com\alice`, strings.Repeat("v", 32), domainUsers), 4},
+		"group off column":        {head + fmt.Sprintf("%-34s%-33s%s \n", `example.com\alice`, "vsys1", domainUsers), 4},
+		"text in the gap":         {head + fmt.Sprintf("%-34s%-20s%-12s%s \n", `example.com\alice`, "vsys1", "x", domainUsers), 4},
+		"group without user":      {head + fmt.Sprintf("%64s%s \n", "", "team-x"), 4},
+		"group after a break":     {head + alice + "\n" + fmt.Sprintf("%64s%s \n", "", "team-x"), 6},
+		"group off its line":      {head + alice + fmt.Sprintf("%60s%s \n", "", "team-x"), 5},
+		"marker only":             {head + alice + fmt.Sprintf("%64s%s \n", "", "*"), 5},
+		"total no number":         {head + alice + "\nTotal: many\n", 6},
+		"two totals":              {head + alice + "\nTotal: 1\nTotal: 1\n", 7},
+		"line after total":        {head + "\nTotal: 1\n" + alice, 6},
 	} {
 		_, err := identity.ParseUserIDs(cdata(c.body))
 		if pe := partError(t, err, identity.PartUserGroups); pe.Line != c.line {

@@ -176,13 +176,18 @@ func ParseMappings(b []byte) (MappingPage, error) {
 }
 
 // The columns of the U3 table, as observed on fw01, PAN-OS 11.2.5 (spec
-// 2026-10-17 X1). The header holds User Name at 0, Vsys at 34 and Groups at
-// 42. A user line holds the name at 0, the vsys at 34 and the first group at
-// 66. A further group is a line of its own, at 64.
+// 2026-10-17 X1, and the long names of the Task 4 fix round). The header holds
+// User Name at 0, Vsys at 34 and Groups at 42. A user line holds the name in a
+// field of 32 characters, two spaces, the vsys in a field of 30 characters,
+// two spaces and the first group: the vsys at 34 and the first group at 66. A
+// name of 33 characters or more is printed whole and moves the vsys to two
+// places after the name; the first group stays 32 places after the vsys. A
+// further group is a line of its own at 64, whatever the length of the name.
 const (
+	nameWidth        = 32
 	vsysColumn       = 34
 	headerGroupsCol  = 42
-	groupColumn      = 66
+	firstGroupOffset = 32 // from the vsys to the first group
 	moreGroupsColumn = 64
 )
 
@@ -254,12 +259,7 @@ func readUserTable(b []byte) (userTable, error) {
 				return fail(n, "a user line does not fit the columns")
 			}
 			t.users++
-			if _, seen := t.groups[name]; !seen {
-				t.groups[name] = nil
-			}
-			if group != "" {
-				t.groups[name] = append(t.groups[name], group)
-			}
+			t.groups[name] = append(t.groups[name], group)
 			user = name
 		}
 	}
@@ -269,25 +269,32 @@ func readUserTable(b []byte) (userTable, error) {
 	return t, nil
 }
 
-// userLine reads a user line of U3: the name at 0, the vsys at 34 and the
-// first group at 66 (X1). A line with nothing after the vsys holds no group.
+// userLine reads a user line of U3 in the columns above. A name that fits its
+// field gives the vsys at 34. A longer name ends at the first two spaces after
+// the field, and the vsys follows them. Every user line holds a first group:
+// no device showed one without.
 func userLine(line string) (name, group string, ok bool) {
-	if len(line) <= vsysColumn || line[vsysColumn-1] != ' ' || line[vsysColumn] == ' ' {
+	if len(line) <= vsysColumn {
 		return "", "", false
 	}
-	name = strings.TrimRight(line[:vsysColumn], " ")
-	vsys, _, _ := strings.Cut(line[vsysColumn:], " ")
-	end := vsysColumn + len(vsys)
-	switch {
-	case end >= groupColumn:
-		return "", "", false
-	case len(line) <= groupColumn:
-		return name, "", spaces(line[end:])
-	case !spaces(line[end:groupColumn]) || line[groupColumn] == ' ':
+	v := vsysColumn
+	if !spaces(line[nameWidth:vsysColumn]) || line[vsysColumn] == ' ' {
+		i := strings.Index(line[nameWidth:], "  ")
+		if i < 0 {
+			return "", "", false
+		}
+		v = nameWidth + i + len("  ")
+	}
+	g := v + firstGroupOffset
+	if len(line) <= g || line[v] == ' ' || line[g] == ' ' {
 		return "", "", false
 	}
-	group = groupName(line[groupColumn:])
-	return name, group, group != ""
+	vsys, _, _ := strings.Cut(line[v:], " ")
+	if v+len(vsys) >= g || !spaces(line[v+len(vsys):g]) {
+		return "", "", false
+	}
+	group = groupName(line[g:])
+	return strings.TrimRight(line[:v-len("  ")], " "), group, group != ""
 }
 
 // moreGroups reads a further group line of U3: the group at 64 (X1).
