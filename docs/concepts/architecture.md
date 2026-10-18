@@ -1,6 +1,6 @@
 # Architecture
 
-proteus is one Go module with a read-only core, a set of question packages, and
+Proteus is one Go module with a read-only core, a set of question packages, and
 front ends for the command line and MCP. `ARCHITECTURE.md` in the repository root
 gives the reasoning behind each decision, and `AGENTS.md` lists the rules that
 every package follows.
@@ -104,7 +104,7 @@ sequenceDiagram
     C-->>U: text or JSON, exit code
 ```
 
-A device that proteus cannot read becomes a **hole**, and the question runs on the
+A device that Proteus cannot read becomes a **hole**, and the question runs on the
 other devices.
 
 ## The schema digest

@@ -76,7 +76,7 @@ may be incomplete: the path leaves the estate at 198.19.0.77
 unresolved: fw02/vsys1: 198.19.0.77 leaves the estate (not in the inventory)
 ```
 
-The next hop 198.19.0.77 is no firewall of the inventory, so proteus cannot check
+The next hop 198.19.0.77 is no firewall of the inventory, so Proteus cannot check
 the rest of the path. The run exits with code 3. See [Undecided](#undecided) for
 every cause of an undecided hop.
 
@@ -201,7 +201,7 @@ first match: allow-remote (allow)
 
 The App-ID data comes from `apps.xml.gz` beside the configuration. `allow-remote`
 names `app-remote`, whose implicit use holds `web-browsing`. The run gives no
-zones, so proteus derives them and the answer is `inferred`.
+zones, so Proteus derives them and the answer is `inferred`.
 
 ## Reading the output
 
@@ -214,10 +214,10 @@ The first line is the verdict:
 | `allowed` | every hop passes and routing delivers the flow |
 | `denied at hop N: <device> / <vsys>, rule <name> (<action>)` | a rule or a default rule stops the flow |
 | `denied at hop N: no route to <address> on <device>` | routing drops the flow on that hop |
-| `undecided at hop N: <device> / <vsys>, <reason>` | proteus cannot decide that hop |
+| `undecided at hop N: <device> / <vsys>, <reason>` | Proteus cannot decide that hop |
 
 The first hop that stops the flow, or that is undecided, sets the verdict.
-proteus still checks every other hop, and a hop after the deny shows
+Proteus still checks every other hop, and a hop after the deny shows
 `(after the deny)`. A deny after an undecided hop leaves the verdict `undecided`,
 and a note names the later deny.
 
@@ -239,13 +239,13 @@ The path starts where the source is connected, or where the most specific route 
 the source leaves. When two firewalls connect the source, or only default routes
 cover it, the command exits 2 and asks you to name the start with `--device <name>`.
 
-Path mode needs one address per endpoint. proteus resolves an FQDN endpoint with
+Path mode needs one address per endpoint. Proteus resolves an FQDN endpoint with
 this machine's DNS and traces the first IPv4 address, and FQDN objects of that name
 still match. With `--no-dns`, or when the name has no IPv4 address, the command
 exits 2: "path mode needs an address for <name>; remove --no-dns or give an address".
 
 Each device answers from its latest snapshot, or from its latest one at or before
-`--at`. For an HA pair, proteus reads the snapshot of the active member.
+`--at`. For an HA pair, Proteus reads the snapshot of the active member.
 
 `--why` adds the stages of routing, then one block per hop. The block holds the
 security verdict, the candidate rules with their doubts, the default rule and the
@@ -282,7 +282,7 @@ hop 1: fw02 / vsys1, security stop: default rule interzone-default (deny), built
 The `checks.security` block has the same keys as a `--file` result.
 
 A destination that the firewall itself owns gets the same check as any other hop.
-A note says that proteus does not check the firewall's own services, the interface
+A note says that Proteus does not check the firewall's own services, the interface
 management profile.
 
 ### `--file` mode
@@ -307,7 +307,7 @@ The last lines give the answer:
 | `first certain match: <rule> (<action>)` | the first rule that surely matches, in an undecided answer |
 | `undecided: <rule> (<action>) at position N may match first: <reason>` | the earlier rule in doubt that keeps the answer undecided |
 
-Without `--from-zone` and `--to-zone`, proteus derives the zones from the
+Without `--from-zone` and `--to-zone`, Proteus derives the zones from the
 interfaces and routes of the configuration. A derived zone is always `inferred`.
 `--file` does not check NAT, so a derived zone is the zone before NAT.
 
@@ -382,7 +382,7 @@ the candidates that remain, and the detail.
 
 ### Undecided
 
-proteus decides a hop at the first candidate rule that it can evaluate in full.
+Proteus decides a hop at the first candidate rule that it can evaluate in full.
 An earlier candidate that it cannot evaluate is **in doubt**, because the firewall
 can match it first. When every such rule has the same action, the hop is decided
 with the fidelity `overmatch`. When one of them has another action, the hop is
@@ -391,13 +391,13 @@ undecided.
 | Cause | Examples |
 | --- | --- |
 | a candidate above the match names an application | an application or service `application-default` without `--application` or without App-ID data; an application that the App-ID data does not hold, see [Applications](#applications) |
-| a candidate above the match names a service that proteus cannot read | a predefined service such as `service-https` that the snapshot does not hold, a service group that holds one, or no service |
+| a candidate above the match names a service that Proteus cannot read | a predefined service such as `service-https` that the snapshot does not hold, a service group that holds one, or no service |
 | a candidate above the match names a value without data | a user, a HIP profile or a schedule |
 | a candidate above the match names a URL category | without `--url`, or a category that the configuration does not define, such as a PAN-DB category |
 | a candidate names a runtime source or destination | an external dynamic list, a region or a dynamic address group; these rules stay candidates, because their members are known only at runtime |
-| a doubt on the path | ECMP (proteus does not follow the other next hops), a PBF rule that can redirect the flow, a NAT or PBF answer that can miss matches, or a start that only a default route places |
+| a doubt on the path | ECMP (Proteus does not follow the other next hops), a PBF rule that can redirect the flow, a NAT or PBF answer that can miss matches, or a start that only a default route places |
 | the zones | the vsys of the hop is unknown, a zone is missing, a zone is the placeholder `external` of a vsys crossing, or the vsys does not define the zone |
-| the default rules | the local and the pushed override of a default rule have different actions, and proteus does not know which one wins |
+| the default rules | the local and the pushed override of a default rule have different actions, and Proteus does not know which one wins |
 | the routing end | the path leaves the estate, loops, or ends unresolved |
 
 When a PBF rule only may match, the hop also says why, for example a service and
@@ -405,7 +405,7 @@ no `--port`.
 
 ### Default rules and rule-type
 
-A firewall evaluates its default rules after every other rule, and proteus does
+A firewall evaluates its default rules after every other rule, and Proteus does
 the same. `intrazone-default` decides a flow with equal zones, and
 `interzone-default` decides a flow with different zones. The built-in actions are
 allow and deny, and an override in the configuration changes the action:
@@ -419,7 +419,7 @@ allow and deny, and an override in the configuration changes the action:
 When a local and a pushed override have the same action, the output shows `local`.
 When their actions differ, the hop is undecided.
 
-proteus applies the `rule-type` of each rule:
+Proteus applies the `rule-type` of each rule:
 
 | Rule-type | Matches |
 | --- | --- |
@@ -428,7 +428,7 @@ proteus applies the `rule-type` of each rule:
 | `interzone` | different zones only |
 
 Path mode always knows both zones. With `--file`, rule-type and the default rules
-apply when you give both zones, or when proteus derives one zone on each side. The
+apply when you give both zones, or when Proteus derives one zone on each side. The
 answer is then `inferred`. With several derived zones on a side, or none, an
 `intrazone` or `interzone` rule stays in doubt (`zone.derived`). The answer is
 undecided when that rule can change it.
@@ -436,7 +436,7 @@ undecided when that rule can change it.
 ### Applications
 
 `--application <name>` gives the application of the flow: a predefined application
-or a custom application of the configuration. proteus then matches it as the
+or a custom application of the configuration. Proteus then matches it as the
 firewall does, from the App-ID data of the device.
 
 #### Where the App-ID data comes from
@@ -445,7 +445,7 @@ firewall does, from the App-ID data of the device.
 | --- | --- |
 | path mode | each hop reads the App-ID data of the content version of its snapshot; `proteus fetch` stores it, see [App-ID data](../concepts/snapshots.md#app-id-data) and [fetch](fetch.md); the hops of one path can have different content versions |
 | `--file` | `apps.xml.gz` in the directory of the configuration; the note `note.app-data-file` names the file and its content version; nothing checks that the version is the device's; copy the file from `<store>/.content/<version>.v1.xml.gz` |
-| no data | a snapshot without a content version, a missing file or a file that proteus cannot read gives the note `note.app-data-missing`; the answer is then the same as without `--application` |
+| no data | a snapshot without a content version, a missing file or a file that Proteus cannot read gives the note `note.app-data-missing`; the answer is then the same as without `--application` |
 
 #### How a rule matches
 
@@ -474,7 +474,7 @@ A filter counts the tags that the configuration adds to an application with
 function of a named container.
 
 Every answer with an application carries `note.app-shift`. The firewall can match
-the session again when App-ID identifies it later. proteus evaluates one
+the session again when App-ID identifies it later. Proteus evaluates one
 application per flow, as `test security-policy-match` does.
 
 #### application-default
@@ -489,7 +489,7 @@ ports are those of the rule's applications that imply the flow's application.
 | a secure extended port, such as `tcp/443/secure` | that port, with `note.app-secure-port` |
 | `tcp/dynamic`, `tcp/any` | any port of that protocol |
 | an IP protocol, such as 89, or a range of them | that protocol, any port |
-| an ICMP or ICMPv6 type | protocol 1 or 58, with `note.app-icmp-type`: proteus does not check the type |
+| an ICMP or ICMPv6 type | protocol 1 or 58, with `note.app-icmp-type`: Proteus does not check the type |
 | no default | any protocol and port |
 
 A rule with a custom service matches on the ports of the service. When such a port
@@ -514,7 +514,7 @@ service group. Such a flow drops those rules, with or without `--application`.
 #### A name that is no application
 
 The firewall refuses an unknown name and a container as the application of a flow.
-With `--file`, proteus exits 2 and suggests up to five names. For a container, the
+With `--file`, Proteus exits 2 and suggests up to five names. For a container, the
 suggestions are its functions:
 
 ```text
@@ -536,7 +536,7 @@ and its content version, because another hop can have another content version.
 | `--to-zone <zone>` | derived | with `--file`: the destination zone; give both zones or neither |
 | `--url <url>` | none | URL, matched against custom URL categories |
 | `--application <name>` | none | a predefined or custom application, matched with App-ID data, see [Applications](#applications) |
-| `--user <user>` | none | source user; proteus accepts the flag and does not evaluate it yet |
+| `--user <user>` | none | source user; Proteus accepts the flag and does not evaluate it yet |
 | `--no-dns` | off | do not resolve an FQDN endpoint |
 | `--router <name>` | none | path mode with `--device`: start in this logical router |
 | `--each` | off | check every selected firewall on its own; arrives in a later release |
@@ -575,18 +575,18 @@ stored snapshots.
 | Code | When |
 | --- | --- |
 | 0 | `allowed` or `denied`, with a complete answer |
-| 3 | `undecided`, an unresolved entry, or a hole, such as a device without a snapshot or a configuration that proteus cannot read |
+| 3 | `undecided`, an unresolved entry, or a hole, such as a device without a snapshot or a configuration that Proteus cannot read |
 | 2 | you must change the command line: no start, a start tie, or a flag that the mode refuses |
 
 The other codes are in [Output and exit codes](../reference/output.md#exit-codes).
 
 ## Limits
 
-- proteus does not evaluate `--user`, so a rule that names a user is in doubt.
+- Proteus does not evaluate `--user`, so a rule that names a user is in doubt.
 - Without `--application`, or without App-ID data, a rule that names an
   application is in doubt.
 - Policy-based forwarding does not evaluate the application.
-- proteus does not check the return path.
+- Proteus does not check the return path.
 - `--file` does not check NAT.
 
 See [Limits: simulate policy](../reference/limits.md#simulate-policy) and

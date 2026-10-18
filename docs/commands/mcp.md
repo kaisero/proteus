@@ -1,6 +1,6 @@
 # mcp
 
-`mcp` serves the proteus questions to an agent, or to a chatbot behind an MCP gateway, over the Model Context Protocol (MCP).
+`mcp` serves the Proteus questions to an agent, or to a chatbot behind an MCP gateway, over the Model Context Protocol (MCP).
 
 ## Synopsis
 
@@ -48,7 +48,7 @@ before `at`. A date in `at` means the end of that day.
 
 `search` and `lookup` find applications, filters and containers with the App-ID
 data, as the command line does. The input schema of each tool describes what
-proteus evaluates for each input.
+Proteus evaluates for each input.
 
 A result for `limit` is a finding for `search`, a card for `lookup`, and a single
 change for `snapshot_diff`. In `snapshot_diff`, the scope where the limit falls
@@ -106,12 +106,12 @@ TLS in front of it. Without `allowed_hosts`, the line ends `(Host check off)`.
 
 !!! warning
     A token holder can forge the identity. The token proves that a request comes
-    through the gateway, and proteus does not verify the identity header. proteus
+    through the gateway, and Proteus does not verify the identity header. Proteus
     does no authorization, so the gateway must decide who can use the server.
 
 ### Deploy with Docker
 
-The sample in `deploy/docker/` runs proteus in two containers behind a TLS proxy:
+The sample in `deploy/docker/` runs Proteus in two containers behind a TLS proxy:
 
 ```mermaid
 flowchart LR
@@ -128,7 +128,7 @@ flowchart LR
 | `proteus-mcp` | runs `proteus mcp --http`; mounts the store read-only, holds the token as a secret, and sits on a network with no route out |
 | `caddy` | terminates TLS, limits the request body to 1 MB and forwards to `proteus-mcp`; checks the server with `/healthz`; drops the `X-User-Claims` header from every log line, so only the audit holds identities |
 
-Both proteus containers run as UID 10001, read-only, with every capability
+Both Proteus containers run as UID 10001, read-only, with every capability
 dropped. The server image has no shell. The comments in
 `deploy/docker/compose.yaml` list the steps before the first start: the secrets,
 their owner and their mode. Until the first fetch writes the export,
@@ -372,7 +372,7 @@ The server checks its setup before it answers, and a failed check stops it:
 - The server answers with the same [limits](../reference/limits.md) as the
   command line.
 - Its data is as fresh as the last `proteus fetch`.
-- proteus does no authorization, and a token holder can forge the identity.
+- Proteus does no authorization, and a token holder can forge the identity.
 - A timeout cannot interrupt a snapshot load or an index build.
 
 [Limits of the MCP server](../reference/limits.md#the-mcp-server) lists them all.
@@ -386,7 +386,7 @@ that the chatbot uses, after each change of model or of the instructions.
 
 Use the lab flows of the policy path probe, and one host name:
 
-| # | Flow | Expected answer from proteus |
+| # | Flow | Expected answer from Proteus |
 | --- | --- | --- |
 | A | 198.18.1.10 -> 198.18.10.100 tcp/443 (fw02 to fw01) | allowed |
 | B | 198.18.10.100 -> 198.18.1.10 tcp/22 (the reverse) | undecided on fw01: a rule with service `application-default` |
@@ -397,7 +397,7 @@ Use the lab flows of the policy path probe, and one host name:
 
 Adapt the addresses to the lab's current rules. Run each flow with
 `proteus simulate policy … --output json` first, and write down the answer that
-proteus gives. The model check compares the model's reply with that answer.
+Proteus gives. The model check compares the model's reply with that answer.
 
 Ask each question in a new conversation, in the user's words:
 
@@ -426,11 +426,11 @@ The check passes when every reply follows all four rules:
 3. The snapshot age is stated when a note says that the snapshot is stale.
 4. A `call.choice` error leads to a question that offers the options.
 
-A reply that states a verdict proteus did not give also fails.
+A reply that states a verdict Proteus did not give also fails.
 
 Write the result in [Limits](../reference/limits.md#model-check) under the date:
 
-- the model and its version, the gateway, and the proteus version
+- the model and its version, the gateway, and the Proteus version
 - for each question: the tool calls the model made, pass or fail, and for a fail
   the rule it broke and the reply in one line
 - the total, such as "12 of 12 passed"
@@ -445,4 +445,4 @@ description need better words.
 - [Output and exit codes](../reference/output.md)
 - [Limits of the MCP server](../reference/limits.md#the-mcp-server)
 - [fetch](fetch.md)
-- [How proteus works](../concepts/index.md)
+- [How Proteus works](../concepts/index.md)

@@ -1,6 +1,6 @@
 # Output and exit codes
 
-proteus prints text for people, and JSON or YAML for scripts. The exit code tells
+Proteus prints text for people, and JSON or YAML for scripts. The exit code tells
 a script whether the answer is complete.
 
 ## Exit codes
@@ -218,5 +218,5 @@ Earlier stderr lines, such as the `--verbose` echo, can come before this line.
 
 Every command writes one log file in the log directory. A command that fails or
 exits with code 3 prints the path of its log. `--log-level debug` records every
-API call and, for a simulation, what each stage kept. proteus redacts passwords
+API call and, for a simulation, what each stage kept. Proteus redacts passwords
 and API keys from every log.

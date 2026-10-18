@@ -12,7 +12,7 @@ flowchart TB
 
 Every answer is keyed by device and vsys. The same shared dynamic address group
 can hold different members in two vsys, because each vsys adds its own tagged
-objects to it. For that reason proteus resolves a name in one scope at a time.
+objects to it. For that reason Proteus resolves a name in one scope at a time.
 
 ## Name resolution
 
@@ -32,5 +32,5 @@ A firewall evaluates security rules in this order:
 3. shared post-rules, pushed by Panorama
 4. the default rules
 
-A managed firewall carries the rules that Panorama pushed to it, so proteus reads
+A managed firewall carries the rules that Panorama pushed to it, so Proteus reads
 each firewall's own configuration and does not read Panorama.
