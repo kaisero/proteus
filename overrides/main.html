@@ -1,0 +1,14 @@
+{#- Adds the Proteus app icon and the link preview image to every page. -#}
+{% extends "base.html" %}
+
+{% block extrahead %}
+  <link rel="apple-touch-icon" href="{{ 'assets/images/apple-touch-icon.png' | url }}">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="{{ config.site_name }}">
+  <meta property="og:title" content="{% if page.title and not page.is_homepage %}{{ page.title | striptags }} - {% endif %}{{ config.site_name }}">
+  <meta property="og:description" content="{{ config.site_description }}">
+  <meta property="og:image" content="{{ config.site_url }}assets/images/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:card" content="summary_large_image">
+{% endblock %}

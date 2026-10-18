@@ -21,7 +21,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   rules, groups, filters and containers that select an application, and `lookup`
   shows its category, risk, default ports and dependencies.
 - **Read the docs as a website.** A push to `main` publishes the pages under
-  `docs/` to GitHub Pages; `make docs-serve` shows the same site locally.
+  `docs/` to GitHub Pages; `make docs-serve` shows the same site locally. The
+  site and the README carry the Proteus logo, colors and fonts, in light and
+  dark.
 - **Keep a broad answer short with `--limit`.** `search`, `lookup` and
   `snapshot diff`, and their MCP tools with `limit`, can keep only the first N
   findings, cards or changes; the summary says how many it left out and what
