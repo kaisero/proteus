@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Fetch stores each firewall's User-ID data.** `fetch` now keeps the
+  user-to-address mappings, the users with their groups and the identity sources
+  of each single-vsys firewall with its snapshot; `identity: false` on a device
+  turns this off.
 - **Simulate a flow by its application.** `simulate policy --application` now
   matches rules by application, group, filter and container as the firewall does,
   with implicit use, and checks the application's default ports for

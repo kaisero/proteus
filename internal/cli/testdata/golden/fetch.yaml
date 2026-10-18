@@ -62,6 +62,11 @@ results:
         status: ok
         detail: content 8000-1000, 4 applications, 1 container
         elapsed_ms: 0
+      - slug: identity
+        name: fetch the identity data
+        status: ok
+        detail: '9 calls: 4 users, 8 groups, 6 mappings in 1 page, 2 sources'
+        elapsed_ms: 0
       - slug: store
         name: store the snapshot
         status: ok

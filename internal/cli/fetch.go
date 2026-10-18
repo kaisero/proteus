@@ -41,7 +41,7 @@ func (a *app) fetchCmd() *cobra.Command {
 		Short: "Fetch devices into the store",
 		Long: "Fetch logs in to each device, reads its configuration and operational state, and\n" +
 			"stores them as a snapshot. Name devices, select them with --label, or pass --all.\n\n" +
-			"Stages per device: resolve, login, ha, documents, template, applications, store",
+			"Stages per device: resolve, login, ha, documents, template, applications, identity, store",
 		ValidArgsFunction: a.completeDevices,
 		RunE: func(c *cobra.Command, names []string) error {
 			o.names = names
@@ -187,7 +187,7 @@ func (f fetcher) store(_ context.Context, d *deviceFetch) (task.Result, error) {
 		}
 		meta.Documents = append(meta.Documents, dm)
 	}
-	sn, err := f.st.Write(meta, res.Docs, nil, d.Target.SnapshotKeep)
+	sn, err := f.st.Write(meta, res.Docs, res.Identity, d.Target.SnapshotKeep)
 	if err != nil {
 		return task.Result{}, err
 	}

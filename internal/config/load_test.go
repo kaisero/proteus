@@ -370,3 +370,56 @@ func TestMergedFixtureLoads(t *testing.T) {
 		t.Errorf("zones = %d", len(zones))
 	}
 }
+
+// Parse reads a configuration from bytes as Load reads its file: the same
+// tree, version and report. It reads no file beside it, so a predefined.xml
+// next to the file does not reach it. The fetch reads the domains of the
+// identity sources from the configuration it holds (spec 2026-10-17 §3.2).
+func TestParseReadsBytes(t *testing.T) {
+	t.Parallel()
+	raw, err := os.ReadFile("../../testdata/config/firewall-lab-merged.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	pre, err := os.ReadFile("../../testdata/predefined/predefined.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.xml")
+	if err := os.WriteFile(path, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, PredefinedFile), pre, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	loaded, loadRep, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	parsed, parseRep, err := Parse(bytes.NewReader(raw), "config")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p := treeDiff(loaded.Root(), parsed.Root()); p != "" {
+		t.Errorf("the parsed tree differs at %s", p)
+	}
+	if loaded.Predefined() == nil || parsed.Predefined() != nil {
+		t.Errorf("predefined: loaded %v, parsed %v; want only the load to read the file beside", loaded.Predefined() != nil, parsed.Predefined() != nil)
+	}
+	if parsed.Path() != "config" || parsed.Version() != loaded.Version() || parsed.DetailVersion() != loaded.DetailVersion() ||
+		parsed.Digest() != loaded.Digest() || !slices.Equal(parseRep.Untyped, loadRep.Untyped) {
+		t.Errorf("parsed %q %q %q, report %s; loaded report %s", parsed.Path(), parsed.Version(), parsed.DetailVersion(), parseRep, loadRep)
+	}
+	// It refuses what Load refuses, and names the configuration.
+	if _, _, err := Parse(strings.NewReader("<response/>"), "the-name"); err == nil || !strings.Contains(err.Error(), "the-name") {
+		t.Errorf("no config element: %v", err)
+	}
+	panorama, err := os.ReadFile("../../testdata/config/panorama-rejected.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := Parse(bytes.NewReader(panorama), "the-name"); err == nil || !strings.Contains(err.Error(), "Panorama") {
+		t.Errorf("a Panorama configuration: %v", err)
+	}
+}

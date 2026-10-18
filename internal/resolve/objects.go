@@ -98,6 +98,43 @@ func ObjectsAt(cfg *config.Config, sc config.Scope, kind string, within []string
 	return objectsInChain(cfg, chain, kind, within)
 }
 
+// CloudIdentityEngine is one Cloud Identity Engine profile: its name and the
+// domain that its users and groups carry, <domain>\<group> (spec 2026-10-17
+// §3.3). The domain is empty when the profile names none.
+type CloudIdentityEngine struct{ Name, Domain string }
+
+// CloudIdentityEngines returns the CIE profiles that a scope sees, in the
+// order of the configuration. The schema holds them at
+// vsys/entry/cloud-identity-engine/entry, each with a domain
+// (schemas/schema.xml:50272, AGENTS.md R1). A Panorama template pushes them:
+// on fw01 only the merge with the pushed template holds them (as observed on
+// fw01, PAN-OS 11.2.5, spec 2026-10-17 C1).
+func CloudIdentityEngines(cfg *config.Config, sc config.Scope) []CloudIdentityEngine {
+	var out []CloudIdentityEngine
+	for _, e := range elementsInChain(cfg, chainFor(sc), "cloud-identity-engine", nil) {
+		out = append(out, CloudIdentityEngine{Name: e.Name, Domain: e.elem.Child("domain").TextOr("")})
+	}
+	return out
+}
+
+// GroupMapping is one group-mapping profile: its name and the domain that it
+// gives its users and groups. The domain is empty when the profile names
+// none; the device then takes one from the directory, which the
+// configuration does not hold (ruling Q1).
+type GroupMapping struct{ Name, Domain string }
+
+// GroupMappings returns the group-mapping profiles that a scope sees, in the
+// order of the configuration. The schema holds them at
+// vsys/entry/group-mapping/entry, each with an optional domain
+// (schemas/schema.xml:50193, AGENTS.md R1).
+func GroupMappings(cfg *config.Config, sc config.Scope) []GroupMapping {
+	var out []GroupMapping
+	for _, e := range elementsInChain(cfg, chainFor(sc), "group-mapping", nil) {
+		out = append(out, GroupMapping{Name: e.Name, Domain: e.elem.Child("domain").TextOr("")})
+	}
+	return out
+}
+
 // chainFor returns the scopes a scope inherits from, shared first.
 func chainFor(sc config.Scope) []config.Scope {
 	chain := []config.Scope{{Sort: config.ScopeShared}}

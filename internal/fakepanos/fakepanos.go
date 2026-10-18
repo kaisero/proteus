@@ -1,8 +1,8 @@
 // Package fakepanos is a stand-in PAN-OS XML API for tests. It answers keygen, a
 // fixed set of show commands, the running configuration, the pushed template,
-// the predefined services, the App-ID data and a configuration export over TLS
-// on 127.0.0.1, and records every request so a test can check what was sent
-// and what was not.
+// the predefined services, the App-ID data, the User-ID data and a
+// configuration export over TLS on 127.0.0.1, and records every request so a
+// test can check what was sent and what was not.
 package fakepanos
 
 import (
@@ -102,12 +102,146 @@ const (
 // template, as fw02 gave it on PAN-OS 12.2.3 (spec 2026-10-17 C7).
 const NoTemplate = `<response status="success"><result>No template pushed to device</result></response>`
 
+// The User-ID commands of a fetch, each a show command (spec 2026-10-17 §3.2:
+// U3, U5–U9).
+const (
+	GroupMappingStatsCmd = "<show><user><group-mapping><statistics/></group-mapping></user></show>"
+	GroupMappingStateCmd = "<show><user><group-mapping><state>all</state></group-mapping></user></show>"
+	CIEStatusCmd         = "<show><user><cloud-identity-engine><status><all/></status></cloud-identity-engine></user></show>"
+	UserIDsCmd           = "<show><user><user-ids><all/></user-ids></user></show>"
+	UserAttributesCmd    = "<show><user><user-attributes><user>all</user></user-attributes></user></show>"
+	GroupListCmd         = "<show><user><group><list/></group></user></show>"
+	DUGListCmd           = `<show><user><group><list><entry name="dynamic"/></list></group></user></show>`
+	RegisteredUsersCmd   = "<show><object><registered-user><all/></registered-user></object></show>"
+)
+
+// MappingPageCmd asks a page of the user-to-IP mapping table: limit entries
+// from the entry start (spec 2026-10-17 U1).
+func MappingPageCmd(limit, start int) string {
+	return fmt.Sprintf("<show><user><ip-user-mapping-mp><all/><limit>%d</limit><start-point>%d</start-point></ip-user-mapping-mp></user></show>", limit, start)
+}
+
+// The User-ID answers of every fake device, unless Ops names the command:
+// dummy data in the layouts of spec 2026-10-17 X1. Two group-mapping
+// profiles; no CIE profile, so a configuration needs no CIE domain and a
+// fetch misses no part (§3.4, SG2); three users of U3 with eight groups among
+// them, and dave in U8 alone; two DUGs; the tags of two users; and six
+// mappings in the first page of a fetch, 10,000 entries from entry 1.
+const (
+	GroupMappingStats = `<response status="success"><result>` +
+		`<entry><name>example.com</name><vsys>vsys1</vsys><groups>3</groups><last>60 secs ago(took 0 secs)</last><next>In 3540 secs</next></entry>` + "\n" +
+		`<entry><name>branch</name><vsys>vsys1</vsys><groups>1</groups><last>60 secs ago(took 0 secs)</last><next>In 3540 secs</next></entry>` + "\n" +
+		`</result></response>`
+
+	GroupMappingState = `<response status="success"><result><![CDATA[` + "\n\n" +
+		"Group Mapping(vsys1, type: active-directory): example.com \n" +
+		"\tBind DN    : svc-ldap@example.com\n" +
+		"\tBase       : dc=example,dc=com\n" +
+		"\tGroup Filter: (None)\n" +
+		"\tUser Filter: (None)\n" +
+		"\tServers    : configured 1 servers\n" +
+		"\t\t192.0.2.53(389)\n" +
+		"\t\t\tLast Action Time: 60 secs ago(took 0 secs)\n" +
+		"\t\t\tNext Action Time: In 3540 secs\n" +
+		"\tNumber of Groups: 3\n" +
+		"\tcn=domain users,cn=users,dc=example,dc=com\n" +
+		"\tcn=payroll,ou=groups,dc=example,dc=com\n" +
+		"\tcn=empty,ou=groups,dc=example,dc=com\n" +
+		"\n" +
+		"Group Mapping(vsys1, type: active-directory): branch \n" +
+		"\tBind DN    : svc-ldap@example.com\n" +
+		"\tBase       : ou=branch,dc=example,dc=com\n" +
+		"\tGroup Filter: (None)\n" +
+		"\tUser Filter: (None)\n" +
+		"\tServers    : configured 1 servers\n" +
+		"\t\t192.0.2.54(389)\n" +
+		"\t\t\tLast Action Time: 60 secs ago(took 0 secs)\n" +
+		"\t\t\tNext Action Time: In 3540 secs\n" +
+		"\tNumber of Groups: 1\n" +
+		"\tcn=branch staff,ou=branch,dc=example,dc=com\n" +
+		"\n]]></result></response>"
+
+	CIEStatus = `<response status="success"><result>` +
+		"Name\t\tVsys\tGroups\t\tLast-Action\t\tNext-Action\n" +
+		"------------------------------------------------------------------------------\n" +
+		`</result></response>`
+
+	UserIDs = `<response status="success"><result><![CDATA[` + "\n" +
+		"User Name                         Vsys    Groups\n" +
+		"------------------------------------------------------------------\n" +
+		"example.com\\alice                 vsys1                           cn=domain users,cn=users,dc=example,dc=com \n" +
+		"                                                                cn=payroll,ou=groups,dc=example,dc=com \n" +
+		"example.com\\bob                   vsys1                           cn=domain users,cn=users,dc=example,dc=com \n" +
+		"                                                                cn=branch staff,ou=branch,dc=example,dc=com \n" +
+		"                                                                team-x \n" +
+		"example.com\\carol                 vsys1                           cn=domain users,cn=users,dc=example,dc=com \n" +
+		"                                                                engineering \n" +
+		"                                                                dug-a \n" +
+		"                                                                dug-ab \n" +
+		"\nTotal: 3\n* : Custom Group\n\n]]></result></response>"
+
+	UserAttributes = `<response status="success"><result>` + "\n" +
+		"Primary: example.com\\alice\tEmail: alice@example.com\n" +
+		"Alt User Names: \n" +
+		"1) alice@example.com\n" +
+		"\n" +
+		"Primary: example.com\\bob\tEmail: robert@example.com\n" +
+		"Alt User Names: \n" +
+		"1) bob@example.com\n" +
+		"\n" +
+		"Primary: example.com\\carol\t\n" +
+		"\n" +
+		"Primary: example.com\\dave\t\n" +
+		"Alt User Names: \n" +
+		"1) dave@example.com\n" +
+		`</result></response>`
+
+	GroupList = `<response status="success"><result><![CDATA[` + "\n" +
+		"cn=domain users,cn=users,dc=example,dc=com \n" +
+		"cn=payroll,ou=groups,dc=example,dc=com \n" +
+		"cn=empty,ou=groups,dc=example,dc=com \n" +
+		"cn=branch staff,ou=branch,dc=example,dc=com \n" +
+		"engineering \n" +
+		"team-x \n" +
+		"dug-a \n" +
+		"dug-ab \n" +
+		"\nTotal: 8\n* : Custom Group\n\n]]></result></response>"
+
+	DUGList = `<response status="success"><result><![CDATA[` + "\n" +
+		"dug-a \n" +
+		"dug-ab \n" +
+		"\nTotal: 2\n* : Custom Group\n\n]]></result></response>"
+
+	RegisteredUsers = `<response status="success"><result>` +
+		`<entry user="example.com\carol">` + "\n<tag>\n<member>tag-a</member>\n<member>tag-b</member>\n</tag>\n</entry>\n" +
+		`<entry user="example.com\dave">` + "\n<tag>\n<member>tag-a</member>\n</tag>\n</entry>\n" +
+		"<count>2</count>\n</result></response>"
+
+	Mappings = `<response status="success"><result>` +
+		`<entry><ip>198.51.100.11</ip><vsys>vsys1</vsys><type>XMLAPI</type><user>example.com\alice</user><timeout>14400</timeout><origin>203.0.113.5</origin></entry>` + "\n" +
+		`<entry><ip>198.51.100.10</ip><vsys>vsys1</vsys><type>XMLAPI</type><user>example\alice</user><timeout>14400</timeout><origin>203.0.113.5</origin></entry>` + "\n" +
+		`<entry><ip>198.51.100.13</ip><vsys>vsys1</vsys><type>XMLAPI</type><user>example.com\carol</user><timeout>14400</timeout><origin>203.0.113.5</origin></entry>` + "\n" +
+		`<entry><ip>198.51.100.12</ip><vsys>vsys1</vsys><type>XMLAPI</type><user>other\ghost</user><timeout>14400</timeout><origin>203.0.113.5</origin></entry>` + "\n" +
+		`<entry><ip>2001:db8::11</ip><vsys>vsys1</vsys><type>XMLAPI</type><user>example.com\bob</user><timeout>14400</timeout><origin>203.0.113.5</origin></entry>` + "\n" +
+		`<entry><ip>198.51.100.14</ip><vsys>vsys1</vsys><type>XMLAPI</type><user>example.com\dave</user><timeout>14400</timeout><origin>203.0.113.5</origin></entry>` + "\n" +
+		"<count>6</count>\n<total>6</total>\n</result></response>"
+)
+
 // defaults are the answers every fake device gives unless Ops names the
 // command.
 var defaults = map[string]string{
-	PredefinedCmd:   PredefinedServices,
-	ApplicationsCmd: Applications,
-	ContainersCmd:   Containers,
+	PredefinedCmd:            PredefinedServices,
+	ApplicationsCmd:          Applications,
+	ContainersCmd:            Containers,
+	GroupMappingStatsCmd:     GroupMappingStats,
+	GroupMappingStateCmd:     GroupMappingState,
+	CIEStatusCmd:             CIEStatus,
+	UserIDsCmd:               UserIDs,
+	UserAttributesCmd:        UserAttributes,
+	GroupListCmd:             GroupList,
+	DUGListCmd:               DUGList,
+	RegisteredUsersCmd:       RegisteredUsers,
+	MappingPageCmd(10000, 1): Mappings,
 }
 
 // Success wraps a result the way PAN-OS does.

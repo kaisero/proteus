@@ -16,6 +16,7 @@ import (
 	"github.com/okaiser/proteus/internal/config"
 	"github.com/okaiser/proteus/internal/fakepanos"
 	"github.com/okaiser/proteus/internal/fetch"
+	"github.com/okaiser/proteus/internal/identity"
 	"github.com/okaiser/proteus/internal/index"
 	"github.com/okaiser/proteus/internal/inventory"
 	"github.com/okaiser/proteus/internal/resolve"
@@ -1157,13 +1158,13 @@ func TestFetchWhyShowsTheStages(t *testing.T) {
 	c := newCLI(t)
 	c.inventory(inventoryFor(lab(t).Start(t)))
 	out := c.want(0, "fetch", "fw01", "--why")
-	for _, slug := range []string{"resolve", "login", "ha", "documents", "template", "applications", "store"} {
+	for _, slug := range []string{"resolve", "login", "ha", "documents", "template", "applications", "identity", "store"} {
 		if !strings.Contains(out, "  "+slug+" ") {
 			t.Errorf("missing stage %s:\n%s", slug, out)
 		}
 	}
 	// The command's help lists the stages in the order they run.
-	if long := newApp(nil, nil, getenv, nil).fetchCmd().Long; !strings.Contains(long, "documents, template, applications") {
+	if long := newApp(nil, nil, getenv, nil).fetchCmd().Long; !strings.Contains(long, "documents, template, applications, identity, store") {
 		t.Errorf("fetch help: %s", long)
 	}
 }
@@ -1448,5 +1449,61 @@ func TestFetchPrunesContentOnce(t *testing.T) {
 	}
 	if n := strings.Count(c.logFile(), "pruned the content files"); n != 1 {
 		t.Errorf("pruned %d times:\n%s", n, c.logFile())
+	}
+}
+
+// The snapshot keeps the identity data of the device as identity.json.gz,
+// mode 0600, and meta.json says so (spec 2026-10-17 §4.1).
+func TestFetchStoresTheIdentityFile(t *testing.T) {
+	t.Parallel()
+	c := newCLI(t)
+	c.inventory(inventoryFor(lab(t).Start(t)))
+	c.want(0, "fetch", "fw01")
+	sn, raw := metaJSON(t, c, "fw01")
+	fi, err := os.Stat(sn.IdentityPath())
+	if err != nil || fi.Mode().Perm() != 0o600 || filepath.Base(sn.IdentityPath()) != identity.FileName {
+		t.Fatalf("identity file: %v, %v", fi, err)
+	}
+	if !strings.Contains(raw, `"identity": true`) {
+		t.Errorf("meta.json:\n%s", raw)
+	}
+	d, err := identity.Load(sn.IdentityPath())
+	if err != nil || d.Counts().Users != 4 || len(d.PartsMissing()) != 0 {
+		t.Errorf("identity data %+v, %v", d, err)
+	}
+}
+
+// identity: false on a device keeps the identity data out of its snapshot:
+// no file, no key in meta.json, a note, and the fetch is complete (spec
+// 2026-10-17 D4).
+func TestFetchWithIdentityOffStoresNoFile(t *testing.T) {
+	t.Parallel()
+	c := newCLI(t)
+	c.inventory(strings.Replace(inventoryFor(lab(t).Start(t)), "    labels: {site: s1}\n", "    labels: {site: s1}\n    identity: false\n", 1))
+	out := c.want(0, "fetch", "fw01", "--output", "json")
+	sn, raw := metaJSON(t, c, "fw01")
+	if _, err := os.Stat(filepath.Join(sn.Dir, identity.FileName)); !errors.Is(err, os.ErrNotExist) || sn.IdentityPath() != "" || strings.Contains(raw, `"identity"`) {
+		t.Errorf("identity file: %v\nmeta.json:\n%s", err, raw)
+	}
+	if !slices.ContainsFunc(fetchNotes(t, out), func(n note) bool { return n.Code == "note.identity-off" }) {
+		t.Errorf("no note:\n%s", out)
+	}
+}
+
+// A transport error while the identity data arrives stores the snapshot
+// without the file, and the fetch exits 3 (spec 2026-10-17 §3.4, PD4).
+func TestFetchIdentityTransportFailureExits3(t *testing.T) {
+	t.Parallel()
+	c := newCLI(t)
+	d := lab(t)
+	d.DropCmd = map[string]int{fakepanos.UserIDsCmd: 2}
+	c.inventory(inventoryFor(d.Start(t)))
+	out := c.want(exitIncomplete, "fetch", "fw01")
+	sn, raw := metaJSON(t, c, "fw01")
+	if _, err := os.Stat(filepath.Join(sn.Dir, identity.FileName)); !errors.Is(err, os.ErrNotExist) || sn.IdentityPath() != "" || strings.Contains(raw, `"identity": true`) {
+		t.Errorf("identity file: %v\nmeta.json:\n%s", err, raw)
+	}
+	if !strings.Contains(out, "identity") || !strings.Contains(out, "FAILED") || !strings.Contains(raw, `"name": "identity"`) {
+		t.Errorf("the failed identity data must be named:\n%s\nmeta.json:\n%s", out, raw)
 	}
 }

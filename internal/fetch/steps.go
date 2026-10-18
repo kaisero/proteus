@@ -31,6 +31,10 @@ type State struct {
 	// schemaRoot gives the root of the schema digest to the template step;
 	// nil is config.SchemaRoot. A test makes it fail.
 	schemaRoot func() (*schema.Node, error)
+	// mappingPage and mappingCap are the page size of the mapping table and
+	// the most entries the identity step keeps; 0 uses the constants. A test
+	// sets small ones.
+	mappingPage, mappingCap int
 }
 
 // NewState starts a device's fetch.
@@ -43,10 +47,12 @@ func NewState(t inventory.Target, docs []Document, opts ActiveOptions, log *runl
 
 // Steps are the device-side steps of a fetch: log in, follow the active HA peer,
 // fetch the documents, merge the pushed template into the configuration, fetch
-// the application data. A failed login fails the device, because nothing can be
-// read without a key; a failed document is recorded and the rest still arrive
-// (spec S10). The application data comes last: it needs the content version of
-// the system info.
+// the application data, fetch the identity data. A failed login fails the
+// device, because nothing can be read without a key; a failed document is
+// recorded and the rest still arrive (spec S10). The application data needs
+// the content version of the system info, and the identity data comes after
+// it (spec 2026-10-17 §3.1): it needs the system info and the merged
+// configuration.
 func Steps() []task.Step[State] {
 	return []task.Step[State]{
 		{Name: "log in", Slug: "login", Do: loginStep},
@@ -54,6 +60,7 @@ func Steps() []task.Step[State] {
 		{Name: "fetch the documents", Slug: "documents", Do: documentsStep},
 		{Name: "merge the pushed template", Slug: "template", Do: templateStep},
 		{Name: "fetch the application data", Slug: "applications", Do: applicationsStep},
+		{Name: "fetch the identity data", Slug: "identity", Do: identityStep},
 	}
 }
 

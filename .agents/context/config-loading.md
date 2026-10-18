@@ -147,6 +147,7 @@ func (r Report) HasUnknown() bool
 func (r Report) String() string
 func (s Scope) String() string
 func Load(path string) (*Config, Report, error)
+func Parse(r io.Reader, name string) (*Config, Report, error)
 func ParseScope(s string) (Scope, error)
 func SchemaRoot() (*schema.Node, error)
 ```

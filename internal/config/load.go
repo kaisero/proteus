@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -38,7 +39,8 @@ func (c *Config) Version() string { return c.version }
 // DetailVersion returns the patch level from the config root, e.g. 11.2.7.
 func (c *Config) DetailVersion() string { return c.detailVersion }
 
-// Path returns the file the configuration was loaded from.
+// Path returns the file the configuration was loaded from, or the name that
+// Parse gave it.
 func (c *Config) Path() string { return c.path }
 
 // Digest returns the schema root that describes this configuration.
@@ -66,33 +68,46 @@ func (c *Config) Predefined() *Element { return c.predefined }
 // loads without them, and rules that name them stay in doubt. A file that cannot
 // be read or parsed fails the load, because skipping it would hide data.
 func Load(path string) (*Config, Report, error) {
-	var rep Report
 	f, err := os.Open(path)
 	if err != nil {
-		return nil, rep, fmt.Errorf("config: open %s: %w", path, err)
+		return nil, Report{}, fmt.Errorf("config: open %s: %w", path, err)
 	}
 	defer func() { _ = f.Close() }()
 
-	root, err := parseTree(f)
+	cfg, rep, err := Parse(f, path)
 	if err != nil {
-		return nil, rep, fmt.Errorf("config: %s: %w", path, err)
+		return nil, Report{}, err
+	}
+	pre, err := loadPredefined(filepath.Join(filepath.Dir(path), PredefinedFile))
+	if err != nil {
+		return nil, Report{}, err
+	}
+	cfg.predefined = pre
+	return cfg, rep, nil
+}
+
+// Parse reads a configuration from r as Load reads a file, bare or wrapped,
+// and gives it name as its path. It reads no file beside it, so the
+// configuration has no predefined services. fetch reads the configuration it
+// holds this way (spec 2026-10-17 §3.2).
+func Parse(r io.Reader, name string) (*Config, Report, error) {
+	var rep Report
+	root, err := parseTree(r)
+	if err != nil {
+		return nil, rep, fmt.Errorf("config: %s: %w", name, err)
 	}
 	if isPanorama(root) {
 		return nil, rep, fmt.Errorf("config: %s is a Panorama configuration; "+
-			"proteus reads each firewall's own configuration", path)
+			"proteus reads each firewall's own configuration", name)
 	}
 
 	sch, err := loadDigest()
 	if err != nil {
 		return nil, rep, err
 	}
-	pre, err := loadPredefined(filepath.Join(filepath.Dir(path), PredefinedFile))
-	if err != nil {
-		return nil, rep, err
-	}
 	cfg := &Config{
-		path: path, version: root.Attr("version"), detailVersion: root.Attr("detail-version"),
-		schema: sch, root: root, predefined: pre,
+		path: name, version: root.Attr("version"), detailVersion: root.Attr("detail-version"),
+		schema: sch, root: root,
 	}
 	rep.Untyped = cfg.undescribed()
 	return cfg, rep, nil

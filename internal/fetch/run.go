@@ -32,6 +32,10 @@ type Result struct {
 	// pushed template. It is empty when the configuration did not arrive (spec
 	// 2026-10-17 §2.1).
 	ConfigSource string
+	// Identity is the identity file of the device, gzip JSON to store as
+	// identity.FileName; nil when the identity step was skipped or failed
+	// (spec 2026-10-17 §3, §4.1).
+	Identity []byte
 }
 
 // AppData is the App-ID data of one fetch (spec 2026-10-16 §2.2).
