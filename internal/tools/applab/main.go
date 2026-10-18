@@ -13,10 +13,10 @@
 // the end, also after a failure or an interrupt.
 //
 // The device answers op commands only: <show> and
-// <test><security-policy-match>, and checkOp refuses any other command before
-// it is sent (AGENTS.md R2, plan C7). The API key comes from a header file,
-// which holds one line "X-PAN-KEY: <key>". The tool never prints, logs or
-// copies the key, and never asks the device for one.
+// <test><security-policy-match>, and labkit.CheckOp refuses any other command
+// before it is sent (AGENTS.md R2, plan C7). The API key comes from a header
+// file, which holds one line "X-PAN-KEY: <key>". The tool never prints, logs
+// or copies the key, and never asks the device for one.
 //
 // -render <file> prints a lab file with its placeholders filled from the
 // variables file, for the XML API set calls of the lab run. Its output holds
@@ -36,7 +36,9 @@ import (
 	"path/filepath"
 	"syscall"
 
-	"github.com/okaiser/proteus/internal/inventory"
+	"github.com/okaiser/proteus/internal/config"
+	"github.com/okaiser/proteus/internal/estate"
+	"github.com/okaiser/proteus/internal/tools/labkit"
 )
 
 // options are the flags. Each flag can also come from the variable its help
@@ -44,6 +46,10 @@ import (
 type options struct {
 	device, flows, vars, vsys, proteus, out, keyHeader, inventory, render string
 }
+
+// snapshotFiles are the files of the snapshot that file mode reads (plan
+// D18): the configuration, the predefined services and the content file.
+var snapshotFiles = []string{"config.xml", config.PredefinedFile, estate.AppsFile}
 
 func main() { os.Exit(run(os.Args[1:], os.Stdout, os.Stderr)) }
 
@@ -73,7 +79,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 }
 
 func lab(ctx context.Context, o options, stdout, stderr io.Writer) error {
-	vars, err := readVarsFile(o.vars)
+	vars, err := labkit.ReadVarsFile(o.vars)
 	if err != nil {
 		return err
 	}
@@ -82,7 +88,7 @@ func lab(ctx context.Context, o options, stdout, stderr io.Writer) error {
 		if err != nil {
 			return err
 		}
-		s, err := Fill(string(b), vars)
+		s, err := fill(string(b), vars)
 		if err != nil {
 			return err
 		}
@@ -101,15 +107,18 @@ func lab(ctx context.Context, o options, stdout, stderr io.Writer) error {
 	if err != nil {
 		return err
 	}
-	header, key, err := keyHeader(o.keyHeader)
+	if o.keyHeader == "" {
+		return errors.New("give the API key header file: -key-header <file>, or APPLAB_KEY_HEADER=<file>")
+	}
+	header, key, err := labkit.KeyHeader(o.keyHeader)
 	if err != nil {
 		return err
 	}
-	target, err := lookup(o.inventory, o.device)
+	target, err := labkit.Lookup(o.inventory, o.device)
 	if err != nil {
 		return err
 	}
-	out, err := outDir(o.out)
+	out, err := labkit.OutDir(o.out)
 	if err != nil {
 		return err
 	}
@@ -130,7 +139,7 @@ func lab(ctx context.Context, o options, stdout, stderr io.Writer) error {
 	bin := o.proteus
 	if bin == "" {
 		bin = filepath.Join(copyDir, "proteus")
-		if err := command(ctx, stderr, nil, "go", "build", "-o", bin, "./cmd/proteus"); err != nil {
+		if err := labkit.Command(ctx, stderr, nil, "go", "build", "-o", bin, "./cmd/proteus"); err != nil {
 			return fmt.Errorf("build proteus: %w", err)
 		}
 	}
@@ -139,21 +148,21 @@ func lab(ctx context.Context, o options, stdout, stderr io.Writer) error {
 		env = append(env, "PROTEUS_CONFIG="+o.inventory)
 	}
 	fmt.Fprintf(stderr, "applab: fetching %s into a temporary store\n", o.device)
-	if err := command(ctx, stderr, env, bin, "fetch", o.device); err != nil {
+	if err := labkit.Command(ctx, stderr, env, bin, "fetch", o.device); err != nil {
 		// Exit 3 is a partial fetch: what file mode needs may still be there,
-		// and copySnapshot checks it.
+		// and labkit.CopySnapshot checks it.
 		if ee, ok := errors.AsType[*exec.ExitError](err); !ok || ee.ExitCode() != 3 {
 			return fmt.Errorf("proteus fetch %s: %w", o.device, err)
 		}
 		fmt.Fprintf(stderr, "applab: the fetch of %s was partial (exit 3)\n", o.device)
 	}
-	version, err := copySnapshot(storeDir, o.device, copyDir)
+	version, err := labkit.CopySnapshot(storeDir, o.device, copyDir, snapshotFiles)
 	if err != nil {
 		return err
 	}
 	fmt.Fprintf(stdout, "device %s, content %s, %d flows, answers in %s\n", o.device, version, len(flows), out)
 
-	dev := newDevice(target.Host, target.InsecureTLS, target.Timeout, header, key)
+	dev := labkit.NewDevice(target.Host, target.InsecureTLS, target.Timeout, header, key)
 	runProteus := func(ctx context.Context, args []string) ([]byte, []byte, int, error) {
 		var so, se bytes.Buffer
 		//nolint:gosec // G204: the binary and its arguments come from this tool's flags and flow list.
@@ -174,95 +183,4 @@ func lab(ctx context.Context, o options, stdout, stderr io.Writer) error {
 	}
 	fmt.Fprintf(stdout, "all %d flows agree\n", len(flows))
 	return nil
-}
-
-// readVarsFile reads the variables file. A missing file is no error for a
-// flow list without placeholders, so it reads as empty.
-func readVarsFile(path string) (map[string]string, error) {
-	f, err := os.Open(path)
-	if errors.Is(err, os.ErrNotExist) {
-		return map[string]string{}, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = f.Close() }()
-	return ReadVars(f)
-}
-
-// keyHeader reads the key header file. Its name is a path, not the key.
-func keyHeader(path string) (string, string, error) {
-	if path == "" {
-		return "", "", errors.New("give the API key header file: -key-header <file>, or APPLAB_KEY_HEADER=<file>")
-	}
-	f, err := os.Open(path)
-	if err != nil {
-		return "", "", err
-	}
-	defer func() { _ = f.Close() }()
-	name, value, err := ReadKeyHeader(f)
-	if err != nil {
-		return "", "", fmt.Errorf("%s: %w", path, err)
-	}
-	return name, value, nil
-}
-
-// lookup finds the device in the proteus inventory: its host, its TLS
-// setting and its time-out. The password stays with proteus fetch.
-func lookup(path, name string) (inventory.Target, error) {
-	if path == "" {
-		p, err := inventory.DefaultPath(os.Getenv)
-		if err != nil {
-			return inventory.Target{}, err
-		}
-		path = p
-	}
-	inv, err := inventory.Load(path)
-	if err != nil {
-		return inventory.Target{}, err
-	}
-	t, err := inv.Resolve(name, os.Getenv)
-	t.Password = ""
-	return t, err
-}
-
-// outDir returns the output directory: the one given, or a new temporary
-// one. It refuses a directory in the repository, so no answer of the lab
-// device lands in git.
-func outDir(dir string) (string, error) {
-	if dir == "" {
-		return os.MkdirTemp("", "applab-out-")
-	}
-	abs, err := filepath.Abs(dir)
-	if err != nil {
-		return "", err
-	}
-	if wd, err := os.Getwd(); err == nil {
-		if root, ok := repoRoot(wd); ok && insideRepo(abs, root) {
-			return "", fmt.Errorf("-out %s is inside the repository %s; give a directory outside it", abs, root)
-		}
-	}
-	return abs, os.MkdirAll(abs, 0o700)
-}
-
-// repoRoot is the nearest directory at or above dir that holds go.mod.
-func repoRoot(dir string) (string, bool) {
-	for {
-		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
-			return dir, true
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			return "", false
-		}
-		dir = parent
-	}
-}
-
-// command runs one command with extra environment, its output to w.
-func command(ctx context.Context, w io.Writer, env []string, name string, args ...string) error {
-	//nolint:gosec // G204: the command and its arguments come from this tool.
-	cmd := exec.CommandContext(ctx, name, args...)
-	cmd.Env, cmd.Stdout, cmd.Stderr = append(os.Environ(), env...), w, w
-	return cmd.Run()
 }

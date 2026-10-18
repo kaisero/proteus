@@ -12,11 +12,12 @@ out=${1:-zone-snapshot.json}
 : "${PANOS_HOST:?set PANOS_HOST}"
 : "${PANOS_API_KEY:?set PANOS_API_KEY}"
 
+# Each call is a POST. The key goes only in the X-PAN-KEY header, which curl reads
+# from standard input, so the key is in no URL and on no command line.
 op() {
-  curl -sk --max-time 60 -G "https://$PANOS_HOST/api/" \
+  curl -sk --max-time 60 -H @- "https://$PANOS_HOST/api/" \
     --data-urlencode "type=op" \
-    --data-urlencode "cmd=$1" \
-    --data-urlencode "key=$PANOS_API_KEY"
+    --data-urlencode "cmd=$1" <<<"X-PAN-KEY: $PANOS_API_KEY"
 }
 
 # afi=both so a device with IPv6 routes reports them; the argument is declared by the

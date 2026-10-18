@@ -29,6 +29,16 @@
 # its comment block below holds the measured facts it relies on.
 set -uo pipefail
 
+# need_key_header <file>: stop the probe when the key header file cannot be
+# read, before the call that needs it, so no request goes out without its key.
+# The message names the path, never the key.
+need_key_header() {
+  if [ ! -f "$1" ] || [ ! -r "$1" ]; then
+    echo "device-probe: cannot read the key header file $1" >&2
+    exit 2
+  fi
+}
+
 routing_probe() {
   local dev=${1:?device} router=${2:?router}
   shift 2
@@ -261,6 +271,7 @@ for h in r.get("hops") or []:
           elif [ "$fz" = - ] || [ "$tz" = - ] || [ "$hsrc" = - ] || [ "$hdst" = - ]; then
             unprobed=$((unprobed + 1)); theirs="not probed (no zones)"
           else
+            need_key_header "${!header}"
             local cmd="<test><security-policy-match>"
             cmd+="<source>$(xml_escape "$hsrc")</source><destination>$(xml_escape "$hdst")</destination>"
             cmd+="<from>$(xml_escape "$fz")</from><to>$(xml_escape "$tz")</to>"
@@ -315,6 +326,7 @@ fi
 if [ "${1:-}" = "--nat" ]; then
   : "${PANOS_HOST:?set PANOS_HOST}"
   : "${PANOS_KEY_HEADER:?set PANOS_KEY_HEADER}"
+  need_key_header "$PANOS_KEY_HEADER"
   shift
   nat_probe "$@"
   exit 0
@@ -323,6 +335,7 @@ fi
 if [ "${1:-}" = "--routing" ]; then
   : "${PANOS_HOST:?set PANOS_HOST}"
   : "${PANOS_KEY_HEADER:?set PANOS_KEY_HEADER}"
+  need_key_header "$PANOS_KEY_HEADER"
   shift
   routing_probe "$@"
   exit 0
@@ -335,6 +348,7 @@ analyst=${3:-bin/proteus}
 
 : "${PANOS_HOST:?set PANOS_HOST}"
 : "${PANOS_KEY_HEADER:?set PANOS_KEY_HEADER}"
+need_key_header "$PANOS_KEY_HEADER"
 
 # Each probe is source destination from-zone to-zone application port, then the
 # rule it is aimed at. Zones and ports are taken from that rule, because
@@ -353,6 +367,24 @@ probes=(
   "198.18.0.5      198.18.10.100  client     server    ldap         389  shared-service-ad"
   "100.64.0.5      198.18.0.6     prisma     client    web-browsing 80   prisma-to-lab"
 )
+
+# library_rule reads the text answer of simulate policy on its standard input
+# and prints the rule to compare with the device's (internal/query FileAnswer):
+#   "first match: <rule> (<action>)"                    -> <rule>
+#   "first match: <rule> (<action>), default rule (...)" -> no-match, because
+#       the device names no default rule (measured on fw02, 2026-10-08)
+#   "no enabled rule matches"                           -> no-match
+#   "first certain match: ..." or "undecided: ..."      -> undecided: an earlier
+#       rule is held in doubt, so the library names no first match
+# Any other answer, such as an error, prints error.
+library_rule() {
+  awk '
+    /^first match: .*, default rule \(/ { ans = "no-match"; next }
+    /^first match: / { r = substr($0, 14); sub(/ \([^()]*\)$/, "", r); ans = r; next }
+    /^no enabled rule matches$/ { ans = "no-match"; next }
+    /^(first certain match|undecided): / { ans = "undecided"; next }
+    END { print (ans == "" ? "error" : ans) }'
+}
 
 device_match() {
   local src=$1 dst=$2 fz=$3 tz=$4 app=$5 port=$6
@@ -380,8 +412,7 @@ for p in "${probes[@]}"; do
   dev=$(device_match "$src" "$dst" "$fz" "$tz" "$app" "$port")
   lib=$("$analyst" simulate policy "$src" "$dst" --file "$cfg" --vsys "$vsys" \
         --from-zone "$fz" --to-zone "$tz" --port "$port" --application "$app" 2>/dev/null \
-        | sed -n 's/^first match: \([^ ]*\).*/\1/p')
-  lib=${lib:-no-match}
+        | library_rule)
   total=$((total + 1))
   if [ "$dev" = "$lib" ]; then
     agree=yes

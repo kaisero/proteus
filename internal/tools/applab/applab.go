@@ -4,24 +4,18 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"crypto/tls"
 	"encoding/json"
 	"encoding/xml"
 	"errors"
 	"fmt"
 	"io"
-	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
-	"time"
 
-	"github.com/okaiser/proteus/internal/config"
-	"github.com/okaiser/proteus/internal/estate"
-	"github.com/okaiser/proteus/internal/store"
+	"github.com/okaiser/proteus/internal/tools/labkit"
 )
 
 // The lab files, relative to the repository root.
@@ -32,10 +26,6 @@ const (
 	// FlowsFile is the flow list.
 	FlowsFile = "docs/lab/app-id-flows.tsv"
 )
-
-// vsysXPath is the vsys of a firewall that runs one vsys: a PAN-OS default
-// name, not lab data. Every line of the set file is below it.
-const vsysXPath = "/config/devices/entry[@name='localhost.localdomain']/vsys/entry[@name='vsys1']"
 
 // Flow is one line of the flow list, with its placeholders filled.
 type Flow struct {
@@ -53,51 +43,11 @@ const (
 	expectRefused = "refused"
 )
 
-var varKey = regexp.MustCompile(`^[A-Z][A-Z0-9_]*$`)
-
-// ReadVars reads KEY=value lines. A blank line and a line that starts with #
-// are skipped. A line without = is an error, and so is a key given twice.
-func ReadVars(r io.Reader) (map[string]string, error) {
-	out := map[string]string{}
-	sc := bufio.NewScanner(r)
-	for n := 1; sc.Scan(); n++ {
-		line := strings.TrimSpace(sc.Text())
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		k, v, ok := strings.Cut(line, "=")
-		k, v = strings.TrimSpace(k), strings.TrimSpace(v)
-		switch {
-		case !ok:
-			return nil, fmt.Errorf("variables line %d: want KEY=value", n)
-		case !varKey.MatchString(k):
-			return nil, fmt.Errorf("variables line %d: key %q: want upper case letters, digits and _", n, k)
-		case out[k] != "":
-			return nil, fmt.Errorf("variables line %d: %s is given twice", n, k)
-		}
-		out[k] = v
-	}
-	return out, sc.Err()
-}
-
-// placeholder is ${KEY} in a lab file.
-var placeholder = regexp.MustCompile(`\$\{([A-Z][A-Z0-9_]*)\}`)
-
-// Fill replaces each ${KEY} with its value from vars. An unknown key is an
-// error. A value is not read again for placeholders.
-func Fill(s string, vars map[string]string) (string, error) {
-	var missing []string
-	out := placeholder.ReplaceAllStringFunc(s, func(m string) string {
-		k := placeholder.FindStringSubmatch(m)[1]
-		v, ok := vars[k]
-		if !ok {
-			missing = append(missing, k)
-			return m
-		}
-		return v
-	})
-	if len(missing) > 0 {
-		return "", fmt.Errorf("no value for %s in %s", strings.Join(missing, ", "), VarsFile)
+// fill is labkit.Fill with the name of the variables file in its error.
+func fill(s string, vars map[string]string) (string, error) {
+	out, err := labkit.Fill(s, vars)
+	if err != nil {
+		return "", fmt.Errorf("%w in %s", err, VarsFile)
 	}
 	return out, nil
 }
@@ -129,7 +79,7 @@ func ReadFlows(r io.Reader, vars map[string]string) ([]Flow, error) {
 			header = true
 			continue
 		}
-		filled, err := Fill(line, vars)
+		filled, err := fill(line, vars)
 		if err != nil {
 			return nil, fmt.Errorf("flows line %d: %w", n, err)
 		}
@@ -306,16 +256,6 @@ func (a Answer) String() string {
 // 2026-10-16 P10).
 const unrecognized = "Unrecognized application"
 
-// implicitMarker is how the device marks a rule that matches the flow's
-// application through implicit use: "ssl/application-default(implicit)", as
-// observed on the lab VM, PAN-OS 12.1.9 (spec 2026-10-16 I1).
-const implicitMarker = "(implicit)"
-
-// implicitElement is the XML API form of the same mark: an <Implicit>
-// element right before the entry that matches through implicit use, as
-// observed on fw02, PAN-OS 12.2.3 (docs/lab/app-id-lab.md).
-const implicitElement = "Implicit"
-
 // ParseDevice reads the device's answer to DeviceCmd. err is the error of the
 // call; an "Unrecognized application" refusal, in the answer or in err, gives
 // Refused. An answer without a rule gives Rule "": the command never lists the
@@ -324,67 +264,13 @@ func ParseDevice(b []byte, err error) (Answer, error) {
 	if bytes.Contains(b, []byte(unrecognized)) || err != nil && strings.Contains(err.Error(), unrecognized) {
 		return Answer{Refused: true}, nil
 	}
-	if err != nil {
-		return Answer{}, err
-	}
-	var r struct {
-		Status string `xml:"status,attr"`
-		// PAN-OS writes a message as <msg>text</msg> or as
-		// <msg><line>text</line></msg>.
-		Msg struct {
-			Text  string   `xml:",chardata"`
-			Lines []string `xml:"line"`
-		} `xml:"msg"`
-		// Items keeps the children of rules in order, so an <Implicit>
-		// element marks the entry after it.
-		Result struct {
-			Rules struct {
-				Items []struct {
-					XMLName xml.Name
-					Name    string `xml:"name,attr"`
-					Text    string `xml:",chardata"`
-					Action  string `xml:"action"`
-					Inner   string `xml:",innerxml"`
-				} `xml:",any"`
-			} `xml:"rules"`
-		} `xml:"result"`
-	}
-	if err := xml.Unmarshal(b, &r); err != nil {
-		return Answer{}, fmt.Errorf("the device answer is not XML: %w", err)
-	}
-	if r.Status != "success" {
-		msg := strings.Join(strings.Fields(strings.Join(append(r.Msg.Lines, r.Msg.Text), " ")), " ")
-		return Answer{}, fmt.Errorf("the device refused the command: %s", msg)
-	}
-	// The first entry is the first match: on fw02 the answer can list more.
-	first, implicit := -1, false
-	items := r.Result.Rules.Items
-	for i, it := range items {
-		if it.XMLName.Local == "entry" {
-			first = i
-			implicit = i > 0 && items[i-1].XMLName.Local == implicitElement
-			break
-		}
-	}
-	if first < 0 {
-		return Answer{}, nil
-	}
-	e := items[first]
-	name := e.Name
-	if name == "" {
-		// An older answer gives the rule as text: "name; index: 3".
-		name, _, _ = strings.Cut(strings.TrimSpace(e.Text), ";")
-	}
-	a := Answer{Rule: strings.TrimSpace(name), Action: strings.TrimSpace(e.Action), Implicit: implicit || strings.Contains(e.Inner, implicitMarker)}
-	if a.Rule == "" || a.Action == "" {
-		return Answer{}, fmt.Errorf("the device answer names no rule or no action: %.200s", e.Inner)
-	}
-	return a, nil
+	p, err := labkit.ParsePolicyMatch(b, err)
+	return Answer{Rule: p.Rule, Action: p.Action, Implicit: p.Implicit}, err
 }
 
 // ParseProteus reads proteus simulate policy --output json. b is the
 // standard output for exit 0 and 3, and the standard error otherwise (see
-// proteusOutput). The bool says whether proteus decided. Exit 3 is an
+// labkit.ProteusOutput). The bool says whether proteus decided. Exit 3 is an
 // incomplete answer, such as an undecided one: its answer is on the standard
 // output. Exit 2 for the application is a refusal (spec 2026-10-16 §4.1,
 // P10); any other exit is an error.
@@ -392,13 +278,13 @@ func ParseProteus(b []byte, exit int) (Answer, bool, error) {
 	switch exit {
 	case 0, 3:
 	case 2:
-		msg := lastError(b)
+		msg := labkit.LastError(b)
 		if strings.HasPrefix(msg, "--application ") {
 			return Answer{Refused: true}, true, nil
 		}
 		return Answer{}, false, fmt.Errorf("proteus refused the flow (exit 2): %s", msg)
 	default:
-		return Answer{}, false, fmt.Errorf("proteus exit %d: %s", exit, lastError(b))
+		return Answer{}, false, fmt.Errorf("proteus exit %d: %s", exit, labkit.LastError(b))
 	}
 	var env struct {
 		Results []struct {
@@ -430,29 +316,6 @@ func ParseProteus(b []byte, exit int) (Answer, bool, error) {
 	}
 	implicit := len(r.Implicit) > 0 && string(r.Implicit) != "null"
 	return Answer{Rule: r.Rule, Action: r.FirstMatch.Action, Implicit: implicit}, true, nil
-}
-
-// proteusOutput is the output ParseProteus reads: the standard output for
-// an answer, exit 0 or 3, the standard error for a refusal or an error.
-func proteusOutput(stdout, stderr []byte, exit int) []byte {
-	if exit == 0 || exit == 3 {
-		return stdout
-	}
-	return stderr
-}
-
-// lastError is the error of the last JSON line of proteus's standard error,
-// or the last line as it stands.
-func lastError(b []byte) string {
-	lines := strings.Split(strings.TrimSpace(string(b)), "\n")
-	last := lines[len(lines)-1]
-	var line struct {
-		Error string `json:"error"`
-	}
-	if json.Unmarshal([]byte(last), &line) == nil && line.Error != "" {
-		return line.Error
-	}
-	return last
 }
 
 // Compare checks proteus's answer against the device's (spec 2026-10-16 §9.1).
@@ -488,156 +351,9 @@ func Compare(f Flow, device, proteus Answer, decided bool) error {
 	return nil
 }
 
-// checkOp refuses every op command but a <show> command and a
-// <test><security-policy-match> command, before it is sent. The command must
-// be one XML element: a second element after it would run too. This is the
-// R2 amendment for the lab tool (AGENTS.md R2, plan C7).
-func checkOp(cmd string) error {
-	refuse := func(why string) error {
-		return fmt.Errorf("applab: refusing op command %.80q: %s; only <show> and <test><security-policy-match> are allowed", cmd, why)
-	}
-	dec := xml.NewDecoder(strings.NewReader(cmd))
-	var root struct {
-		XMLName xml.Name
-		Kids    []struct {
-			XMLName xml.Name
-		} `xml:",any"`
-	}
-	if err := dec.Decode(&root); err != nil {
-		return refuse("not one XML element")
-	}
-	// Nothing may follow the element, and nothing may come before it.
-	if tok, err := dec.Token(); !errors.Is(err, io.EOF) || tok != nil || !strings.HasPrefix(cmd, "<") {
-		return refuse("more than one XML element")
-	}
-	switch {
-	case root.XMLName.Local == "show":
-		return nil
-	case root.XMLName.Local == "test" && len(root.Kids) == 1 && root.Kids[0].XMLName.Local == "security-policy-match":
-		return nil
-	}
-	return refuse("not a read-only command")
-}
-
-// errForbidden is a 403 from the device: the key is not valid, or its account
-// lacks the rights. The run stops at once.
-var errForbidden = errors.New("the device answered 403 Forbidden: the API key is not valid or its account " +
-	"lacks the op rights; renew the key header file")
-
-// device sends op commands to one firewall's XML API with an API key header.
-type device struct {
-	base   string
-	http   *http.Client
-	header string
-	key    string
-}
-
-// newDevice returns a client for the device at host. insecure skips the TLS
-// certificate check, as the inventory's insecure_tls says. timeout 0 means
-// 60 s.
-func newDevice(host string, insecure bool, timeout time.Duration, header, key string) *device {
-	if timeout == 0 {
-		timeout = 60 * time.Second
-	}
-	tr := http.DefaultTransport.(*http.Transport).Clone()
-	//nolint:gosec // G402: the inventory's insecure_tls opts out per device, for self-signed lab certificates.
-	tr.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12, InsecureSkipVerify: insecure}
-	return &device{base: "https://" + host + "/api/", http: &http.Client{Transport: tr, Timeout: timeout}, header: header, key: key}
-}
-
-// op sends one op command. checkOp runs first, so a refused command never
-// leaves this process. The answer comes back with an error for an HTTP error
-// status; a 403 is errForbidden. The key is in a header only, never in a URL
-// or an error.
-func (d *device) op(ctx context.Context, cmd string) ([]byte, error) {
-	if err := checkOp(cmd); err != nil {
-		return nil, err
-	}
-	form := url.Values{"type": {"op"}, "cmd": {cmd}}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, d.base, strings.NewReader(form.Encode()))
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set(d.header, d.key)
-	resp, err := d.http.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = resp.Body.Close() }()
-	b, err := io.ReadAll(resp.Body)
-	switch {
-	case err != nil:
-		return nil, err
-	case resp.StatusCode == http.StatusForbidden:
-		return nil, errForbidden
-	case resp.StatusCode >= 300:
-		return b, fmt.Errorf("the device answered HTTP %d", resp.StatusCode)
-	}
-	return b, nil
-}
-
-var headerName = regexp.MustCompile("^[!#$%&'*+.^_`|~0-9A-Za-z-]+$")
-
-// ReadKeyHeader reads the API key header file: one line "X-PAN-KEY: <key>".
-// An error never quotes the file, so the key cannot reach a log.
-func ReadKeyHeader(r io.Reader) (name, value string, err error) {
-	b, err := io.ReadAll(io.LimitReader(r, 64<<10))
-	if err != nil {
-		return "", "", err
-	}
-	lines := strings.Split(strings.TrimSpace(string(b)), "\n")
-	bad := errors.New("the key header file must hold one line: X-PAN-KEY: <key>")
-	if len(lines) != 1 {
-		return "", "", bad
-	}
-	name, value, ok := strings.Cut(lines[0], ":")
-	name, value = strings.TrimSpace(name), strings.TrimSpace(value)
-	if !ok || value == "" || !headerName.MatchString(name) {
-		return "", "", bad
-	}
-	return name, value, nil
-}
-
-// insideRepo reports whether dir is root or below it.
-func insideRepo(dir, root string) bool {
-	rel, err := filepath.Rel(root, dir)
-	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
-}
-
-// copySnapshot copies the latest snapshot of device in the store at root into
-// dst, for file mode (plan D18): the configuration as config.xml, the
-// predefined services as predefined.xml and the content file as apps.xml.gz.
-// It returns the content version.
-func copySnapshot(root, device, dst string) (string, error) {
-	sn, err := store.At(root).Latest(device)
-	if err != nil {
-		return "", err
-	}
-	content := sn.ContentPath()
-	if content == "" {
-		return "", fmt.Errorf("the snapshot of %s names no content version, so it has no application data", device)
-	}
-	for src, name := range map[string]string{
-		sn.Path(store.ConfigDoc):                     "config.xml",
-		filepath.Join(sn.Dir, config.PredefinedFile): config.PredefinedFile,
-		content: estate.AppsFile,
-	} {
-		b, err := os.ReadFile(src)
-		if err != nil {
-			return "", fmt.Errorf("the snapshot of %s lacks a file: %w", device, err)
-		}
-		//nolint:gosec // G703: name is one of the three fixed file names above.
-		if err := os.WriteFile(filepath.Join(dst, name), b, 0o600); err != nil {
-			return "", err
-		}
-	}
-	return sn.Meta.AppVersion, nil
-}
-
 // opSender sends one op command to the device.
 type opSender interface {
-	op(ctx context.Context, cmd string) ([]byte, error)
+	Op(ctx context.Context, cmd string) ([]byte, error)
 }
 
 // proteusRunner runs proteus with args and returns its standard output, its
@@ -657,8 +373,8 @@ func checkFlows(ctx context.Context, w io.Writer, out string, dev opSender, run 
 		if err := ctx.Err(); err != nil {
 			return diffs, err
 		}
-		b, derr := dev.op(ctx, DeviceCmd(f))
-		if errors.Is(derr, errForbidden) {
+		b, derr := dev.Op(ctx, DeviceCmd(f))
+		if errors.Is(derr, labkit.ErrForbidden) {
 			return diffs, derr
 		}
 		if err := os.WriteFile(filepath.Join(out, f.Case+".device.xml"), b, 0o600); err != nil {
@@ -668,7 +384,7 @@ func checkFlows(ctx context.Context, w io.Writer, out string, dev opSender, run 
 		if err != nil {
 			return diffs, fmt.Errorf("%s: proteus: %w", f.Case, err)
 		}
-		body := proteusOutput(stdout, stderr, exit)
+		body := labkit.ProteusOutput(stdout, stderr, exit)
 		if err := os.WriteFile(filepath.Join(out, f.Case+".proteus.json"), body, 0o600); err != nil {
 			return diffs, err
 		}

@@ -217,18 +217,3 @@ func TestRunStopsWhenTheFetchFails(t *testing.T) {
 		t.Errorf("exit %d\nstderr:\n%s", code, stderr.String())
 	}
 }
-
-func TestRepoRoot(t *testing.T) {
-	t.Parallel()
-	wd, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
-	r, ok := repoRoot(wd)
-	if !ok || r != filepath.Clean(filepath.Join(wd, root)) {
-		t.Errorf("repoRoot = %q, %v", r, ok)
-	}
-	if _, ok := repoRoot("/"); ok {
-		t.Error("/ has a go.mod")
-	}
-}
