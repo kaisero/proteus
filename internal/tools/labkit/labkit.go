@@ -305,7 +305,8 @@ func Command(ctx context.Context, w io.Writer, env []string, name string, args .
 // version. Each name in files is a file name: estate.AppsFile is the
 // snapshot's content file, and any other name is the file of that name in the
 // snapshot directory, such as config.xml, predefined.xml or identity.json.gz.
-// A missing file is an error, and nothing is copied then.
+// A missing file is an error, found before the first copy, so nothing is
+// copied then.
 func CopySnapshot(root, device, dst string, files []string) (string, error) {
 	sn, err := store.At(root).Latest(device)
 	if err != nil {
@@ -322,6 +323,9 @@ func CopySnapshot(root, device, dst string, files []string) (string, error) {
 			}
 		default:
 			src[i] = filepath.Join(sn.Dir, name)
+		}
+		if _, err := os.Stat(src[i]); err != nil {
+			return "", fmt.Errorf("the snapshot of %s lacks a file: %w", device, err)
 		}
 	}
 	for i, name := range files {

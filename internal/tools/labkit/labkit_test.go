@@ -499,8 +499,20 @@ func TestCopySnapshot(t *testing.T) {
 	if _, err := CopySnapshot(fakeSnapshot(t, false), "fw-test", t.TempDir(), []string{"apps.xml.gz"}); err == nil || !strings.Contains(err.Error(), "content") {
 		t.Errorf("no content file: %v", err)
 	}
-	if _, err := CopySnapshot(st, "fw-test", t.TempDir(), []string{"none.xml"}); err == nil || !strings.Contains(err.Error(), "lacks a file") {
+	// A missing second file is found before the first file is copied.
+	dst = t.TempDir()
+	if _, err := CopySnapshot(st, "fw-test", dst, []string{"config.xml", "none.xml"}); err == nil || !strings.Contains(err.Error(), "lacks a file") {
 		t.Errorf("a missing file: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dst, "config.xml")); !os.IsNotExist(err) {
+		t.Errorf("config.xml was copied before the missing file stopped the copy: %v", err)
+	}
+	// A directory passes the check but cannot be read.
+	if err := os.Mkdir(filepath.Join(st, "fw-test", "2026-10-17T10-00-00Z", "adir"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := CopySnapshot(st, "fw-test", t.TempDir(), []string{"adir"}); err == nil || !strings.Contains(err.Error(), "lacks a file") {
+		t.Errorf("a directory: %v", err)
 	}
 	for _, name := range []string{"../meta.json", "a/config.xml", "..", ""} {
 		if _, err := CopySnapshot(st, "fw-test", t.TempDir(), []string{name}); err == nil || !strings.Contains(err.Error(), "not a file name") {

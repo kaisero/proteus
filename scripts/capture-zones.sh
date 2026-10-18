@@ -13,11 +13,13 @@ out=${1:-zone-snapshot.json}
 : "${PANOS_API_KEY:?set PANOS_API_KEY}"
 
 # Each call is a POST. The key goes only in the X-PAN-KEY header, which curl reads
-# from standard input, so the key is in no URL and on no command line.
+# from a pipe on standard input. printf is a builtin, so the key is in no URL, on
+# no command line and in no file. A here-string can go through a temporary file.
 op() {
-  curl -sk --max-time 60 -H @- "https://$PANOS_HOST/api/" \
-    --data-urlencode "type=op" \
-    --data-urlencode "cmd=$1" <<<"X-PAN-KEY: $PANOS_API_KEY"
+  printf 'X-PAN-KEY: %s\n' "$PANOS_API_KEY" \
+    | curl -sk --max-time 60 -H @- "https://$PANOS_HOST/api/" \
+      --data-urlencode "type=op" \
+      --data-urlencode "cmd=$1"
 }
 
 # afi=both so a device with IPv6 routes reports them; the argument is declared by the
