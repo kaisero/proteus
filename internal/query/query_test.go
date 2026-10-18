@@ -1,12 +1,14 @@
 package query
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/okaiser/proteus/internal/config"
 	"github.com/okaiser/proteus/internal/estate"
 	"github.com/okaiser/proteus/internal/reason"
 	"github.com/okaiser/proteus/internal/simulate"
@@ -128,5 +130,63 @@ func TestEchoes(t *testing.T) {
 		if err != nil || !strings.Contains(string(b), tc.want) {
 			t.Errorf("%T: %s %v, want %s", tc.got, b, err, tc.want)
 		}
+	}
+}
+
+// The merge of the pushed template adds template values and changes no local
+// node (spec 2026-10-17 §2.5): for each name of firewall-lab.xml, search and
+// lookup answer the same on the fixture and on its merge, the synthetic
+// template copy of net-home included. The template's zone is found on the
+// merge only.
+func TestMergedAnswersEqualOnLocalNodes(t *testing.T) {
+	t.Parallel()
+	lab, merged := fixture("firewall-lab.xml"), fixture("firewall-lab-merged.xml")
+	cfg, _, err := config.Load(lab)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	var walk func(el *config.Element)
+	walk = func(el *config.Element) {
+		if n := el.Attr("name"); n != "" && el.Name == "entry" {
+			names = append(names, n)
+		}
+		for _, c := range el.Children {
+			walk(c)
+		}
+	}
+	walk(cfg.Root())
+	if len(names) < 10 {
+		t.Fatalf("names: %v", names)
+	}
+	answer := func(file, name string) string {
+		s, err := Search(context.Background(), Env{}, SearchInput{Term: name, Selection: Selection{File: file}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		l, err := Lookup(context.Background(), Env{}, LookupInput{Name: name, Selection: Selection{File: file}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		b, err := json.Marshal([]any{s.Results, s.Unresolved, s.Summary, l.Results, l.Unresolved, l.Summary})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(b)
+	}
+	for _, name := range names {
+		if a, b := answer(lab, name), answer(merged, name); a != b {
+			t.Errorf("%s: the answers differ\nfixture %s\nmerge   %s", name, a, b)
+		}
+	}
+	zone := func(file string) int {
+		s, err := Search(context.Background(), Env{}, SearchInput{Term: "tpl-zone", Selection: Selection{File: file}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return len(s.Results)
+	}
+	if zone(lab) != 0 || zone(merged) == 0 {
+		t.Errorf("tpl-zone: %d findings on the fixture, %d on the merge", zone(lab), zone(merged))
 	}
 }

@@ -266,3 +266,33 @@ func TestDiffNotesTheContentVersion(t *testing.T) {
 		}
 	}
 }
+
+// Two snapshots whose configurations come from different sources give a note:
+// across the switch from the export to the running configuration and its
+// template, template values show as added once. A snapshot without the key
+// exported its configuration (spec 2026-10-17 §2.4).
+func TestDiffNotesTheConfigSourceChange(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		older, newer string
+		want         string
+	}{
+		{"", "running+template", "configuration source export → running+template"},
+		{"export", "running+template", "configuration source export → running+template"},
+		{"running", "running+template", "configuration source running → running+template"},
+		{"running+template", "running+template", ""},
+		{"", "export", ""},
+	} {
+		l := newLab(t)
+		l.write(store.Meta{Device: "fw01", ConfigSource: tc.older}, pathlab.Read(t, fixture("firewall-lab.xml")))
+		l.write(store.Meta{Device: "fw01", ConfigSource: tc.newer}, pathlab.Read(t, fixture("firewall-lab-merged.xml")))
+		e, err := SnapshotDiff(context.Background(), l.env(), DiffInput{Selection: Selection{Device: []string{"fw01"}}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		n, ok := noteWith(e.Notes, "note.config-source-changed")
+		if ok != (tc.want != "") || ok && (!strings.HasPrefix(n.Note, tc.want+": ") || n.Device != "fw01") {
+			t.Errorf("%q → %q: notes %+v", tc.older, tc.newer, e.Notes)
+		}
+	}
+}

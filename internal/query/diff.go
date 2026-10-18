@@ -124,6 +124,13 @@ func SnapshotDiff(ctx context.Context, env Env, in DiffInput) (Envelope[DiffInpu
 			e.Notes = append(e.Notes, NoteOf(d, "", reason.New("note.app-version-changed",
 				fmt.Sprintf("content version %s → %s", was, now))))
 		}
+		// Across a change of the configuration source, template values show as
+		// added and the uncommitted changes of an export as removed, once
+		// (spec 2026-10-17 §2.4).
+		if was, now := configSource(older.Meta), configSource(newer.Meta); was != now {
+			e.Notes = append(e.Notes, NoteOf(d, "", reason.New("note.config-source-changed", fmt.Sprintf(
+				"configuration source %s → %s: template values and uncommitted changes show as added or removed once", was, now))))
+		}
 		was, err1 := env.configs().Config(older)
 		now, err2 := env.configs().Config(newer)
 		if err1 != nil || err2 != nil {
@@ -151,6 +158,16 @@ func SnapshotDiff(ctx context.Context, env Env, in DiffInput) (Envelope[DiffInpu
 	e.Summary.Answer = diffCount(e.Summary, len(e.Holes))
 	cutChanges(&e, in.ResultLimit)
 	return e, nil
+}
+
+// configSource is where a snapshot's configuration came from. A snapshot
+// without the key exported it: every fetch before the switch did (spec
+// 2026-10-17 §2.4).
+func configSource(m store.Meta) string {
+	if m.ConfigSource == "" {
+		return "export"
+	}
+	return m.ConfigSource
 }
 
 // cutChanges keeps the first Limit changes of a complete answer, in its

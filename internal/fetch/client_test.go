@@ -226,6 +226,13 @@ func TestOnlyReadCalls(t *testing.T) {
 	if n := len(d.Requests()); n != 1 {
 		t.Errorf("a refused command reached the device: %d requests", n)
 	}
+	// The configuration and the pushed template are show commands (spec
+	// 2026-10-17 §2.1), so the guard lets them through.
+	for _, cmd := range []string{runningConfigCmd, pushedTemplateCmd} {
+		if err := showOnly(cmd); err != nil {
+			t.Errorf("showOnly(%q): %v", cmd, err)
+		}
+	}
 	var methods []string
 	ty := reflect.TypeFor[*Client]()
 	for method := range ty.Methods() {

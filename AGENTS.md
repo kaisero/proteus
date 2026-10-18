@@ -27,9 +27,10 @@ A loaded index is immutable once built. A reload produces a new index and
 replaces the pointer.
 
 The fetcher is the one package of proteus that talks to a device. It asks for an
-API key, runs `<show>` commands and exports the configuration; `fetch.Client`
-refuses any other op command before it reaches the device, and has no method for
-anything else.
+API key and runs `<show>` commands, among them `show config running` and
+`show config pushed-template`; it exports the configuration only when the device
+refuses `show config running`. `fetch.Client` refuses any other op command before
+it reaches the device, and has no method for anything else.
 
 One lab tool also talks to a device, by owner decision (spec 2026-10-16 §9.1,
 plan C7): `internal/tools/applab`, which `make app-lab` runs by hand, never in CI.

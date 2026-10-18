@@ -73,12 +73,16 @@ const OrderSuffix = " order"
 // uuid: as observed on fw01 (PAN-OS 11.2.5, 2026-10-08), rule entries carry a
 // uuid attribute. admin, time and dirtyId name the administrator and the time
 // of an uncommitted change; they are ignored when they occur (owner decision
-// for snapshot diff, 2026-10-10; not yet seen on a lab device).
+// for snapshot diff, 2026-10-10; not yet seen on a lab device). ptpl marks a
+// value that a Panorama template pushed, and src a template node of a
+// configuration get, as observed on fw01, PAN-OS 11.2.5 (spec 2026-10-17 C2).
 var ignoredAttrs = map[string]bool{
 	"uuid":    true,
 	"admin":   true,
 	"time":    true,
 	"dirtyId": true,
+	"ptpl":    true,
+	"src":     true,
 }
 
 // Compare returns what differs between two configurations in one scope, sorted by

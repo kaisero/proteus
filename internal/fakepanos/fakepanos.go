@@ -1,7 +1,8 @@
 // Package fakepanos is a stand-in PAN-OS XML API for tests. It answers keygen, a
-// fixed set of show commands, the predefined services, the App-ID data and a
-// configuration export over TLS on 127.0.0.1, and records every request so a test can check what was
-// sent and what was not.
+// fixed set of show commands, the running configuration, the pushed template,
+// the predefined services, the App-ID data and a configuration export over TLS
+// on 127.0.0.1, and records every request so a test can check what was sent
+// and what was not.
 package fakepanos
 
 import (
@@ -20,16 +21,25 @@ type Device struct {
 	// Ops maps a show command to the full response body the device returns for it.
 	// A command not listed gets the device's syntax-error refusal.
 	Ops map[string]string
-	// Config is the body of a configuration export.
+	// Config is the configuration: the body of an export, and the config
+	// element of the answer to RunningConfigCmd, unless Ops names the command.
 	Config string
+	// Template is the template element of the answer to PushedTemplateCmd,
+	// unless Ops names the command. Empty answers NoTemplate, as a device
+	// without a template does.
+	Template string
 	// DropFirst closes the connection without an answer on the first N requests,
 	// which a client sees as a transport error.
 	DropFirst int
+	// DropCmd maps an op command to the number of its requests to drop without
+	// an answer, which a client sees as a transport error.
+	DropCmd map[string]int
 	// TruncateFirst promises a longer body than it sends on the first N
 	// requests, then closes the connection, which a client sees while reading.
 	TruncateFirst int
-	// Stall names a request type, such as "export", that the device never answers:
-	// it waits until the client gives up, as a hung device does.
+	// Stall names a request type, such as "export", or an op command that the
+	// device never answers: it waits until the client gives up, as a hung
+	// device does.
 	Stall string
 
 	mu       sync.Mutex
@@ -80,6 +90,18 @@ const Containers = `<response status="success"><result><application-container>` 
 	`<member>office-docs</member><member>office-mail</member></functions></entry>` +
 	`</application-container></result></response>`
 
+// RunningConfigCmd and PushedTemplateCmd ask a device for its running
+// configuration and for the template that Panorama pushed to it (spec
+// 2026-10-17 C9, C12).
+const (
+	RunningConfigCmd  = "<show><config><running/></config></show>"
+	PushedTemplateCmd = "<show><config><pushed-template/></config></show>"
+)
+
+// NoTemplate is the answer to PushedTemplateCmd of a device without a
+// template, as fw02 gave it on PAN-OS 12.2.3 (spec 2026-10-17 C7).
+const NoTemplate = `<response status="success"><result>No template pushed to device</result></response>`
+
 // defaults are the answers every fake device gives unless Ops names the
 // command.
 var defaults = map[string]string{
@@ -123,9 +145,13 @@ func (d *Device) serve(w http.ResponseWriter, r *http.Request) {
 		Method: r.Method, Type: r.Form.Get("type"), Cmd: r.Form.Get("cmd"),
 		Key: r.Header.Get("X-PAN-KEY"), RawQuery: r.URL.RawQuery, Body: string(body),
 	})
+	cmd := r.Form.Get("cmd")
 	drop := d.DropFirst > 0
 	if drop {
 		d.DropFirst--
+	} else if d.DropCmd[cmd] > 0 {
+		d.DropCmd[cmd]--
+		drop = true
 	}
 	truncate := !drop && d.TruncateFirst > 0
 	if truncate {
@@ -133,7 +159,7 @@ func (d *Device) serve(w http.ResponseWriter, r *http.Request) {
 	}
 	d.mu.Unlock()
 
-	if d.Stall != "" && r.Form.Get("type") == d.Stall {
+	if d.Stall != "" && (r.Form.Get("type") == d.Stall || cmd == d.Stall) {
 		<-r.Context().Done()
 		return
 	}
@@ -174,9 +200,9 @@ func (d *Device) serve(w http.ResponseWriter, r *http.Request) {
 	}
 	switch r.Form.Get("type") {
 	case "op":
-		resp, ok := d.Ops[r.Form.Get("cmd")]
+		resp, ok := d.Ops[cmd]
 		if !ok {
-			resp, ok = defaults[r.Form.Get("cmd")]
+			resp, ok = d.answer(cmd)
 		}
 		if !ok {
 			_, _ = io.WriteString(w, Refusal("17", "show -> invalid syntax"))
@@ -194,4 +220,20 @@ func (d *Device) serve(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		_, _ = io.WriteString(w, Refusal("400", "unsupported type"))
 	}
+}
+
+// answer is the device's own answer to an op command that Ops does not name:
+// the running configuration, the pushed template, or a default.
+func (d *Device) answer(cmd string) (string, bool) {
+	switch cmd {
+	case RunningConfigCmd:
+		return Success(d.Config), true
+	case PushedTemplateCmd:
+		if d.Template == "" {
+			return NoTemplate, true
+		}
+		return Success(d.Template), true
+	}
+	resp, ok := defaults[cmd]
+	return resp, ok
 }

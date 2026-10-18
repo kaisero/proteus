@@ -252,6 +252,65 @@ func TestFetchWithoutThePredefinedServicesIsComplete(t *testing.T) {
 	}
 }
 
+// meta.json names where the configuration came from (spec 2026-10-17 §2.1): the
+// running configuration merged with the pushed template, kept as template.xml;
+// the running configuration of a device without a template, with no note (C7);
+// or the export of a device that refuses show config running, with its note. A
+// template lost to the network makes the fetch incomplete.
+func TestFetchRecordsTheConfigSource(t *testing.T) {
+	t.Parallel()
+	template := read(t, fixture("firewall-lab-template.xml"))
+	for name, tc := range map[string]struct {
+		device func(d *fakepanos.Device)
+		code   int
+		source string
+		note   string
+		file   bool
+	}{
+		"template":    {func(d *fakepanos.Device) { d.Template = template }, 0, "running+template", "", true},
+		"no template": {func(*fakepanos.Device) {}, 0, "running", "", false},
+		"refused": {func(d *fakepanos.Device) {
+			d.Ops[fakepanos.RunningConfigCmd] = fakepanos.Refusal("17", "show -> config is unexpected")
+		}, 0, "export", "note.config-not-running", false},
+		"dropped": {func(d *fakepanos.Device) {
+			d.Template = template
+			d.DropCmd = map[string]int{fakepanos.PushedTemplateCmd: 2}
+		}, exitIncomplete, "running", "", false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			d := lab(t)
+			tc.device(d)
+			c := newCLI(t)
+			c.inventory(inventoryFor(d.Start(t)))
+			out := c.want(tc.code, "fetch", "fw01", "--output", "json")
+			var notes []string
+			for _, n := range fetchNotes(t, out) {
+				if n.Code != "note.tls-off" {
+					notes = append(notes, string(n.Code))
+				}
+			}
+			if got := strings.Join(notes, ","); got != tc.note {
+				t.Errorf("notes %s, want %q", got, tc.note)
+			}
+			sn, err := store.At(c.env["PROTEUS_STORE"]).Latest("fw01")
+			if err != nil {
+				t.Fatal(err)
+			}
+			b, err := os.ReadFile(filepath.Join(sn.Dir, "meta.json"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if sn.Meta.ConfigSource != tc.source || !strings.Contains(string(b), `"config_source": "`+tc.source+`"`) {
+				t.Errorf("source %q, meta.json:\n%s", sn.Meta.ConfigSource, b)
+			}
+			if _, err := os.Stat(sn.Path(fetch.PushedTemplate.Name)); (err == nil) != tc.file {
+				t.Errorf("template.xml: %v, want stored %v", err, tc.file)
+			}
+		})
+	}
+}
+
 // cli runs proteus against a temporary inventory and store.
 type cli struct {
 	t       *testing.T
@@ -1028,28 +1087,33 @@ func TestSearchRefusesAnUnknownKind(t *testing.T) {
 // device stored, and TestMain's leak check proves no goroutine is left behind.
 func TestACancelledFanOutEndsPromptly(t *testing.T) {
 	t.Parallel()
-	hung := lab(t)
-	hung.Stall = "export"
-	inv, err := inventory.Parse(strings.NewReader(inventoryFor(lab(t).Start(t), hung.Start(t))))
-	if err != nil {
-		t.Fatal(err)
-	}
-	st, err := store.Open(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-	start := time.Now()
-	out, err := fetchText(ctx, fetcher{inv: inv, st: st, getenv: getenv}, "fw01", "fw02")
-	if elapsed := time.Since(start); elapsed > 20*time.Second {
-		t.Fatalf("the fan-out took %s after its context ended", elapsed)
-	}
-	if !errors.Is(err, errIncomplete) {
-		t.Errorf("one device stored and one cancelled is an incomplete fetch, got %v\n%s", err, out)
-	}
-	if _, err := st.Latest("fw01"); err != nil {
-		t.Errorf("the device that answered must be stored: %v", err)
+	for _, stall := range []string{fakepanos.RunningConfigCmd, fakepanos.PushedTemplateCmd} {
+		t.Run(stall, func(t *testing.T) {
+			t.Parallel()
+			hung := lab(t)
+			hung.Stall = stall
+			inv, err := inventory.Parse(strings.NewReader(inventoryFor(lab(t).Start(t), hung.Start(t))))
+			if err != nil {
+				t.Fatal(err)
+			}
+			st, err := store.Open(t.TempDir())
+			if err != nil {
+				t.Fatal(err)
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			start := time.Now()
+			out, err := fetchText(ctx, fetcher{inv: inv, st: st, getenv: getenv}, "fw01", "fw02")
+			if elapsed := time.Since(start); elapsed > 20*time.Second {
+				t.Fatalf("the fan-out took %s after its context ended", elapsed)
+			}
+			if !errors.Is(err, errIncomplete) {
+				t.Errorf("one device stored and one cancelled is an incomplete fetch, got %v\n%s", err, out)
+			}
+			if _, err := st.Latest("fw01"); err != nil {
+				t.Errorf("the device that answered must be stored: %v", err)
+			}
+		})
 	}
 }
 
@@ -1093,10 +1157,14 @@ func TestFetchWhyShowsTheStages(t *testing.T) {
 	c := newCLI(t)
 	c.inventory(inventoryFor(lab(t).Start(t)))
 	out := c.want(0, "fetch", "fw01", "--why")
-	for _, slug := range []string{"resolve", "login", "ha", "documents", "applications", "store"} {
+	for _, slug := range []string{"resolve", "login", "ha", "documents", "template", "applications", "store"} {
 		if !strings.Contains(out, "  "+slug+" ") {
 			t.Errorf("missing stage %s:\n%s", slug, out)
 		}
+	}
+	// The command's help lists the stages in the order they run.
+	if long := newApp(nil, nil, getenv, nil).fetchCmd().Long; !strings.Contains(long, "documents, template, applications") {
+		t.Errorf("fetch help: %s", long)
 	}
 }
 

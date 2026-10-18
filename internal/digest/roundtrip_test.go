@@ -128,6 +128,31 @@ func TestReadRefusesAnOlderFormat(t *testing.T) {
 	}
 }
 
+// The template-object mark survives the round trip on the nodes the schema
+// marks only. A digest of format 2 has no mark, so a merge would take each
+// template object by its children: it is refused (spec 2026-10-17 C11).
+func TestDigestKeepsTheTemplateObjectMark(t *testing.T) {
+	t.Parallel()
+	got, err := Read(bytes.NewReader(encoded(t)))
+	if err != nil {
+		t.Fatalf("Read: %v", err)
+	}
+	address := got.Root.Child("shared").Child("address")
+	if !address.EntrySequence().TemplateObject || address.TemplateObject || got.Root.TemplateObject {
+		t.Error("tlo: the mark must survive on the address entry only")
+	}
+	if got.Root.Child("devices").EntrySequence().TemplateObject {
+		t.Error("tlo: devices/entry has no mark")
+	}
+	var buf bytes.Buffer
+	zw := gzip.NewWriter(&buf)
+	_, _ = zw.Write([]byte(`{"format":2,"platform":"firewall","version":"11.2.0","root":{"k":0,"n":"config"}}`))
+	_ = zw.Close()
+	if _, err := Read(&buf); err == nil || !strings.Contains(err.Error(), "format version 2, this build reads 3") {
+		t.Errorf("want a format error, got %v", err)
+	}
+}
+
 func TestWriteIsGzipped(t *testing.T) {
 	t.Parallel()
 	b := encoded(t)

@@ -92,6 +92,39 @@ func TestWriteFillsANamedDocument(t *testing.T) {
 	}
 }
 
+// meta.json names the source of the configuration (spec 2026-10-17 §2.1). A
+// fetch without the configuration has none, and the key is left out.
+func TestMetaConfigSourceRoundTrip(t *testing.T) {
+	t.Parallel()
+	s := open(t)
+	with, err := s.Write(Meta{Device: "fw01", ConfigSource: "running+template"}, docs(t, false), 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	without, err := s.Write(Meta{Device: "fw01"}, map[string][]byte{}, 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		sn   Snapshot
+		want string
+	}{{with, "running+template"}, {without, ""}} {
+		sn, want := tc.sn, tc.want
+		got, err := s.Get("fw01", sn.ID)
+		if err != nil || got.Meta.ConfigSource != want {
+			t.Errorf("%s: source %q, %v; want %q", sn.ID, got.Meta.ConfigSource, err, want)
+		}
+		b, err := os.ReadFile(filepath.Join(sn.Dir, "meta.json"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if has := strings.Contains(string(b), `"config_source": "running+template"`); has != (want != "") ||
+			want == "" && strings.Contains(string(b), "config_source") {
+			t.Errorf("%s: meta.json:\n%s", sn.ID, b)
+		}
+	}
+}
+
 // Nothing can be analysed without the configuration, so a fetch that lost it is
 // kept for the record but never becomes latest.
 func TestLatestMovesOnlyWithAConfiguration(t *testing.T) {

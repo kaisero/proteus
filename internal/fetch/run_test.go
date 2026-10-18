@@ -54,6 +54,7 @@ func arrived(r Result, name string) bool {
 func TestRunFetchesEveryDocument(t *testing.T) {
 	t.Parallel()
 	d := fullDevice(t)
+	d.Template = string(readFile(t, templateFile))
 	res, err := run(context.Background(), target(d.Start(t)), Documents, ActiveOptions{}, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -170,17 +171,26 @@ func TestAFailedDocumentIsWarnedAboutOnce(t *testing.T) {
 // proves it leaves no goroutine behind.
 func TestACancelledRunEndsPromptly(t *testing.T) {
 	t.Parallel()
-	d := fullDevice(t)
-	d.Stall = "export"
-	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
-	defer cancel()
-	start := time.Now()
-	res, err := run(ctx, target(d.Start(t)), Documents, ActiveOptions{}, nil)
-	if elapsed := time.Since(start); elapsed > 10*time.Second {
-		t.Fatalf("the run took %s after its context ended", elapsed)
-	}
-	if err == nil && arrived(res, RunningConfig.Name) {
-		t.Error("the stalled export cannot have succeeded")
+	for cmd, doc := range map[string]string{
+		fakepanos.RunningConfigCmd:  RunningConfig.Name,
+		fakepanos.PushedTemplateCmd: PushedTemplate.Name,
+	} {
+		t.Run(doc, func(t *testing.T) {
+			t.Parallel()
+			d := fullDevice(t)
+			d.Template = "<template><name>tpl-stack</name><config><shared/></config></template>"
+			d.Stall = cmd
+			ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+			defer cancel()
+			start := time.Now()
+			res, err := run(ctx, target(d.Start(t)), Documents, ActiveOptions{}, nil)
+			if elapsed := time.Since(start); elapsed > 10*time.Second {
+				t.Fatalf("the run took %s after its context ended", elapsed)
+			}
+			if err == nil || arrived(res, doc) {
+				t.Errorf("the stalled %s cannot have succeeded: %v", doc, err)
+			}
+		})
 	}
 }
 
@@ -249,7 +259,8 @@ func TestARefusedPredefinedDocumentIsANote(t *testing.T) {
 				t.Fatalf("no documents step: %+v", recs)
 			}
 			docs := recs[i]
-			if docs.Status != task.OK || docs.Detail != "6 of 7 documents" ||
+			// The template counts: the device answers that it has none (C7).
+			if docs.Status != task.OK || docs.Detail != "7 of 8 documents" ||
 				len(docs.Notes) != 1 || docs.Notes[0].Code != "note.fetch-predefined-missing" {
 				t.Errorf("documents step = %+v", docs)
 			}

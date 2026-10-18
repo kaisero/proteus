@@ -24,7 +24,7 @@
       "documents": [
         {
           "name": "config",
-          "bytes": 2993
+          "bytes": 2992
         },
         {
           "name": "system-info",
@@ -77,7 +77,14 @@
           "slug": "documents",
           "name": "fetch the documents",
           "status": "ok",
-          "detail": "7 of 7 documents",
+          "detail": "8 of 8 documents",
+          "elapsed_ms": 0
+        },
+        {
+          "slug": "template",
+          "name": "merge the pushed template",
+          "status": "ok",
+          "detail": "no template pushed to the device",
           "elapsed_ms": 0
         },
         {

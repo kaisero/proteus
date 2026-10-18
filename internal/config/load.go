@@ -170,6 +170,19 @@ func loadDigest() (*loadedSchema, error) {
 	return schemaLoaded, schemaErr
 }
 
+// SchemaRoot returns the root of the embedded schema digest, decoded once and
+// shared with every load. fetch reads the template-object marks there to merge
+// a pushed template (spec 2026-10-17 §2.2, AGENTS.md R1).
+func SchemaRoot() (*schema.Node, error) { return rootOf(loadDigest()) }
+
+// rootOf is the root of a decoded digest, or the error that decoding gave.
+func rootOf(s *loadedSchema, err error) (*schema.Node, error) {
+	if err != nil {
+		return nil, err
+	}
+	return s.root, nil
+}
+
 // readDigest decodes the digest in fsys and builds its tables.
 func readDigest(fsys fs.FS) (*loadedSchema, error) {
 	f, err := fsys.Open("schemadigest/" + digest.Filename)

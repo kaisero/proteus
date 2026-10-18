@@ -26,6 +26,12 @@ type Result struct {
 	// Apps is the device's App-ID data: nil when the device refused it or the
 	// step failed.
 	Apps *AppData
+	// ConfigSource names where the configuration came from: "running+template",
+	// "running", "export+template" or "export". The first word names the base,
+	// the export after a fallback; +template says that the merge used the
+	// pushed template. It is empty when the configuration did not arrive (spec
+	// 2026-10-17 §2.1).
+	ConfigSource string
 }
 
 // AppData is the App-ID data of one fetch (spec 2026-10-16 §2.2).

@@ -233,6 +233,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **A snapshot holds the template values the firewall runs.** `fetch` now merges
+  the template that Panorama pushed into the running configuration, so zones,
+  profiles and identity sources of a template are part of each snapshot; the
+  first `snapshot diff` after the change shows them as added, with a note.
 - **`--application` sets the protocol.** Without `--protocol`, `simulate policy
   --application` now uses the application's default protocol instead of `tcp`.
 - **A protocol without ports skips rules with custom services.** On ICMP or
@@ -325,6 +329,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A snapshot no longer holds uncommitted changes.** `fetch` now reads the
+  running configuration of each firewall; the configuration export that it read
+  before also held the changes that an admin had not committed yet.
 - **NAT matches a service group through any member that holds the port.** A
   group with a member the snapshot does not define, such as `service-https`
   without the predefined services, now matches a port another member holds, as

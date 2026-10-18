@@ -103,6 +103,11 @@ type Meta struct {
 	// active peer of a device found passive.
 	FetchedFrom string   `json:"fetched_from,omitempty"`
 	Notes       []string `json:"notes,omitempty"`
+	// ConfigSource names where config.xml came from: "running+template",
+	// "running", "export+template" or "export" (spec 2026-10-17 §2.1). It is
+	// empty when the configuration did not arrive, and in a snapshot from
+	// before the switch, which exported its configuration.
+	ConfigSource string `json:"config_source,omitempty"`
 }
 
 // DocumentMeta is what happened to one document.

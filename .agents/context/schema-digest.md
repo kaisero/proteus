@@ -21,7 +21,7 @@ describes. That is rule R1.
   It parses the proprietary grammar and writes a trimmed, gzipped JSON digest
   carrying its PAN-OS version and platform. It refuses a parse that found no
   `memberof` target, the failure mode that once cost a proof-of-concept cycle,
-  and one that marked no element `encrypt="yes"`.
+  and one that marked no element `encrypt="yes"` or `tlo="yes"`.
 
 ### Secrets
 
@@ -37,6 +37,16 @@ A registered path's `*` stands for one segment (`path.Match`), and
 digest. `schema.IsSecret` answers both. No secret is a
 reference (`config.TestNoSecretIsAReference`), so the walk, the index and search
 never see one; snapshot diff shows `(secret)` in its place.
+
+### Template objects
+
+The schema marks a template object `tlo="yes"` (470 elements in the 11.2 firewall
+schema): object entries such as a zone or a CIE profile, and nodes such as
+`deviceconfig/system/update-schedule/threats`. The device entry and the vsys entry
+have no mark. The parser keeps it as `Node.TemplateObject`, and the digest carries
+it (`tlo`). Digest format 3 added it; `digest.Read` refuses format 2.
+`fetch.MergeTemplate` reads it through `config.SchemaRoot()`: a local copy of a
+template object hides the template copy whole (spec 2026-10-17 C11).
 
 A Go model was once generated from the digest as well. Nothing read it, because
 `internal/config`, `resolve` and `index` walk the element tree through the digest,

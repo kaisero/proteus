@@ -46,7 +46,11 @@ a URL. A transport error is retried once; a refusal (HTTP 4xx, or
 `status="error"` with HTTP 200) is not.
 
 A `Document` is a name and a fetch function. `Documents` lists them:
-`config` (export), `system-info`, `interfaces`, `fib`, `rib`, `ha`, `predefined`.
+`config` (`show config running`), `template` (`show config pushed-template`),
+`system-info`, `interfaces`, `fib`, `rib`, `ha`, `predefined`. `config` has a
+`Fallback`: a device that refuses `show config running` is exported, with
+`note.config-not-running`, because the export holds the candidate (spec 2026-10-17
+C12).
 **Adding a fetcher is adding one `Document` value and listing it.** A document with
 `Optional` set is one a release may refuse: an API refusal, or an answer that fails
 `Optional.Check`, adds the `Optional.Refused` note to `Result.Notes`, stores
@@ -60,7 +64,9 @@ Advanced Routing device the legacy route command answers success with a deprecat
 text, so the Advanced Routing command must come first (verified on fw02).
 
 `Steps()` are a device's fetch as `internal/task` steps on a `State` (`NewState`):
-`login`, `ha`, `documents`, `applications`. The CLI runs them with `task.Run`, between its own
+`login`, `ha`, `documents`, `template`, `applications`. The `template` step merges
+the pushed template into `config` (`MergeTemplate`, spec 2026-10-17 §2.2: a local
+template object, leaf or member list wins) and sets `Result.ConfigSource`. The CLI runs them with `task.Run`, between its own
 `resolve` and `store` steps, with the device's name as the task's kind, so every
 error starts `<device>/<step>: `. A failed document is recorded in
 `Result.Outcomes` and the rest continue (spec S10); the `documents` step is then
@@ -176,6 +182,8 @@ type ActiveOptions struct{ ... }
 type AppData struct{ ... }
 type Client struct{ ... }
 type Document struct{ ... }
+type Fallback struct{ ... }
+type MergeStats struct{ ... }
 type Optional struct{ ... }
 type Outcome struct{ ... }
 type Result struct{ ... }
@@ -186,6 +194,7 @@ func (c *Client) ExportConfig(ctx context.Context) ([]byte, error)
 func (c *Client) Keygen(ctx context.Context, user, password string) error
 func (c *Client) Op(ctx context.Context, cmd string) ([]byte, error)
 func (e *APIError) Error() string
+func MergeTemplate(base, template []byte, root *schema.Node) ([]byte, MergeStats, error)
 func NewClient(t inventory.Target, log *runlog.Logger) *Client
 func NewState(t inventory.Target, docs []Document, opts ActiveOptions, log *runlog.Logger) State
 func OpDocument(name string, cmds ...string) Document
@@ -230,8 +239,9 @@ func Open(root string) (*Store, error)
   itself, because it cannot import `fetch` (R12). A test in `internal/cli`
   asserts they equal `fetch`'s names.
 - **Tests never touch a device.** `internal/fakepanos` serves keygen, show commands
-  and an export over TLS on 127.0.0.1, records every request, and can drop
-  connections to exercise the retry.
+  (the running configuration and the pushed template among them) and an export
+  over TLS on 127.0.0.1, records every request, and can drop connections, also
+  per command, to exercise the retry.
 - **Secrets stay out of output.** Errors never quote a password or a key; tests
   check both.
 

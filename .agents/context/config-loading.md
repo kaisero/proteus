@@ -148,6 +148,7 @@ func (r Report) String() string
 func (s Scope) String() string
 func Load(path string) (*Config, Report, error)
 func ParseScope(s string) (Scope, error)
+func SchemaRoot() (*schema.Node, error)
 ```
 <!-- /GENERATED:api -->
 

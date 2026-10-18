@@ -14,7 +14,7 @@ results:
     documents:
       - name: config
         file: config.xml
-        bytes: 3252
+        bytes: 3251
       - name: system-info
         file: system-info.xml
         bytes: 252
@@ -45,7 +45,7 @@ results:
     documents:
       - name: config
         file: config.xml
-        bytes: 3252
+        bytes: 3251
       - name: system-info
         file: system-info.xml
         bytes: 252
