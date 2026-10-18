@@ -1,0 +1,275 @@
+<?xml version="1.0"?>
+<sequence name="config" forward-compatible="no">
+  <sequence name="readonly" tlo="yes" optional="yes" internal="yes" hidden="yes" skip-validation="yes">
+</sequence>
+  <sequence name="shared" optional="yes" no-eol-for-set-cmd="yes" xpath="/config">
+    <array name="address" use-cache="yes" optional="yes" add_to_xml_object_cache="yes" prune-on="single-vsys-mode">
+      <sequence name="entry" apply_unused_child="yes" tlo="yes">
+        <validate expr="not(@name = '0.0.0.0')" err="0.0.0.0 is reserved and not allowed as the name of an address object" />
+        <attr-req name="name" type="string" maxlen="63" subtype="object-name" help-string="alphanumeric string [ 0-9a-zA-Z._-]">
+          <validate unique-cache="yes" uniquein="../entry/@name|../../address-group/entry/@name" />
+          <validate validator="disallow-keyword-any" err="name 'any' is disallowed" />
+        </attr-req>
+        <element name="description" optional="yes" type="string" minlen="0" maxlen="1023" />
+        <choice optional="no">
+          <element name="ip-netmask" type="ipspec" />
+          <element name="ip-range" type="iprangespec" />
+          <element name="ip-wildcard" type="ipdiscontmask" />
+          <element name="fqdn" type="string" minlen="1" maxlen="255" regex="^[a-zA-Z0-9_]([a-zA-Z0-9._-])+[a-zA-Z0-9]$" />
+        </choice>
+        <array name="tag" optional="yes" max-count="64" help-string="tags for address object" ui-field-hint="{ &quot;type&quot;: &quot;tag&quot; }" uiHint-fieldLabel="Tags">
+          <validate expr="not(../ip-wildcard)" err="tag is not supported for ip-wildcard type address" />
+          <element name="member" type="string" maxlen="127">
+            <validate>
+              <memberof type="tag" memberof="#config/shared/tag/entry/@name" />
+            </validate>
+            <validate uniquein="#tag/member" />
+          </element>
+        </array>
+        <element name="lbdns" optional="yes" type="bool" default="no">
+          <validate expr="(../fqdn)" err="lbdns is supported only for fqdn objects" />
+        </element>
+      </sequence>
+    </array>
+    <array name="address-group" use-cache="yes" apply_unused="yes" add_to_xml_object_cache="yes" optional="yes" prune-on="single-vsys-mode">
+      <sequence name="entry" tlo="yes">
+        <validate expr="not(./@name='any')" err="'any' is not allowed" />
+        <attr-req name="name" type="string" maxlen="63" subtype="object-name" help-string="alphanumeric string [ 0-9a-zA-Z._-]">
+          <validate unique-cache="yes" uniquein="../entry/@name|../../address/entry/@name" />
+        </attr-req>
+        <element name="description" optional="yes" type="string" minlen="0" maxlen="1023" />
+        <choice>
+          <array name="static">
+            <element name="member" type="string" maxlen="63">
+              <validate>
+                <memberof type="address" memberof="#config/shared/address/entry[not(ip-wildcard)]/@name" />
+                <memberof type="address-group" memberof="#config/shared/address-group/entry/@name" />
+                <memberof sans="../../../@name" />
+              </validate>
+              <validate uniquein="#static/member" />
+              <validate expr="count(../member) &gt; 0" err="Static address group cannot be empty" />
+              <validate expr="count(../member) &lt;= ../../../../../devices/entry/platform/limits/max-address-per-group" err="Maximum number of address per group exceeded for this platform" />
+            </element>
+          </array>
+          <sequence name="dynamic">
+            <validate validator="dyn-addr-grp-match-criteria-check" err="Invalid match criteria" />
+            <element name="filter" type="string" maxlen="2047" help-string="tag-based filter" />
+          </sequence>
+        </choice>
+        <array name="tag" optional="yes" max-count="64" help-string="tags for address group object" ui-field-hint="{ &quot;type&quot;: &quot;tag&quot; }" uiHint-fieldLabel="Tags">
+          <element name="member" type="string" maxlen="127">
+            <validate>
+              <memberof type="tag" memberof="#config/shared/tag/entry/@name" />
+            </validate>
+            <validate uniquein="#tag/member" />
+          </element>
+        </array>
+        <element name="cuid-tags-fetch-enable" optional="yes" hidden="yes" type="bool" default="no" help-string="Enable or disable fetching of Registered IPs from Cloud UserID for the tags configured in the match filters" />
+      </sequence>
+    </array>
+    <array name="certificate" optional="yes">
+      <sequence name="entry" tlo="yes">
+        <attr-req name="name" type="string" maxlen="63"/>
+        <element name="common-name" type="string" minlen="0" maxlen="255"/>
+        <choice>
+          <element name="private-key" optional="yes" type="string" maxlen="16384" encrypt="yes" double-encrypt="yes"/>
+          <element name="private-key-on-hsm" optional="yes" type="bool" default="no"/>
+        </choice>
+      </sequence>
+    </array>
+    <sequence name="local-user-database" optional="yes">
+      <array name="user" optional="yes">
+        <sequence name="entry" tlo="yes" in-tpl="yes">
+          <attr-req name="name" type="string" regex=".*" maxlen="31" help-string="User name"/>
+          <element name="phash" type="string" maxlen="63"/>
+          <element name="disabled" type="bool" optional="yes"/>
+        </sequence>
+      </array>
+    </sequence>
+  </sequence>
+  <array name="devices" optional="yes">
+    <sequence name="entry" alt-name="configuration for" max-count="1">
+      <attr-req name="name" type="string" maxlen="31" subtype="object-name" help-string="alphanumeric string [ 0-9a-zA-Z._-]">
+        <validate uniquein="../entry/@name" />
+      </attr-req>
+      <array name="vsys" complete-handler="vsys-name-completer" xpath="/config/devices/entry[@name='localhost.localdomain']">
+        <validate expr="count(./entry[@name='vsys1']) = 1" err="Cannot delete virtual system 'vsys1'" />
+        <sequence name="entry" max-count="255" no-rename="yes" use-task="yes">
+          <validate expr="count(../entry) &lt;= ../../platform/limits/licensed-vsys" err="Maximum number of virtual systems reached" />
+          <attr-req name="name" type="string" subtype="object-name" help-string="vsys name">
+            <validate validator="vsys-name-validator" err="Invalid vsys name" />
+            <validate uniquein="../entry/@name" />
+          </attr-req>
+          <sequence name="import" optional="yes" help-string="Import predefined configured resources">
+            <sequence name="network" optional="yes" help-string="Network configuration">
+              <array name="interface" optional="yes" help-string="Import interface">
+                <element name="member" type="string" affects="../../../../../zone">
+                  <validate>
+                    <memberof type="log-card" memberof="#myentry(devices)/network/interface/ethernet/entry/log-card/units/entry/@name" />
+                    <memberof type="log-card" memberof="#myentry(devices)/deviceconfig/log-fwd-card/interface/entry/units/entry/@name" />
+                    <memberof type="tap" memberof="#myentry(devices)/network/interface/ethernet/entry[tap]/@name" />
+                    <memberof type="vwire" memberof="#myentry(devices)/network/interface/ethernet/entry/virtual-wire/units/entry/@name|#myentry(devices)/network/interface/ethernet/entry[virtual-wire]/@name" />
+                    <memberof type="layer2" memberof="#myentry(devices)/network/interface/ethernet/entry/layer2/units/entry/@name|#myentry(devices)/network/interface/ethernet/entry[layer2]/@name" />
+                    <memberof type="layer3" memberof="#myentry(devices)/network/interface/ethernet/entry/layer3/units/entry/@name|#myentry(devices)/network/interface/ethernet/entry[layer3]/@name" />
+                    <memberof type="layer3" memberof="#myentry(devices)/network/interface/cellular/entry[layer3]/@name" />
+                    <memberof type="log-card" memberof="#myentry(devices)/network/interface/cluster-ethernet/entry/log-card/units/entry/@name" />
+                    <memberof type="tap" memberof="#myentry(devices)/network/interface/cluster-ethernet/entry[tap]/@name" />
+                    <memberof type="vwire" memberof="#myentry(devices)/network/interface/cluster-ethernet/entry/virtual-wire/units/entry/@name|#myentry(devices)/network/interface/cluster-ethernet/entry[virtual-wire]/@name" />
+                    <memberof type="layer2" memberof="#myentry(devices)/network/interface/cluster-ethernet/entry/layer2/units/entry/@name|#myentry(devices)/network/interface/cluster-ethernet/entry[layer2]/@name" />
+                    <memberof type="layer3" memberof="#myentry(devices)/network/interface/cluster-ethernet/entry/layer3/units/entry/@name|#myentry(devices)/network/interface/cluster-ethernet/entry[layer3]/@name" />
+                    <memberof type="vwire-aggregate" memberof="#myentry(devices)/network/interface/aggregate-ethernet/entry[virtual-wire]/@name|#myentry(devices)/network/interface/aggregate-ethernet/entry/virtual-wire/units/entry/@name" />
+                    <memberof type="layer2-aggregate" memberof="#myentry(devices)/network/interface/aggregate-ethernet/entry/layer2/units/entry/@name|#myentry(devices)/network/interface/aggregate-ethernet/entry[layer2]/@name" />
+                    <memberof type="layer3-aggregate" memberof="#myentry(devices)/network/interface/aggregate-ethernet/entry/layer3/units/entry/@name|#myentry(devices)/network/interface/aggregate-ethernet/entry[layer3]/@name" />
+                    <memberof type="vlan" memberof="#myentry(devices)/network/interface/vlan/units/entry/@name" />
+                    <memberof type="vlan" memberof="string('vlan')" />
+                    <memberof type="loopback" memberof="#myentry(devices)/network/interface/loopback/units/entry/@name" />
+                    <memberof type="loopback" memberof="string('loopback')" />
+                    <memberof type="tunnel" memberof="#myentry(devices)/network/interface/tunnel/units/entry/@name" />
+                    <memberof type="tunnel" memberof="string('tunnel')" />
+                    <memberof type="sdwan" memberof="#myentry(devices)/network/interface/sdwan/units/entry/@name" />
+                    <memberof type="sdwan" memberof="string('sdwan')" />
+                  </validate>
+                  <validate uniquein="#vsys/entry/import/network/interface/member|#myentry(devices)/network/shared-gateway/entry/import/network/interface/member" />
+                </element>
+              </array>
+            </sequence>
+          </sequence>
+          <array name="address" use-cache="yes" optional="yes" add_to_xml_object_cache="yes">
+            <validate expr="count(entry/@name) &lt;= ../../../platform/limits/max-address" err="Maximum number of addresses exceeded" skip-on-delete="yes" />
+            <sequence name="entry" apply_unused_child="yes" tlo="yes">
+              <validate expr="not(@name = '0.0.0.0')" err="0.0.0.0 is reserved and not allowed as the name of an address object" />
+              <attr-req name="name" type="string" maxlen="63" subtype="object-name" help-string="alphanumeric string [ 0-9a-zA-Z._-]">
+                <validate unique-cache="yes" uniquein="#myentry(vsys)/address/entry/@name" />
+                <validate unique-cache="yes" uniquein="#myentry(vsys)/address-group/entry/@name" />
+                <validate validator="disallow-keyword-any" err="name 'any' is disallowed" />
+              </attr-req>
+              <element name="description" optional="yes" type="string" minlen="0" maxlen="1023" />
+              <choice optional="no">
+                <element name="ip-netmask" type="ipspec" />
+                <element name="ip-range" type="iprangespec" />
+                <element name="ip-wildcard" type="ipdiscontmask" />
+                <element name="fqdn" type="string" minlen="1" maxlen="255" regex="^[a-zA-Z0-9_]([a-zA-Z0-9._-])+[a-zA-Z0-9]$" />
+              </choice>
+              <array name="tag" optional="yes" max-count="64" help-string="tags for address object" ui-field-hint="{ &quot;type&quot;: &quot;tag&quot; }" uiHint-fieldLabel="Tags">
+                <validate expr="not(../ip-wildcard)" err="tag is not supported for ip-wildcard type address" />
+                <element name="member" type="string" maxlen="127">
+                  <validate>
+                    <memberof type="tag" memberof="#config/shared/tag/entry/@name" />
+                    <memberof memberof="#myentry(vsys)/tag/entry/@name" />
+                  </validate>
+                  <validate uniquein="#tag/member" />
+                </element>
+              </array>
+              <element name="lbdns" optional="yes" type="bool" default="no">
+                <validate expr="(../fqdn)" err="lbdns is supported only for fqdn objects" />
+              </element>
+            </sequence>
+          </array>
+          <sequence name="rulebase" optional="yes">
+            <sequence name="security" alt-name="Security" help-string="Security Rules" optional="yes">
+              <array name="rules" use-cache="yes" block-partial-commit="yes">
+                <sequence name="entry" name-space="../entry/@name" tlo="yes" audit-comment="yes" moveable="yes" need-uuid="yes">
+                  <validate expr="not(@name='intrazone-default')" err="'intrazone-default' is a reserved name" />
+                  <validate expr="not(@name='interzone-default')" err="'interzone-default' is a reserved name" />
+                  <validate validator="custom-rule-settings-validator" />
+                  <attr-opt name="uuid" type="string" regex="[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}" minlen="36" maxlen="36" help-string="UUID" />
+                  <attr-req name="name" type="string" maxlen="63" subtype="object-name" help-string="alphanumeric string [ 0-9a-zA-Z._-]">
+                    <validate validator="security-rule-zone-src-dest-validator" err="different set of source and destination for intrazone rule" />
+                    <validate uniquein="../entry/@name" />
+                    <validate validator="disallow-keyword-any" err="name 'any' is disallowed" />
+                  </attr-req>
+                  <array name="from" no-default="yes">
+                    <validate validator="common-rules-validator" err="'any' should not be used with another value" />
+                    <element name="member" type="multiple" default="any">
+                      <string maxlen="31">
+                        <validate>
+                          <memberof type="zone" memberof="#myentry(vsys)/zone/entry/@name" />
+                        </validate>
+                      </string>
+                      <enum value="any" help-string="any zone" />
+                      <attr-opt name="previous-zone" type="string" maxlen="31" help-string="previous zone name" />
+                    </element>
+                  </array>
+                  <array name="to" no-default="yes">
+                    <validate validator="common-rules-validator" err="'any' should not be used with another value" />
+                    <element name="member" type="multiple" default="any">
+                      <string maxlen="31">
+                        <validate>
+                          <memberof type="zone" memberof="#myentry(vsys)/zone/entry/@name" />
+                        </validate>
+                      </string>
+                      <enum value="multicast" help-string="multicast zone" />
+                      <enum value="any" help-string="any zone" />
+                      <attr-opt name="previous-zone" type="string" maxlen="31" help-string="previous zone name" />
+                    </element>
+                  </array>
+                  <array name="source" default-member="yes" empty="no">
+                    <validate validator="common-rules-validator" err="'any' should not be used with another value" />
+                    <validate validator="common-rules-source-validator" err="Duplicate source not allowed" />
+                    <element name="member" type="multiple" default="any">
+                      <ipspec />
+                      <string maxlen="63">
+                        <validate>
+                          <memberof type="region" memberof="##/predefined/region/entry/@name" />
+                          <memberof type="address" memberof="#config/shared/address/entry/@name" />
+                          <memberof type="address-group" memberof="#config/shared/address-group/entry/@name" />
+                          <memberof type="external-list" memberof="#config/shared/external-list/entry[type/ip]/@name" />
+                          <memberof type="external-list" memberof="#config/shared/external-list/entry[type/predefined-ip]/@name" />
+                          <memberof type="external-list" memberof="##/predefined/ip-block-list-v2/entry/@name" />
+                          <memberof type="region" memberof="#myentry(vsys)/region/entry/@name" />
+                          <memberof type="address" memberof="#myentry(vsys)/address/entry/@name" />
+                          <memberof type="address-group" memberof="#myentry(vsys)/address-group/entry/@name" />
+                          <memberof type="external-list" memberof="#myentry(vsys)/external-list/entry[type/ip]/@name" />
+                          <memberof type="external-list" memberof="#myentry(vsys)/external-list/entry[type/predefined-ip]/@name" />
+                          <memberof type="external-list" memberof="##/predefined/ip-block-list-v2/entry/@name" />
+                        </validate>
+                      </string>
+                      <ipspec />
+                      <iprangespec />
+                      <enum value="any" help-string="any address" />
+                    </element>
+                  </array>
+                  <array name="destination" default-member="yes" empty="no">
+                    <validate validator="common-rules-validator" err="'any' should not be used with another value" />
+                    <validate validator="common-rules-source-validator" err="Duplicate destination not allowed" />
+                    <element name="member" type="multiple" completion-same-as="../../source/member" default="any">
+                      <ipspec />
+                      <string maxlen="63">
+                        <validate>
+                          <memberof type="region" memberof="##/predefined/region/entry/@name" />
+                          <memberof type="address" memberof="#config/shared/address/entry/@name" />
+                          <memberof type="address-group" memberof="#config/shared/address-group/entry/@name" />
+                          <memberof type="external-list" memberof="#config/shared/external-list/entry[type/ip]/@name" />
+                          <memberof type="external-list" memberof="#config/shared/external-list/entry[type/predefined-ip]/@name" />
+                          <memberof type="external-list" memberof="##/predefined/ip-block-list-v2/entry/@name" />
+                          <memberof type="region" memberof="#myentry(vsys)/region/entry/@name" />
+                          <memberof type="address" memberof="#myentry(vsys)/address/entry/@name" />
+                          <memberof type="address-group" memberof="#myentry(vsys)/address-group/entry/@name" />
+                          <memberof type="external-list" memberof="#myentry(vsys)/external-list/entry[type/ip]/@name" />
+                          <memberof type="external-list" memberof="#myentry(vsys)/external-list/entry[type/predefined-ip]/@name" />
+                          <memberof type="external-list" memberof="##/predefined/ip-block-list-v2/entry/@name" />
+                        </validate>
+                      </string>
+                      <ipspec />
+                      <iprangespec />
+                      <enum value="any" help-string="any address" />
+                    </element>
+                  </array>
+                  <element name="disabled" type="bool" default="no" optional="yes" help-string="Disable the rule" />
+                  <element name="action" type="enum" default="allow">
+                    <enum value="deny" help-string="Deny" show-help-tip="block, use App Deny action" />
+                    <enum value="allow" help-string="Allow" />
+                    <enum value="drop" help-string="Drop" show-help-tip="silent drop, send optional ICMP Unreachable" />
+                    <enum value="reset-client" help-string="Reset client" />
+                    <enum value="reset-server" help-string="Reset server" />
+                    <enum value="reset-both" help-string="Reset both client and server" />
+                  </element>
+                </sequence>
+              </array>
+            </sequence>
+          </sequence>
+        </sequence>
+      </array>
+    </sequence>
+  </array>
+</sequence>

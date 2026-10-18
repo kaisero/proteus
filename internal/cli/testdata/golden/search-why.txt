@@ -1,0 +1,16 @@
+search 10.124.0.1 (covers)
+
+file / vsys1   ../../testdata/config/firewall-multivsys.xml
+  object    address       corp-dc-vienna       10.124.0.1/32
+            file/vsys1: address corp-dc-vienna
+  object    address       corp-location-vienna 10.124.0.0/16
+            file/vsys1: address corp-location-vienna
+  group     address-group corp-dc              holds corp-dc-vienna
+            file/vsys1: address-group corp-dc
+  group     address-group corp-location        holds corp-location-vienna
+            file/vsys1: address-group corp-location
+  reference security rule Corp DC Access       destination -> corp-dc
+            file/vsys1: security rule Corp DC Access (destination)
+  reference security rule Corp DC Access       source -> corp-location
+            file/vsys1: security rule Corp DC Access (source)
+1 with results, 2 without, 0 holes

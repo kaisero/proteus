@@ -1,0 +1,300 @@
+{
+  "type": "object",
+  "properties": {
+    "format": {
+      "type": "integer",
+      "description": "the envelope format; a change that breaks a consumer increments it",
+      "const": 2
+    },
+    "command": {
+      "type": "string",
+      "description": "the command that answered",
+      "const": "snapshot diff"
+    },
+    "detail": {
+      "type": "string",
+      "description": "summary or full: how much of each result the envelope holds",
+      "const": "summary"
+    },
+    "input": {
+      "type": "object",
+      "properties": {
+        "from": {
+          "type": "string",
+          "description": "the older point in time; empty for the snapshot before the newer one"
+        },
+        "limit": {
+          "type": "integer",
+          "description": "the most results kept; 0 for every result"
+        },
+        "selection": {
+          "type": "object",
+          "properties": {
+            "at": {
+              "type": "string",
+              "description": "read each device's newest snapshot at or before this time; empty for the latest"
+            },
+            "device": {
+              "type": [
+                "null",
+                "array"
+              ],
+              "items": {
+                "type": "string"
+              },
+              "description": "the devices to read; empty for every device"
+            },
+            "file": {
+              "type": "string",
+              "description": "one configuration file to read in place of the store"
+            },
+            "fresh": {
+              "type": "boolean",
+              "description": "fetch the devices before reading them"
+            },
+            "label": {
+              "type": [
+                "null",
+                "array"
+              ],
+              "items": {
+                "type": "string"
+              },
+              "description": "select devices by label, key=value"
+            },
+            "vsys": {
+              "type": [
+                "null",
+                "array"
+              ],
+              "items": {
+                "type": "string"
+              },
+              "description": "the vsys to read; empty for every vsys"
+            }
+          },
+          "description": "the devices compared",
+          "additionalProperties": false
+        },
+        "to": {
+          "type": "string",
+          "description": "the newer point in time; empty for the latest snapshot"
+        }
+      },
+      "description": "the question as answered, with the flow as simulated",
+      "required": [
+        "from",
+        "limit",
+        "selection",
+        "to"
+      ],
+      "additionalProperties": false
+    },
+    "results": {
+      "type": [
+        "null",
+        "array"
+      ],
+      "items": {
+        "type": "object",
+        "properties": {
+          "answer": {
+            "type": "string",
+            "description": "one line that says what the result found, as the text output prints it"
+          },
+          "device": {
+            "type": "string",
+            "description": "the device name"
+          },
+          "from": {
+            "type": "string",
+            "description": "the older snapshot ID"
+          },
+          "to": {
+            "type": "string",
+            "description": "the newer snapshot ID"
+          },
+          "scope": {
+            "type": "string",
+            "description": "the configuration scope the result came from"
+          },
+          "added": {
+            "type": "integer",
+            "description": "elements added"
+          },
+          "removed": {
+            "type": "integer",
+            "description": "elements removed"
+          },
+          "changed": {
+            "type": "integer",
+            "description": "elements changed"
+          }
+        },
+        "required": [
+          "answer",
+          "device",
+          "from",
+          "to",
+          "scope",
+          "added",
+          "removed",
+          "changed"
+        ],
+        "additionalProperties": false
+      },
+      "description": "the answers; empty when no target could be read"
+    },
+    "summary": {
+      "type": [
+        "null",
+        "object"
+      ],
+      "properties": {
+        "answer": {
+          "type": "string",
+          "description": "the count line of the text output"
+        },
+        "found": {
+          "type": "integer",
+          "description": "results over every target, the omitted ones included; for snapshot diff, single changes"
+        },
+        "with": {
+          "type": "integer",
+          "description": "targets with a result; for snapshot diff, devices with a change"
+        },
+        "without": {
+          "type": "integer",
+          "description": "targets read without a result; for snapshot diff, devices compared without a change"
+        },
+        "omitted": {
+          "type": "integer",
+          "description": "results the limit left out; for snapshot diff, single changes; 0 when every result is shown"
+        }
+      },
+      "description": "search, lookup and snapshot diff only: the count of results over the targets read",
+      "required": [
+        "answer",
+        "found",
+        "with",
+        "without",
+        "omitted"
+      ],
+      "additionalProperties": false
+    },
+    "holes": {
+      "type": [
+        "null",
+        "array"
+      ],
+      "items": {
+        "type": "object",
+        "properties": {
+          "device": {
+            "type": "string"
+          },
+          "vsys": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "device",
+          "code",
+          "text"
+        ],
+        "additionalProperties": false
+      },
+      "description": "devices or snapshots the answer could not read; each one makes the answer incomplete"
+    },
+    "unresolved": {
+      "type": [
+        "null",
+        "array"
+      ],
+      "items": {
+        "type": "object",
+        "properties": {
+          "device": {
+            "type": "string",
+            "description": "the device"
+          },
+          "vsys": {
+            "type": "string",
+            "description": "the vsys; empty for the device as a whole"
+          },
+          "value": {
+            "type": "string",
+            "description": "the value that was not resolved"
+          },
+          "code": {
+            "type": "string",
+            "description": "the reason code"
+          },
+          "text": {
+            "type": "string",
+            "description": "the reason in words"
+          }
+        },
+        "required": [
+          "device",
+          "code",
+          "text"
+        ],
+        "additionalProperties": false
+      },
+      "description": "values the answer could not resolve; each one can hide matches"
+    },
+    "notes": {
+      "type": [
+        "null",
+        "array"
+      ],
+      "items": {
+        "type": "object",
+        "properties": {
+          "device": {
+            "type": "string",
+            "description": "the device"
+          },
+          "vsys": {
+            "type": "string",
+            "description": "the vsys; empty for the device as a whole"
+          },
+          "code": {
+            "type": "string",
+            "description": "the reason code"
+          },
+          "text": {
+            "type": "string",
+            "description": "the note in words"
+          }
+        },
+        "required": [
+          "device",
+          "code",
+          "text"
+        ],
+        "additionalProperties": false
+      },
+      "description": "facts that qualify the answer without making it incomplete, such as a stale snapshot"
+    }
+  },
+  "description": "the snapshot diff answer, detail summary",
+  "required": [
+    "format",
+    "command",
+    "detail",
+    "input",
+    "results",
+    "holes",
+    "unresolved",
+    "notes"
+  ],
+  "additionalProperties": false
+}

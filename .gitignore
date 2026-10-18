@@ -3,13 +3,30 @@
 
 # Vendor schema files pulled off an appliance. Redistribution is unresolved,
 # so they stay out of git until that question is answered. See ARCHITECTURE.md.
-/schemas/
+# schemas/out/ holds proteus's own generated JSON schemas and is committed.
+/schemas/*
+!/schemas/out/
 
-# config/schemadigest/ is committed, not ignored. go:embed cannot reach outside its
-# own package, so the digests have to sit there for the library to compile at all. A
-# pristine checkout without them does not build, which means neither does a consumer
-# that runs go get. The Makefile keeps the copy in step with schemadigest/ and
-# digest-check verifies it.
+# internal/config/schemadigest/ is committed, not ignored. It is the only copy of
+# the digests: go:embed reads them there, and the generator reads them there too.
 
 # A local inventory holds credentials or names the variables that do.
 config.yaml
+
+# Local clutter and live device data. A fetched configuration holds addresses and
+# secrets and must never be committed by mistake.
+.DS_Store
+*.swp
+.swp
+/fw-live.xml
+
+# The real values of the App-ID lab placeholders: lab addresses stay out of git.
+/docs/lab/app-id-lab.vars
+
+# Zensical build output.
+/site/
+
+# Build output: the CLI binary and compiled test binaries.
+/dist/
+/proteus
+*.test

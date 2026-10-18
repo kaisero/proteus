@@ -1,0 +1,204 @@
+{
+  "format": 2,
+  "command": "simulate policy",
+  "detail": "full",
+  "input": {
+    "flow": {
+      "source": {
+        "addrs": [
+          "10.1.0.5"
+        ],
+        "resolved": false
+      },
+      "destination": {
+        "addrs": [
+          "10.2.0.5"
+        ],
+        "resolved": false
+      },
+      "protocol": "",
+      "port": 80,
+      "application": "web-browsing"
+    },
+    "selection": {
+      "file": "TMP"
+    }
+  },
+  "results": [
+    {
+      "answer": "first match: allow-remote (allow)",
+      "verdict": "pass",
+      "reasons": [
+        {
+          "code": "verdict.rule",
+          "text": "rule allow-remote (allow)"
+        }
+      ],
+      "rule": "allow-remote",
+      "default": "",
+      "default_action": "",
+      "default_source": "",
+      "fidelity": {
+        "level": "inferred"
+      },
+      "first_match": {
+        "position": 8,
+        "name": "allow-remote",
+        "action": "allow",
+        "layer": "local",
+        "scope": "vsys:vsys1"
+      },
+      "implicit": {
+        "app": "web-browsing",
+        "via": [
+          "app-remote"
+        ]
+      },
+      "candidates": [
+        {
+          "position": 8,
+          "name": "allow-remote",
+          "action": "allow",
+          "layer": "local",
+          "scope": "vsys:vsys1"
+        }
+      ],
+      "doubts": [],
+      "zones": {
+        "from": [
+          "inside"
+        ],
+        "to": [
+          "outside"
+        ],
+        "source": "configuration",
+        "detail": "10.1.0.5: inside via ethernet1/1 10.1.0.1/24; 10.2.0.5: outside via ethernet1/2 10.2.0.1/24"
+      },
+      "stages": [
+        {
+          "slug": "resolve-source",
+          "name": "Resolve the source",
+          "fidelity": {
+            "level": "exact"
+          },
+          "candidates": 8,
+          "detail": "10.1.0.5: 0 hits, 0 negated rules",
+          "elapsed_ms": 0
+        },
+        {
+          "slug": "resolve-destination",
+          "name": "Resolve the destination",
+          "fidelity": {
+            "level": "exact"
+          },
+          "candidates": 8,
+          "detail": "10.2.0.5: 0 hits, 0 negated rules",
+          "elapsed_ms": 0
+        },
+        {
+          "slug": "derive-zones",
+          "name": "Derive the zones",
+          "fidelity": {
+            "level": "inferred"
+          },
+          "candidates": 8,
+          "detail": "from inside; to outside (configuration)",
+          "elapsed_ms": 0
+        },
+        {
+          "slug": "match-application",
+          "name": "Match the application",
+          "fidelity": {
+            "level": "exact"
+          },
+          "candidates": 1,
+          "detail": "web-browsing: 0 explicit, 1 implicit, 0 kept in doubt (content 8000-1000)",
+          "elapsed_ms": 0
+        },
+        {
+          "slug": "match-service",
+          "name": "Match the service",
+          "fidelity": {
+            "level": "exact"
+          },
+          "candidates": 1,
+          "detail": "tcp/80; protocol tcp, from the default of web-browsing (tcp/80; tcp/443/secure)",
+          "elapsed_ms": 0
+        },
+        {
+          "slug": "match-url",
+          "name": "Match the URL category",
+          "fidelity": {
+            "level": "exact"
+          },
+          "candidates": 1,
+          "detail": "no candidate names a URL category",
+          "elapsed_ms": 0
+        },
+        {
+          "slug": "drop-disabled",
+          "name": "Drop disabled rules",
+          "fidelity": {
+            "level": "exact"
+          },
+          "candidates": 1,
+          "detail": "0 disabled",
+          "elapsed_ms": 0
+        },
+        {
+          "slug": "order",
+          "name": "Order by evaluation",
+          "fidelity": {
+            "level": "exact"
+          },
+          "candidates": 1,
+          "detail": "1 in order",
+          "elapsed_ms": 0
+        },
+        {
+          "slug": "first-match",
+          "name": "Take the first match",
+          "fidelity": {
+            "level": "exact"
+          },
+          "candidates": 1,
+          "detail": "allow-remote (allow), position 8",
+          "elapsed_ms": 0
+        }
+      ],
+      "kind": "policy",
+      "relevance": {
+        "known": false,
+        "relevant": false,
+        "code": "gap.fib-missing",
+        "text": "no stored forwarding table"
+      },
+      "target": {
+        "device": "file",
+        "vsys": "vsys1"
+      }
+    }
+  ],
+  "holes": [],
+  "unresolved": [],
+  "notes": [
+    {
+      "device": "file",
+      "vsys": "vsys1",
+      "code": "note.app-data-file",
+      "text": "application data of content 8000-1000 from TMP"
+    },
+    {
+      "device": "file",
+      "vsys": "vsys1",
+      "code": "note.app-shift",
+      "text": "the device can match the session again when App-ID identifies it later: an earlier application, such as ssl or web-browsing, can match another rule than web-browsing"
+    },
+    {
+      "device": "file",
+      "vsys": "vsys1",
+      "code": "note.app-implicit",
+      "text": "rule allow-remote matches web-browsing only through the implicit use of app-remote"
+    }
+  ]
+}

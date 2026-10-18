@@ -8,24 +8,36 @@
 # implementation yet, only the skeleton and the standards. Add one line per
 # package as each package gains its first test, in the form:
 #
-#   github.com/okaiser/panos-analyst/internal/schema  86.9
+#   github.com/kaisero/proteus/internal/schema  86.9
 
-github.com/okaiser/panos-analyst/internal/schema  86.9
-github.com/okaiser/panos-analyst/internal/digest  71.8
-github.com/okaiser/panos-analyst/internal/codegen  93.0
-github.com/okaiser/panos-analyst/cmd/panos-schemagen  57.6
-github.com/okaiser/panos-analyst/config  98.1
-github.com/okaiser/panos-analyst/resolve  96.3
-github.com/okaiser/panos-analyst/index  95.1
-github.com/okaiser/panos-analyst/inventory  96.2
-github.com/okaiser/panos-analyst/fetch  100.0
-github.com/okaiser/panos-analyst/store  88.1
-github.com/okaiser/panos-analyst/cmd/panos-analyst  93.3
-github.com/okaiser/panos-analyst/estate  100.0
-github.com/okaiser/panos-analyst/search  97.3
-github.com/okaiser/panos-analyst/card  94.4
-github.com/okaiser/panos-analyst/drift  91.1
-github.com/okaiser/panos-analyst/runlog  93.0
-github.com/okaiser/panos-analyst/simulate  100.0
-github.com/okaiser/panos-analyst/simulate/securitypolicy  97.5
-github.com/okaiser/panos-analyst/simulate/routing  100.0
+github.com/kaisero/proteus/internal/schema  90.2
+github.com/kaisero/proteus/internal/digest  74.4
+github.com/kaisero/proteus/internal/config  98.7
+github.com/kaisero/proteus/internal/resolve  97.8
+github.com/kaisero/proteus/internal/index  98.3
+github.com/kaisero/proteus/internal/inventory  97.1
+github.com/kaisero/proteus/internal/fetch  100.0
+github.com/kaisero/proteus/internal/store  95.3
+github.com/kaisero/proteus/internal/cli      97.4
+github.com/kaisero/proteus/internal/estate  100.0
+github.com/kaisero/proteus/internal/search  100.0
+github.com/kaisero/proteus/internal/card  98.3
+github.com/kaisero/proteus/internal/drift  100.0
+github.com/kaisero/proteus/internal/runlog  97.5
+github.com/kaisero/proteus/internal/simulate  100.0
+github.com/kaisero/proteus/internal/simulate/securitypolicy  99.4
+github.com/kaisero/proteus/internal/simulate/routing  100.0
+github.com/kaisero/proteus/internal/simulate/topology  100.0
+github.com/kaisero/proteus/internal/simulate/rulebase  100.0
+github.com/kaisero/proteus/internal/simulate/nat  100.0
+github.com/kaisero/proteus/internal/tools/schemadigest  67.9
+github.com/kaisero/proteus/cmd/proteus  70.6
+github.com/kaisero/proteus/internal/task  100.0
+github.com/kaisero/proteus/internal/simulate/pathlab  92.4
+github.com/kaisero/proteus/internal/testconfig  98.8
+github.com/kaisero/proteus/internal/simulate/pathpolicy  100.0
+github.com/kaisero/proteus/internal/reason  100.0
+github.com/kaisero/proteus/internal/query  98.1
+github.com/kaisero/proteus/internal/mcp  95.7
+github.com/kaisero/proteus/internal/appid  100.0
+github.com/kaisero/proteus/internal/tools/applab  93.6

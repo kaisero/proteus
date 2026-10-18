@@ -1,6 +1,7 @@
 // Package fakepanos is a stand-in PAN-OS XML API for tests. It answers keygen, a
-// fixed set of show commands and a configuration export over TLS on 127.0.0.1, and
-// records every request so a test can check what was sent and what was not.
+// fixed set of show commands, the predefined services, the App-ID data and a
+// configuration export over TLS on 127.0.0.1, and records every request so a test can check what was
+// sent and what was not.
 package fakepanos
 
 import (
@@ -27,6 +28,9 @@ type Device struct {
 	// TruncateFirst promises a longer body than it sends on the first N
 	// requests, then closes the connection, which a client sees while reading.
 	TruncateFirst int
+	// Stall names a request type, such as "export", that the device never answers:
+	// it waits until the client gives up, as a hung device does.
+	Stall string
 
 	mu       sync.Mutex
 	requests []Request
@@ -35,6 +39,53 @@ type Device struct {
 // Request is one request as the device received it.
 type Request struct {
 	Method, Type, Cmd, Key, RawQuery, Body string
+}
+
+// PredefinedCmd asks a device for its predefined services.
+const PredefinedCmd = "<show><predefined><xpath>/predefined/service</xpath></predefined></show>"
+
+// PredefinedServices is a device's answer to PredefinedCmd, as fw02 gave it on
+// PAN-OS 12.2.3 (L4). Every fake device answers it unless Ops names the command.
+const PredefinedServices = `<response status="success"><result><service>` +
+	`<entry name="service-http"><protocol><tcp><port>80,8080</port></tcp></protocol></entry>` +
+	`<entry name="service-https"><protocol><tcp><port>443</port></tcp></protocol></entry>` +
+	`</service></result></response>`
+
+// ApplicationsCmd and ContainersCmd ask a device for its App-ID data (spec
+// 2026-10-16 F1).
+const (
+	ApplicationsCmd = "<show><predefined><xpath>/predefined/application</xpath></predefined></show>"
+	ContainersCmd   = "<show><predefined><xpath>/predefined/application-container</xpath></predefined></show>"
+)
+
+// Applications is a dummy answer to ApplicationsCmd in the shape of spec
+// 2026-10-16 F1 and F7: two applications and the two functions of one
+// container. The ids and versions are dummy values. Every fake device answers
+// it unless Ops names the command.
+const Applications = `<response status="success"><result><application>` +
+	`<entry id="10001" name="ssl" minver="1.0.0"><category>networking</category><risk>4</risk>` +
+	`<icon>ZHVtbXk=</icon><default><port><member>tcp/443</member></port></default></entry>` +
+	`<entry id="10002" name="web-browsing" minver="1.0.0"><category>general-internet</category><risk>4</risk>` +
+	`<default><port><member>tcp/80</member></port></default></entry>` +
+	`<entry id="10003" name="office-docs" minver="1.0.0"><category>business-systems</category><risk>2</risk>` +
+	`<application-container>office-suite</application-container></entry>` +
+	`<entry id="10004" name="office-mail" minver="1.0.0"><category>business-systems</category><risk>2</risk>` +
+	`<application-container>office-suite</application-container></entry>` +
+	`</application></result></response>`
+
+// Containers is a dummy answer to ContainersCmd (F1, F7). Every fake device
+// answers it unless Ops names the command.
+const Containers = `<response status="success"><result><application-container>` +
+	`<entry id="90001" name="office-suite" minver="1.0.0"><functions>` +
+	`<member>office-docs</member><member>office-mail</member></functions></entry>` +
+	`</application-container></result></response>`
+
+// defaults are the answers every fake device gives unless Ops names the
+// command.
+var defaults = map[string]string{
+	PredefinedCmd:   PredefinedServices,
+	ApplicationsCmd: Applications,
+	ContainersCmd:   Containers,
 }
 
 // Success wraps a result the way PAN-OS does.
@@ -82,6 +133,11 @@ func (d *Device) serve(w http.ResponseWriter, r *http.Request) {
 	}
 	d.mu.Unlock()
 
+	if d.Stall != "" && r.Form.Get("type") == d.Stall {
+		<-r.Context().Done()
+		return
+	}
+
 	if truncate {
 		if hj, ok := w.(http.Hijacker); ok {
 			if conn, buf, err := hj.Hijack(); err == nil {
@@ -119,6 +175,9 @@ func (d *Device) serve(w http.ResponseWriter, r *http.Request) {
 	switch r.Form.Get("type") {
 	case "op":
 		resp, ok := d.Ops[r.Form.Get("cmd")]
+		if !ok {
+			resp, ok = defaults[r.Form.Get("cmd")]
+		}
 		if !ok {
 			_, _ = io.WriteString(w, Refusal("17", "show -> invalid syntax"))
 			return

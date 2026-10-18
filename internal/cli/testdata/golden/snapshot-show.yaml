@@ -1,0 +1,69 @@
+format: 2
+command: snapshot show
+input: {}
+results:
+  - device: fw01
+    vsys: vsys1
+    snapshot: 2026-09-28T10-01-00Z
+    taken_at: "2026-09-28T10:01:00Z"
+    version: 11.2.5
+    rules: 6
+    host: 127.0.0.1:PORT
+    model: PA-VM
+    serial: "007900000000001"
+    documents:
+      - name: config
+        file: config.xml
+        bytes: 3252
+      - name: system-info
+        file: system-info.xml
+        bytes: 252
+      - name: interfaces
+        file: interfaces.xml
+        bytes: 7786
+      - name: fib
+        file: fib.xml
+        bytes: 7295
+      - name: rib
+        file: rib.xml
+        bytes: 15939
+      - name: ha
+        file: ha.xml
+        bytes: 163
+      - name: predefined
+        file: predefined.xml
+        bytes: 245
+  - device: fw01
+    vsys: vsys2
+    snapshot: 2026-09-28T10-01-00Z
+    taken_at: "2026-09-28T10:01:00Z"
+    version: 11.2.5
+    rules: 3
+    host: 127.0.0.1:PORT
+    model: PA-VM
+    serial: "007900000000001"
+    documents:
+      - name: config
+        file: config.xml
+        bytes: 3252
+      - name: system-info
+        file: system-info.xml
+        bytes: 252
+      - name: interfaces
+        file: interfaces.xml
+        bytes: 7786
+      - name: fib
+        file: fib.xml
+        bytes: 7295
+      - name: rib
+        file: rib.xml
+        bytes: 15939
+      - name: ha
+        file: ha.xml
+        bytes: 163
+      - name: predefined
+        file: predefined.xml
+        bytes: 245
+holes: []
+unresolved: []
+notes: []

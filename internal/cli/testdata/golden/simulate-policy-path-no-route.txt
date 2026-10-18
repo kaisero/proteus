@@ -1,0 +1,22 @@
+denied at hop 2: no route to 198.18.30.5 on fw01
+
+simulate policy 198.18.1.10 -> 198.18.30.5 tcp/443            fidelity: exact
+
+  198.18.1.10
+     │ 198.18.1.0/24
+  ┌─ fw02 ─ vsys1 ─ router default ─ snapshot 1m ─────────────────────┐
+  │  zones   home -> labor                                            │
+  │  in      vlan.1        198.18.1.1/24                              │
+  │  out     vlan.32       198.19.0.1/24                              │
+  │  route   198.18.0.0/15 via 198.19.0.254   static                  │
+  │  policy  interzone-default (allow)                                │
+  └──┬────────────────────────────────────────────────────────────────┘
+     │ 198.19.0.0/24   198.19.0.1 -> 198.19.0.254
+  ┌─ fw01 ─ vsys1 ─ router default ─ snapshot 1m ─────────────────────┐
+  │  zones   transport -> ?                                           │
+  │  in      ethernet1/1   198.19.0.254/24                            │
+  │  policy  not evaluated: dropped by routing before security policy │
+  └───────────────────────────────────────────────────────────────────┘
+  dropped on fw01: no route to 198.18.30.5
+
+firewalls on the path: fw02 (home -> labor), fw01 (transport -> ?)

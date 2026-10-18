@@ -1,0 +1,9 @@
+# The build reads only the module, its code and the fetch loop.
+*
+!go.mod
+!go.sum
+!cmd/
+!internal/
+!deploy/docker/fetch-loop.sh
+**/*_test.go
+**/testdata/

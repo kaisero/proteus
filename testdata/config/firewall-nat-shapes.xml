@@ -1,0 +1,54 @@
+<config version="11.2.0" urldb="paloaltonetworks" detail-version="11.2.5">
+  <!-- NAT translation shapes the lab does not carry. Synthetic: "future" uses an
+       element no schema defines, so the reader must not take it for "none". -->
+  <devices>
+    <entry name="localhost.localdomain">
+      <vsys>
+        <entry name="vsys1">
+          <rulebase>
+            <nat>
+              <rules>
+                <entry name="future">
+                  <from><member>any</member></from><to><member>untrust</member></to>
+                  <source><member>any</member></source><destination><member>any</member></destination>
+                  <source-translation><magic-ip/></source-translation>
+                </entry>
+                <entry name="bound">
+                  <from><member>any</member></from><to><member>untrust</member></to>
+                  <source><member>any</member></source><destination><member>any</member></destination>
+                  <source-translation><dynamic-ip-and-port><interface-address><interface>ethernet1/1</interface><floating-ip>10.0.0.9</floating-ip></interface-address></dynamic-ip-and-port></source-translation>
+                  <active-active-device-binding>primary</active-active-device-binding>
+                </entry>
+                <entry name="rewrite">
+                  <from><member>any</member></from><to><member>untrust</member></to>
+                  <source><member>any</member></source><destination><member>203.0.113.5</member></destination>
+                  <destination-translation><translated-address>10.1.1.1</translated-address><dns-rewrite><direction>reverse</direction></dns-rewrite></destination-translation>
+                </entry>
+                <entry name="dyn-default">
+                  <from><member>any</member></from><to><member>untrust</member></to>
+                  <source><member>any</member></source><destination><member>203.0.113.6</member></destination>
+                  <dynamic-destination-translation><translated-address>10.1.1.6</translated-address></dynamic-destination-translation>
+                </entry>
+                <entry name="v6pool">
+                  <from><member>any</member></from><to><member>untrust</member></to>
+                  <source><member>any</member></source><destination><member>any</member></destination>
+                  <source-translation><dynamic-ip><interface-address><interface>ethernet1/9</interface></interface-address></dynamic-ip></source-translation>
+                </entry>
+                <entry name="empty">
+                  <from><member>any</member></from><to><member>untrust</member></to>
+                  <source><member>any</member></source><destination><member>any</member></destination>
+                  <source-translation/>
+                </entry>
+                <entry name="object-ip">
+                  <from><member>any</member></from><to><member>untrust</member></to>
+                  <source><member>any</member></source><destination><member>any</member></destination>
+                  <source-translation><dynamic-ip-and-port><interface-address><interface>ethernet1/1</interface><ip>fw-public</ip></interface-address></dynamic-ip-and-port></source-translation>
+                </entry>
+              </rules>
+            </nat>
+          </rulebase>
+        </entry>
+      </vsys>
+    </entry>
+  </devices>
+</config>

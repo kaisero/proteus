@@ -8,18 +8,19 @@ package digest
 import (
 	"fmt"
 
-	"github.com/okaiser/panos-analyst/internal/schema"
+	"github.com/kaisero/proteus/internal/schema"
 )
 
-// The platform a digest was built from.
-const (
-	PlatformFirewall = "firewall" // schema.xml
-	PlatformPanorama = "panorama" // cms-schema.xml
-)
+// PlatformFirewall is the platform every digest is built from: a firewall's
+// schema.xml. proteus reads firewall configurations only.
+const PlatformFirewall = "firewall"
 
 // formatVersion changes when the on-disk shape changes. Read refuses a digest it
 // does not understand rather than decoding it wrongly.
-const formatVersion = 1
+//
+// 2 added the encrypted mark (Node.Encrypted). A digest of format 1 would read
+// as one without secrets, so it is refused rather than read.
+const formatVersion = 2
 
 // Digest is one platform's schema at one PAN-OS version.
 type Digest struct {
@@ -29,18 +30,16 @@ type Digest struct {
 	Root          *schema.Node `json:"root"`
 }
 
-// Filename returns the committed name for a digest.
-func Filename(platform, version string) string {
-	return fmt.Sprintf("panos-%s-%s.json.gz", version, platform)
-}
+// Filename is the committed name of the one digest proteus embeds. Version in
+// the digest records the release its schema came from.
+const Filename = "firewall.json.gz"
 
 func (d *Digest) validate() error {
 	switch {
 	case d == nil:
 		return fmt.Errorf("digest: nil")
-	case d.Platform != PlatformFirewall && d.Platform != PlatformPanorama:
-		return fmt.Errorf("digest: unknown platform %q, want %s or %s",
-			d.Platform, PlatformFirewall, PlatformPanorama)
+	case d.Platform != PlatformFirewall:
+		return fmt.Errorf("digest: unknown platform %q, want %s", d.Platform, PlatformFirewall)
 	case d.Version == "":
 		return fmt.Errorf("digest: empty version")
 	case d.Root == nil:

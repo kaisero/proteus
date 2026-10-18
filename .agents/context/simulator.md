@@ -1,15 +1,17 @@
 # simulator
 
-Validated against ceb05c1 on 2026-09-29 · Purpose: how a simulation runs as stages, how certain its answer is, and how to trace one after the fact.
+Validated against 9e7d9b7 on 2026-10-08 · Purpose: how a simulation runs as stages, how certain its answer is, and how to trace one after the fact.
 
 ## Purpose & responsibilities
 
 `simulate` is the framework of spec §11: a run of named stages over one flow, each
-declaring its fidelity. It is a leaf (R12). `simulate/securitypolicy` answers which
-rule one flow hits on one device; `simulate/routing` (spec §17) which firewalls a
-packet crosses. `estate.Simulations` is the registry; the command makes one
-`simulate <kind>` subcommand per entry, from `kindCommands` when a kind needs its own
-flags (routing). `runlog` records each stage.
+declaring its fidelity. It is a leaf (R12). `internal/simulate/securitypolicy` answers which
+rule one flow hits on one device; `internal/simulate/routing` (spec §17) which firewalls a
+packet crosses; `internal/simulate/nat` (spec §18) the NAT rule and the translated packet on
+one firewall; `internal/simulate/pathpolicy` whether a flow passes every firewall on its
+path (the default mode of `simulate policy`). `internal/simulate/nat` is also the NAT engine routing and securitypolicy
+call; `internal/simulate/topology` and `internal/simulate/rulebase` are leaf packages they share. `estate.Simulations` is the registry; the command makes one
+`simulate <kind>` subcommand per entry, each from its own builder in `kindCommands`. `runlog` records each stage.
 
 ## How it works
 
@@ -31,88 +33,221 @@ logs one `[STEP]` line at info and the debug lines at debug, wraps errors as
 
 ### securitypolicy
 
-Eight stages, each ANDing into the running candidate set:
+Nine stages, each ANDing into the running candidate set:
 
 | Slug | Fidelity |
 |---|---|
 | `resolve-source`, `resolve-destination` | exact for an address; inferred for an FQDN resolved by this machine's DNS; undermatch for an FQDN with no address or any unresolved value |
 | `derive-zones` | exact when given; inferred when derived (forwarding table or configuration); not evaluated when no zone was found |
-| `match-service` | exact; overmatch naming rules kept for `application-default`, a predefined service or no service; not evaluated without `--port` |
+| `match-application` | exact; a no-op without a flow application or without App-ID data; overmatch naming rules kept for an unknown name (`doubt.application-unknown`) or a filter the custom flow application cannot be judged by (`doubt.application`) |
+| `match-service` | exact; overmatch naming rules kept for `application-default` (without an evaluated application, or with the port or protocol open: `doubt.app-port-open`), a predefined service or no service; not evaluated without `--port` |
 | `match-url` | exact; overmatch naming rules kept for a category the configuration does not define; not evaluated without `--url` when a candidate names a category |
-| `drop-disabled`, `order` | exact |
-| `first-match` | not evaluated: application (and user when given) |
+| `drop-disabled` | exact |
+| `order` | exact; sets `Verdict.Doubts` per candidate (spec 2026-10-07 §4.7) |
+| `first-match` | exact; overmatch when earlier doubtful candidates share the action; undermatch (undecided) when one has another action, or no rule and the zones are not single and known; not evaluated: user, and application when `match-application` did not evaluate it, only when a candidate up to the decision names one |
+
+`derive-zones` also applies `rule-type` when both zones are given, or derived with
+one defined zone on each side and no NAT rule in doubt (inferred, C5); that pair is
+`state.from`/`state.to`. `Run` refuses a given zone the vsys does not define with a
+`*simulate.ChoiceError` of kind `simulate.ChoiceZone` that lists its zones
+(`rulebase.UndefinedZones`, C15); `query.PolicyFile` checks the same first
+(`givenZones`): a usage error, or a hole per vsys when another selected vsys defines
+the zone; and path mode leaves the check not evaluated (the hop has its
+`zone.undefined` doubt). With several derived zones on a side, none, or a NAT rule
+in doubt, typed rules stay and each gets a `zone.derived` doubt
+(`state.ruleTypeOpen`). The decision (§4.7): the first candidate without doubt
+decides; with none, the default rule chosen by the known pair, given or derived
+(C16) (`intrazone-default`/`interzone-default`; local, then pushed override, else
+the built-in action; local and pushed that disagree are undecided). Doubts come from
+`doubt.go` (`ruleFields` classifies every schema child of the rule entry, guarded by
+a test): application, user, HIP, schedule, `application-default`, predefined or
+absent service, a URL category without `--url` or not defined, and an EDL, region or
+dynamic group as source or destination (`index.View.Opaque`, E23). Any stage at
+undermatch leaves the flow undecided. `Verdict.Decision()` gives `Pass`, `Stop` or `Undecided`.
+
+**Application** (spec 2026-10-16, plan D6-D8, D10, D17, D19; deep-dive
+[app-id](app-id.md)). `Run` loads nothing: the caller puts the device's
+`*appid.Data` in `Providers.Apps` (`query` loads it per content version; PBF builds
+its view with empty providers, so PBF keeps `doubt.application`). With a flow
+application `Run` first makes it canonical (`flowApplication`): a custom
+application of the scope in any case, with its configured name, else the content
+name (P14). An unknown name or a container is a `*simulate.ChoiceError` of kind
+`ChoiceApplication` with empty `Options`, the suggestions in its texts (P10, D13):
+`query.PolicyFile` makes it a usage error (exit 2), `pathpolicy` the hop's
+undecided (`doubt.application-unknown`, naming the device and content version).
+With `Protocol` empty, `Run` takes the protocol of the application's default per
+check: one protocol, else open (D10); `Verdict.Protocol` names it and
+`Verdict.AppData` says whether the target had data, so `needs` judges the run's
+flow.
+
+`match-application` sorts the rules into three sets: **explicit** (`View.Candidates`
+on `Application`: by name, group at any depth, filter, container, `any`, and a rule
+without an `application` element, which takes the digest default `any`, R1),
+**kept** (a name neither the data nor the configuration holds, after the group
+closure and in filter `exclude` lists, `doubt.application-unknown`; without
+containers a container name is unknown; D8), and **implicit** (allow rules only,
+I5, reaching an application whose `implicit-use-applications` holds the flow's,
+`Data.ImpliedBy`; minus explicit and kept, so no rule is in both passes). `order`
+lists explicit ∪ kept in rule order, then implicit in rule order (D7); `firstMatch`
+runs its doubt logic unchanged on that order, and the default rules come after
+both (I6). So an explicit match wins over an earlier implicit one (I2), and an
+implicit candidate never "may match first" against an explicit winner. A deciding
+implicit rule sets `Verdict.Implicit` and `note.app-implicit`. Every evaluated run
+adds `note.app-shift` (§4.6).
+
+`match-service` with an evaluated application checks `application-default` with
+`appid.Default.Match` on the rule's applications (for an implicit rule, the union
+of the defaults of its applications that imply the flow's, I7, I8): a `/secure`
+port adds `note.app-secure-port`, an ICMP type `note.app-icmp-type`, an open port
+or protocol keeps the rule with `doubt.app-port-open`; a custom service whose port
+is not a default port adds `note.app-non-default-port`. **P13/D19:** a protocol
+without ports (icmp, 89, 47) drops every rule whose service names only custom
+services or service groups, with or without a flow application; rules with
+service `any`, and rules kept for `application-default`, a predefined or no
+service, stay.
 
 Negated rules are inverted in the resolve stages. A rule without a category matches
 any URL. Relevance (S14) comes from the zone locator: a route more specific than a
-default covering either endpoint.
+default covering either endpoint. With `--file` there is no network, so relevance is
+unknown and the post-NAT zone is not checked.
 
 ### routing
 
 Reads every device's interface state, FIB and RIB through `simulate.Network`
 (`estate.NewNetwork` over the store; an HA pair is one node, paired by serial) and a
-path device's configuration through `Env.Load`. `routing.Topology` is built once:
-address owners, connected nets, a `bart` table per router, and `Place` (connected,
-else the most specific non-default route, walking on while that route leads to
-another node; ties and default-only are `ChoiceError`, exit 2).
+path device's configuration through `Env.Load`. A `Network` is per question (its lazy
+maps have no lock). It reads the raw tables through `When.Ops` (`estate.OpSource`;
+nil reads the store, a server shares a cache keyed by member and snapshot id) and
+builds every note (stale, HA, unreadable RIB) per question from the meta and `Now`.
+`routing.Topology` is built once: address owners, connected nets, a `bart` table per
+router, and `Place` (connected, else the most specific non-default route, walking on
+while that route leads to another node; ties and default-only are `ChoiceError`,
+exit 2).
 
 | Slug | Fidelity |
 |---|---|
 | `place` | exact (connected, `--device`); inferred (routed); undermatch when a device cannot be read |
-| `hop<N>/pbf` | exact; inferred when a PBF rule could take the packet or on a version gap; not evaluated without configuration |
+| `hop<N>/pbf` | exact; inferred when a PBF rule could take the packet; not evaluated without configuration |
 | `hop<N>/lookup` | exact; undermatch on ECMP (lowest next hop followed) or an unknown `nh_type` |
 | `hop<N>/zones` | exact |
 | `hop<N>/nat` | exact; inferred when a NAT rule could translate, or after an earlier hop could |
 | `hop<N>/next` | exact; undermatch when the path leaves the estate or by an interface; unresolved for two owners, over 16 hops |
 
+### nat
+
+`nat.Match(Input)` finds the first rule that surely matches the pre-NAT packet, the
+doubts above it (N11) and the excluded rules with their field; `nat.Rules` places
+each bi-directional rule's implicit destination rule directly after it (verified on
+fw01). `nat.Translate` gives the source candidates (port "assigned at runtime" for
+DIPP), the destination with its port, first-to-first for static ranges, and the
+post-NAT lookup. The `nat` kind's stages: `place`, `pbf`, `lookup`, `match`,
+`translate`, `post-lookup`. Routing's `nat` stage calls the engine and replaces the
+hop's egress after a destination NAT; the policy simulation's `derive-zones` runs it per source
+zone for the post-NAT destination zone.
+
 `Run.Output` is `routing.Path`: `Hops` (one per device and vsys; a vsys crossing
 splits through the external zones), `Outcome`, `End`, `Hidden` (off-path devices
 with interfaces without a router).
 
+### pathpolicy
+
+`pathpolicy.Run(ctx, env, in)` answers a flow along its path (spec 2026-10-07 §4,
+§5). It is a function package, not a registered kind. It runs routing once, then per
+hop: the path's doubts (ECMP, a PBF rule and each reason it only may match, with
+its own code, PBF or NAT undermatch, each NAT rule in doubt, a start by a default
+route), zone validity (both zones named, defined in the
+hop's vsys, not a placeholder), and each `Check` in list order. Today the one check
+is `Security`: securitypolicy with the hop's zones given and each endpoint trimmed
+to the traced address. Its fidelity is the weakest of the address, zone and
+`first-match` stages, capped by a routed start or inferred NAT. A hop that routing drops runs no check. The fold: the first undecided or
+stopping hop sets `At`; undecided wins over stop on one hop; a later stop after an
+undecided point is a note; hops after a stop carry `AfterDeny`; with no point,
+routing's end decides (delivered or local: allowed; dropped: denied; any other end:
+undecided). Routing's `ChoiceError` and `UnavailableError` return unchanged; an
+unreadable hop configuration is a hole. `internal/simulate/pathlab` is the
+two-firewall fixture its tests share with the CLI's.
+
 ## Build / run pointers
 
-- `go test ./simulate/... ./runlog`
-- `./bin/panos-analyst simulate secpolicy <src> <dst> --file <cfg> --why`
-- `./bin/panos-analyst simulate routing <src> <dst> --why` (needs fetched devices)
+- `go test ./internal/simulate/... ./runlog`
+- `./bin/proteus simulate policy <src> <dst> --why` (path mode; needs fetched devices)
+- `./bin/proteus simulate policy <src> <dst> --file <cfg> --why`
+- `./bin/proteus simulate routing <src> <dst> --why` (needs fetched devices)
+- `./bin/proteus simulate nat <src> <dst> --device <fw> --port <p> --why`
+- `scripts/device-probe.sh --nat <device> <router> <src,dst,port>...` against the device
+- `scripts/device-probe.sh --path <flows-file>` compares each decided path hop with
+  the hop device's `test security-policy-match` (`PANOS_HOST_<NAME>`,
+  `PANOS_API_KEY_<NAME>`)
 - `--log-level debug`, then `grep '\[STEP\]'` in the run log: the rules each stage left.
 
 ## Public API
 
-<!-- GENERATED:api ./simulate -->
+<!-- GENERATED:api ./internal/simulate -->
 ```go
+type ChoiceError struct{ ... }
+type CodedError struct{ ... }
 type DeviceData struct{ ... }
 type Endpoint struct{ ... }
 type Env struct{ ... }
 type Fidelity struct{ ... }
 type Flow struct{ ... }
+type Forward struct{ ... }
 type Input struct{ ... }
+type Match struct{ ... }
+type Missing struct{ ... }
 type Network interface{ ... }
 type Outcome struct{ ... }
+type Port struct{ ... }
+type Reasons []reason.Reason
 type Run struct{ ... }
 type Simulation interface{ ... }
 type Stage struct{ ... }
 type StageState struct{ ... }
 type Step[S any] struct{ ... }
 type Target struct{ ... }
+type UnavailableError struct{ ... }
 
+func (e *ChoiceError) Error() string
+func (e *CodedError) Code() reason.Code
+func (e *CodedError) Error() string
+func (e *Env) Stepf(format string, args ...any)
+func (e *UnavailableError) Error() string
 func (e Endpoint) String() string
 func (f Fidelity) Declared() bool
 func (f Fidelity) Level() string
 func (f Fidelity) MarshalJSON() ([]byte, error)
-func (f Fidelity) Reasons() []string
+func (f Fidelity) Reasons() Reasons
 func (f Fidelity) Skipped() []string
+func (f Fidelity) SkippedReasons() Reasons
 func (f Fidelity) String() string
+func (f Fidelity) UnderMatchGroups() []Reasons
+func (f Fidelity) UnderMatchReasons() Reasons
+func (f Flow) FirstAddresses() Flow
+func (m Match) First() resolve.FIBRoute
+func (m Missing) Why() reason.Reason
+func (p Port) Link() netip.Prefix
+func (rs Reasons) Joined() reason.Reason
+func (rs Reasons) Prefixed(p string) Reasons
+func (rs Reasons) Text() string
+func (rs Reasons) Texts() []string
+func (t Target) Index(rb resolve.Rulebase, vsys string) (*index.Index, error)
 func Addr(a netip.Addr) Endpoint
+func DNSNotes(f Flow, used string) Reasons
 func Execute[S any](ctx context.Context, kind string, state *S, steps []Step[S], keepBitmaps bool, log *runlog.Logger) ([]Stage, error)
+func NewMissing(device string, r reason.Reason) Missing
 func NotEvaluated(dimensions ...string) Fidelity
-func OverMatchBecause(reason string) Fidelity
+func OverMatchBecause(r reason.Reason) Fidelity
 func Overall(stages []Stage) Fidelity
-func UnderMatch(reason string) Fidelity
+func UnderMatch(rs ...reason.Reason) Fidelity
 func Weakest(fs ...Fidelity) Fidelity
 ```
 <!-- /GENERATED:api -->
 
-<!-- GENERATED:api ./simulate/securitypolicy -->
+<!-- GENERATED:api ./internal/simulate/securitypolicy -->
 ```go
+type Doubt struct{ ... }
+type Implicit struct{ ... }
+type Outcome string
 type Relevance struct{ ... }
 type Simulation struct{}
 type Verdict struct{ ... }
@@ -122,44 +257,126 @@ func (Simulation) Describe() string
 func (Simulation) Kind() string
 func (Simulation) Run(ctx context.Context, env *simulate.Env, in simulate.Input) (simulate.Run, error)
 func (Simulation) Stages() []string
+func (d Doubt) Text() string
+func (r Relevance) MarshalJSON() ([]byte, error)
+func (v Verdict) Decision() (Outcome, simulate.Reasons)
 ```
 <!-- /GENERATED:api -->
 
-<!-- GENERATED:api ./simulate/routing -->
+<!-- GENERATED:api ./internal/simulate/routing -->
 ```go
-type ChoiceError struct{ ... }
 type Hop struct{ ... }
 type Lookup struct{ ... }
-type Match struct{ ... }
 type NotFollowed struct{ ... }
 type Outcome string
 type Path struct{ ... }
-type Placed string
-type Placement struct{ ... }
-type Port struct{ ... }
 type Simulation struct{}
-type Topology struct{ ... }
 
 func (Simulation) Describe() string
 func (Simulation) Kind() string
 func (Simulation) Run(ctx context.Context, env *simulate.Env, in simulate.Input) (simulate.Run, error)
 func (Simulation) Stages() []string
-func (e *ChoiceError) Error() string
-func (m Match) First() resolve.FIBRoute
-func (p Port) Link() netip.Prefix
-func (t *Topology) Connected(a netip.Addr) []Port
-func (t *Topology) Interface(node, name string) (Port, bool)
-func (t *Topology) Lookup(node, router string, a netip.Addr) (Match, bool)
-func (t *Topology) Nodes() []string
-func (t *Topology) Owners(a netip.Addr) []Port
-func (t *Topology) Peers(out Port, nh netip.Addr) []Port
-func (t *Topology) Place(src netip.Addr) (Placement, error)
-func (t *Topology) Routers(node string) []string
-func NewTopology(devs []simulate.DeviceData) *Topology
+func NATDoubt(d natsim.Doubt) reason.Reason
 ```
 <!-- /GENERATED:api -->
 
-<!-- GENERATED:api ./runlog -->
+<!-- GENERATED:api ./internal/simulate/pathpolicy -->
+```go
+type Check interface{ ... }
+type CheckResult struct{ ... }
+type Hop struct{ ... }
+type HopVerdict string
+type Point struct{ ... }
+type Result struct{ ... }
+type Security struct{}
+type Verdict string
+
+func (Security) Evaluate(ctx context.Context, env *simulate.Env, h routing.Hop, flow simulate.Flow) (CheckResult, error)
+func (Security) Name() string
+func Checks() []Check
+func Run(ctx context.Context, env *simulate.Env, in simulate.Input) (Result, []simulate.Stage, error)
+```
+<!-- /GENERATED:api -->
+
+<!-- GENERATED:api ./internal/simulate/nat -->
+```go
+type Doubt struct{ ... }
+type Excluded struct{ ... }
+type Input struct{ ... }
+type MatchResult struct{ ... }
+type Result struct{ ... }
+type Rule struct{ ... }
+type Simulation struct{}
+type Translation struct{ ... }
+
+func (Simulation) Describe() string
+func (Simulation) Kind() string
+func (Simulation) Run(ctx context.Context, env *simulate.Env, in simulate.Input) (simulate.Run, error)
+func (Simulation) Stages() []string
+func (d Doubt) Text() string
+func FQDNs(in Input, m MatchResult) []string
+func Match(in Input) MatchResult
+func Rules(t *resolve.Target) []Rule
+func Translate(in Input, m MatchResult) Result
+```
+<!-- /GENERATED:api -->
+
+<!-- GENERATED:api ./internal/simulate/topology -->
+```go
+type Placed string
+type Placement struct{ ... }
+type Topology struct{ ... }
+
+func (t *Topology) Connected(a netip.Addr) []simulate.Port
+func (t *Topology) Forward(node, router string, a netip.Addr) simulate.Forward
+func (t *Topology) Interface(node, name string) (simulate.Port, bool)
+func (t *Topology) Lookup(node, router string, a netip.Addr) (simulate.Match, bool)
+func (t *Topology) Nodes() []string
+func (t *Topology) Owners(a netip.Addr) []simulate.Port
+func (t *Topology) Peers(out simulate.Port, nh netip.Addr) []simulate.Port
+func (t *Topology) Place(src netip.Addr) (Placement, error)
+func (t *Topology) Routers(node string) []string
+func (t *Topology) Start(node, router string, src netip.Addr) (simulate.Port, netip.Prefix, bool, error)
+func NewTopology(devs []simulate.DeviceData) *Topology
+func UnknownNextHopType(node string, m simulate.Match) (reason.Reason, bool)
+```
+<!-- /GENERATED:api -->
+
+<!-- GENERATED:api ./internal/simulate/rulebase -->
+```go
+type Addresses map[string]string
+type PBFMatch struct{ ... }
+type PBFPassed struct{ ... }
+type Side struct{ ... }
+type Vsys struct{ ... }
+type ZoneRefusal struct{ ... }
+
+func (m Addresses) Holds(value string, a netip.Addr) bool
+func (p PBFPassed) String() string
+func (s Side) Holds(i uint32) bool
+func (v Vsys) Addresses() Addresses
+func (v Vsys) PBF(src, dst netip.Addr, proto string, port uint16, in simulate.Port) PBFMatch
+func (v Vsys) Sides(rb resolve.Rulebase, src, dst netip.Addr, negated func(int) (bool, bool)) (
+func Certainty(rb resolve.Rulebase, unresolved []index.Unresolved) simulate.Fidelity
+func Defined(cfg *config.Config, sc config.Scope, rb resolve.Rulebase, field string) map[string]bool
+func FromFits(r resolve.PBFRule, in simulate.Port) bool
+func Load(load func(device, vsys string) (simulate.Target, error), device, vsys string) (Vsys, bool)
+func PassedText(ps []PBFPassed) string
+func Protocol(p string) string
+func ServiceTerm(proto string, port uint16) (string, bool)
+func Undecidable(values []string, defined map[string]bool, keywords ...string) bool
+func UndefinedService(cfg *config.Config, text string) reason.Reason
+func UndefinedZones(cfg *config.Config, sc config.Scope, from, to string) *ZoneRefusal
+```
+<!-- /GENERATED:api -->
+
+`runlog.Open` names a file `<command>-<UTC ms timestamp>-<seq>.log`. The sequence
+number is a process-wide atomic counter, and a name another process holds is skipped,
+so runs in one millisecond never share a file. Rotation sorts by timestamp, then
+sequence number, ignores files not named so, and treats a file another run removed
+first as removed.
+
+<!-- GENERATED:api ./internal/runlog -->
 ```go
 type Level int
 type Logger struct{ ... }
@@ -173,9 +390,10 @@ func (l *Logger) Enabled(lv Level) bool
 func (l *Logger) Errorf(tag Tag, format string, args ...any)
 func (l *Logger) Infof(tag Tag, format string, args ...any)
 func (l *Logger) Path() string
+func (l *Logger) Persist() error
 func (l *Logger) Warnf(tag Tag, format string, args ...any)
 func (lv Level) String() string
-func Discard() *Logger
+func Buffered(o Options) *Logger
 func Open(o Options) (*Logger, error)
 func ParseLevel(s string) (Level, error)
 ```
@@ -187,7 +405,9 @@ func ParseLevel(s string) (Level, error)
   the arrival interface's zone, which a table only predicts (PAN-OS "Packet Flow
   Sequence").
 - **A default route does not place a source.** A source placed only by a default
-  route leaves the source zone open (not evaluated). Measured on fw01 on 2026-09-29:
+  route leaves the source zone open (not evaluated), from the forwarding table and
+  from a default static route in the configuration alike: each placement ends with
+  the route's prefix, which `viaDefault` reads. Measured on fw01 on 2026-09-29:
   derived zones agreed with the device for 3 of 7 probe flows (given zones: 7 of 7).
   The misses came from overlay routing the forwarding table does not show: traffic
   arriving on a tunnel zone whose source a specific route places elsewhere, and a
@@ -198,15 +418,20 @@ func ParseLevel(s string) (Level, error)
   `simulate` receives the log through `Env`.
 - **`Run.Output` is `any`.** Each kind documents its type; securitypolicy's is
   `Verdict`, routing's `routing.Path`.
-- **Routing detects PBF and NAT, it does not follow them.** The stages run in
-  packet-flow order (pbf, lookup, zones, nat) so a later simulation replaces them in
-  place (`routing.TestPBFForwardAndSourceNAT`).
+- **Routing applies NAT and detects PBF.** The stages run in packet-flow order
+  (pbf, lookup, zones, nat); a destination NAT adds a post-NAT lookup to the hop
+  (`routing.TestDestinationNAT`).
+- **NAT matches the pre-NAT packet, security policy the post-NAT zones.** Both
+  verified on fw01 with real traffic (spec §18 F5, F6); the fixtures
+  `testdata/opdata/fw01-nat-policy-match.tsv` hold the device's answers and
+  `nat.TestTheRuleFw01Named` replays them.
 - **Unverified shapes fail conservative.** The lab has no HA pair, multi-vsys,
   discard or next-lr route: an unknown `nh_type` is unresolved, an HA state short of
   a confirmed pair is not followed (spec §17.2).
 
 ## See also
 
-- [commands](commands.md), [questions](questions.md), [providers](providers.md)
+- [commands](commands.md), [questions](questions.md), [providers](providers.md),
+  [app-id](app-id.md)
 - spec §11 and §17, plans `docs/plans/2026-09-29-panos-analyst-m4-simulator.md`,
   `docs/plans/2026-09-29-panos-analyst-routing.md`

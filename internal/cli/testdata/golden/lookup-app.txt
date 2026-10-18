@@ -1,0 +1,14 @@
+file / vsys1   TMP
+  note: application data of content 8000-1000 from TMP
+  file/vsys1: application app-remote
+application    app-remote                   predefined
+
+  category     networking
+  subcategory  remote-access
+  technology   client-server
+  risk         4
+  default      tcp/80,443,8090
+  uses         dns
+  implicit uses ssl, web-browsing
+
+1 with it, 0 without, 0 holes

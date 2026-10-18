@@ -70,6 +70,7 @@ func refPathsOf(t *testing.T, doc, array string) map[string][]string {
 }
 
 func TestReferencePathsKeepsTheWholePath(t *testing.T) {
+	t.Parallel()
 	got := refPathsOf(t, refPathDoc, "rules")
 
 	for path, want := range map[string]string{
@@ -94,6 +95,7 @@ func TestReferencePathsKeepsTheWholePath(t *testing.T) {
 // flattens it away, which is right for the grammar and wrong for the file: the
 // remaining path then matches nothing.
 func TestReferencePathsKeepsANamedUnionButNotAnAnonymousOne(t *testing.T) {
+	t.Parallel()
 	got := refPathsOf(t, refPathDoc, "rules")
 	for path := range got {
 		if strings.HasPrefix(path, "group/") || strings.HasPrefix(path, "profiles/") {
@@ -107,6 +109,7 @@ func TestReferencePathsKeepsANamedUnionButNotAnAnonymousOne(t *testing.T) {
 
 // A leaf inside a nested entry array belongs to that array, not to this one.
 func TestReferencePathsStopsAtANestedEntryArray(t *testing.T) {
+	t.Parallel()
 	got := refPathsOf(t, refPathDoc, "rules")
 	for path := range got {
 		if strings.HasPrefix(path, "nested/") {
@@ -117,12 +120,14 @@ func TestReferencePathsStopsAtANestedEntryArray(t *testing.T) {
 
 // A memberof is not always a reference: a literal constraint names no object.
 func TestReferencePathsSkipsLiteralConstraints(t *testing.T) {
+	t.Parallel()
 	if kinds, ok := refPathsOf(t, refPathDoc, "rules")["type"]; ok {
 		t.Errorf("string('URL List') is not an object reference, got %v", kinds)
 	}
 }
 
 func TestPathFieldsFlattensOnlyAnonymousChoices(t *testing.T) {
+	t.Parallel()
 	root, err := Parse(strings.NewReader(refPathDoc))
 	if err != nil {
 		t.Fatalf("Parse: %v", err)

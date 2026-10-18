@@ -1,0 +1,34 @@
+{
+  "type": "object",
+  "properties": {
+    "device": {
+      "type": "string",
+      "description": "the device to compare"
+    },
+    "from": {
+      "type": "string",
+      "description": "the older point in time; left out, the snapshot before the newer one"
+    },
+    "to": {
+      "type": "string",
+      "description": "the newer point in time; left out, the latest"
+    },
+    "detail": {
+      "type": "string",
+      "description": "summary or full: how much of each result to return; summary when left out",
+      "enum": [
+        "summary",
+        "full"
+      ]
+    },
+    "limit": {
+      "type": "integer",
+      "description": "keep only the first N results, in the answer's usual order: findings for search, cards for lookup, single changes for snapshot_diff; the summary's omitted counts the rest. No default: left out, every result is returned",
+      "minimum": 1
+    }
+  },
+  "required": [
+    "device"
+  ],
+  "additionalProperties": false
+}

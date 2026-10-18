@@ -38,7 +38,7 @@ complete answer. A value nothing recognises is an incomplete one. See
 
 ### Wiring comes from the schema
 
-`wireResolvers` in `index/resolver.go` maps each `Field` to the resolvers covering
+`wireResolvers` in `internal/index/resolver.go` maps each `Field` to the resolvers covering
 the kinds `config.FieldKinds("rulebase/security/rules")` reports. Nothing here
 lists fields by hand.
 
@@ -48,13 +48,18 @@ as though `source` names nothing.
 
 ### The four paths
 
-`View.Candidates` in `index/candidates.go` is the driver. A rule field reaches a
+`View.Candidates` in `internal/index/candidates.go` is the driver. A rule field reaches a
 value by four paths, and forgetting one gives a wrong answer rather than an
 incomplete one:
 
 1. the field names an object whose value matches — the resolvers
 2. the field names a group holding such an object, at any depth, static membership
-   or tag filter alike — the closure
+   or tag filter alike — the closure. Each group kind (address, service,
+   application group) has its own closure, and a field asks only the group kinds
+   the schema lets it name: an address group and a service group may share a name.
+   The closure is built in one pass: groups that hold each other (a cycle) are
+   joined into one component first, and the components are built in the order
+   they hold each other (`settle`, `components` in `closure.go`)
 3. the field holds a matching value directly — `literalRules`
 4. the field is `any` — `RulesWithAny`
 
@@ -72,7 +77,7 @@ a specific one.
 | `resolver_service.go` | service, service-group | protocol plus port-range interval containment |
 | `resolver_user.go` | user, user-group, dynamic-user-group | local database, then the caller's directory |
 | `resolver_zone.go` | zone | interface addresses and static routes as a routing table, longest prefix wins |
-| `resolver_app.go` | application, application-group, application-filter, application-container | custom applications only; the rest is content-database data |
+| `resolver_app.go` | application, application-group, application-filter, application-container | custom applications by name in any case; with App-ID data in `Providers.Apps` also predefined applications, the filters that select one (`appid.Filter.Selects`, with `application-tag` tags) and the containers that hold it; without data `gap.application-filter` and `gap.application-container` per filter and container, and without containers in the data the container gaps stay |
 
 `tag` has no resolver and needs none: a tag is a name, and the generic name path
 already answers it.
@@ -84,11 +89,16 @@ already answers it.
   reachability question was address-shaped.
 - **URL matching is by token, never by substring.** The host matches in full and
   the path as a prefix, so `wildcard-example.com` does not cover
-  `wildcard-example.com.evil.net`. Syntax rules in `resolve/urlpattern.go` are
+  `wildcard-example.com.evil.net`. Syntax rules in `internal/resolve/urlpattern.go` are
   verified against a firewall's validator; the matching rules are
   documentation-derived and labelled as such.
 - **A service group spells its membership `members`**, an address group `static`,
   a local user group `user`. All three are read in `resolve.objectValue`.
+- **An application hit keeps its scope.** A custom application or a filter keeps
+  the scope that defines it; a content application or a container gets the
+  predefined scope (`config.ScopePredefined`), so R5 and R10 hold. A custom
+  application wins over a content one of the same name in any case (P14). See
+  [app-id](app-id.md).
 - **Zone placement has two sources.** With a `ZoneSnapshot` in `Providers` it reads
   the device's own forwarding table and is authoritative. Without one it infers from
   the configuration, reports that it did, and reports every limit: a zone with no
@@ -97,24 +107,26 @@ already answers it.
 
 ## Adding a value space
 
-1. Write `index/resolver_<name>.go` implementing the four methods.
+1. Write `internal/index/resolver_<name>.go` implementing the four methods.
 2. Read whatever it needs in `resolve`, not in `index`.
-3. Register it in `build()` in `index/index.go`; the kinds it declares do the wiring.
+3. Register it in `build()` in `internal/index/index.go`; the kinds it declares do the wiring.
 4. If a kind name is ambiguous in the schema, use `resolve.ObjectsAt` with an
    explicit container path rather than `ObjectsInScope`. See [config-loading](config-loading.md).
 5. Report what it cannot evaluate. Never guess membership.
 
 ## Build / run pointers
 
-- `go test ./index/ -run 'Resolver|Candidates'` — the value-space tests.
-- `./bin/panos-analyst search <value> --file <cfg>` — every value space at once.
+- `go test ./internal/index/ -run 'Resolver|Candidates'` — the value-space tests.
+- `./bin/proteus search <value> --file <cfg>` — every value space at once.
 - `scripts/device-probe.sh` — compares the first match against a real firewall.
 
 ## Public API
 
-<!-- GENERATED:api ./index -->
+<!-- GENERATED:api ./internal/index -->
 ```go
+type Edges struct{ ... }
 type Field int
+type Group struct{ ... }
 type Hit struct{ ... }
 type Index struct{ ... }
 type Interner struct{ ... }
@@ -123,6 +135,7 @@ type ProfileUse struct{ ... }
 type Providers struct{ ... }
 type Ref struct{ ... }
 type Report struct{ ... }
+type Set struct{ ... }
 type StaleReporter interface{ ... }
 type UnparsedFilter struct{ ... }
 type Unresolved struct{ ... }
@@ -135,19 +148,17 @@ type ZoneSnapshot struct{ ... }
 
 func (f Field) String() string
 func (i *Index) Candidates(f Field, value string) (*roaring.Bitmap, Report)
-func (i *Index) CandidatesFor(f Field, addr netip.Addr) *roaring.Bitmap
-func (i *Index) CandidatesForName(f Field, name string) *roaring.Bitmap
-func (i *Index) CandidatesForPrefix(f Field, p netip.Prefix) *roaring.Bitmap
 func (i *Index) Containing(addr netip.Addr) []Match
-func (i *Index) DirectGroupsOf(name string) []string
 func (i *Index) Disabled() *roaring.Bitmap
-func (i *Index) GroupsOf(name string) []string
+func (i *Index) GroupPath(kind, group, name string) []string
+func (i *Index) GroupsHolding(kind, name string, direct bool) []Group
 func (i *Index) Interner() *Interner
-func (i *Index) MembersOf(group string) []string
+func (i *Index) MatchWildcards(prefixes []netip.Prefix, single bool) ([]Hit, []Unresolved)
 func (i *Index) Overlapping(p netip.Prefix) []Match
 func (i *Index) ProfileUses(value string) []ProfileUse
 func (i *Index) Refs(name string) []Ref
 func (i *Index) Rules() []resolve.Rule
+func (i *Index) RulesReaching(f Field, name string) *roaring.Bitmap
 func (i *Index) RulesWith(f Field, ids ...uint32) *roaring.Bitmap
 func (i *Index) RulesWithAddr(f Field, addr netip.Addr) *roaring.Bitmap
 func (i *Index) RulesWithAny(f Field) *roaring.Bitmap
@@ -155,12 +166,14 @@ func (i *Index) RulesWithPrefix(f Field, p netip.Prefix) *roaring.Bitmap
 func (i *Index) Scope() config.Scope
 func (i *Index) SearchValues(substr string) []Hit
 func (i *Index) UnparsedFilters() []UnparsedFilter
-func (i *Index) VersionGap() string
 func (i *Index) With(p Providers) *View
 func (in *Interner) ID(name string) uint32
 func (in *Interner) Len() int
 func (in *Interner) Lookup(name string) (uint32, bool)
 func (in *Interner) Name(id uint32) string
+func (s *Set) Config() *config.Config
+func (s *Set) Index(sc config.Scope, rb resolve.Rulebase) (*Index, error)
+func (s *Set) Provider(sc config.Scope) func(resolve.Rulebase) (*Index, error)
 func (s *UserSnapshot) GroupsOf(user string) []string
 func (s *UserSnapshot) Stale() (string, bool)
 func (s *ZoneSnapshot) Describe() string
@@ -168,14 +181,19 @@ func (s *ZoneSnapshot) Routers() []string
 func (s *ZoneSnapshot) UnroutedInterfaces() []string
 func (s *ZoneSnapshot) ZonesOf(addr netip.Addr) []ZonePlacement
 func (u Unresolved) String() string
+func (u Unresolved) Why() reason.Reason
 func (v *View) Candidates(f Field, value string) (*roaring.Bitmap, Report)
-func For(cfg *config.Config, sc config.Scope) (*Index, error)
-func ForRulebase(cfg *config.Config, sc config.Scope, rb resolve.Rulebase) (*Index, error)
+func (v *View) Opaque(f Field) (*roaring.Bitmap, map[uint32][]reason.Reason)
+func Build(cfg *config.Config, edges *Edges, sc config.Scope, rb resolve.Rulebase) (*Index, error)
 func LoadUserSnapshot(r io.Reader) (*UserSnapshot, error)
 func LoadZoneSnapshot(r io.Reader) (*ZoneSnapshot, error)
+func New(cfg *config.Config, sc config.Scope, rb resolve.Rulebase) (*Index, error)
 func NewInterner() *Interner
+func NewSet(cfg *config.Config) *Set
+func NewUnresolved(value, kind string, r reason.Reason) Unresolved
 func NewZoneSnapshot(takenAt time.Time, source string, interfaces, fib io.Reader) (*ZoneSnapshot, error)
 func PrefixesOf(value string) []netip.Prefix
+func ReadEdges(cfg *config.Config) (*Edges, error)
 ```
 <!-- /GENERATED:api -->
 
@@ -194,8 +212,8 @@ func PrefixesOf(value string) []netip.Prefix
 
 ## See also
 
-- `index/candidates.go` — the driver and the four paths
-- `index/resolver.go` — the interface, `Providers`, `View`, `Report`, `SearchValues`
+- `internal/index/candidates.go` — the driver and the four paths
+- `internal/index/resolver.go` — the interface, `Providers`, `View`, `Report`, `SearchValues`
 - [reporting](reporting.md) — what a resolver must report when it cannot answer
 - [providers](providers.md) — value spaces that need data a file does not hold
 - `ARCHITECTURE.md` — the reachability-versus-verdict seam

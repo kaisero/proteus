@@ -1,0 +1,4 @@
+/* Terminal output is for reading. Only command blocks get a copy button. */
+.language-text .md-clipboard {
+  display: none;
+}

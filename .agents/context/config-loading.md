@@ -5,7 +5,7 @@ Validated against 86fd84f on 2026-09-27 · Purpose: how a configuration file bec
 ## Purpose & responsibilities
 
 `config` owns the file and the schema. It parses the XML into an element tree,
-attaches the schema digest for that PAN-OS version, and answers the questions only
+attaches the one schema digest, and answers the questions only
 the schema can answer: which object kinds a field may name, where a kind sits under
 a scope, and every reference edge the file contains.
 
@@ -27,16 +27,32 @@ Two details are load-bearing and both have regression tests:
   `type=export&category=configuration` or wrapped in `<response><result>` from
   `type=config&action=show`. Both load.
 - **A nested `<config>` is an ordinary child.** A firewall file holds one under
-  `shared/log-settings`, and a Panorama template embeds a whole firewall
-  configuration. Parsing stops only when
+  `shared/log-settings`. Parsing stops only when
   the outermost one closes. Stopping at the first nested close found 1 reference
   edge where the correct walk finds 18.
 
-Only 11.2 digests ship. Another version is read with the nearest digest: the
-highest not above it, else the lowest (spec §9). `Report.VersionGap` and
-`Config.VersionGap()` name both versions, and every index `Candidates` report
-carries it as an `Unresolved`, because a field that moved between releases yields
-no reference and a lookup can then miss rules without looking incomplete.
+**Predefined services sit next to the configuration.** When `predefined.xml`
+(`PredefinedFile`) is in the same directory, `Load` reads it too: the device's
+answer to the predefined service command, bare `<service>` or wrapped (L4).
+`Config.Predefined()` returns it under a `<predefined>` element, so its path is
+`/predefined/service`; it is not part of `Root()`, so a walk never sees it. No file,
+or a well-formed file without `<service>`, loads without them (the doubt stays); a
+file that cannot be read or parsed fails the load and names the file.
+The node is hand-modelled (R8, `schema.HandModelled`).
+
+One digest ships (`schemadigest/firewall.json.gz`, from 11.2) and reads every
+version. `Load` does not check the `version` attribute; a configuration without
+one loads. `Version()` and `DetailVersion()` are for display only.
+
+**Nothing is dropped silently (R3).** `Load` walks the tree against the digest and
+lists each element the digest does not describe in `Report.Untyped` (instance
+path), once at its top: a field a newer release added counts as one. The element
+stays in the tree, so a reader that wants it still finds it. The count stays in the
+report; no answer shows it (todo 55). "Described" has one definition: `schema.Node.Step`, plus the
+hand-modelled shared pushed rulebases in `Config.ChildNode`; snapshot diff uses the
+same two. The walk costs about 3% of a load (`BenchmarkUndescribedLarge` against
+`BenchmarkLoadLarge`). `TestRoundTripLosesNothing` writes each fixture's tree back
+and checks it against the file.
 
 ### The element tree
 
@@ -47,21 +63,18 @@ receiver, so a walk reads as a path rather than as a chain of existence checks.
 `InstancePath` names entries, because two vsys can each hold an object of
 the same name.
 
-### The digest, and why it is embedded twice
+### The digest, and where it lives
 
 The schema is large. `internal/digest` stores a trimmed, gzipped form, and
-`config/embed.go` embeds it with `go:embed schemadigest`.
+`internal/config/embed.go` embeds it with `go:embed schemadigest`.
 
-An embed directive cannot reach outside its own package, so the digests live in two
-committed places: `schemadigest/` holds the originals and `config/schemadigest/`
-holds the copy that is embedded. `make config/schemadigest` refreshes the copy and
-`make digest-check` fails the build if they diverge. When the copy was gitignored,
-a pristine checkout did not compile at all, and neither did a consumer running
-`go get`.
+An embed directive cannot reach outside its own package, so the digests have one
+committed home, `internal/config/schemadigest/`. The schemadigest tool writes them
+there, so there is no second copy to keep in step. When the directory was
+gitignored, a pristine checkout did not compile at all.
 
 Both the decoded digest and the reference table are cached process-wide per schema.
-Before that caching, `Load` cost 41.8 ms and `Walk` 15.2 ms; after, 0.12 ms and
-0.011 ms.
+Before that caching, `Load` cost 41.8 ms; after, 0.12 ms.
 
 ### Schema questions
 
@@ -73,12 +86,8 @@ Before that caching, `Load` cost 41.8 ms and `Walk` 15.2 ms; after, 0.12 ms and
   profile live under `profiles/`.
 - **`WalkPaths(fn)`** — every reference value in the file, scoped, each located by
   its path below the entry that holds it (`profile-setting/group`, `log-setting`),
-  with the candidate kinds the schema allows for that leaf alone. This is the walk
-  to use.
-- **`Walk(fn)`** — the older walk, kept for callers that have not moved. It sees
-  only `entry/<field>/member`, which is 397 of the firewall schema's 1,991
-  reference leaves, and reports a field's candidates merged across everything
-  below it.
+  with the candidate kinds the schema allows for that leaf alone. It is the only
+  walk.
 
 ### Ambiguous kind names
 
@@ -99,34 +108,32 @@ that might hit an ambiguous kind uses `KindContainers` and chooses, then reads w
 
 ## Build / run pointers
 
-- `go test ./config/` — loading, the tree, the walk, the schema questions.
-- `./bin/panos-analyst snapshot show --file <cfg>` — version, vsys, rule counts.
-- `make digest-check` — the two digest copies agree.
+- `go test ./internal/config/` — loading, the tree, the walk, the schema questions.
+- `./bin/proteus snapshot show --file <cfg>` — version, vsys, rule counts.
 
 ## Public API
 
-<!-- GENERATED:api ./config -->
+<!-- GENERATED:api ./internal/config -->
 ```go
 type Config struct{ ... }
 type Element struct{ ... }
 type Event struct{ ... }
-type EventKind int
 type Report struct{ ... }
 type Scope struct{ ... }
 type ScopeSort int
 type Untyped struct{ ... }
 
+func (c *Config) ChildNode(n *schema.Node, child *Element) *schema.Node
 func (c *Config) DetailVersion() string
 func (c *Config) Digest() *schema.Node
-func (c *Config) DigestVersion() string
 func (c *Config) FieldKinds(suffix string) map[string][]string
 func (c *Config) KindContainer(kind string) []string
 func (c *Config) KindContainers(kind string) [][]string
 func (c *Config) Path() string
+func (c *Config) Predefined() *Element
 func (c *Config) Root() *Element
+func (c *Config) SchemaNode(el *Element) *schema.Node
 func (c *Config) Version() string
-func (c *Config) VersionGap() string
-func (c *Config) Walk(fn func(Event) bool) error
 func (c *Config) WalkPaths(fn func(Event) bool) error
 func (e *Element) Attr(name string) string
 func (e *Element) Child(name string) *Element
@@ -176,7 +183,7 @@ func ParseScope(s string) (Scope, error)
 
 ## See also
 
-- `config/load.go`, `config/tree.go`, `config/walk.go`
+- `internal/config/load.go`, `internal/config/tree.go`, `internal/config/walk.go`
 - `internal/schema/refs.go` — target classification and the census
-- [schema-codegen](schema-codegen.md) — where the digest comes from
+- [schema-digest](schema-digest.md) — where the digest comes from
 - [scope-semantics](scope-semantics.md) — what `resolve` builds on this

@@ -1,0 +1,53 @@
+<config version="11.2.0" urldb="paloaltonetworks" detail-version="11.2.5">
+  <!-- fw02 of the path fixture, derived from firewall-lab.xml: zones home
+       (vlan.1) and labor (vlan.32), and 198.18.0.0/15 routed to fw01 at
+       198.19.0.254. Zones and addresses match testdata/opdata/fw02-interface-all.xml.
+       No security rule and no pushed rule, so the default rules decide. -->
+  <shared/>
+  <devices>
+    <entry name="localhost.localdomain">
+      <network>
+        <interface>
+          <vlan>
+            <units>
+              <entry name="vlan.1"><ip><entry name="198.18.1.1/24"/></ip></entry>
+              <entry name="vlan.32"><ip><entry name="198.19.0.1/24"/></ip></entry>
+            </units>
+          </vlan>
+        </interface>
+        <logical-router>
+          <entry name="default">
+            <vrf>
+              <entry name="default">
+                <interface><member>vlan.1</member><member>vlan.32</member></interface>
+                <routing-table>
+                  <ip>
+                    <static-route>
+                      <entry name="to-lab">
+                        <destination>198.18.0.0/15</destination>
+                        <interface>vlan.32</interface>
+                        <nexthop><ip-address>198.19.0.254</ip-address></nexthop>
+                      </entry>
+                    </static-route>
+                  </ip>
+                </routing-table>
+              </entry>
+            </vrf>
+          </entry>
+        </logical-router>
+      </network>
+      <vsys>
+        <entry name="vsys1">
+          <zone>
+            <entry name="home"><network><layer3><member>vlan.1</member></layer3></network></entry>
+            <entry name="labor"><network><layer3><member>vlan.32</member></layer3></network></entry>
+          </zone>
+          <address>
+            <entry name="net-home"><ip-netmask>198.18.1.0/24</ip-netmask></entry>
+            <entry name="net-labor"><ip-netmask>198.18.0.0/15</ip-netmask></entry>
+          </address>
+        </entry>
+      </vsys>
+    </entry>
+  </devices>
+</config>

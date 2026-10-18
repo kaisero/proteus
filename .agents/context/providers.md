@@ -1,11 +1,11 @@
 # providers
 
-Validated against 86fd84f on 2026-09-27 · Purpose: how facts a configuration does not hold reach a lookup, without the library fetching anything.
+Validated against 86fd84f on 2026-09-27 · Purpose: how facts a configuration does not hold reach a lookup, without the read-only core fetching anything.
 
 ## Purpose & responsibilities
 
 Some questions cannot be answered from a file. Which groups a user belongs to comes
-from User-ID, which learns it from a directory. The library defines the shape of
+from User-ID, which learns it from a directory. The core defines the shape of
 that data and reads it. **The caller fetches it.** The core performs no network
 access at all; `store.Snapshot.Zones()` builds a zone snapshot from a fetched one.
 
@@ -15,6 +15,7 @@ access at all; `store.Snapshot.Zones()` builds a zone snapshot from a fetched on
 type Providers struct {
 	Users UserDirectory
 	Zones ZoneLocator
+	Apps  *appid.Data // the device's App-ID content data, or nil
 }
 
 type UserDirectory interface{ GroupsOf(user string) []string }
@@ -98,16 +99,33 @@ comes from one firewall, and shared belongs to none of its vsys.
 The format contract is `docs/zone-snapshot-format.md` and the `ZoneSnapshot` doc
 comment. `scripts/capture-zones.sh` captures one.
 
+### App-ID content data
+
+`Providers.Apps` is the parsed content file of the device's content version
+(`appid.Data`, spec 2026-10-16). It is a value, not an interface: one file is
+immutable and shared by every device and snapshot with that version. `query`
+loads it (`estate.Target.Apps`, through `Env.Apps`, an `estate.AppSource`; the MCP
+server's cache keeps one LRU item per content version) once per question per
+file (`appMemo`), only when the question needs it (plan D11): `--application`, a
+search term with the shape of a name, or a lookup that needs application kinds.
+With it, the application resolver answers predefined applications, filters and
+containers; without it, it reports `gap.application-filter` and
+`gap.application-container`, and the answer carries `note.app-data-missing`. PBF
+builds its view with empty providers, so it never sees the data (D5). See
+[app-id](app-id.md).
+
 ## Build / run pointers
 
-- `go test ./index/ -run 'User|Snapshot'`
-- `PANOS_USERS=testdata/users-snapshot.json ./bin/panos-analyst search 'ACME\carol' --file testdata/config/firewall-users.xml`
+- `go test ./internal/index/ -run 'User|Snapshot'`
+- `PROTEUS_USERS=testdata/users-snapshot.json ./bin/proteus search 'ACME\carol' --file testdata/config/firewall-users.xml`
 
 ## Public API
 
-<!-- GENERATED:api ./index -->
+<!-- GENERATED:api ./internal/index -->
 ```go
+type Edges struct{ ... }
 type Field int
+type Group struct{ ... }
 type Hit struct{ ... }
 type Index struct{ ... }
 type Interner struct{ ... }
@@ -116,6 +134,7 @@ type ProfileUse struct{ ... }
 type Providers struct{ ... }
 type Ref struct{ ... }
 type Report struct{ ... }
+type Set struct{ ... }
 type StaleReporter interface{ ... }
 type UnparsedFilter struct{ ... }
 type Unresolved struct{ ... }
@@ -128,19 +147,17 @@ type ZoneSnapshot struct{ ... }
 
 func (f Field) String() string
 func (i *Index) Candidates(f Field, value string) (*roaring.Bitmap, Report)
-func (i *Index) CandidatesFor(f Field, addr netip.Addr) *roaring.Bitmap
-func (i *Index) CandidatesForName(f Field, name string) *roaring.Bitmap
-func (i *Index) CandidatesForPrefix(f Field, p netip.Prefix) *roaring.Bitmap
 func (i *Index) Containing(addr netip.Addr) []Match
-func (i *Index) DirectGroupsOf(name string) []string
 func (i *Index) Disabled() *roaring.Bitmap
-func (i *Index) GroupsOf(name string) []string
+func (i *Index) GroupPath(kind, group, name string) []string
+func (i *Index) GroupsHolding(kind, name string, direct bool) []Group
 func (i *Index) Interner() *Interner
-func (i *Index) MembersOf(group string) []string
+func (i *Index) MatchWildcards(prefixes []netip.Prefix, single bool) ([]Hit, []Unresolved)
 func (i *Index) Overlapping(p netip.Prefix) []Match
 func (i *Index) ProfileUses(value string) []ProfileUse
 func (i *Index) Refs(name string) []Ref
 func (i *Index) Rules() []resolve.Rule
+func (i *Index) RulesReaching(f Field, name string) *roaring.Bitmap
 func (i *Index) RulesWith(f Field, ids ...uint32) *roaring.Bitmap
 func (i *Index) RulesWithAddr(f Field, addr netip.Addr) *roaring.Bitmap
 func (i *Index) RulesWithAny(f Field) *roaring.Bitmap
@@ -148,12 +165,14 @@ func (i *Index) RulesWithPrefix(f Field, p netip.Prefix) *roaring.Bitmap
 func (i *Index) Scope() config.Scope
 func (i *Index) SearchValues(substr string) []Hit
 func (i *Index) UnparsedFilters() []UnparsedFilter
-func (i *Index) VersionGap() string
 func (i *Index) With(p Providers) *View
 func (in *Interner) ID(name string) uint32
 func (in *Interner) Len() int
 func (in *Interner) Lookup(name string) (uint32, bool)
 func (in *Interner) Name(id uint32) string
+func (s *Set) Config() *config.Config
+func (s *Set) Index(sc config.Scope, rb resolve.Rulebase) (*Index, error)
+func (s *Set) Provider(sc config.Scope) func(resolve.Rulebase) (*Index, error)
 func (s *UserSnapshot) GroupsOf(user string) []string
 func (s *UserSnapshot) Stale() (string, bool)
 func (s *ZoneSnapshot) Describe() string
@@ -161,21 +180,26 @@ func (s *ZoneSnapshot) Routers() []string
 func (s *ZoneSnapshot) UnroutedInterfaces() []string
 func (s *ZoneSnapshot) ZonesOf(addr netip.Addr) []ZonePlacement
 func (u Unresolved) String() string
+func (u Unresolved) Why() reason.Reason
 func (v *View) Candidates(f Field, value string) (*roaring.Bitmap, Report)
-func For(cfg *config.Config, sc config.Scope) (*Index, error)
-func ForRulebase(cfg *config.Config, sc config.Scope, rb resolve.Rulebase) (*Index, error)
+func (v *View) Opaque(f Field) (*roaring.Bitmap, map[uint32][]reason.Reason)
+func Build(cfg *config.Config, edges *Edges, sc config.Scope, rb resolve.Rulebase) (*Index, error)
 func LoadUserSnapshot(r io.Reader) (*UserSnapshot, error)
 func LoadZoneSnapshot(r io.Reader) (*ZoneSnapshot, error)
+func New(cfg *config.Config, sc config.Scope, rb resolve.Rulebase) (*Index, error)
 func NewInterner() *Interner
+func NewSet(cfg *config.Config) *Set
+func NewUnresolved(value, kind string, r reason.Reason) Unresolved
 func NewZoneSnapshot(takenAt time.Time, source string, interfaces, fib io.Reader) (*ZoneSnapshot, error)
 func PrefixesOf(value string) []netip.Prefix
+func ReadEdges(cfg *config.Config) (*Edges, error)
 ```
 <!-- /GENERATED:api -->
 
 ## Gotchas / invariants
 
-- **Never add I/O to the library.** A provider is an interface. Fetching belongs to
-  the caller, which keeps the library offline, deterministic and testable.
+- **Never add I/O to the read-only core.** A provider is an interface. Fetching belongs to
+  the caller, which keeps the core offline, deterministic and testable.
 - **Never bake a provider into a cached index.** That is the whole reason `View`
   exists.
 - **A missing provider is reported, not silently skipped.** Otherwise a user query
@@ -183,6 +207,6 @@ func PrefixesOf(value string) []netip.Prefix
 
 ## See also
 
-- `index/snapshot.go`, `index/resolver_user.go`, `index/resolver.go`
+- `internal/index/snapshot.go`, `internal/index/resolver_user.go`, `internal/index/resolver.go`
 - [reporting](reporting.md) — where the staleness reason surfaces
 - [value-spaces](value-spaces.md) — the user and zone spaces

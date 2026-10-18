@@ -1,0 +1,67 @@
+format: 2
+command: search
+detail: summary
+input:
+  direct: false
+  fields: null
+  kinds: null
+  limit: 0
+  mode: covers
+  selection:
+    file: ../../testdata/config/firewall-multivsys.xml
+  show: null
+  term: 10.124.0.1
+results:
+  - answer: 'file/vsys1: address corp-dc-vienna'
+    device: file
+    vsys: vsys1
+    stage: object
+    kind: address
+    name: corp-dc-vienna
+    scope: vsys:vsys1
+  - answer: 'file/vsys1: address corp-location-vienna'
+    device: file
+    vsys: vsys1
+    stage: object
+    kind: address
+    name: corp-location-vienna
+    scope: vsys:vsys1
+  - answer: 'file/vsys1: address-group corp-dc'
+    device: file
+    vsys: vsys1
+    stage: group
+    kind: address-group
+    name: corp-dc
+    scope: shared
+  - answer: 'file/vsys1: address-group corp-location'
+    device: file
+    vsys: vsys1
+    stage: group
+    kind: address-group
+    name: corp-location
+    scope: shared
+  - answer: 'file/vsys1: security rule Corp DC Access (destination)'
+    device: file
+    vsys: vsys1
+    stage: reference
+    kind: security rule
+    name: Corp DC Access
+    field: destination
+    scope: vsys:vsys1
+  - answer: 'file/vsys1: security rule Corp DC Access (source)'
+    device: file
+    vsys: vsys1
+    stage: reference
+    kind: security rule
+    name: Corp DC Access
+    field: source
+    scope: vsys:vsys1
+summary:
+  answer: 1 with results, 2 without, 0 holes
+  found: 6
+  with: 1
+  without: 2
+  omitted: 0
+holes: []
+unresolved: []
+notes: []

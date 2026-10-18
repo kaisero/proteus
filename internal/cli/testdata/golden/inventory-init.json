@@ -1,0 +1,16 @@
+{
+  "format": 2,
+  "command": "inventory init",
+  "input": {
+    "path": "TMP"
+  },
+  "results": [
+    {
+      "path": "TMP",
+      "mode": "0600"
+    }
+  ],
+  "holes": [],
+  "unresolved": [],
+  "notes": []
+}

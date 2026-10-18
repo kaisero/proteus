@@ -1,0 +1,252 @@
+{
+  "format": 2,
+  "command": "simulate nat",
+  "detail": "full",
+  "input": {
+    "at": "",
+    "device": "fw01",
+    "flow": {
+      "source": {
+        "addrs": [
+          "198.18.1.10"
+        ],
+        "resolved": false
+      },
+      "destination": {
+        "addrs": [
+          "198.18.250.10"
+        ],
+        "resolved": false
+      },
+      "protocol": "tcp",
+      "port": 8443
+    },
+    "from_interface": "",
+    "from_zone": "transport",
+    "router": "default"
+  },
+  "results": [
+    {
+      "answer": "t-dnat-port: destination 198.18.250.10:8443 -\u003e 198.18.10.100:443",
+      "rule": {
+        "Name": "t-dnat-port",
+        "Action": "",
+        "Disabled": false,
+        "NegateSource": false,
+        "NegateDestination": false,
+        "Scope": {
+          "Sort": 1,
+          "Name": "vsys1"
+        },
+        "Layer": 1,
+        "Position": 3,
+        "Fields": {
+          "destination": [
+            "198.18.250.10"
+          ],
+          "from": [
+            "any"
+          ],
+          "source": [
+            "any"
+          ],
+          "to": [
+            "transport"
+          ]
+        },
+        "ProfileGroups": null,
+        "Profiles": null,
+        "UUID": "",
+        "Description": "",
+        "LogStart": "",
+        "LogEnd": "",
+        "LogSetting": "",
+        "Schedule": "",
+        "ToInterface": "any",
+        "NATType": "ipv4",
+        "Service": "t-8443",
+        "Source": null,
+        "Destination": {
+          "Kind": "static",
+          "Address": "198.18.10.100",
+          "Port": 443,
+          "PortText": "",
+          "Distribution": "",
+          "DNSRewrite": ""
+        },
+        "HABinding": "",
+        "Origin": ""
+      },
+      "excluded": [
+        {
+          "rule": "t-no-nat",
+          "field": "from zone client ≠ transport"
+        },
+        {
+          "rule": "t-disabled",
+          "field": "disabled"
+        }
+      ],
+      "in": {
+        "device": "fw01",
+        "vsys": "1",
+        "router": "default",
+        "interface": "",
+        "zone": "transport",
+        "address": "198.19.0.254/24"
+      },
+      "pre_nat": {
+        "out": {
+          "device": "fw01",
+          "vsys": "1",
+          "router": "default",
+          "interface": "ethernet1/1",
+          "zone": "transport",
+          "address": "198.19.0.254/24"
+        },
+        "routes": [
+          {
+            "destination": "0.0.0.0/0",
+            "next_hops": [
+              {
+                "Router": "default",
+                "IPv6": false,
+                "Destination": "0.0.0.0/0",
+                "Interface": "ethernet1/1",
+                "NextHop": "198.19.0.1",
+                "Flags": "ug",
+                "NextHopType": "0",
+                "ECMP": false
+              }
+            ]
+          }
+        ],
+        "fidelity": {
+          "level": "exact"
+        }
+      },
+      "destination": {
+        "kind": "static",
+        "candidates": [
+          "198.18.10.100"
+        ],
+        "address": "198.18.10.100",
+        "port": "443"
+      },
+      "post_nat": {
+        "out": {
+          "device": "fw01",
+          "vsys": "1",
+          "router": "default",
+          "interface": "ethernet1/2",
+          "zone": "server",
+          "address": "198.18.10.1/24"
+        },
+        "routes": [
+          {
+            "destination": "198.18.10.0/24",
+            "next_hops": [
+              {
+                "Router": "default",
+                "IPv6": false,
+                "Destination": "198.18.10.0/24",
+                "Interface": "ethernet1/2",
+                "NextHop": "0.0.0.0",
+                "Flags": "u",
+                "NextHopType": "0",
+                "ECMP": false
+              }
+            ]
+          }
+        ],
+        "fidelity": {
+          "level": "exact"
+        }
+      },
+      "flow": {
+        "source": {
+          "addrs": [
+            "198.18.1.10"
+          ],
+          "resolved": false
+        },
+        "destination": {
+          "addrs": [
+            "198.18.10.100"
+          ],
+          "resolved": false
+        },
+        "protocol": "tcp",
+        "port": 443
+      },
+      "fidelity": {
+        "level": "exact"
+      },
+      "stages": [
+        {
+          "slug": "place",
+          "name": "place the ingress",
+          "fidelity": {
+            "level": "exact"
+          },
+          "candidates": 0,
+          "detail": "given: zone transport",
+          "elapsed_ms": 0
+        },
+        {
+          "slug": "pbf",
+          "name": "policy-based forwarding",
+          "fidelity": {
+            "level": "exact"
+          },
+          "candidates": 0,
+          "detail": "no PBF rule could take the packet",
+          "elapsed_ms": 0
+        },
+        {
+          "slug": "lookup",
+          "name": "pre-NAT route lookup",
+          "fidelity": {
+            "level": "exact"
+          },
+          "candidates": 0,
+          "detail": "198.18.250.10 leaves by ethernet1/1 (zone transport)",
+          "elapsed_ms": 0
+        },
+        {
+          "slug": "match",
+          "name": "NAT rule",
+          "fidelity": {
+            "level": "exact"
+          },
+          "candidates": 0,
+          "detail": "rule t-dnat-port",
+          "elapsed_ms": 0
+        },
+        {
+          "slug": "translate",
+          "name": "translation",
+          "fidelity": {
+            "level": "exact"
+          },
+          "candidates": 0,
+          "detail": "destination -\u003e 198.18.10.100",
+          "elapsed_ms": 0
+        },
+        {
+          "slug": "post-lookup",
+          "name": "post-NAT route lookup",
+          "fidelity": {
+            "level": "exact"
+          },
+          "candidates": 0,
+          "detail": "198.18.10.100 leaves by ethernet1/2 (zone server)",
+          "elapsed_ms": 0
+        }
+      ]
+    }
+  ],
+  "holes": [],
+  "unresolved": [],
+  "notes": []
+}

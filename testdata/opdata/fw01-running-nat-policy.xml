@@ -1,0 +1,214 @@
+<response status="success"><result>
+  <member>Nat policy configured on vsys1:
+"t-no-nat; index: 1" {
+        nat-type ipv4;
+        from client;
+        source 198.18.11.77;
+        source-region none;
+        to transport;
+        to-interface  ;
+        destination 198.18.250.0/24;
+        destination-region none;
+        service 0:any/any/any;
+        terminal no;
+}
+
+"t-dnat-port; index: 2" {
+        nat-type ipv4;
+        from any;
+        source any;
+        source-region none;
+        to transport;
+        to-interface  ;
+        destination 198.18.250.10;
+        destination-region none;
+        service 0:tcp/any/8443;
+        translate-to "dst: 198.18.10.100:443";
+        terminal no;
+}
+
+"t-dnat-self; index: 3" {
+        nat-type ipv4;
+        from any;
+        source any;
+        source-region none;
+        to transport;
+        to-interface  ;
+        destination 198.19.0.254;
+        destination-region none;
+        service 0:tcp/any/8080;
+        translate-to "dst: 198.18.10.100:80";
+        terminal no;
+}
+
+"t-bidir; index: 4" {
+        nat-type ipv4;
+        from dmz;
+        source 198.18.19.50;
+        source-region none;
+        to transport;
+        to-interface  ;
+        destination any;
+        destination-region none;
+        service 0:any/any/any;
+        translate-to "src: 198.18.250.20 (static-ip) (pool idx: 6)";
+        terminal no;
+}
+
+"t-bidir; index: 5" {
+        nat-type ipv4;
+        from any;
+        source any;
+        source-region none;
+        to transport;
+        to-interface  ;
+        destination 198.18.250.20;
+        destination-region none;
+        service 0:any/any/any;
+        translate-to "dst: 198.18.19.50";
+        terminal no;
+}
+
+"t-dnat-competing; index: 6" {
+        nat-type ipv4;
+        from any;
+        source any;
+        source-region none;
+        to transport;
+        to-interface  ;
+        destination 198.18.250.20;
+        destination-region none;
+        service 0:any/any/any;
+        translate-to "dst: 198.18.10.101";
+        terminal no;
+}
+
+"t-static-block; index: 7" {
+        nat-type ipv4;
+        from dmz;
+        source 198.18.19.0/28;
+        source-region none;
+        to transport;
+        to-interface  ;
+        destination 198.18.250.0/24;
+        destination-region none;
+        service 0:any/any/any;
+        translate-to "src: 198.18.250.32-198.18.250.47 (static-ip) (pool idx: 7)";
+        terminal no;
+}
+
+"t-pdipp; index: 8" {
+        nat-type ipv4;
+        from client;
+        source 198.18.11.0/24;
+        source-region none;
+        to transport;
+        to-interface  ;
+        destination 198.18.250.100;
+        destination-region none;
+        service 0:any/any/any;
+        translate-to "src: ethernet1/1 198.19.0.254 (persistent-dynamic-ip-and-port) (pool idx: 8)";
+        terminal no;
+}
+
+"t-dip-pool; index: 9" {
+        nat-type ipv4;
+        from client;
+        source 198.18.11.0/24;
+        source-region none;
+        to transport;
+        to-interface  ;
+        destination 198.18.250.0/24;
+        destination-region none;
+        service 0:any/any/any;
+        translate-to [ "src: 198.18.250.64-198.18.250.71 (dynamic-ip) (pool idx: 9)" "fallback: ethernet1/1 198.19.0.254 (dynamic-ip-and-port) (pool idx: 10)" ];
+        terminal no;
+}
+
+"t-dnat-fqdn; index: 10" {
+        nat-type ipv4;
+        from any;
+        source any;
+        source-region none;
+        to transport;
+        to-interface  ;
+        destination 198.18.250.30;
+        destination-region none;
+        service 0:any/any/any;
+        translate-to "dst: 0.0.0.0(cnt: 0)(distribution: round-robin)";
+        terminal no;
+}
+
+"server-access; index: 11" {
+        nat-type ipv4;
+        from transport;
+        source any;
+        source-region none;
+        to server;
+        to-interface  ;
+        destination any;
+        destination-region none;
+        service 0:any/any/any;
+        translate-to "src: ethernet1/2 198.18.10.1 (dynamic-ip-and-port) (pool idx: 1)";
+        terminal no;
+}
+
+"oob-mgmt-access; index: 12" {
+        nat-type ipv4;
+        from any;
+        source any;
+        source-region none;
+        to mgmt;
+        to-interface ethernet1/9.101 ;
+        destination any;
+        destination-region none;
+        service 0:any/any/any;
+        translate-to "src: ethernet1/9.101 198.18.101.1 (dynamic-ip-and-port) (pool idx: 2)";
+        terminal no;
+}
+
+"mgmt-access; index: 13" {
+        nat-type ipv4;
+        from transport;
+        source any;
+        source-region none;
+        to mgmt;
+        to-interface  ;
+        destination any;
+        destination-region none;
+        service 0:any/any/any;
+        translate-to "src: ethernet1/5 198.18.100.1 (dynamic-ip-and-port) (pool idx: 3)";
+        terminal no;
+}
+
+"internet-a; index: 14" {
+        nat-type ipv4;
+        from any;
+        source any;
+        source-region none;
+        to transport;
+        to-interface ethernet1/1 ;
+        destination any;
+        destination-region none;
+        service 0:any/any/any;
+        translate-to "src: ethernet1/1 198.19.0.254 (dynamic-ip-and-port) (pool idx: 4)";
+        terminal no;
+}
+
+"internet-b; index: 15" {
+        nat-type ipv4;
+        from any;
+        source any;
+        source-region none;
+        to transport;
+        to-interface ethernet1/8 ;
+        destination any;
+        destination-region none;
+        service 0:any/any/any;
+        translate-to "src: ethernet1/8 (unavailable) (dynamic-ip-and-port) (pool idx: 5)";
+        terminal no;
+}
+
+
+</member>
+</result></response>

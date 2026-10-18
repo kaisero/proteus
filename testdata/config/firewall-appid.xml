@@ -1,0 +1,186 @@
+<config version="11.2.0" urldb="paloaltonetworks" detail-version="11.2.5">
+  <!-- App-ID fixture (spec 2026-10-16). Every value is a dummy. It pairs with
+       testdata/appid/content.xml, content version 8000-1000: custom applications
+       with and without a default (P6, P7), one in mixed case (P14), configured
+       application tags (S12), application filters, nested application groups
+       (S8), a rule that names a container (S9) and a rule whose application
+       implies others (I1). -->
+  <shared>
+    <application>
+      <entry name="shared-media">
+        <category>media</category>
+        <subcategory>sub-a</subcategory>
+        <technology>tech-a</technology>
+        <risk>3</risk>
+        <default><port><member>tcp/8600</member></port></default>
+      </entry>
+    </application>
+  </shared>
+  <devices>
+    <entry name="localhost.localdomain">
+      <network>
+        <interface>
+          <ethernet>
+            <entry name="ethernet1/1">
+              <layer3><ip><entry name="10.1.0.1/24"/></ip></layer3>
+            </entry>
+            <entry name="ethernet1/2">
+              <layer3><ip><entry name="10.2.0.1/24"/></ip></layer3>
+            </entry>
+          </ethernet>
+        </interface>
+      </network>
+      <vsys>
+        <entry name="vsys1">
+          <import>
+            <network>
+              <interface><member>ethernet1/1</member><member>ethernet1/2</member></interface>
+            </network>
+          </import>
+          <zone>
+            <entry name="inside"><network><layer3><member>ethernet1/1</member></layer3></network></entry>
+            <entry name="outside"><network><layer3><member>ethernet1/2</member></layer3></network></entry>
+          </zone>
+          <tag>
+            <entry name="t-sanctioned"/>
+          </tag>
+          <application>
+            <entry name="erp-custom">
+              <category>business-systems</category>
+              <subcategory>erp-crm</subcategory>
+              <technology>client-server</technology>
+              <risk>2</risk>
+              <able-to-transfer-file>yes</able-to-transfer-file>
+              <default><port><member>tcp/8443</member></port></default>
+            </entry>
+            <entry name="erp-nodefault">
+              <category>business-systems</category>
+              <subcategory>erp-crm</subcategory>
+              <technology>client-server</technology>
+              <risk>1</risk>
+            </entry>
+            <entry name="Erp-Mixed">
+              <category>business-systems</category>
+              <subcategory>erp-crm</subcategory>
+              <technology>client-server</technology>
+              <risk>2</risk>
+              <default><port><member>tcp/8444</member></port></default>
+            </entry>
+          </application>
+          <application-tag>
+            <entry name="app-media"><tag><member>t-sanctioned</member></tag></entry>
+            <entry name="app-collab"/>
+          </application-tag>
+          <application-filter>
+            <entry name="f-media">
+              <category><member>media</member></category>
+            </entry>
+            <entry name="f-tagged">
+              <tagging><tag><member>[Web App]</member><member>t-sanctioned</member></tag></tagging>
+            </entry>
+            <entry name="f-webapp">
+              <tagging><tag><member>[Web App]</member></tag></tagging>
+            </entry>
+            <entry name="f-risky">
+              <category><member>media</member><member>collaboration</member></category>
+              <risk><member>4</member></risk>
+              <evasive>yes</evasive>
+              <tagging><tag><member>[Streaming]</member></tag></tagging>
+              <exclude><member>app-old</member><member>office-suite</member></exclude>
+            </entry>
+            <entry name="f-notag">
+              <category><member>collaboration</member></category>
+              <tagging><no-tag>yes</no-tag></tagging>
+            </entry>
+          </application-filter>
+          <application-group>
+            <entry name="inner">
+              <members><member>ssl</member><member>f-media</member></members>
+            </entry>
+            <entry name="outer">
+              <members><member>inner</member></members>
+            </entry>
+          </application-group>
+          <rulebase>
+            <security>
+              <rules>
+                <entry name="allow-media">
+                  <from><member>inside</member></from>
+                  <to><member>outside</member></to>
+                  <source><member>any</member></source>
+                  <destination><member>any</member></destination>
+                  <application><member>f-media</member></application>
+                  <service><member>application-default</member></service>
+                  <action>allow</action>
+                </entry>
+                <entry name="allow-tagged">
+                  <from><member>inside</member></from>
+                  <to><member>outside</member></to>
+                  <source><member>any</member></source>
+                  <destination><member>any</member></destination>
+                  <application><member>f-tagged</member></application>
+                  <service><member>application-default</member></service>
+                  <action>allow</action>
+                </entry>
+                <entry name="allow-webapp">
+                  <from><member>inside</member></from>
+                  <to><member>outside</member></to>
+                  <source><member>any</member></source>
+                  <destination><member>any</member></destination>
+                  <application><member>f-webapp</member></application>
+                  <service><member>application-default</member></service>
+                  <action>allow</action>
+                </entry>
+                <entry name="allow-outer">
+                  <from><member>inside</member></from>
+                  <to><member>outside</member></to>
+                  <source><member>any</member></source>
+                  <destination><member>any</member></destination>
+                  <application><member>outer</member></application>
+                  <service><member>application-default</member></service>
+                  <action>allow</action>
+                </entry>
+                <entry name="allow-office">
+                  <from><member>inside</member></from>
+                  <to><member>outside</member></to>
+                  <source><member>any</member></source>
+                  <destination><member>any</member></destination>
+                  <application><member>office-suite</member></application>
+                  <service><member>application-default</member></service>
+                  <action>allow</action>
+                </entry>
+                <entry name="allow-erp">
+                  <from><member>inside</member></from>
+                  <to><member>outside</member></to>
+                  <source><member>any</member></source>
+                  <destination><member>any</member></destination>
+                  <application><member>erp-custom</member><member>Erp-Mixed</member></application>
+                  <service><member>application-default</member></service>
+                  <action>allow</action>
+                </entry>
+                <entry name="deny-risky">
+                  <from><member>inside</member></from>
+                  <to><member>outside</member></to>
+                  <source><member>any</member></source>
+                  <destination><member>any</member></destination>
+                  <application><member>f-risky</member></application>
+                  <service><member>any</member></service>
+                  <action>deny</action>
+                </entry>
+                <entry name="allow-remote">
+                  <from><member>inside</member></from>
+                  <to><member>outside</member></to>
+                  <source><member>any</member></source>
+                  <destination><member>any</member></destination>
+                  <application><member>app-remote</member></application>
+                  <service><member>application-default</member></service>
+                  <action>allow</action>
+                </entry>
+              </rules>
+            </security>
+          </rulebase>
+        </entry>
+      </vsys>
+    </entry>
+  </devices>
+</config>

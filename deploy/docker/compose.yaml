@@ -1,0 +1,131 @@
+# proteus behind TLS for a gateway such as Portkey (spec 2026-10-09 §5, D3).
+#
+#   proteus-fetch  fetches every device on a schedule; the only service with
+#                  the inventory with credentials; writes the store volume.
+#   proteus-mcp    `proteus mcp --http`; reads the store volume read-only;
+#                  no route out of its network.
+#   caddy          terminates TLS for proteus.example.org and forwards to
+#                  proteus-mcp.
+#
+# Before the first start, from this directory:
+#
+#   mkdir -p secrets
+#   cp inventory.example.yaml secrets/inventory.yaml   # set hosts and the user
+#   printf '%s' 'the firewall password' > secrets/panos-password
+#   openssl rand -hex 32 > secrets/proteus-mcp-token  # 64 characters
+#   sudo chown 10001:10001 secrets/*
+#   sudo chmod 0400 secrets/*
+#
+# proteus refuses an inventory that others can read and a token file that
+# others can write. Compose mounts file secrets with the host file's owner
+# and mode, so the files belong to UID 10001, the user both images run as.
+#
+# Replace proteus.example.org here and in Caddyfile with the server's DNS
+# name. Then: docker compose up -d --build
+name: proteus
+
+x-proteus: &proteus
+  user: "10001:10001"
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  restart: unless-stopped
+
+services:
+  proteus-fetch:
+    <<: *proteus
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+      target: fetch
+    image: proteus-fetch:local
+    environment:
+      FETCH_INTERVAL: "3600"          # seconds between fetch runs
+      PASSWORD_ENV: PANOS_PASSWORD    # the inventory's password_env
+      PROTEUS_CONFIG: /run/secrets/proteus-inventory
+      PROTEUS_STORE: /var/lib/proteus/store
+      PROTEUS_LOG_DIR: /var/log/proteus/fetch
+    secrets:
+      - proteus-inventory
+      - panos-password
+    volumes:
+      - store:/var/lib/proteus/store
+      - fetch-logs:/var/log/proteus
+    networks: [egress]                # reaches the firewalls' XML API
+
+  proteus-mcp:
+    <<: *proteus
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+      target: mcp
+    image: proteus:local
+    command: ["mcp", "--http"]
+    environment:
+      PROTEUS_STORE: /var/lib/proteus/store
+      PROTEUS_LOG_DIR: /var/log/proteus/cli
+      PROTEUS_MCP_LISTEN: 0.0.0.0:8765
+      PROTEUS_MCP_TOKEN_FILE: /run/secrets/proteus-mcp-token
+      # Optional: the Host check. Caddy forwards the host name it serves, so
+      # set it to that name; leave it out to accept every Host (the token
+      # still guards every request).
+      PROTEUS_MCP_ALLOWED_HOSTS: proteus.example.org
+      PROTEUS_MCP_IDENTITY_HEADER: X-User-Claims
+      PROTEUS_MCP_AUDIT_CLAIMS: sub
+      # The audit lines go to standard output: the container platform's log
+      # collects and keeps them. For a file instead, name it on the mcp-logs
+      # volume; it rotates at PROTEUS_MCP_AUDIT_MAX_MB (100) and keeps
+      # PROTEUS_MCP_AUDIT_KEEP (10) old files.
+      PROTEUS_MCP_AUDIT_LOG: "-"
+      PROTEUS_MCP_LOG_DIR: /var/log/proteus/mcp
+    secrets:
+      - proteus-mcp-token
+    volumes:
+      - store:/var/lib/proteus/store:ro
+      - mcp-logs:/var/log/proteus
+    networks: [backend]
+    # On SIGTERM the server lets the running calls answer. An answer is
+    # written at most call_timeout + max_wait + 10s after its request, and
+    # the whole stop ends by then, whatever still runs. So the grace is
+    # call_timeout + max_wait + 20s: 60s + 10s + 20s with the defaults.
+    # Raise it with either setting.
+    stop_grace_period: 90s
+    # No ports: only caddy reaches it. The server starts once the store holds
+    # the inventory export; until the first fetch it exits 2 ("run proteus
+    # fetch first") and restarts.
+
+  caddy:
+    image: caddy:2.10.2
+    restart: unless-stopped
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE]
+    security_opt: ["no-new-privileges:true"]
+    ports:
+      - "443:443"
+      - "80:80"                       # ACME HTTP challenge and redirect
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks: [backend, egress]
+    depends_on: [proteus-mcp]
+
+secrets:
+  proteus-inventory:
+    file: ./secrets/inventory.yaml
+  panos-password:
+    file: ./secrets/panos-password
+  proteus-mcp-token:
+    file: ./secrets/proteus-mcp-token
+
+volumes:
+  store:
+  fetch-logs:
+  mcp-logs:                           # the call logs: sensitive
+  caddy-data:
+  caddy-config:
+
+networks:
+  egress: {}
+  backend:
+    internal: true                    # no route out for proteus-mcp

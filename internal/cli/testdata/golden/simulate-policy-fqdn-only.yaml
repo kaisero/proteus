@@ -1,0 +1,147 @@
+format: 2
+command: simulate policy
+detail: full
+input:
+  flow:
+    source:
+      addrs:
+        - 10.0.0.1
+      resolved: false
+    destination:
+      name: www.example.com
+      addrs:
+        - 198.51.100.7
+      resolved: true
+    protocol: tcp
+    port: 443
+  selection:
+    file: ../../testdata/config/firewall-simulate.xml
+results:
+  - answer: 'first match: anything (allow)'
+    verdict: pass
+    reasons:
+      - code: verdict.rule
+        text: rule anything (allow)
+    rule: anything
+    default: ""
+    default_action: ""
+    default_source: ""
+    fidelity:
+      level: inferred
+      reasons:
+        - code: doubt.same-action
+          text: 'earlier candidates in doubt share the action allow: to-web-by-name'
+      not_evaluated:
+        - zones
+    first_match:
+      position: 9
+      name: anything
+      action: allow
+      layer: local
+      scope: vsys:vsys1
+    candidates:
+      - position: 2
+        name: to-web-by-name
+        action: allow
+        layer: local
+        scope: vsys:vsys1
+      - position: 9
+        name: anything
+        action: allow
+        layer: local
+        scope: vsys:vsys1
+    doubts:
+      - position: 2
+        rule: to-web-by-name
+        reasons:
+          - code: doubt.fqdn-resolution
+            text: 'destination: www.example.com matched only through an FQDN object; the firewall resolves this object itself; its addresses can differ from ours'
+    zones:
+      from: []
+      to: []
+      source: not evaluated
+    stages:
+      - slug: resolve-source
+        name: Resolve the source
+        fidelity:
+          level: exact
+        candidates: 8
+        detail: '10.0.0.1: 1 hits, 1 negated rules'
+        elapsed_ms: 0
+      - slug: resolve-destination
+        name: Resolve the destination
+        fidelity:
+          level: inferred
+        candidates: 2
+        detail: 'www.example.com: 1 hits, 0 negated rules; www.example.com resolved by this machine''s DNS to [198.51.100.7], which may answer differently from the firewall''s'
+        elapsed_ms: 0
+      - slug: derive-zones
+        name: Derive the zones
+        fidelity:
+          level: overmatch
+          not_evaluated:
+            - zones
+        candidates: 2
+        detail: no zone found for either side (not evaluated)
+        elapsed_ms: 0
+      - slug: match-application
+        name: Match the application
+        fidelity:
+          level: exact
+        candidates: 2
+        detail: no application given
+        elapsed_ms: 0
+      - slug: match-service
+        name: Match the service
+        fidelity:
+          level: exact
+        candidates: 2
+        detail: tcp/443
+        elapsed_ms: 0
+      - slug: match-url
+        name: Match the URL category
+        fidelity:
+          level: exact
+        candidates: 2
+        detail: no candidate names a URL category
+        elapsed_ms: 0
+      - slug: drop-disabled
+        name: Drop disabled rules
+        fidelity:
+          level: exact
+        candidates: 2
+        detail: 0 disabled
+        elapsed_ms: 0
+      - slug: order
+        name: Order by evaluation
+        fidelity:
+          level: exact
+        candidates: 2
+        detail: 2 in order
+        elapsed_ms: 0
+      - slug: first-match
+        name: Take the first match
+        fidelity:
+          level: overmatch
+          reasons:
+            - code: doubt.same-action
+              text: 'earlier candidates in doubt share the action allow: to-web-by-name'
+        candidates: 2
+        detail: anything (allow), position 9
+        elapsed_ms: 0
+    kind: policy
+    relevance:
+      known: false
+      relevant: false
+      code: gap.fib-missing
+      text: no stored forwarding table
+    target:
+      device: file
+      vsys: vsys1
+holes: []
+unresolved: []
+notes:
+  - device: file
+    vsys: vsys1
+    code: dns.canonical-name
+    text: www.example.com has the canonical name web.cdn.example.net, as this machine's resolver reports it

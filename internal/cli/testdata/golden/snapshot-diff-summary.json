@@ -1,0 +1,47 @@
+{
+  "format": 2,
+  "command": "snapshot diff",
+  "detail": "summary",
+  "input": {
+    "from": "",
+    "limit": 0,
+    "selection": {
+      "vsys": [
+        "vsys1"
+      ]
+    },
+    "to": ""
+  },
+  "results": [
+    {
+      "answer": "fw01/shared: 0 added, 0 removed, 0 changed",
+      "device": "fw01",
+      "from": "2026-09-28T10-00-00Z",
+      "to": "2026-09-28T10-01-00Z",
+      "scope": "shared",
+      "added": 0,
+      "removed": 0,
+      "changed": 0
+    },
+    {
+      "answer": "fw01/vsys:vsys1: 1 added, 1 removed, 2 changed",
+      "device": "fw01",
+      "from": "2026-09-28T10-00-00Z",
+      "to": "2026-09-28T10-01-00Z",
+      "scope": "vsys:vsys1",
+      "added": 1,
+      "removed": 1,
+      "changed": 2
+    }
+  ],
+  "summary": {
+    "answer": "1 with changes, 0 without, 0 holes",
+    "found": 4,
+    "with": 1,
+    "without": 0,
+    "omitted": 0
+  },
+  "holes": [],
+  "unresolved": [],
+  "notes": []
+}

@@ -6,6 +6,7 @@ import (
 )
 
 func TestParseTargetConfigScope(t *testing.T) {
+	t.Parallel()
 	got, err := ParseTarget("#config/shared/address/entry/@name")
 	if err != nil {
 		t.Fatalf("ParseTarget: %v", err)
@@ -16,6 +17,7 @@ func TestParseTargetConfigScope(t *testing.T) {
 }
 
 func TestParseTargetPredefined(t *testing.T) {
+	t.Parallel()
 	got, err := ParseTarget("##/predefined/region/entry/@name")
 	if err != nil {
 		t.Fatalf("ParseTarget: %v", err)
@@ -26,6 +28,7 @@ func TestParseTargetPredefined(t *testing.T) {
 }
 
 func TestParseTargetStripsPredicate(t *testing.T) {
+	t.Parallel()
 	got, err := ParseTarget("#config/shared/address/entry[not(ip-wildcard)]/@name")
 	if err != nil {
 		t.Fatalf("ParseTarget: %v", err)
@@ -39,22 +42,22 @@ func TestParseTargetStripsPredicate(t *testing.T) {
 }
 
 func TestParseTargetRejectsLiteral(t *testing.T) {
+	t.Parallel()
 	if _, err := ParseTarget("string('vlan')"); err == nil {
 		t.Error("a string literal is not a reference target; want an error")
 	}
 }
 
 func TestReferencesFromRuleFields(t *testing.T) {
+	t.Parallel()
 	root := load(t)
-	rules := root.Child("shared").Child("pre-rulebase").Child("security").Child("rules")
 	byField := map[string][]string{}
-	for _, fr := range References(rules.EntrySequence()) {
+	for _, fr := range References(securityRule(root)) {
 		byField[fr.Field] = fr.Candidates
 	}
 	for _, field := range []string{"source", "destination"} {
-		kinds := byField[field]
-		if len(kinds) != 2 || kinds[0] != "address" || kinds[1] != "address-group" {
-			t.Errorf("%s: got %v, want [address address-group]", field, kinds)
+		if got, want := strings.Join(byField[field], " "), "region address address-group external-list ip-block-list-v2"; got != want {
+			t.Errorf("%s: got [%s], want [%s]", field, got, want)
 		}
 	}
 	if len(byField["application"]) != 0 {
@@ -64,6 +67,7 @@ func TestReferencesFromRuleFields(t *testing.T) {
 
 // Almost every real target sits inside a <validate>. Both forms must work.
 func TestReferencesInsideValidate(t *testing.T) {
+	t.Parallel()
 	const doc = `<sequence name="config">
 	  <array name="thing">
 	    <sequence name="entry">
@@ -99,6 +103,7 @@ func TestReferencesInsideValidate(t *testing.T) {
 }
 
 func TestClassifyTargetForms(t *testing.T) {
+	t.Parallel()
 	for raw, want := range map[string]TargetForm{
 		"#config/shared/address/entry/@name":                       FormObject,
 		"##/predefined/region/entry/@name":                         FormPredefined,
@@ -114,9 +119,10 @@ func TestClassifyTargetForms(t *testing.T) {
 	}
 }
 
-// 1,710 of the expressions in cms-schema.xml begin substring(, which a
+// 36 of the targets in the 11.2 firewall schema begin substring(, which a
 // leading-string( check misses. Each one accepted becomes a false index edge.
 func TestParseTargetRejectsEveryExpression(t *testing.T) {
+	t.Parallel()
 	for _, raw := range []string{
 		"string('vlan')",
 		"substring(string('tunnel'), 1, 6*(not('$tunip'='')))",
@@ -129,6 +135,7 @@ func TestParseTargetRejectsEveryExpression(t *testing.T) {
 }
 
 func TestParseTargetRejectsRuleFieldReference(t *testing.T) {
+	t.Parallel()
 	// This names another rule's field, not an object, so it is not an edge.
 	if _, err := ParseTarget("##/shared/pre-rulebase/*/rules/entry/from/member"); err == nil {
 		t.Error("a wildcard rule-field target must not parse as an object reference")
@@ -137,16 +144,16 @@ func TestParseTargetRejectsRuleFieldReference(t *testing.T) {
 
 // A field usually has several candidate kinds, so References groups by field.
 func TestReferencesGroupCandidatesByField(t *testing.T) {
+	t.Parallel()
 	root := load(t)
-	rules := root.Child("shared").Child("pre-rulebase").Child("security").Child("rules")
-	got := References(rules.EntrySequence())
+	got := References(securityRule(root))
 
 	byField := map[string][]string{}
 	for _, fr := range got {
 		byField[fr.Field] = fr.Candidates
 	}
 	for _, field := range []string{"source", "destination"} {
-		want := []string{"address", "address-group"}
+		want := []string{"region", "address", "address-group", "external-list", "ip-block-list-v2"}
 		gotKinds := byField[field]
 		if len(gotKinds) != len(want) {
 			t.Fatalf("%s: got %v, want %v", field, gotKinds, want)

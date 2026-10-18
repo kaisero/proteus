@@ -1,0 +1,27 @@
+# test nat-policy-match on fw01 (PAN-OS 11.2.5) with firewall-nat.xml's rules, 2026-09-29.
+# The XML API answers the rule name only: <rules><entry>NAME</entry></rules>; empty
+# when no rule matches. Protocol 6 for every flow. Translations are in
+# fw01-running-nat-policy.xml (translate-to) and, for the two traffic tests, below.
+# case	source	destination	dport	from	to	to-interface	rule
+no-nat	198.18.11.77	198.18.250.200	443	client	transport	ethernet1/1	t-no-nat
+disabled	198.18.11.78	198.18.250.200	443	client	transport	ethernet1/1	t-dip-pool
+dnat-port	198.18.1.10	198.18.250.10	8443	transport	transport	ethernet1/1	t-dnat-port
+dnat-port-other-port	198.18.1.10	198.18.250.10	443	transport	transport	ethernet1/1	internet-a
+uturn	198.18.11.5	198.18.250.10	8443	client	transport	ethernet1/1	t-dnat-port
+dnat-self	198.18.1.10	198.19.0.254	8080	transport	transport	ethernet1/1	t-dnat-self
+bidir	198.18.19.50	198.18.250.200	443	dmz	transport	ethernet1/1	t-bidir
+bidir-reverse	198.18.1.10	198.18.250.20	443	transport	transport	ethernet1/1	t-bidir
+static-block	198.18.19.5	198.18.250.200	443	dmz	transport	ethernet1/1	t-static-block
+pdipp	198.18.11.5	198.18.250.100	443	client	transport	ethernet1/1	t-pdipp
+dip-pool	198.18.11.5	198.18.250.200	443	client	transport	ethernet1/1	t-dip-pool
+dnat-fqdn-unresolved	198.18.1.10	198.18.250.30	443	transport	transport	ethernet1/1	
+to-server	198.18.1.10	198.18.250.11	443	transport	server	ethernet1/2	server-access
+internet-a	198.18.10.5	8.8.8.8	443	server	transport	ethernet1/1	internet-a
+internet-b	198.18.10.5	8.8.8.8	443	server	transport	ethernet1/8	internet-b
+# Traffic tests (traffic log), from a host behind fw02, whose lab-access rule
+# translated the source to 198.19.0.1:
+# 198.19.0.1 -> 198.18.250.10:8443 => 198.18.10.100:443, zones transport -> server,
+#   security rule t-allow-8443 (the pre-NAT port), allowed, tcp-fin.
+# 198.19.0.1 -> 198.18.250.20:8443 => 198.18.19.50 (implicit rule of t-bidir), zones
+#   transport -> dmz; with t-dnat-competing moved above t-bidir => 198.18.10.101,
+#   zones transport -> server; after moving it back => 198.18.19.50 again.

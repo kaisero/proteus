@@ -1,0 +1,53 @@
+{
+  "type": "object",
+  "properties": {
+    "source": {
+      "type": "string",
+      "description": "an address or a host name; a host name is resolved with DNS and its first IPv4 address is checked; left out, the path starts on device without a source"
+    },
+    "destination": {
+      "type": "string",
+      "description": "an address or a host name; a host name is resolved with DNS and its first IPv4 address is traced"
+    },
+    "protocol": {
+      "type": "string",
+      "description": "tcp, udp, icmp or sctp; tcp when left out",
+      "enum": [
+        "tcp",
+        "udp",
+        "icmp",
+        "sctp"
+      ]
+    },
+    "port": {
+      "type": "integer",
+      "description": "the destination port, a number; it decides NAT and PBF rules that name a service",
+      "minimum": 1,
+      "maximum": 65535
+    },
+    "device": {
+      "type": "string",
+      "description": "the firewall the path starts on"
+    },
+    "router": {
+      "type": "string",
+      "description": "the start's logical router; needs device"
+    },
+    "at": {
+      "type": "string",
+      "description": "read each device's newest snapshot at or before this time; left out, the latest"
+    },
+    "detail": {
+      "type": "string",
+      "description": "summary or full: how much of each result to return; summary when left out",
+      "enum": [
+        "summary",
+        "full"
+      ]
+    }
+  },
+  "required": [
+    "destination"
+  ],
+  "additionalProperties": false
+}

@@ -36,8 +36,21 @@ So the lowest set bit is the first match.
 
 `ObjectsInScope(cfg, scope, kind)` walks the chain shared first, so a vsys
 definition replaces a shared one of the same name and records what it replaced in
-`ShadowedFrom`. `ObjectsAt` takes an explicit container path, for the kinds whose
+`ShadowedFrom`. Below shared sits the scope `predefined` (`config.ScopePredefined`):
+the device's predefined services, when the configuration came with
+`predefined.xml`. Every scope sees them, and a configured service of the same name
+hides them, the vsys's over shared's over the predefined one (lab facts L4, L7). `ObjectsAt` takes an explicit container path, for the kinds whose
 name is ambiguous in the schema.
+
+`ObjectsOfKindsInScope(cfg, scope, kinds...)` reads several kinds that one name
+in a field can mean. A name resolves by scope first and kind second: only the
+nearest scope that defines it in any of the kinds counts, so a vsys service hides a
+shared service group of its name, and a vsys service group hides the predefined
+service (lab fact L9). Addresses resolve the same way: a vsys address hides a
+shared address group of its name, and the other way round (lab fact L10). The
+security index, NAT, lookup cards, search and `rulebase.Defined` read services and
+service groups, and addresses and address groups, through it; `Namesakes(kind)`
+names the kinds that resolve together.
 
 `objectValue` reduces an object to the one value that identifies it, and PAN-OS
 spells that differently per kind: `ip-netmask`, `ip-range`, `fqdn`, `ip-wildcard`,
@@ -70,20 +83,23 @@ possibly a zone of its own.
 
 ## Build / run pointers
 
-- `go test ./resolve/` — the whole package.
-- `./bin/panos-analyst snapshot show --file <cfg>` — every vsys and its rule count.
-- `./bin/panos-analyst search <address> --file <cfg>` — the groups holding it, per vsys.
+- `go test ./internal/resolve/` — the whole package.
+- `./bin/proteus snapshot show --file <cfg>` — every vsys and its rule count.
+- `./bin/proteus search <address> --file <cfg>` — the groups holding it, per vsys.
 
 ## Public API
 
-<!-- GENERATED:api ./resolve -->
+<!-- GENERATED:api ./internal/resolve -->
 ```go
+type Application struct{ ... }
+type ApplicationFilter struct{ ... }
+type DefaultRule struct{ ... }
+type DestinationTranslation struct{ ... }
 type FIBRoute struct{ ... }
 type HAState struct{ ... }
 type InterfaceAddress struct{ ... }
 type InterfaceState struct{ ... }
 type Layer int
-type Members struct{ ... }
 type NATRule struct{ ... }
 type Object struct{ ... }
 type PBFRule struct{ ... }
@@ -92,6 +108,7 @@ type RIBNextHop struct{ ... }
 type RIBRoute struct{ ... }
 type Rule struct{ ... }
 type Rulebase int
+type SourceTranslation struct{ ... }
 type StaticRoute struct{ ... }
 type TagFilter struct{ ... }
 type Target struct{ ... }
@@ -107,33 +124,38 @@ func (p URLPattern) Match(url string) bool
 func (p URLPattern) Raw() string
 func (r Rulebase) String() string
 func (t *Target) Chain() []config.Scope
+func (t *Target) DefaultRules() []DefaultRule
 func (t *Target) NATRules() []NATRule
-func (t *Target) Objects(kind string) ([]Object, error)
+func (t *Target) Objects(kind string) []Object
 func (t *Target) PBFRules() []PBFRule
-func (t *Target) ResolveGroup(name string) (Members, error)
-func (t *Target) Rules(rb Rulebase) ([]Rule, error)
+func (t *Target) Rules(rb Rulebase) []Rule
 func (t *Target) Scope() config.Scope
 func (t *Target) Serial() string
 func (t *Target) Vsys() string
+func ApplicationFilters(cfg *config.Config, sc config.Scope) []ApplicationFilter
+func ApplicationTags(cfg *config.Config, sc config.Scope) map[string][]string
+func Applications(cfg *config.Config, sc config.Scope) []Application
 func DynamicRoutingProtocols(cfg *config.Config) []string
-func GroupInScope(cfg *config.Config, sc config.Scope, name string) (Members, error)
-func InterfaceAddresses(cfg *config.Config) ([]InterfaceAddress, error)
+func InterfaceAddresses(cfg *config.Config) []InterfaceAddress
+func Namesakes(kind string) []string
 func ObjectKinds(cfg *config.Config) []string
-func ObjectsAt(cfg *config.Config, sc config.Scope, kind string, within []string) ([]Object, error)
-func ObjectsInScope(cfg *config.Config, sc config.Scope, kind string) ([]Object, error)
+func ObjectsAt(cfg *config.Config, sc config.Scope, kind string, within []string) []Object
+func ObjectsInScope(cfg *config.Config, sc config.Scope, kind string) []Object
+func ObjectsOfKindsInScope(cfg *config.Config, sc config.Scope, kinds ...string) map[string][]Object
 func ParseTagFilter(raw string) (*TagFilter, error)
 func ParseURLPattern(member string) (URLPattern, error)
-func ProfileGroupsInScope(cfg *config.Config, sc config.Scope) ([]ProfileGroup, error)
+func ProfileGroupsInScope(cfg *config.Config, sc config.Scope) []ProfileGroup
 func ReadFIBRoutes(b []byte) ([]FIBRoute, error)
 func ReadHAState(b []byte) (HAState, error)
 func ReadInterfaceStates(b []byte) ([]InterfaceState, error)
 func ReadRIBRoutes(b []byte) ([]RIBRoute, error)
-func StaticRoutes(cfg *config.Config) ([]StaticRoute, error)
+func StaticRoutes(cfg *config.Config) []StaticRoute
 func TargetFor(cfg *config.Config, device, vsys string) (*Target, error)
-func Targets(cfg *config.Config) ([]*Target, error)
-func URLFilteringProfilesInScope(cfg *config.Config, sc config.Scope) ([]URLFilteringProfile, error)
-func Vsyses(cfg *config.Config) ([]string, error)
-func ZonesInScope(cfg *config.Config, sc config.Scope) ([]Zone, error)
+func Targets(cfg *config.Config) []*Target
+func URLFilteringProfilesInScope(cfg *config.Config, sc config.Scope) []URLFilteringProfile
+func Vsyses(cfg *config.Config) []string
+func ZoneNames(cfg *config.Config, sc config.Scope) []string
+func ZonesInScope(cfg *config.Config, sc config.Scope) []Zone
 ```
 <!-- /GENERATED:api -->
 
@@ -141,15 +163,17 @@ func ZonesInScope(cfg *config.Config, sc config.Scope) ([]Zone, error)
 
 - **A scope is not optional.** A global index merges sibling vsys and returns
   answers that are wrong rather than incomplete. See R5 and R10.
-- **`group` reads address groups only.** Service and application groups take part
-  in the index closure but `GroupInScope` does not read them.
+- **Group membership lives in the index closure.** `resolve` reads a group as an
+  `Object`: `Dynamic` is set from the `<dynamic>` element, and `Value` is the tag
+  filter or the member list. `index` builds each group kind's membership per scope.
 - **Runtime group members are absent by design.** Addresses registered through
-  User-ID or VM monitoring are not in a file, and every group answer says so.
+  User-ID or VM monitoring are not in a file; a rule naming a dynamic group carries
+  the `doubt.dynamic-group` reason.
 
 ## See also
 
-- `resolve/target.go`, `resolve/rules.go`
-- `resolve/objects.go`, `resolve/groups.go`, `resolve/filter.go`
-- `resolve/zones.go`, `resolve/profiles.go`
+- `internal/resolve/target.go`, `internal/resolve/rules.go`
+- `internal/resolve/objects.go`, `internal/resolve/filter.go`
+- `internal/resolve/zones.go`, `internal/resolve/profiles.go`
 - [config-loading](config-loading.md) — the tree and schema questions this builds on
 - [value-spaces](value-spaces.md) — what `index` does with these objects

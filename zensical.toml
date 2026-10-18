@@ -1,0 +1,106 @@
+[project]
+site_name = "Proteus"
+site_description = "Answer questions about PAN-OS firewalls from their configuration and operational state."
+site_url = "https://kaisero.github.io/proteus/"
+repo_url = "https://github.com/kaisero/proteus"
+repo_name = "kaisero/proteus"
+copyright = "Copyright &copy; 2026 Oliver Kaiser"
+
+nav = [
+  { "Home" = "index.md" },
+  { "Get started" = [
+    { "Install" = "get-started/index.md" },
+    { "Ask a config file" = "get-started/config-file.md" },
+    { "Connect your firewalls" = "get-started/firewalls.md" },
+  ] },
+  { "Commands" = [
+    { "Commands" = "commands/index.md" },
+    { "search" = "commands/search.md" },
+    { "lookup" = "commands/lookup.md" },
+    { "simulate policy" = "commands/simulate-policy.md" },
+    { "simulate nat" = "commands/simulate-nat.md" },
+    { "simulate routing" = "commands/simulate-routing.md" },
+    { "snapshot" = "commands/snapshot.md" },
+    { "fetch" = "commands/fetch.md" },
+    { "inventory" = "commands/inventory.md" },
+    { "mcp" = "commands/mcp.md" },
+  ] },
+  { "Reference" = [
+    { "Reference" = "reference/index.md" },
+    { "Global flags" = "reference/global-flags.md" },
+    { "Configuration" = "reference/configuration.md" },
+    { "Output and exit codes" = "reference/output.md" },
+    { "Limits" = "reference/limits.md" },
+    { "Contributing" = "reference/contributing.md" },
+  ] },
+  { "Concepts" = [
+    { "How proteus works" = "concepts/index.md" },
+    { "Snapshots and the store" = "concepts/snapshots.md" },
+    { "Scope" = "concepts/scope.md" },
+    { "Fidelity" = "concepts/fidelity.md" },
+    { "Architecture" = "concepts/architecture.md" },
+  ] },
+]
+
+extra_css = [
+  "stylesheets/tokens.css",
+  "stylesheets/theme.css",
+  "stylesheets/extra.css",
+]
+
+[project.theme]
+# The design system: logo, favicon, fonts and colours. The overrides folder
+# holds the logo mark and the extra page head; docs/stylesheets the colours.
+custom_dir = "overrides"
+favicon = "assets/images/favicon.svg"
+icon.logo = "proteus/mark"
+font = false
+features = [
+  "content.code.copy",
+  "content.tabs.link",
+  "navigation.indexes",
+  "navigation.instant",
+  "navigation.sections",
+  "navigation.tabs",
+  "navigation.top",
+  "search.suggest",
+  "toc.follow",
+]
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: light)"
+scheme = "default"
+primary = "custom"
+accent = "custom"
+toggle.icon = "lucide/sun"
+toggle.name = "Switch to dark mode"
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: dark)"
+scheme = "slate"
+primary = "custom"
+accent = "custom"
+toggle.icon = "lucide/moon"
+toggle.name = "Switch to light mode"
+
+# Working notes kept in docs/ but not part of the published site. Lab notes hold
+# device data, so a page under docs/ is published unless a pattern here names it.
+[project.plugins.exclude]
+glob = [
+  "specs/*",
+  "plans/*",
+  "lab/*",
+  "todo.md",
+  "zone-snapshot-format.md",
+]
+
+[project.markdown_extensions]
+admonition = {}
+attr_list = {}
+md_in_html = {}
+pymdownx.tabbed.alternate_style = true
+pymdownx.highlight.pygments_lang_class = true
+pymdownx.superfences.custom_fences = [
+  { name = "mermaid", class = "mermaid", format = "pymdownx.superfences.fence_code_format" },
+]
+toc.permalink = true

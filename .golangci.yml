@@ -1,4 +1,4 @@
-# golangci-lint v2 configuration for panos-analyst.
+# golangci-lint v2 configuration for proteus.
 # Run: make lint   (or: golangci-lint run)
 version: "2"
 
@@ -16,6 +16,9 @@ linters:
     - bodyclose
     - unconvert
     - unparam
+    - errorlint
+    - paralleltest
+    - tparallel
   settings:
     errcheck:
       # Writes to an in-memory buffer or to stdout cannot be usefully handled.
@@ -28,6 +31,9 @@ linters:
     gosec:
       excludes:
         - G304 # file path from a variable — the whole library reads schema and config paths the caller supplies
+    misspell:
+      ignore-rules:
+        - statuser # an answer that sets its own status (Stringer-style naming), not a typo
   exclusions:
     generated: lax
     rules:
@@ -37,14 +43,13 @@ linters:
           - gosec
           - errcheck
           - unparam
-      # Generated model code is machine output; it is checked by the generator's
-      # own tests, not by style linters.
-      - path: ^config/
+      # contract_test.go's row/format subtests share one row's "outputs" map and
+      # "want" exit code, read back once every format has run; running them in
+      # parallel would race on that map, so they stay sequential on purpose.
+      - path: internal/cli/contract_test\.go
         linters:
-          - revive
-          - gocritic
-          - misspell
-          - unparam
+          - paralleltest
+          - tparallel
 
 formatters:
   enable:
@@ -53,4 +58,4 @@ formatters:
   settings:
     goimports:
       local-prefixes:
-        - github.com/okaiser/panos-analyst
+        - github.com/kaisero/proteus

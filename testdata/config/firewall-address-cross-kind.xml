@@ -1,0 +1,79 @@
+<config version="11.2.0" urldb="paloaltonetworks" detail-version="11.2.5">
+  <!-- One address name, two kinds, two scopes (lab fact L10). vsys1 defines
+       rv-adr as an address (10.88.8.8), which hides shared's address group
+       rv-adr (rv-a9, 10.88.9.9). vsys1 defines rv-adr2 as an address group
+       (rv-a6, 10.88.6.6), which hides shared's address rv-adr2 (10.88.7.7).
+       From home to wan: sec-a (source rv-adr) and sec-b (source rv-adr2) above
+       rest; snat-adr2 translates to the pool rv-adr2. -->
+  <shared>
+    <address>
+      <entry name="rv-a9"><ip-netmask>10.88.9.9/32</ip-netmask></entry>
+      <entry name="rv-adr2"><ip-netmask>10.88.7.7/32</ip-netmask></entry>
+    </address>
+    <address-group>
+      <entry name="rv-adr"><static><member>rv-a9</member></static></entry>
+    </address-group>
+  </shared>
+  <devices>
+    <entry name="localhost.localdomain">
+      <vsys>
+        <entry name="vsys1">
+          <zone>
+            <entry name="home"/>
+            <entry name="wan"/>
+          </zone>
+          <address>
+            <entry name="rv-adr"><ip-netmask>10.88.8.8/32</ip-netmask></entry>
+            <entry name="rv-a6"><ip-netmask>10.88.6.6/32</ip-netmask></entry>
+          </address>
+          <address-group>
+            <entry name="rv-adr2"><static><member>rv-a6</member></static></entry>
+          </address-group>
+          <rulebase>
+            <security>
+              <rules>
+                <entry name="sec-a">
+                  <from><member>home</member></from>
+                  <to><member>wan</member></to>
+                  <source><member>rv-adr</member></source>
+                  <destination><member>any</member></destination>
+                  <application><member>any</member></application>
+                  <service><member>any</member></service>
+                  <action>allow</action>
+                </entry>
+                <entry name="sec-b">
+                  <from><member>home</member></from>
+                  <to><member>wan</member></to>
+                  <source><member>rv-adr2</member></source>
+                  <destination><member>any</member></destination>
+                  <application><member>any</member></application>
+                  <service><member>any</member></service>
+                  <action>allow</action>
+                </entry>
+                <entry name="rest">
+                  <from><member>home</member></from>
+                  <to><member>wan</member></to>
+                  <source><member>any</member></source>
+                  <destination><member>any</member></destination>
+                  <application><member>any</member></application>
+                  <service><member>any</member></service>
+                  <action>deny</action>
+                </entry>
+              </rules>
+            </security>
+            <nat>
+              <rules>
+                <entry name="snat-adr2">
+                  <from><member>home</member></from><to><member>wan</member></to>
+                  <source><member>any</member></source><destination><member>any</member></destination>
+                  <service>any</service>
+                  <source-translation><dynamic-ip-and-port><translated-address><member>rv-adr2</member></translated-address></dynamic-ip-and-port></source-translation>
+                </entry>
+              </rules>
+            </nat>
+          </rulebase>
+        </entry>
+      </vsys>
+    </entry>
+  </devices>
+</config>

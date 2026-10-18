@@ -1,0 +1,125 @@
+<config version="11.2.0" urldb="paloaltonetworks" detail-version="11.2.5">
+  <!-- Rules whose addresses the configuration does not hold (spec E23): an
+       external list, a predefined region, a custom region, a dynamic address
+       group, a static group holding an external list, a built-in list, and the
+       same external list negated. g-loop-a and g-loop-b hold each other. -->
+  <shared/>
+  <devices>
+    <entry name="localhost.localdomain">
+      <vsys>
+        <entry name="vsys1">
+          <zone>
+            <entry name="inside"/>
+            <entry name="outside"/>
+          </zone>
+          <address>
+            <entry name="web"><ip-netmask>10.1.0.10</ip-netmask></entry>
+            <entry name="tagged"><ip-netmask>10.1.0.20</ip-netmask><tag><member>web-tag</member></tag></entry>
+          </address>
+          <address-group>
+            <entry name="dag-web"><dynamic><filter>'web-tag'</filter></dynamic></entry>
+            <entry name="g-mixed"><static><member>edl-bad</member><member>web</member></static></entry>
+            <entry name="g-loop-a"><static><member>g-loop-b</member></static></entry>
+            <entry name="g-loop-b"><static><member>g-loop-a</member></static></entry>
+          </address-group>
+          <external-list>
+            <entry name="edl-bad">
+              <type><ip><recurring><daily><at>01</at></daily></recurring><url>https://lists.example.com/bad.txt</url></ip></type>
+            </entry>
+          </external-list>
+          <region>
+            <entry name="my-region"><address><member>10.9.0.0/16</member></address></entry>
+          </region>
+          <rulebase>
+            <security>
+              <rules>
+                <entry name="from-edl">
+                  <from><member>outside</member></from>
+                  <to><member>inside</member></to>
+                  <source><member>edl-bad</member></source>
+                  <destination><member>any</member></destination>
+                  <application><member>any</member></application>
+                  <service><member>any</member></service>
+                  <action>deny</action>
+                </entry>
+                <entry name="from-country">
+                  <from><member>outside</member></from>
+                  <to><member>inside</member></to>
+                  <source><member>AT</member></source>
+                  <destination><member>any</member></destination>
+                  <application><member>any</member></application>
+                  <service><member>any</member></service>
+                  <action>deny</action>
+                </entry>
+                <entry name="from-dag">
+                  <from><member>outside</member></from>
+                  <to><member>inside</member></to>
+                  <source><member>dag-web</member></source>
+                  <destination><member>any</member></destination>
+                  <application><member>any</member></application>
+                  <service><member>any</member></service>
+                  <action>allow</action>
+                </entry>
+                <entry name="from-group">
+                  <from><member>outside</member></from>
+                  <to><member>inside</member></to>
+                  <source><member>g-mixed</member></source>
+                  <destination><member>any</member></destination>
+                  <application><member>any</member></application>
+                  <service><member>any</member></service>
+                  <action>deny</action>
+                </entry>
+                <entry name="not-from-edl">
+                  <from><member>outside</member></from>
+                  <to><member>inside</member></to>
+                  <source><member>edl-bad</member></source>
+                  <negate-source>yes</negate-source>
+                  <destination><member>any</member></destination>
+                  <application><member>any</member></application>
+                  <service><member>any</member></service>
+                  <action>deny</action>
+                </entry>
+                <entry name="to-builtin">
+                  <from><member>outside</member></from>
+                  <to><member>inside</member></to>
+                  <source><member>any</member></source>
+                  <destination><member>panw-highrisk-ip-list</member></destination>
+                  <application><member>any</member></application>
+                  <service><member>any</member></service>
+                  <action>deny</action>
+                </entry>
+                <entry name="from-region">
+                  <from><member>outside</member></from>
+                  <to><member>inside</member></to>
+                  <source><member>my-region</member></source>
+                  <destination><member>any</member></destination>
+                  <application><member>any</member></application>
+                  <service><member>any</member></service>
+                  <action>deny</action>
+                </entry>
+                <entry name="loop">
+                  <from><member>outside</member></from>
+                  <to><member>inside</member></to>
+                  <source><member>g-loop-a</member></source>
+                  <destination><member>any</member></destination>
+                  <application><member>any</member></application>
+                  <service><member>any</member></service>
+                  <action>allow</action>
+                </entry>
+                <entry name="plain">
+                  <from><member>outside</member></from>
+                  <to><member>inside</member></to>
+                  <source><member>any</member></source>
+                  <destination><member>any</member></destination>
+                  <application><member>any</member></application>
+                  <service><member>any</member></service>
+                  <action>allow</action>
+                </entry>
+              </rules>
+            </security>
+          </rulebase>
+        </entry>
+      </vsys>
+    </entry>
+  </devices>
+</config>

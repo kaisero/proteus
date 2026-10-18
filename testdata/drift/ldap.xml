@@ -1,0 +1,106 @@
+<config version="11.2.0" urldb="paloaltonetworks" detail-version="11.2.5">
+  <!-- before.xml with one change: ldap-corp binds with another password. -->
+  <shared>
+    <post-rulebase><security><rules>
+      <entry name="pushed-post"><action>deny</action>
+        <source><member>any</member></source></entry>
+    </rules></security></post-rulebase>
+  </shared>
+  <devices>
+    <entry name="localhost.localdomain">
+      <vsys>
+        <entry name="vsys1">
+          <zone>
+            <entry name="trust"><network><layer3><member>ethernet1/1</member></layer3></network></entry>
+            <entry name="untrust"><network><layer3><member>ethernet1/2</member></layer3></network></entry>
+          </zone>
+          <address>
+            <entry name="net-inside"><ip-netmask>10.88.1.0/24</ip-netmask></entry>
+            <entry name="srv-web"><ip-netmask>10.88.2.10</ip-netmask></entry>
+          </address>
+          <address-group>
+            <entry name="g-inside"><static><member>net-inside</member><member>srv-web</member></static></entry>
+          </address-group>
+          <external-list>
+            <entry name="edl-block">
+              <type><ip><recurring><hourly/></recurring><url>https://lists.example.com/block.txt</url></ip></type>
+            </entry>
+          </external-list>
+          <certificate>
+            <entry name="cert-web">
+              <common-name>web.example.com</common-name>
+              <private-key>-AQ==DUMMYKEYBEFORE0000</private-key>
+            </entry>
+          </certificate>
+          <server-profile>
+            <ldap>
+              <entry name="ldap-corp">
+                <bind-dn>cn=reader,dc=example,dc=com</bind-dn>
+                <bind-password>-AQ==DUMMYBINDAFTER0000</bind-password>
+                <server>
+                  <entry name="ldap1"><address>10.88.5.1</address></entry>
+                  <entry name="ldap2"><address>10.88.5.2</address></entry>
+                </server>
+              </entry>
+            </ldap>
+          </server-profile>
+          <local-user-database>
+            <user>
+              <entry name="user1">
+                <phash>$5$dummysalt$DUMMYHASHBEFORE0000</phash>
+              </entry>
+            </user>
+          </local-user-database>
+          <profiles>
+            <virus>
+              <entry name="av-strict">
+                <decoder>
+                  <entry name="http"><action>reset-both</action></entry>
+                  <entry name="smtp"><action>alert</action></entry>
+                </decoder>
+              </entry>
+            </virus>
+          </profiles>
+          <rulebase>
+            <security>
+              <rules>
+                <entry name="inside-out" uuid="00000000-0000-4000-8000-000000000001">
+                  <from><member>trust</member></from>
+                  <to><member>untrust</member></to>
+                  <source><member>net-inside</member><member>srv-web</member></source>
+                  <destination><member>10.88.9.0/24</member></destination>
+                  <application><member>any</member></application>
+                  <service><member>application-default</member></service>
+                  <action>allow</action>
+                </entry>
+              </rules>
+            </security>
+            <nat>
+              <rules>
+                <entry name="dnat-web" uuid="00000000-0000-4000-8000-000000000002">
+                  <from><member>untrust</member></from>
+                  <to><member>untrust</member></to>
+                  <source><member>any</member></source>
+                  <destination><member>198.18.0.10</member></destination>
+                  <service>any</service>
+                  <destination-translation><translated-address>srv-web</translated-address></destination-translation>
+                </entry>
+              </rules>
+            </nat>
+            <pbf>
+              <rules>
+                <entry name="pbf-out" uuid="00000000-0000-4000-8000-000000000003">
+                  <from><zone><member>trust</member></zone></from>
+                  <source><member>any</member></source>
+                  <destination><member>any</member></destination>
+                  <service><member>any</member></service>
+                  <action><forward><egress-interface>ethernet1/2</egress-interface></forward></action>
+                </entry>
+              </rules>
+            </pbf>
+          </rulebase>
+        </entry>
+      </vsys>
+    </entry>
+  </devices>
+</config>

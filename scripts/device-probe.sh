@@ -6,8 +6,10 @@
 # library over-matches, which is the safe direction for a candidate set. This
 # script exists to show where they disagree and why, not to require agreement.
 #
-# Usage: PANOS_HOST=... PANOS_API_KEY=... scripts/device-probe.sh <config.xml> <vsys> [panos-analyst]
+# Usage: PANOS_HOST=... PANOS_API_KEY=... scripts/device-probe.sh <config.xml> <vsys> [proteus]
 #        PANOS_HOST=... PANOS_API_KEY=... scripts/device-probe.sh --routing <device> <router> <destination>...
+#        PANOS_HOST=... PANOS_API_KEY=... scripts/device-probe.sh --nat <device> <router> <src,dst,port[,from-zone]>...
+#        PANOS_HOST_<NAME>=... PANOS_API_KEY_<NAME>=... scripts/device-probe.sh --path <flows-file>
 #
 # <vsys> is vsys1 or vsys:vsys1.
 #
@@ -19,12 +21,15 @@
 # on 11.2 for the router named default (fw01) and refuses other logical routers and
 # every router on 12.2 (fw02). The two agree when the egress interface is the same
 # and the library's next hop is one of the device's (ECMP picks by hash).
+#
+# --path compares each hop of simulate policy's path answer with the hop's device;
+# its comment block below holds the measured facts it relies on.
 set -uo pipefail
 
 routing_probe() {
   local dev=${1:?device} router=${2:?router}
   shift 2
-  local analyst=${PANOS_ANALYST:-bin/panos-analyst} agreed=0 total=0
+  local analyst=${PROTEUS_BIN:-bin/proteus} agreed=0 total=0
   local live
   live=$(curl -sk --max-time 40 -G "https://$PANOS_HOST/api/" \
     --data-urlencode "type=op" --data-urlencode "key=$PANOS_API_KEY" \
@@ -94,6 +99,224 @@ print("%s:%s" % (h["out"]["interface"], ",".join(sorted(n["NextHop"] for n in h[
   echo "$agreed of $total agree."
 }
 
+# --nat compares simulate nat's rule with the device's test nat-policy-match. The
+# engine's JSON gives the zones and the egress interface the device is asked with
+# (its from zone, and the pre-NAT lookup's zone and interface), so the probe checks
+# them too. A flow is src,dst,port[,from-zone]. The engine runs with --no-dns: an
+# FQDN resolved here says nothing of what the device resolved. The XML API answers
+# the rule name only (spec §18 F13); an implicit bi-directional rule carries its
+# origin's name on both sides.
+nat_probe() {
+  local dev=${1:?device} router=${2:?router}
+  shift 2
+  local analyst=${PROTEUS_BIN:-bin/proteus} agreed=0 total=0
+  printf '%-44s %-24s %-24s %s\n' FLOW DEVICE LIBRARY AGREE
+  for f in "$@"; do
+    IFS=, read -r src dst port zone <<<"$f"
+    if [ "$src" = "-" ]; then
+      # The device answers no rule for a flow without a source (fw01, 2026-09-29).
+      echo "skipped $f: test nat-policy-match needs a source"
+      continue
+    fi
+    local extra=()
+    [ -n "${zone:-}" ] && extra=(--from-zone "$zone")
+    local json lib from to ifc
+    json=$("$analyst" simulate nat "$src" "$dst" --device "$dev" --router "$router" --port "$port" ${extra[@]+"${extra[@]}"} --no-dns --output json 2>/dev/null)
+    read -r lib from to ifc < <(python3 -c '
+import json, sys
+try:
+    env = json.load(sys.stdin)
+    r = env["results"]
+except Exception:
+    print("error - - -"); raise SystemExit
+rule = (r.get("rule") or {}).get("Name") or "none"
+# A translation to an address nothing resolves is what the device reports as no rule (spec §18 F17, D8).
+if any("resolves to no address" in u.get("reason", "") for u in env.get("unresolved") or []):
+    rule = "none"
+pre = r["pre_nat"]["out"]
+print(rule, r["in"].get("zone") or "-", pre.get("zone") or "-", pre.get("interface") or "-")' <<<"$json")
+    local cmd="<test><nat-policy-match>"
+    [ "$src" != "-" ] && cmd+="<source>$src</source>"
+    cmd+="<destination>$dst</destination><destination-port>$port</destination-port><protocol>6</protocol>"
+    [ "$from" != "-" ] && cmd+="<from>$from</from>"
+    [ "$to" != "-" ] && cmd+="<to>$to</to>"
+    [ "$ifc" != "-" ] && cmd+="<to-interface>$ifc</to-interface>"
+    cmd+="</nat-policy-match></test>"
+    local ref
+    ref=$(curl -sk --max-time 40 -G "https://$PANOS_HOST/api/" \
+      --data-urlencode "type=op" --data-urlencode "key=$PANOS_API_KEY" --data-urlencode "cmd=$cmd" \
+      | python3 -c '
+import sys, xml.etree.ElementTree as ET
+t = ET.fromstring(sys.stdin.read())
+e = t.find(".//rules/entry")
+print((e.text or "").strip() if e is not None else "none")')
+    total=$((total + 1))
+    local agree=NO
+    [ "$ref" = "$lib" ] && agree=yes && agreed=$((agreed + 1))
+    printf '%-44s %-24s %-24s %s\n' "$src -> $dst:$port ($from->$to $ifc)" "$ref" "$lib" "$agree"
+  done
+  echo
+  echo "$agreed of $total agree."
+}
+
+# --path runs simulate policy in path mode for each flow of <flows-file> and asks
+# each hop's device the same question with test security-policy-match. A flows
+# file has one flow per line, "<src> <dst> <protocol> <port>"; "#" starts a comment.
+# Each hop's device is reached through PANOS_HOST_<NAME> and PANOS_API_KEY_<NAME>,
+# NAME being the device name upper-cased with every non-alphanumeric as "_"; a hop
+# whose variables are missing is reported "not probed". Only hops proteus decides
+# (security check pass or stop) are compared; undecided and not-evaluated hops are
+# counted, not probed. The test is sent without <application>: the device then
+# ignores the application but applies application-default ports, so its answer is
+# not ground truth for rules with an application (measured on fw02, 2026-10-08).
+# Measured on fw02, 2026-10-08: the device does not name its default rules; a flow
+# no rule matches gives an empty result. Agree means the same rule name, or an empty
+# device result where proteus decided by a default rule (spec §10.2). A hop dropped
+# by routing is listed with the --routing command that checks it. The test carries
+# no vsys, so a hop on a vsys other than vsys1 is skipped.
+xml_escape() {
+  local s=$1
+  s=${s//&/'&amp;'}
+  s=${s//</'&lt;'}
+  s=${s//>/'&gt;'}
+  printf '%s' "$s"
+}
+
+device_env() {
+  # device_env <device>: the suffix of its PANOS_HOST_/PANOS_API_KEY_ variables.
+  printf '%s' "$1" | tr '[:lower:]' '[:upper:]' | sed 's/[^A-Z0-9]/_/g'
+}
+
+path_probe() {
+  local flows=${1:?flows file}
+  [ -r "$flows" ] || { echo "cannot read $flows" >&2; return 2; }
+  local analyst=${PROTEUS_BIN:-bin/proteus}
+  local decided=0 agreed=0 disagreed=0 undecided=0 unprobed=0 drops=0
+  local fmt='%-36s %-4s %-12s %-30s %-40s %s\n'
+  # shellcheck disable=SC2059 # fmt is the table layout
+  printf "$fmt" FLOW HOP DEVICE PROTEUS DEVICE-ANSWER RESULT
+  local line src dst proto port rest
+  while IFS= read -r line || [ -n "$line" ]; do
+    line=${line%%#*}
+    read -r src dst proto port rest <<<"$line"
+    [ -z "${src:-}" ] && continue
+    if [ -z "${port:-}" ] || [ -n "${rest:-}" ]; then
+      echo "skipped line \"$line\": want <src> <dst> <protocol> <port>" >&2
+      continue
+    fi
+    local flow="$src>$dst $proto/$port" hops
+    hops=$("$analyst" simulate policy "$src" "$dst" --protocol "$proto" --port "$port" --output json 2>/dev/null \
+      | python3 -c '
+import json, sys
+try:
+    r = json.load(sys.stdin)["results"][0]
+except Exception:
+    print("error"); raise SystemExit
+at = r.get("at") or {}
+num = {"tcp": "6", "udp": "17", "icmp": "1", "sctp": "132"}
+for h in r.get("hops") or []:
+    sec = (h.get("checks") or {}).get("security") or {}
+    f = h.get("flow") or {}
+    kind = sec.get("verdict") or "not-evaluated"
+    # Only a route lookup that fails drops the flow; a path that leaves the estate
+    # or ends unresolved still ran its checks on the last hop.
+    if r.get("outcome") == "dropped" and at.get("hop") == h["index"]:
+        kind = "routing-drop"
+    proto = str(f.get("protocol") or "")
+    print("\t".join(str(x) if x not in (None, "") else "-" for x in (
+        kind, h["index"], h.get("device"), h.get("vsys"), sec.get("rule"), sec.get("default"),
+        ((f.get("source") or {}).get("addrs") or [None])[0],
+        ((f.get("destination") or {}).get("addrs") or [None])[0],
+        f.get("from_zone"), f.get("to_zone"), num.get(proto, proto), f.get("port"),
+        (h.get("in") or {}).get("router"),
+        ",".join(d.get("rule") or "" for d in sec.get("doubts") or []))))')
+    if [ "$hops" = error ] || [ -z "$hops" ]; then
+      # shellcheck disable=SC2059
+      printf "$fmt" "$flow" - - "no JSON answer" - SKIP
+      continue
+    fi
+    local kind idx dev vsys rule dflt hsrc hdst fz tz pnum hport router doubted
+    while IFS=$'\t' read -r kind idx dev vsys rule dflt hsrc hdst fz tz pnum hport router doubted; do
+      local mine="$rule $kind" theirs=- result=SKIP
+      case $kind in
+        undecided)
+          undecided=$((undecided + 1)); mine="undecided" ;;
+        not-evaluated)
+          mine="not evaluated" ;;
+        routing-drop)
+          drops=$((drops + 1)); mine="routing drop"
+          theirs="see --routing $dev $router $hdst" ;;
+        pass|stop)
+          decided=$((decided + 1))
+          local name host key
+          name=$(device_env "$dev")
+          host=PANOS_HOST_$name key=PANOS_API_KEY_$name
+          if [ -z "${!host:-}" ] || [ -z "${!key:-}" ]; then
+            unprobed=$((unprobed + 1)); theirs="not probed"
+          elif [ "$vsys" != vsys1 ]; then
+            unprobed=$((unprobed + 1)); theirs="not probed ($vsys)"
+          elif [ "$fz" = - ] || [ "$tz" = - ] || [ "$hsrc" = - ] || [ "$hdst" = - ]; then
+            unprobed=$((unprobed + 1)); theirs="not probed (no zones)"
+          else
+            local cmd="<test><security-policy-match>"
+            cmd+="<source>$(xml_escape "$hsrc")</source><destination>$(xml_escape "$hdst")</destination>"
+            cmd+="<from>$(xml_escape "$fz")</from><to>$(xml_escape "$tz")</to>"
+            cmd+="<protocol>$pnum</protocol>"
+            [ "$hport" != - ] && cmd+="<destination-port>$hport</destination-port>"
+            cmd+="</security-policy-match></test>"
+            theirs=$(curl -sk --max-time 40 -G "https://${!host}/api/" \
+              --data-urlencode "type=op" --data-urlencode "key=${!key}" --data-urlencode "cmd=$cmd" \
+              | python3 -c '
+import sys, xml.etree.ElementTree as ET
+try:
+    t = ET.fromstring(sys.stdin.read())
+except Exception:
+    print("error: no XML"); raise SystemExit
+if t.get("status") != "success":
+    print("error: " + " ".join((t.findtext(".//msg") or t.findtext(".//line") or "refused").split())[:40])
+    raise SystemExit
+e = t.find(".//rules/entry")
+print("(default)" if e is None else (e.get("name") or (e.text or "").strip() or "unnamed"))')
+            case $theirs in
+              error:*) unprobed=$((unprobed + 1)) ;;
+              *)
+                if [ "$theirs" = "$rule" ] || { [ "$theirs" = "(default)" ] && [ "$dflt" != - ]; }; then
+                  result=AGREE; agreed=$((agreed + 1))
+                elif [[ ",$doubted," == *",$theirs,"* ]]; then
+                  # Without <application> the device skips the application but keeps
+                  # application-default ports (measured on fw02, 2026-10-08), so it can
+                  # stop at a rule proteus holds in doubt. proteus decided the hop only
+                  # because every such rule has the deciding action (spec E20).
+                  result=AGREE-ACTION; agreed=$((agreed + 1))
+                else
+                  result=DISAGREE; disagreed=$((disagreed + 1))
+                fi ;;
+            esac
+          fi ;;
+      esac
+      # shellcheck disable=SC2059
+      printf "$fmt" "$flow" "$idx" "$dev" "$mine" "$theirs" "$result"
+    done <<<"$hops"
+  done <"$flows"
+  echo
+  echo "$decided decided hops: $agreed agree, $disagreed disagree, $unprobed not probed."
+  echo "$undecided undecided hops; $drops routing drops (check with --routing)."
+}
+
+if [ "${1:-}" = "--path" ]; then
+  shift
+  path_probe "$@"
+  exit $?
+fi
+
+if [ "${1:-}" = "--nat" ]; then
+  : "${PANOS_HOST:?set PANOS_HOST}"
+  : "${PANOS_API_KEY:?set PANOS_API_KEY}"
+  shift
+  nat_probe "$@"
+  exit 0
+fi
+
 if [ "${1:-}" = "--routing" ]; then
   : "${PANOS_HOST:?set PANOS_HOST}"
   : "${PANOS_API_KEY:?set PANOS_API_KEY}"
@@ -105,7 +328,7 @@ fi
 cfg=${1:?config file}
 vsys=${2:?vsys, e.g. vsys1}
 vsys=${vsys#vsys:}
-analyst=${3:-bin/panos-analyst}
+analyst=${3:-bin/proteus}
 
 : "${PANOS_HOST:?set PANOS_HOST}"
 : "${PANOS_API_KEY:?set PANOS_API_KEY}"
@@ -152,7 +375,7 @@ printf '%-15s %-15s %-9s %-23s %-23s %s\n' SOURCE DESTINATION FROM-ZONE DEVICE L
 for p in "${probes[@]}"; do
   read -r src dst fz tz app port target <<<"$p"
   dev=$(device_match "$src" "$dst" "$fz" "$tz" "$app" "$port")
-  lib=$("$analyst" simulate secpolicy "$src" "$dst" --file "$cfg" --vsys "$vsys" \
+  lib=$("$analyst" simulate policy "$src" "$dst" --file "$cfg" --vsys "$vsys" \
         --from-zone "$fz" --to-zone "$tz" --port "$port" --application "$app" 2>/dev/null \
         | sed -n 's/^first match: \([^ ]*\).*/\1/p')
   lib=${lib:-no-match}

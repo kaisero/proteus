@@ -3,7 +3,7 @@
 
 A block looks like this, and names the package it documents:
 
-    <!-- GENERATED:api ./index -->
+    <!-- GENERATED:api ./internal/index -->
     ...replaced...
     <!-- /GENERATED:api -->
 

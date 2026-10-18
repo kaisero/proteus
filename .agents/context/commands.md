@@ -1,105 +1,314 @@
 # commands
 
-Validated against 7a7cefe on 2026-09-29 · Purpose: the three binaries, what each is for, and which one to reach for.
+Validated against 9e7d9b7 on 2026-10-08 · Purpose: the proteus command, what each subcommand is for, and which one to reach for.
 
 ## Purpose & responsibilities
 
-The library is the product; the commands are how a human or an agent exercises it
-without writing Go. `panos-analyst` is the one command surface: it fetches devices
-into the store and answers questions of them. `panos-demo` is a narrated tour used
-to check behaviour against a real configuration. `panos-schemagen` is the
-build-time generator. Spec: `docs/specs/2026-09-27-panos-analyst-scope.md` §15.
+`proteus` is the product and the one command surface: it fetches devices
+into the store and answers questions of them. It is the only binary; the one
+developer tool, `internal/tools/schemadigest`, runs through `make schema-digest`
+(see [schema-digest](schema-digest.md)). Spec:
+`docs/specs/2026-09-27-panos-analyst-scope.md` §15.
 
-`make tools-bin` builds the first two. `make build` cross-compiles only the
-generator.
+`make build-local` builds `bin/proteus`. `make build` cross-compiles it for
+linux/amd64.
 
-## panos-analyst
+## proteus
 
 ```
-fetch <device>... | --label k=v | --all     log in, fetch six documents, store a snapshot
+fetch <device>... | --label k=v | --all     log in, fetch the documents and the App-ID data, store a snapshot (--why: stages)
 inventory init                              write an inventory template, mode 0600
 snapshot list <device>                      snapshots, newest first; * marks latest
 snapshot show                               per device and vsys: snapshot, age, version, rules
 snapshot diff [--from] [--to]               objects and rules added, removed, changed
 search <term>                               every place a value or name appears
 lookup <name>                               the whole rule or object behind a name
-simulate secpolicy <src> <dst>              the rules one flow could hit, and the first match
+simulate policy <src> <dst>                 does the estate allow the flow along its path (--file: one configuration)
 simulate routing <src> <dst>                the firewalls a packet crosses, hop by hop
+simulate nat <src> <dst> --device <fw>      the NAT rule and the translated packet
 ```
 
 - **Two question verbs.** `search` answers "where does this appear" in five stages:
   objects by value, objects by name, groups, references, literals. Rules whose field
   is `any` are not in it; `simulate` answers "what would this traffic hit".
-- **Selectors** on every question: `--device`, `--label k=v` (AND), `--vsys`,
-  `--at <time>`, `--fresh`, `--file <config.xml>`. No selector means every device.
+- **Selectors** on `search`, `lookup` and `snapshot`: `--device`, `--label k=v`
+  (AND), `--vsys`, `--at <time>`, `--fresh`, `--file <config.xml>`. No selector means
+  every device. The `simulate` commands take their own subsets (below).
 - **Search modes:** the term's type sets the match (address covers, prefix overlaps,
   port covers, URL by tokens, else exact); `--exact`, `--within`, `--contains`
   override. Filters: `--kind`, `--field`, `--show objects,groups,refs,literals`,
   `--direct`.
 - **`lookup <name>`** prints a rule as the rule editor lays it out, or an object
-  with its value, members and holding groups. The kind is inferred; a name several
-  kinds share exits 2 until `--kind` picks one; found nowhere exits 1. `--expand`
+  with its value, members and holding groups; with App-ID data also a predefined
+  application, a container, and a filter with the applications it selects (20 in
+  text, all with `--full`; `--kind application`). The kind is inferred; a name several
+  kinds share exits 2 until `--kind` picks one; found nowhere exits 0 with empty
+  `results`. `--expand`
   shows values in parentheses and groups as trees (three levels); lists stop at five
   items unless `--full`. See [questions](questions.md).
 - **`simulate <kind>`** has one subcommand per kind registered in
-  `estate.Simulations`; `secpolicy` is the first. It runs on one device and vsys
-  (M5 fans out), takes an address or FQDN per side, `--port`, `--url`, zones given
-  or derived, and prints each stage with `--why`. Its text ends with
-  `first match: <rule> (<action>)`, which `scripts/device-probe.sh` reads. See
-  [simulator](simulator.md).
+  `estate.Simulations`, each from its own builder in `kindCommands`
+  (`TestEveryKindHasACommand`). See [simulator](simulator.md).
+- **`simulate policy <src> <dst>`** (`cli/policypath.go`, `query/policy.go`) has two modes (spec
+  2026-10-07 §3). **Path mode**, the default: routing's path from the start
+  (`--device` names it, `--router` picks its router), the security check on every
+  hop with the hop's flow and zones (`pathpolicy.Run`), one verdict `allowed`,
+  `denied` or `undecided` with the hop that set it. Text: verdict line, routing
+  boxes with a `policy` row (and `doubt` rows), `--why` per hop. Exit 3 when
+  undecided. `--vsys`, `--label`, `--from-zone`, `--to-zone`, several `--device`,
+  `--router` without `--device`, `--each` (fan-out, M5b) exit 2; `--fresh` and
+  `--all-devices` are not registered. An FQDN traces its first IPv4 address; with
+  `--no-dns` or no address, exit 2. The loader opens the snapshot each routing hop
+  used (HA: the active member). **`--file`**: one configuration, `--vsys`, zones
+  given (both) or derived, no NAT, the first address of an FQDN checked with a
+  `dns.other-addresses` note for the rest; `--device`, `--label`, `--at`,
+  `--router` exit 2.
+  **`--application`** (spec 2026-10-16 §4.1) is evaluated with App-ID data: path
+  mode reads each hop's snapshot data, `--file` reads `apps.xml.gz` beside the
+  configuration (`note.app-data-file`); without data `note.app-data-missing` and
+  the answer as before. Without `--protocol`, `flowFlags.input` passes an empty
+  protocol (`protocolSet`, D14), so the check takes the application's default and
+  the header prints `Verdict.Protocol`; `simulate routing` and `nat` keep `tcp`.
+  An unknown or container application exits 2 with `--file` (up to five
+  suggestions) and leaves the hop undecided in path mode.
+  Its text ends with `first match: <rule> (<action>)` or `first certain match:` and
+  `undecided:`. Both modes share one JSON security block (`securityJSON`).
+  `scripts/device-probe.sh <config> <vsys>` reads the `--file` text;
+  `--path <flows-file>` compares each decided hop with the hop device's
+  `test security-policy-match`.
+- **`simulate nat <src> <dst> --device <fw>`** (own command via `kindCommands`):
+  `--router`, `--port`, `--protocol`, `--from-zone` or `--from-interface`, `--why`,
+  `--no-dns` (resolves no FQDN at all, also a translated destination's). A source
+  of `-` is any. `--device` is required (exit 2 without it); exit 2 for a device
+  not in the inventory, several routers, IPv6; a device without a snapshot is a
+  hole (exit 3).
 - **`simulate routing <src> <dst>`** (or `<dst> --device <name> [--router]`) has
   its own command (`kindCommands`): no selectors but `--device`, `--at`, `--rib`,
-  `--why`. It reads every inventory device's stored interfaces and tables, draws a
+  `--why`. An undecided or undermatched simulate result also carries `needs`
+  (`query/needs.go`, spec 2026-10-09 §3.4): the port, protocol or URL a second
+  call can give, found from the reason codes; `[]` when none helps, no key
+  when the result is decided. `--detail summary|full` (default `full`) picks the
+  results' form on `--output json|yaml` for every question; with text output it
+  is a usage error. The envelope says which in `detail`; the summary types
+  (`query/summary.go`, spec §3.5) drop candidates, stage tables and a hop's
+  interfaces and lookups. It reads every inventory device's stored interfaces and tables, draws a
   box per firewall and vsys, and exits 2 for a start it cannot choose (ties,
-  default-only, several routers, IPv6). `scripts/device-probe.sh --routing <device>
+  default-only, several routers, IPv6); a start device without a snapshot is a hole
+  (exit 3). `scripts/device-probe.sh --routing <device>
   <router> <dst>...` checks its first lookup against the device.
-- **Output and exit codes:** `--output text|json`; JSON is one envelope with
-  `format`, `command`, `input`, `results`, `holes`, `unresolved`, `notes`. Exit 0
-  complete, 1 error, 2 usage, 3 holes or unresolved.
-- **Settings**, rising precedence default < inventory `defaults:` < `PANOS_*` <
-  flag: inventory path, store root, `max_snapshot_age`, output, and the run log's
-  `log_level`, `log_dir`, `log_keep` (plus `--verbose`). `PANOS_USERS` names a user
-  snapshot; a stored forwarding table supplies zones.
+- **Output:** `--output text|json|yaml`. JSON and YAML are the same envelope:
+  `format` (2), `command`, `input`, `results` (always an array), `holes`,
+  `unresolved`, `notes`. Every note the text shows is in `notes` too. Format 2
+  writes every reason as `{code, text}` with its context fields (see
+  reporting.md); the text output does not change with it. Each result of a
+  question (simulate, search, lookup, snapshot diff) carries `answer`, one line
+  of its text output that a `query` builder makes and the renderer prints
+  (`TestGoldenAnswersAreTextLines`); search, lookup and snapshot diff add
+  `summary` with the count line as its `answer`. Search prints its findings'
+  answers only with `--why`.
+- **`--limit N`** (search, lookup, snapshot diff; MCP `limit`): one field,
+  `query.ResultLimit`, embedded in the query inputs and the MCP arguments. No
+  default. `query.cut` keeps the first N findings or cards of the whole,
+  sorted answer; snapshot diff counts single changes (`cutChanges`): the scope
+  where the limit falls keeps its first changes and an answer with its whole
+  counts plus `(n of m changes shown)`, later scopes drop out, and
+  `DiffResult.Summary` still counts every change. `summary.omitted` counts the
+  rest and the count line ends `; N of M shown, narrow by …` (`leftOut`).
+  Holes, unresolved entries and notes are never cut; text prints the notes of
+  a target with no result left below the answer (`leftNotes`). `--limit 0` is
+  a usage error (`checkLimit`); the MCP input schema has `minimum: 1`.
+- **Colour:** `--color auto|always|never` (also `PROTEUS_COLOR`, inventory `color:`),
+  default `auto`. JSON and YAML are never coloured. `NO_COLOR`, `CLICOLOR_FORCE` and
+  `TERM=dumb` act on `auto` only; `auto` colours a terminal and nothing else.
+  Colour follows meaning (`palette`: bad, warn, ok, head, dim, accent), wraps one
+  token or cell, never a line; columns go through `table`, which aligns by visible
+  width.
+- **Exit codes** (spec §4.1): 0 complete, possibly empty; 1 no answer; 2 the command
+  line must change (unknown command, flag or topic, bad setting, a device not in the
+  inventory, an empty selection); 3 holes or unresolved; 130 SIGINT; 143 SIGTERM.
+  `fetch`: all stored 0, a failure with one device stored 3, none stored 1; it
+  prints its answer in all three. An App-ID call that fails on the way, or a
+  content file that cannot be written, counts as a failure of its device (3); a
+  device that refuses the data only adds `note.fetch-applications-missing` (0).
+- **Errors on stderr:** text mode prints `proteus: <message>` and `log: <path>`. In
+  JSON and YAML mode the last stderr line of a non-zero exit is one JSON object,
+  `{"format":2,"exit":N,"error":…,"log":…}`, also for command-line errors.
+- **A new command** builds an `answer` (`Command`, `Input`, `Results`,
+  `Qualifiers`, `Text`) and ends its `RunE` with `a.emitRun(a.runX(...))`. It never
+  writes to stdout itself; `emit` renders the format, logs the `answer:` line and
+  sets the exit from the qualifiers. It also needs a row in `contractRows`
+  (`contract_test.go`) and goldens.
+- **`fetch --why`** prints each device's stages, `resolve`, `login`, `ha`,
+  `documents`, `applications`, `store`, with status (`ok`, `partial`, `skipped`, `failed`) and
+  detail; JSON always carries them as `stages`. On a terminal a progress line per
+  finished stage goes to stderr.
+- **Settings**, rising precedence default < inventory `defaults:` < `PROTEUS_*` <
+  flag: inventory path, store root, `max_snapshot_age`, output, color, and the run log's
+  `log_level`, `log_dir`, `log_keep` (plus `--verbose`). `PROTEUS_USERS` names a user
+  snapshot, read per command run, and once at start by `proteus mcp` (a bad file
+  exits 2); a stored forwarding table supplies zones.
 - **Run log:** one file per run under `log_dir`, `<time> [<LEVEL>] [<TAG>] <msg>`,
   tags `RUN`, `API`, `SNAP`, `FIND`, `STEP`; secrets redacted; the path is printed
-  when a run exits non-zero. The core never logs; `runlog` is used above it.
-
-## panos-demo
-
-`panos-demo <cfg>` walks twelve sections over one configuration: load, scopes,
-targets, rules, objects, groups, lookups, matching, and the caveats. `-v` explains
-each answer. `-probe <addr>` chooses the address the lookup sections use.
-
-Use it to check a whole configuration at once, especially a real one.
-
-## panos-schemagen
-
-`digest` turns an appliance `schema.xml` into a committed digest. `generate` turns
-digests into `config/v11_2/*/model.go`. See [schema-codegen](schema-codegen.md).
+  when a run exits non-zero. Help, completion and a bare group write no log and
+  ignore a bad setting. The core never logs; `runlog` is used above it.
 
 ## Build / run pointers
 
-- `make tools-bin` — `bin/panos-analyst`, `bin/panos-demo`.
-- `make build-local` — `bin/panos-schemagen` for this machine.
+- `make build-local` — `bin/proteus` for this machine.
 - Fixtures live in `testdata/config/`; with `--file` no command needs a device.
 
 ## Public API
 
-Not a library surface. The commands are `main` packages under `cmd/`.
+`cmd/proteus` is `main` only; the commands live in `internal/cli` behind
+`cli.Run`.
+
+**Query layer** (`internal/query`, spec 2026-10-09 §3.7). Each question is a
+function from a typed input and an `Env` to a typed `Envelope[In, Res]`: the
+command line and the MCP server call the same functions. `cli` keeps Cobra, the
+flags, the text renderers, `emit` and the exit codes, and wraps each envelope in
+a local type that implements `answer`. A full result keeps the native values the
+renderers need in `json:"-"` fields, and the envelope keeps every target read
+(`Targets`). Input rules live in each input's `Validate()`; a refused input is a
+`*query.UsageError` with code `call.usage`, the command line's `Text`, and a
+`ToolText` with the input's field names where `Text` names a flag. `cli` maps it
+to exit 2. A choice only the user can make stays a `*simulate.ChoiceError`,
+whose `Kind` says what is chosen (`device`, `router`, or empty for a question
+with no choice).
+
+`Doc[Echo, Res]` is an envelope's JSON form, and `DocOf` builds it: the input
+block comes from the input's `Echo()` (`PathEcho`, `FileEcho`, `RoutingEcho`,
+`NATEcho`, `SearchEcho`, `LookupEcho`, `DiffEcho`, which the command line also
+prints), and every list prints `[]`. Inputs, input blocks and results carry
+`jsonschema` description tags for the generated schemas (spec §3.6).
+
+<!-- GENERATED:api ./internal/query -->
+```go
+type Check struct{ ... }
+type CheckSummary struct{ ... }
+type Checks []Check
+type DiffEcho struct{ ... }
+type DiffInput struct{ ... }
+type DiffResult struct{ ... }
+type DiffSummary struct{ ... }
+type Doc[Echo, Res any] struct{ ... }
+type Echoer[E any] interface{ ... }
+type Env struct{ ... }
+type Envelope[In, Res any] struct{ ... }
+type FileEcho struct{ ... }
+type Finding struct{ ... }
+type FindingSummary struct{ ... }
+type FlowInput struct{ ... }
+type HopSummary struct{ ... }
+type LookupEcho struct{ ... }
+type LookupInput struct{ ... }
+type LookupResult struct{ ... }
+type LookupSummary struct{ ... }
+type NATEcho struct{ ... }
+type NATInput struct{ ... }
+type NATResult struct{ ... }
+type NATSummary struct{ ... }
+type Need struct{ ... }
+type Note struct{ ... }
+type PathEcho struct{ ... }
+type PathHop struct{ ... }
+type PathHopSummary struct{ ... }
+type PathResult struct{ ... }
+type PathSummary struct{ ... }
+type Point struct{ ... }
+type PolicyFileInput struct{ ... }
+type PolicyInput struct{ ... }
+type ResultLimit struct{ ... }
+type RoutingEcho struct{ ... }
+type RoutingInput struct{ ... }
+type RoutingResult struct{ ... }
+type RoutingSummary struct{ ... }
+type Rule struct{ ... }
+type SearchEcho struct{ ... }
+type SearchInput struct{ ... }
+type Security struct{ ... }
+type SecurityResult struct{ ... }
+type SecuritySummary struct{ ... }
+type Selection struct{ ... }
+type Stage struct{ ... }
+type Summary struct{ ... }
+type Target struct{ ... }
+type Unresolved struct{ ... }
+type UsageError struct{ ... }
+
+func (cs Checks) MarshalJSON() ([]byte, error)
+func (e *UsageError) Error() string
+func (e *UsageError) Unwrap() error
+func (f Finding) Summary() FindingSummary
+func (in DiffInput) Echo() DiffEcho
+func (in DiffInput) Validate() *UsageError
+func (in LookupInput) Echo() LookupEcho
+func (in LookupInput) Validate() *UsageError
+func (in NATInput) Echo() NATEcho
+func (in NATInput) Validate() *UsageError
+func (in PolicyFileInput) Echo() FileEcho
+func (in PolicyFileInput) Validate() *UsageError
+func (in PolicyInput) Echo() PathEcho
+func (in PolicyInput) Validate() *UsageError
+func (in RoutingInput) Echo() RoutingEcho
+func (in RoutingInput) Validate() *UsageError
+func (in SearchInput) Echo() SearchEcho
+func (in SearchInput) Matching() string
+func (in SearchInput) Validate() *UsageError
+func (r DiffResult) Summary() DiffSummary
+func (r LookupResult) Summary() LookupSummary
+func (r NATResult) Summary() NATSummary
+func (r PathResult) Summary() PathSummary
+func (r RoutingResult) Summary() RoutingSummary
+func (r SecurityResult) Summary() SecuritySummary
+func CheckAction(c pathpolicy.CheckResult) string
+func DecisionLine(v securitypolicy.Verdict, name func(string) string) string
+func DestinationTranslation(d *nat.Translation, port uint16) string
+func Detail(f search.Finding) string
+func DiffAnswer(device, scope string, changes []drift.Change) string
+func DocOf[In Echoer[E], E, Res any](e Envelope[In, Res]) Doc[E, Res]
+func EndpointText(e simulate.Endpoint) string
+func FileAnswer(v securitypolicy.Verdict) string
+func FindingAnswer(t Target, kind, name, field string) string
+func Lookup(ctx context.Context, env Env, in LookupInput) (Envelope[LookupInput, LookupResult], error)
+func LookupAnswer(t Target, kind, name string) string
+func NAT(ctx context.Context, env Env, in NATInput) (Envelope[NATInput, NATResult], error)
+func NATAnswer(r nat.Result, f simulate.Flow) string
+func NoteOf(device, vsys string, r reason.Reason) Note
+func PathAnswer(r pathpolicy.Result) string
+func PointHop(r pathpolicy.Result) (routing.Hop, bool)
+func Policy(ctx context.Context, env Env, in PolicyInput) (Envelope[PolicyInput, PathResult], error)
+func PolicyFile(ctx context.Context, env Env, in PolicyFileInput) (Envelope[PolicyFileInput, SecurityResult], error)
+func PortNumber(p uint16) string
+func Routing(ctx context.Context, env Env, in RoutingInput) (Envelope[RoutingInput, RoutingResult], error)
+func RoutingAnswer(p routing.Path) string
+func Search(ctx context.Context, env Env, in SearchInput) (Envelope[SearchInput, Finding], error)
+func SimStages(stages []simulate.Stage) []Stage
+func SnapshotDiff(ctx context.Context, env Env, in DiffInput) (Envelope[DiffInput, DiffResult], error)
+func SourceTranslation(from string, t *nat.Translation) string
+func Summarize[In, R, S any](e Envelope[In, R], f func(R) S) Envelope[In, S]
+func SystemCanonicalName(ctx context.Context, name string) (string, error)
+func SystemResolve(ctx context.Context, name string) ([]netip.Addr, error)
+func TargetNotes(ts []estate.Target) []Note
+func TargetOf(t estate.Target) Target
+func Targets(ctx context.Context, env Env, sel Selection) ([]estate.Target, []estate.Hole, error)
+func UnresolvedOf(device, vsys string, r reason.Reason) Unresolved
+func UnresolvedOfParts(device, vsys string, rs simulate.Reasons) []Unresolved
+```
+<!-- /GENERATED:api -->
 
 ## Gotchas / invariants
 
-- **Commands hold no matching logic.** They compose library calls: `estate` for
+- **Commands hold no matching logic.** They compose package calls: `estate` for
   targets, `search` for findings, `drift` for changes, `index` for candidates. The
-  four paths live in `index/candidates.go` and nowhere else.
+  four paths live in `internal/index/candidates.go` and nowhere else.
 - **An incomplete answer exits 3.** A hole or an unresolved entry is printed and
   sets the exit code; a script must be able to refuse to act on it.
-- **A version gap is unresolved, a stale snapshot is a note.** The first can make
-  an answer miss rules; the second only qualifies it.
+- **A stale snapshot is a note.** It qualifies an answer and does not change the
+  exit code. No note names the PAN-OS version: one schema reads every version.
 
 ## See also
 
-- `cmd/panos-analyst/`, `cmd/panos-demo/main.go`
-- `QUICKSTART.md` — the same commands, task by task, with output
+- `internal/cli/`, `cmd/proteus/main.go`
+- `docs/get-started/` — the same commands, step by step, with output
 - [fetch-and-store](fetch-and-store.md) — what `fetch` and the store do
 - [reporting](reporting.md) — what `Unresolved` means

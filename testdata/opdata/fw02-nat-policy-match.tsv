@@ -1,0 +1,7 @@
+# test nat-policy-match on fw02 (PAN-OS 12.2.2) with its own rules, 2026-09-29.
+# case	source	destination	dport	from	to	to-interface	rule
+home-lab	198.18.1.10	198.18.10.100	443	home	labor	vlan.32	lab-access
+home-mgmt	198.18.1.10	198.18.100.9	443	home	labor	vlan.100	mgmt-workaround
+labor-inet	198.18.10.5	8.8.8.8	443	labor	wan	ethernet1/1	internet-access
+home-inet	198.18.1.10	8.8.8.8	443	home	wan	ethernet1/1	internet-access
+layer2-zone	198.18.1.10	198.18.10.100	443	layer2	labor	vlan.32	

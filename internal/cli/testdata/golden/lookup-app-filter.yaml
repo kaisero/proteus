@@ -1,0 +1,51 @@
+format: 2
+command: lookup
+detail: full
+input:
+  expand: false
+  full: false
+  kind: ""
+  limit: 0
+  name: f-media
+  selection:
+    file: TMP
+results:
+  - answer: 'file/vsys1: application-filter f-media'
+    device: file
+    vsys: vsys1
+    scope: vsys:vsys1
+    card:
+      kind: application-filter
+      name: f-media
+      sections:
+        - title: criteria
+          rows:
+            - label: category
+              text: media
+        - title: applications
+          rows:
+            - label: ""
+              text: 3 applications
+            - label: ""
+              items:
+                - name: app-media
+                - name: app-old
+                - name: shared-media
+        - title: held by
+          rows:
+            - label: ""
+              items:
+                - name: inner
+summary:
+  answer: 1 with it, 0 without, 0 holes
+  found: 1
+  with: 1
+  without: 0
+  omitted: 0
+holes: []
+unresolved: []
+notes:
+  - device: file
+    vsys: vsys1
+    code: note.app-data-file
+    text: application data of content 8000-1000 from TMP

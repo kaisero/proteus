@@ -1,0 +1,15 @@
+{
+  "format": 2,
+  "command": "snapshot show",
+  "input": {},
+  "results": [],
+  "holes": [
+    {
+      "device": "fw01",
+      "code": "gap.snapshot-missing",
+      "text": "store: fw01 has no snapshot with a configuration; run proteus fetch fw01"
+    }
+  ],
+  "unresolved": [],
+  "notes": []
+}

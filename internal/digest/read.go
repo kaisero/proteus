@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/okaiser/panos-analyst/internal/schema"
+	"github.com/kaisero/proteus/internal/schema"
 )
 
 // Read decodes a gzipped JSON digest and rebuilds parent pointers, which are not

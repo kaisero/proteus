@@ -1,0 +1,59 @@
+name: Dependabot auto-merge
+
+# Turns on GitHub's own auto-merge for a Dependabot pull request. It merges
+# nothing itself: auto-merge waits for the checks that branch protection on
+# develop marks required, and merges only when they all pass. Without required
+# checks, auto-merge merges at once; that is the one failure to know about.
+#
+# Patch and minor updates only. A major update can break at runtime where CI
+# does not see it, so a person reviews it. For a grouped update, fetch-metadata
+# reports the largest change in the group, so one major update holds back the
+# whole pull request.
+#
+# develop only, on purpose. Only develop has required checks. A pull request to
+# an unprotected branch would merge at once, so this workflow leaves it alone.
+on:
+  pull_request:
+    branches: [develop]
+
+# A Dependabot run gets a read-only token. These two scopes let
+# `gh pr merge --auto` act on the pull request. No step checks out or runs the
+# code of the pull request, so the token never runs what Dependabot proposed.
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  auto-merge:
+    name: Enable auto-merge
+    # Matched on the author of the pull request, not github.actor: a person who
+    # runs the workflow again becomes the actor.
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Fetch update metadata
+        id: metadata
+        uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
+
+      - name: Enable auto-merge for patch and minor updates
+        if: |
+          steps.metadata.outputs.update-type == 'version-update:semver-patch' ||
+          steps.metadata.outputs.update-type == 'version-update:semver-minor'
+        run: gh pr merge --auto --squash "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Say on the pull request why a major update stays open. Otherwise nothing
+      # happens, which looks the same as broken automation.
+      - name: Explain why a major update stays open
+        if: |
+          steps.metadata.outputs.update-type == 'version-update:semver-major'
+        run: |
+          gh pr comment "$PR_URL" --body \
+            "Left for review: this is a major update (\`${UPDATE_TYPE}\`), and auto-merge covers patch and minor only. Merge it by hand when you are happy with it."
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          UPDATE_TYPE: ${{ steps.metadata.outputs.update-type }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

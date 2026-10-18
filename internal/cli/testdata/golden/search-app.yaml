@@ -1,0 +1,90 @@
+format: 2
+command: search
+detail: full
+input:
+  direct: false
+  fields: null
+  kinds: null
+  limit: 0
+  mode: matches
+  selection:
+    file: TMP
+  show: null
+  term: ssl
+results:
+  - answer: 'file/vsys1: application ssl'
+    device: file
+    vsys: vsys1
+    stage: object
+    kind: application
+    name: ssl
+    via: predefined
+    scope: predefined
+  - answer: 'file/vsys1: application-group inner'
+    device: file
+    vsys: vsys1
+    stage: group
+    kind: application-group
+    name: inner
+    via: holds inner > ssl
+    scope: vsys:vsys1
+  - answer: 'file/vsys1: application-group outer'
+    device: file
+    vsys: vsys1
+    stage: group
+    kind: application-group
+    name: outer
+    via: holds outer > inner > ssl
+    scope: vsys:vsys1
+  - answer: 'file/vsys1: application-group inner (members)'
+    device: file
+    vsys: vsys1
+    stage: reference
+    kind: application-group
+    name: inner
+    field: members
+    via: ssl
+    path: /config/devices/localhost.localdomain/vsys/vsys1/application-group/inner
+    scope: vsys:vsys1
+  - answer: 'file/vsys1: application-group outer (members)'
+    device: file
+    vsys: vsys1
+    stage: reference
+    kind: application-group
+    name: outer
+    field: members
+    via: inner
+    path: /config/devices/localhost.localdomain/vsys/vsys1/application-group/outer
+    scope: vsys:vsys1
+  - answer: 'file/vsys1: security rule allow-outer (application)'
+    device: file
+    vsys: vsys1
+    stage: reference
+    kind: security rule
+    name: allow-outer
+    field: application
+    via: outer
+    path: /config/devices/localhost.localdomain/vsys/vsys1/rulebase/security/rules/allow-outer
+    scope: vsys:vsys1
+  - answer: 'file/vsys1: security rule allow-remote (application)'
+    device: file
+    vsys: vsys1
+    stage: reference
+    kind: security rule
+    name: allow-remote
+    field: application
+    via: implicit use by app-remote
+    scope: vsys:vsys1
+summary:
+  answer: 1 with results, 0 without, 0 holes
+  found: 7
+  with: 1
+  without: 0
+  omitted: 0
+holes: []
+unresolved: []
+notes:
+  - device: file
+    vsys: vsys1
+    code: note.app-data-file
+    text: application data of content 8000-1000 from TMP

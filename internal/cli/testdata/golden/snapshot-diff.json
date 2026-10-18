@@ -1,0 +1,80 @@
+{
+  "format": 2,
+  "command": "snapshot diff",
+  "detail": "full",
+  "input": {
+    "from": "",
+    "limit": 0,
+    "selection": {
+      "vsys": [
+        "vsys1"
+      ]
+    },
+    "to": ""
+  },
+  "results": [
+    {
+      "answer": "fw01/shared: 0 added, 0 removed, 0 changed",
+      "device": "fw01",
+      "from": "2026-09-28T10-00-00Z",
+      "to": "2026-09-28T10-01-00Z",
+      "scope": "shared",
+      "changes": []
+    },
+    {
+      "answer": "fw01/vsys:vsys1: 1 added, 1 removed, 2 changed",
+      "device": "fw01",
+      "from": "2026-09-28T10-00-00Z",
+      "to": "2026-09-28T10-01-00Z",
+      "scope": "vsys:vsys1",
+      "changes": [
+        {
+          "op": "changed",
+          "kind": "address",
+          "name": "net-home",
+          "fields": [
+            {
+              "path": "ip-netmask",
+              "old": "198.18.1.0/24",
+              "new": "198.18.2.0/24"
+            }
+          ]
+        },
+        {
+          "op": "removed",
+          "kind": "address",
+          "name": "net-labor",
+          "old": "198.18.0.0/15"
+        },
+        {
+          "op": "changed",
+          "kind": "security rule",
+          "name": "dc-to-home",
+          "fields": [
+            {
+              "path": "disabled",
+              "old": "",
+              "new": "yes"
+            }
+          ]
+        },
+        {
+          "op": "added",
+          "kind": "security rule",
+          "name": "new-rule",
+          "new": "allow application=dns destination=any source=net-home"
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "answer": "1 with changes, 0 without, 0 holes",
+    "found": 4,
+    "with": 1,
+    "without": 0,
+    "omitted": 0
+  },
+  "holes": [],
+  "unresolved": [],
+  "notes": []
+}

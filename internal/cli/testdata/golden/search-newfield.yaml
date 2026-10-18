@@ -1,0 +1,41 @@
+format: 2
+command: search
+detail: full
+input:
+  direct: false
+  fields: null
+  kinds: null
+  limit: 0
+  mode: covers
+  selection:
+    file: ../../testdata/config/firewall-version-newfield.xml
+  show: null
+  term: 198.18.10.100
+results:
+  - answer: 'file/vsys1: address dc01'
+    device: file
+    vsys: vsys1
+    stage: object
+    kind: address
+    name: dc01
+    via: 198.18.10.100/32
+    scope: vsys:vsys1
+  - answer: 'file/vsys1: security rule dc-out (source)'
+    device: file
+    vsys: vsys1
+    stage: reference
+    kind: security rule
+    name: dc-out
+    field: source
+    via: dc01
+    path: /config/devices/localhost.localdomain/vsys/vsys1/rulebase/security/rules/dc-out
+    scope: vsys:vsys1
+summary:
+  answer: 1 with results, 0 without, 0 holes
+  found: 2
+  with: 1
+  without: 0
+  omitted: 0
+holes: []
+unresolved: []
+notes: []

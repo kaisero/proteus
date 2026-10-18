@@ -1,0 +1,53 @@
+<config version="12.2.0" urldb="paloaltonetworks" detail-version="12.2.3">
+  <!-- A dynamic group whose filter starts with a parenthesis (lab fact L1).
+       h-a and h-b carry the tags the filter names; h-none carries none. -->
+  <shared/>
+  <devices>
+    <entry name="localhost.localdomain">
+      <vsys>
+        <entry name="vsys1">
+          <zone>
+            <entry name="inside"/>
+            <entry name="outside"/>
+          </zone>
+          <tag>
+            <entry name="t-a"/>
+            <entry name="t-b"/>
+          </tag>
+          <address>
+            <entry name="h-a"><ip-netmask>10.88.1.1</ip-netmask><tag><member>t-a</member></tag></entry>
+            <entry name="h-b"><ip-netmask>10.88.1.2</ip-netmask><tag><member>t-b</member></tag></entry>
+            <entry name="h-none"><ip-netmask>10.88.1.3</ip-netmask></entry>
+          </address>
+          <address-group>
+            <entry name="dag-paren"><dynamic><filter>('t-a' or 't-b')</filter></dynamic></entry>
+          </address-group>
+          <rulebase>
+            <security>
+              <rules>
+                <entry name="from-dag">
+                  <from><member>inside</member></from>
+                  <to><member>outside</member></to>
+                  <source><member>dag-paren</member></source>
+                  <destination><member>any</member></destination>
+                  <application><member>any</member></application>
+                  <service><member>any</member></service>
+                  <action>allow</action>
+                </entry>
+                <entry name="from-h-none">
+                  <from><member>inside</member></from>
+                  <to><member>outside</member></to>
+                  <source><member>h-none</member></source>
+                  <destination><member>any</member></destination>
+                  <application><member>any</member></application>
+                  <service><member>any</member></service>
+                  <action>deny</action>
+                </entry>
+              </rules>
+            </security>
+          </rulebase>
+        </entry>
+      </vsys>
+    </entry>
+  </devices>
+</config>

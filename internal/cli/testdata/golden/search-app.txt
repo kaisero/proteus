@@ -1,0 +1,19 @@
+search ssl (matches)
+
+file / vsys1   TMP
+  note: application data of content 8000-1000 from TMP
+  object    application       ssl          predefined
+            file/vsys1: application ssl
+  group     application-group inner        holds inner > ssl
+            file/vsys1: application-group inner
+  group     application-group outer        holds outer > inner > ssl
+            file/vsys1: application-group outer
+  reference application-group inner        members -> ssl
+            file/vsys1: application-group inner (members)
+  reference application-group outer        members -> inner
+            file/vsys1: application-group outer (members)
+  reference security rule     allow-outer  application -> outer
+            file/vsys1: security rule allow-outer (application)
+  reference security rule     allow-remote application -> implicit use by app-remote
+            file/vsys1: security rule allow-remote (application)
+1 with results, 0 without, 0 holes

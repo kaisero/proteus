@@ -1,0 +1,66 @@
+//go:build live
+
+// This file runs only with -tags live. It reads a configuration exported from a
+// real device and is never part of CI.
+//
+// It is an external test package, so it can import index, which imports resolve.
+package resolve_test
+
+import (
+	"os"
+	"testing"
+
+	"github.com/kaisero/proteus/internal/config"
+	"github.com/kaisero/proteus/internal/index"
+	"github.com/kaisero/proteus/internal/resolve"
+)
+
+// TestLiveConfigLoads checks the whole path against a configuration exported from
+// a real device.
+//
+//	PROTEUS_LIVE_CONFIG=/path/to/export.xml go test -tags live ./resolve/
+func TestLiveConfigLoads(t *testing.T) {
+	t.Parallel()
+	path := os.Getenv("PROTEUS_LIVE_CONFIG")
+	if path == "" {
+		t.Skip("set PROTEUS_LIVE_CONFIG to a configuration exported from a device")
+	}
+	cfg, rep, err := config.Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	t.Logf("PAN-OS %s (%s)", cfg.Version(), cfg.DetailVersion())
+	if rep.HasUnknown() {
+		t.Logf("untyped: %s", rep)
+	} else {
+		t.Log("untyped: none")
+	}
+
+	tgs := resolve.Targets(cfg)
+	if len(tgs) == 0 {
+		t.Log("the configuration defines no vsys")
+	}
+	for _, tg := range tgs {
+		rules := tg.Rules(resolve.Security)
+		objs := tg.Objects("address")
+		t.Logf("%s/%s: %d rules, %d visible addresses",
+			tg.Serial(), tg.Vsys(), len(rules), len(objs))
+		for _, r := range rules {
+			t.Logf("    %2d. [%-11s %-18s] %-22s src=%v dst=%v",
+				r.Position, r.Layer, r.Scope, r.Name, r.Fields["source"], r.Fields["destination"])
+		}
+
+		idx, err := index.New(cfg, tg.Scope(), resolve.Security)
+		if err != nil {
+			t.Fatalf("index.New %s: %v", tg.Scope(), err)
+		}
+		for _, o := range objs {
+			refs := idx.Refs(o.Name)
+			groups := idx.GroupsHolding("address", o.Name, false)
+			if len(refs) == 0 && len(groups) == 0 {
+				continue
+			}
+			t.Logf("    %-24s referenced %d time(s), in groups %v", o.Name, len(refs), groups)
+		}
+	}
+}

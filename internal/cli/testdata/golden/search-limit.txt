@@ -1,0 +1,8 @@
+search 10.124.0.1 (covers)
+
+file / vsys1   ../../testdata/config/firewall-multivsys.xml
+  object address corp-dc-vienna       10.124.0.1/32
+         file/vsys1: address corp-dc-vienna
+  object address corp-location-vienna 10.124.0.0/16
+         file/vsys1: address corp-location-vienna
+1 with results, 2 without, 0 holes; 2 of 6 shown, narrow by device, vsys or kind

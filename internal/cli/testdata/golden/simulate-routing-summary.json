@@ -1,0 +1,77 @@
+{
+  "format": 2,
+  "command": "simulate routing",
+  "detail": "summary",
+  "input": {
+    "at": "",
+    "device": "",
+    "flow": {
+      "source": {
+        "addrs": [
+          "198.18.10.5"
+        ],
+        "resolved": false
+      },
+      "destination": {
+        "addrs": [
+          "8.8.8.8"
+        ],
+        "resolved": false
+      },
+      "protocol": "tcp"
+    },
+    "rib": false,
+    "router": ""
+  },
+  "results": [
+    {
+      "answer": "192.168.0.1 leaves the estate (not in the inventory)",
+      "needs": [],
+      "fidelity": {
+        "level": "undermatch",
+        "reasons": [
+          {
+            "code": "path.left-estate",
+            "text": "the path leaves the estate at 192.168.0.1"
+          }
+        ]
+      },
+      "source": {
+        "addrs": [
+          "198.18.10.5"
+        ],
+        "resolved": false
+      },
+      "destination": {
+        "addrs": [
+          "8.8.8.8"
+        ],
+        "resolved": false
+      },
+      "outcome": "left-estate",
+      "end": "192.168.0.1   leaves the estate (not in the inventory)",
+      "end_code": "path.left-estate",
+      "hops": [
+        {
+          "device": "fw01",
+          "vsys": "vsys1",
+          "snapshot": "2026-09-28T10-00-00Z",
+          "from_zone": "server",
+          "to_zone": "transport",
+          "route": "0.0.0.0/0 via 198.19.0.1"
+        },
+        {
+          "device": "fw02",
+          "vsys": "vsys1",
+          "snapshot": "2026-09-28T10-00-00Z",
+          "from_zone": "labor",
+          "to_zone": "wan",
+          "route": "0.0.0.0/0 via 192.168.0.1"
+        }
+      ]
+    }
+  ],
+  "holes": [],
+  "unresolved": [],
+  "notes": []
+}

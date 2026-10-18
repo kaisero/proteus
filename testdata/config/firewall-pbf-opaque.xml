@@ -1,0 +1,75 @@
+<config version="11.2.0" urldb="paloaltonetworks" detail-version="11.2.5">
+  <!-- PBF rules whose source the configuration does not hold (spec E23). From
+       edl: edl-no-pbf above edl-fwd, both from the external list edl-bad. From
+       geo: geo-discard from the region DE. From dag: dag-fwd from the dynamic
+       group dag-web, which holds tagged (10.88.20.1) by its tag. From neg:
+       neg-fwd from every source but edl-bad. -->
+  <shared/>
+  <devices>
+    <entry name="localhost.localdomain">
+      <vsys>
+        <entry name="vsys1">
+          <zone>
+            <entry name="edl"/>
+            <entry name="geo"/>
+            <entry name="dag"/>
+            <entry name="neg"/>
+          </zone>
+          <address>
+            <entry name="tagged"><ip-netmask>10.88.20.1</ip-netmask><tag><member>web-tag</member></tag></entry>
+          </address>
+          <address-group>
+            <entry name="dag-web"><dynamic><filter>'web-tag'</filter></dynamic></entry>
+          </address-group>
+          <external-list>
+            <entry name="edl-bad">
+              <type><ip><recurring><daily><at>01</at></daily></recurring><url>https://lists.example.com/bad.txt</url></ip></type>
+            </entry>
+          </external-list>
+          <rulebase>
+            <pbf>
+              <rules>
+                <entry name="edl-no-pbf">
+                  <from><zone><member>edl</member></zone></from>
+                  <source><member>edl-bad</member></source>
+                  <destination><member>any</member></destination>
+                  <service><member>any</member></service>
+                  <action><no-pbf/></action>
+                </entry>
+                <entry name="edl-fwd">
+                  <from><zone><member>edl</member></zone></from>
+                  <source><member>edl-bad</member></source>
+                  <destination><member>any</member></destination>
+                  <service><member>any</member></service>
+                  <action><forward><egress-interface>ethernet1/4</egress-interface></forward></action>
+                </entry>
+                <entry name="geo-discard">
+                  <from><zone><member>geo</member></zone></from>
+                  <source><member>DE</member></source>
+                  <destination><member>any</member></destination>
+                  <service><member>any</member></service>
+                  <action><discard/></action>
+                </entry>
+                <entry name="dag-fwd">
+                  <from><zone><member>dag</member></zone></from>
+                  <source><member>dag-web</member></source>
+                  <destination><member>any</member></destination>
+                  <service><member>any</member></service>
+                  <action><forward><egress-interface>ethernet1/4</egress-interface></forward></action>
+                </entry>
+                <entry name="neg-fwd">
+                  <from><zone><member>neg</member></zone></from>
+                  <source><member>edl-bad</member></source>
+                  <negate-source>yes</negate-source>
+                  <destination><member>any</member></destination>
+                  <service><member>any</member></service>
+                  <action><forward><egress-interface>ethernet1/4</egress-interface></forward></action>
+                </entry>
+              </rules>
+            </pbf>
+          </rulebase>
+        </entry>
+      </vsys>
+    </entry>
+  </devices>
+</config>

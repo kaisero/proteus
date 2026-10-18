@@ -1,0 +1,60 @@
+<config version="11.2.0" urldb="paloaltonetworks" detail-version="11.2.5">
+  <shared>
+    <address>
+      <entry name="peer-1"><ip-netmask>10.88.6.1</ip-netmask></entry>
+    </address>
+  </shared>
+  <devices>
+    <entry name="localhost.localdomain">
+      <network>
+        <interface>
+          <ethernet>
+            <entry name="ethernet1/1">
+              <layer3><ip><entry name="10.88.1.1/24"/></ip></layer3>
+            </entry>
+          </ethernet>
+        </interface>
+        <virtual-router>
+          <entry name="default">
+            <interface>
+              <member>ethernet1/1</member>
+            </interface>
+            <routing-table>
+              <ip>
+                <static-route>
+                  <entry name="to-remote">
+                    <destination>net-remote</destination>
+                    <nexthop><ip-address>10.88.1.254</ip-address></nexthop>
+                  </entry>
+                </static-route>
+              </ip>
+            </routing-table>
+          </entry>
+        </virtual-router>
+        <ike>
+          <gateway>
+            <entry name="gw-1">
+              <peer-address><ip>peer-1</ip></peer-address>
+              <local-address><interface>ethernet1/1</interface></local-address>
+            </entry>
+          </gateway>
+        </ike>
+      </network>
+      <vsys>
+        <entry name="vsys1">
+          <address>
+            <entry name="net-remote"><ip-netmask>10.88.5.0/24</ip-netmask></entry>
+          </address>
+          <rulebase><security><rules>
+            <entry name="to-remote">
+              <source><member>any</member></source>
+              <destination><member>net-remote</member></destination>
+              <service><member>any</member></service>
+              <action>allow</action>
+            </entry>
+          </rules></security></rulebase>
+        </entry>
+      </vsys>
+    </entry>
+  </devices>
+</config>

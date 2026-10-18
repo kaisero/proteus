@@ -2,6 +2,7 @@ package schema
 
 import (
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"io"
 	"strconv"
@@ -17,8 +18,8 @@ var kindByElement = map[string]Kind{
 // but do carry reference declarations. They are descended into rather than
 // skipped, and anything they declare attaches to the enclosing real node.
 //
-// This is load-bearing. In cms-schema.xml 11,721 of the 11,725 <memberof>
-// elements sit inside a <validate>, and a further 1,727 targets are a memberof
+// This is load-bearing. In the 11.2 firewall schema all 5,038 <memberof>
+// elements sit inside a <validate>, and a further 1,020 targets are a memberof
 // attribute on <validate> itself. Skipping validate parses without error and
 // loses the entire reference graph.
 var transparentElement = map[string]bool{"validate": true, "string": true}
@@ -35,7 +36,7 @@ func Parse(r io.Reader) (*Node, error) {
 
 	for {
 		tok, err := dec.Token()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {
@@ -138,6 +139,8 @@ func newNode(kind Kind, t xml.StartElement) *Node {
 			n.SubType = a.Value
 		case "memberof":
 			n.memberOfTarget = a.Value
+		case "encrypt":
+			n.Encrypted = a.Value == "yes"
 		}
 	}
 	return n

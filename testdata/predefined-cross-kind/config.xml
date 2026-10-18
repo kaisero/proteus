@@ -1,0 +1,84 @@
+<config version="11.2.0" urldb="paloaltonetworks" detail-version="11.2.5">
+  <!-- One name, two kinds, two scopes (lab fact L9). vsys1 defines service-https
+       as a service group of svc-8443 (tcp/8443), which hides the predefined
+       service-https (tcp/443). vsys1 defines web as a service (tcp/8081), which
+       hides shared's service group web (svc-9080, tcp/9080). From home to wan,
+       destination 10.88.10.100: dnat-https above dnat-web, and the security rules
+       sec-https and sec-web above rest. -->
+  <shared>
+    <service>
+      <entry name="svc-9080"><protocol><tcp><port>9080</port></tcp></protocol></entry>
+    </service>
+    <service-group>
+      <entry name="web"><members><member>svc-9080</member></members></entry>
+    </service-group>
+  </shared>
+  <devices>
+    <entry name="localhost.localdomain">
+      <vsys>
+        <entry name="vsys1">
+          <zone>
+            <entry name="home"/>
+            <entry name="wan"/>
+          </zone>
+          <service>
+            <entry name="svc-8443"><protocol><tcp><port>8443</port></tcp></protocol></entry>
+            <entry name="web"><protocol><tcp><port>8081</port></tcp></protocol></entry>
+          </service>
+          <service-group>
+            <entry name="service-https"><members><member>svc-8443</member></members></entry>
+          </service-group>
+          <rulebase>
+            <security>
+              <rules>
+                <entry name="sec-https">
+                  <from><member>home</member></from>
+                  <to><member>wan</member></to>
+                  <source><member>any</member></source>
+                  <destination><member>10.88.10.100</member></destination>
+                  <application><member>any</member></application>
+                  <service><member>service-https</member></service>
+                  <action>allow</action>
+                </entry>
+                <entry name="sec-web">
+                  <from><member>home</member></from>
+                  <to><member>wan</member></to>
+                  <source><member>any</member></source>
+                  <destination><member>10.88.10.100</member></destination>
+                  <application><member>any</member></application>
+                  <service><member>web</member></service>
+                  <action>allow</action>
+                </entry>
+                <entry name="rest">
+                  <from><member>home</member></from>
+                  <to><member>wan</member></to>
+                  <source><member>any</member></source>
+                  <destination><member>any</member></destination>
+                  <application><member>any</member></application>
+                  <service><member>any</member></service>
+                  <action>deny</action>
+                </entry>
+              </rules>
+            </security>
+            <nat>
+              <rules>
+                <entry name="dnat-https">
+                  <from><member>home</member></from><to><member>wan</member></to>
+                  <source><member>any</member></source><destination><member>10.88.10.100</member></destination>
+                  <service>service-https</service>
+                  <destination-translation><translated-address>10.88.20.1</translated-address></destination-translation>
+                </entry>
+                <entry name="dnat-web">
+                  <from><member>home</member></from><to><member>wan</member></to>
+                  <source><member>any</member></source><destination><member>10.88.10.100</member></destination>
+                  <service>web</service>
+                  <destination-translation><translated-address>10.88.20.2</translated-address></destination-translation>
+                </entry>
+              </rules>
+            </nat>
+          </rulebase>
+        </entry>
+      </vsys>
+    </entry>
+  </devices>
+</config>

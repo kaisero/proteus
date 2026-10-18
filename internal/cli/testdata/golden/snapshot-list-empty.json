@@ -1,0 +1,17 @@
+{
+  "format": 2,
+  "command": "snapshot list",
+  "input": {
+    "device": "fw01"
+  },
+  "results": [],
+  "holes": [
+    {
+      "device": "fw01",
+      "code": "gap.snapshot-missing",
+      "text": "store: no snapshots of fw01: open TMP no such file or directory"
+    }
+  ],
+  "unresolved": [],
+  "notes": []
+}

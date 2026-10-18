@@ -11,6 +11,11 @@
     <entry name="localhost.localdomain">
       <vsys>
         <entry name="vsys1">
+          <zone>
+            <entry name="branch-vpn"/>
+            <entry name="datacenter"/>
+            <entry name="sdwan"/>
+          </zone>
           <tag>
             <entry name="branch"><color>color1</color></entry>
             <entry name="laptop"><color>color2</color></entry>
@@ -108,18 +113,21 @@
                   <source><member>any</member></source>
                   <destination><member>dc01</member></destination>
                   <negate-destination>yes</negate-destination>
+                  <service><member>any</member></service>
                   <action><discard/></action>
                 </entry>
                 <entry name="keep-routing">
                   <from><zone><member>datacenter</member></zone></from>
                   <source><member>any</member></source>
                   <destination><member>any</member></destination>
+                  <service><member>any</member></service>
                   <action><no-pbf/></action>
                 </entry>
                 <entry name="to-other-vsys">
                   <from><zone><member>sdwan</member></zone></from>
                   <source><member>any</member></source>
                   <destination><member>any</member></destination>
+                  <service><member>any</member></service>
                   <action><forward-to-vsys>vsys2</forward-to-vsys></action>
                   <disabled>yes</disabled>
                 </entry>
@@ -127,6 +135,7 @@
                   <from><zone><member>sdwan</member></zone></from>
                   <source><member>any</member></source>
                   <destination><member>any</member></destination>
+                  <service><member>any</member></service>
                   <action><forward-to-vsys>vsys2</forward-to-vsys></action>
                 </entry>
               </rules>
@@ -152,7 +161,7 @@
                 </entry>
                 <entry name="static-pve">
                   <from><member>datacenter</member></from>
-                  <to><member>any</member></to>
+                  <to><member>sdwan</member></to>
                   <source><member>pve01</member></source>
                   <destination><member>any</member></destination>
                   <source-translation><static-ip><translated-address>198.51.100.20</translated-address><bi-directional>yes</bi-directional></static-ip></source-translation>

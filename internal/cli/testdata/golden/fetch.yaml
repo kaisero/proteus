@@ -1,0 +1,70 @@
+format: 2
+command: fetch
+input:
+  devices:
+    - fw01
+results:
+  - device: fw01
+    host: 127.0.0.1:PORT
+    tls_verification: false
+    stored: true
+    snapshot: 2026-09-28T10-00-00Z
+    system:
+      hostname: lab-fw01-vm
+      model: PA-VM
+      serial: "007900000000001"
+      sw_version: 11.2.5
+      multi_vsys: "off"
+      app_version: 8000-1000
+    documents:
+      - name: config
+        bytes: 2993
+      - name: system-info
+        bytes: 252
+      - name: interfaces
+        bytes: 7786
+      - name: fib
+        bytes: 7295
+      - name: rib
+        bytes: 15939
+      - name: ha
+        bytes: 163
+      - name: predefined
+        bytes: 245
+    stages:
+      - slug: resolve
+        name: resolve the inventory entry
+        status: ok
+        detail: 127.0.0.1:PORT, TLS verification off
+        elapsed_ms: 0
+      - slug: login
+        name: log in
+        status: ok
+        detail: logged in as reader
+        elapsed_ms: 0
+      - slug: ha
+        name: follow the active HA peer
+        status: skipped
+        detail: HA is not enabled
+        elapsed_ms: 0
+      - slug: documents
+        name: fetch the documents
+        status: ok
+        detail: 7 of 7 documents
+        elapsed_ms: 0
+      - slug: applications
+        name: fetch the application data
+        status: ok
+        detail: content 8000-1000, 4 applications, 1 container
+        elapsed_ms: 0
+      - slug: store
+        name: store the snapshot
+        status: ok
+        detail: fw01@2026-09-28T10-00-00Z
+        elapsed_ms: 0
+holes: []
+unresolved: []
+notes:
+  - device: fw01
+    code: note.tls-off
+    text: TLS certificate verification is off (insecure_tls)

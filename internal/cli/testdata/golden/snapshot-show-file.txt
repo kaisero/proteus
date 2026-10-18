@@ -1,0 +1,4 @@
+file   ../../testdata/config/firewall-multivsys.xml
+  vsys1    PAN-OS 11.2.5, security rules: 1
+  vsys2    PAN-OS 11.2.5, security rules: 0
+  vsys3    PAN-OS 11.2.5, security rules: 0

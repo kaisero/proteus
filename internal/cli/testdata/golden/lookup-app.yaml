@@ -1,0 +1,64 @@
+format: 2
+command: lookup
+detail: full
+input:
+  expand: false
+  full: false
+  kind: ""
+  limit: 0
+  name: app-remote
+  selection:
+    file: TMP
+results:
+  - answer: 'file/vsys1: application app-remote'
+    device: file
+    vsys: vsys1
+    scope: predefined
+    card:
+      kind: application
+      name: app-remote
+      sections:
+        - title: category
+          rows:
+            - label: ""
+              text: networking
+        - title: subcategory
+          rows:
+            - label: ""
+              text: remote-access
+        - title: technology
+          rows:
+            - label: ""
+              text: client-server
+        - title: risk
+          rows:
+            - label: ""
+              text: "4"
+        - title: default
+          rows:
+            - label: ""
+              text: tcp/80,443,8090
+        - title: uses
+          rows:
+            - label: ""
+              items:
+                - name: dns
+        - title: implicit uses
+          rows:
+            - label: ""
+              items:
+                - name: ssl
+                - name: web-browsing
+summary:
+  answer: 1 with it, 0 without, 0 holes
+  found: 1
+  with: 1
+  without: 0
+  omitted: 0
+holes: []
+unresolved: []
+notes:
+  - device: file
+    vsys: vsys1
+    code: note.app-data-file
+    text: application data of content 8000-1000 from TMP
