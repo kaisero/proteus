@@ -56,14 +56,18 @@ var (
 		"the inventory turns the identity data off for the device, so rules that name a user stay in doubt")
 	identityMultiVsys = reason.New("note.identity-multi-vsys",
 		"the device runs several vsys, so the identity data is not fetched and rules that name a user stay in doubt")
+	identityVsysUnknown = reason.New("note.identity-multi-vsys",
+		"the system info does not show that the device runs one vsys, so the identity data is not fetched and rules that name a user stay in doubt")
 )
 
 // identityStep fetches the User-ID data of the device and keeps it as one
 // identity file (spec 2026-10-17 §3, D3, D4).
 //
-//   - The inventory turns it off, or the device runs several vsys: no call, no
-//     file, and a note (D4, D10). The identity file has no vsys, and a device
-//     of several vsys keeps a table per vsys.
+//   - The inventory turns it off, or the system info does not show that the
+//     device runs one vsys: no call, no file, and a note (D4, D10). The
+//     identity file has no vsys, and a device of several vsys keeps a table
+//     per vsys, so a device of an unknown mode gets no file either (ruling
+//     T7-I2).
 //   - A command the device refuses, or an answer that does not read: its part
 //     is empty and missing, and one note names every missing part (§3.4).
 //   - A transport error: no file, an outcome named identity, and the step is
@@ -82,6 +86,10 @@ func identityStep(ctx context.Context, s *State) (task.Result, error) {
 		// (as observed on fw01, PAN-OS 11.2.5), and on for several (spec
 		// 2026-10-17 §3.4).
 		return s.noIdentity(identityMultiVsys, "the device runs several vsys")
+	case !strings.EqualFold(s.Result.System.MultiVsys, "off"):
+		// No system info, or one without the mode: the device can run
+		// several vsys.
+		return s.noIdentity(identityVsysUnknown, "the system info does not show the vsys mode")
 	}
 	r := &identityRead{s: s, why: map[string]string{}}
 	file, err := r.file(ctx)
@@ -159,8 +167,9 @@ func (r *identityRead) ask(ctx context.Context, part, cmd string) ([]byte, error
 }
 
 // miss makes a part missing. The note gives the first cause of each part, and
-// the run log each cause: an error of the identity parsers names a part, a
-// line or an entry and a fixed reason, never a value of the answer (§3.5).
+// the run log each cause. A cause is a fixed text: a refusal gives no text of
+// the device, and an error of the identity parsers names a line or an entry
+// and a fixed reason, never a value of the answer (§3.5, ruling T7-M3).
 func (r *identityRead) miss(part string, err error) {
 	cause := "the device refused the command"
 	if _, refused := errors.AsType[*APIError](err); !refused {
@@ -170,7 +179,7 @@ func (r *identityRead) miss(part string, err error) {
 		r.why[part] = cause
 		r.parts.Missing = append(r.parts.Missing, part)
 	}
-	r.s.Log.Warnf(runlog.TagAPI, "%s: identity: %s is missing: %v", r.s.Target.Name, part, err)
+	r.s.Log.Warnf(runlog.TagAPI, "%s: identity: %s is missing: %s", r.s.Target.Name, part, cause)
 }
 
 // missing reports whether a part is missing.
@@ -264,9 +273,12 @@ func (r *identityRead) partsMissing(parts []string) []reason.Reason {
 // limit entries further on (spec 2026-10-17 §3.2, U1). It stops when it holds
 // total entries, at a page shorter than the limit, or at the cap: no page
 // starts after it. When total changes between pages, it keeps every page, the
-// later entry of an address wins, and the table moved. A table larger than
-// the cap keeps its first entries: it is cut. A moved or cut table is partial
-// (SG13), with a note.
+// later entry of an address wins, and the table moved. A read that ends with
+// fewer entries than total, or than the cap, did not see the whole table, so
+// the table moved too: an insert and a delete between two pages keep total
+// but shift the later page (ruling T7-I1). A table larger than the cap keeps
+// its first entries: it is cut. A moved or cut table is partial (SG13), with
+// a note.
 func (r *identityRead) mappings(ctx context.Context) error {
 	limit, most := cmp.Or(r.s.mappingPage, mappingPage), cmp.Or(r.s.mappingCap, mappingCap)
 	var held []identity.Mapping
@@ -296,6 +308,7 @@ func (r *identityRead) mappings(ctx context.Context) error {
 			break
 		}
 	}
+	moved = moved || len(held) < min(total, most)
 	cut := total > most
 	r.parts.Mappings, r.parts.MappingsPartial = held, moved || cut
 	if moved {

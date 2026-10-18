@@ -222,7 +222,9 @@ func TestIdentityStepPagesTheMappings(t *testing.T) {
 }
 
 // A page shorter than the limit ends the read, whatever total says (spec
-// §3.2). total did not change, so the table did not move.
+// §3.2). A read that holds fewer entries than total did not see the whole
+// table, so the table counts as moved: it is partial, with the note (ruling
+// T7-I1, SG13, PD19).
 func TestIdentityStepStopsAtAShortPage(t *testing.T) {
 	t.Parallel()
 	d := fullDevice(t)
@@ -232,7 +234,28 @@ func TestIdentityStepStopsAtAShortPage(t *testing.T) {
 	if got := pagesAsked(d); !slices.Equal(got, []string{fakepanos.MappingPageCmd(2, 1), fakepanos.MappingPageCmd(2, 3)}) {
 		t.Errorf("pages %q", got)
 	}
-	if f := identityFile(t, s); len(f.Mappings) != 3 || f.MappingsPartial || codes(s) != "" {
+	if f := identityFile(t, s); len(f.Mappings) != 3 || !f.MappingsPartial || codes(s) != "note.identity-mappings-moved" {
+		t.Errorf("mappings %q, partial %v, notes %s", addresses(f), f.MappingsPartial, codes(s))
+	}
+}
+
+// An insert and a delete between two pages keep total, but shift the later
+// page: one entry comes twice and one is not read. The read then holds fewer
+// entries than total, so the table counts as moved, and the later entry of
+// the repeated address wins (ruling T7-I1, spec §3.2, SG13).
+func TestIdentityStepNotesAShiftedTable(t *testing.T) {
+	t.Parallel()
+	d := fullDevice(t)
+	d.Ops[fakepanos.MappingPageCmd(2, 1)] = page(4, entry("198.51.100.1", `example.com\alice`), entry("198.51.100.2", `example.com\bob`))
+	d.Ops[fakepanos.MappingPageCmd(2, 3)] = page(4, entry("198.51.100.2", `example.com\carol`), entry("198.51.100.3", `example.com\dave`))
+	d.Ops[fakepanos.MappingPageCmd(2, 5)] = page(4)
+	s, _ := fetched(t, d, pageSize(2))
+	if got := len(pagesAsked(d)); got != 3 {
+		t.Errorf("%d pages", got)
+	}
+	f := identityFile(t, s)
+	want := []string{`198.51.100.1 example.com\alice`, `198.51.100.2 example.com\carol`, `198.51.100.3 example.com\dave`}
+	if !slices.Equal(addresses(f), want) || !f.MappingsPartial || codes(s) != "note.identity-mappings-moved" {
 		t.Errorf("mappings %q, partial %v, notes %s", addresses(f), f.MappingsPartial, codes(s))
 	}
 }
@@ -334,7 +357,7 @@ func expectNoIdentity(t *testing.T, d *fakepanos.Device, s State, steps map[stri
 	}
 	r := steps["identity"]
 	if r.Status != task.Skipped || len(r.Notes) != 1 || r.Notes[0].Code != reason.Code(code) ||
-		codes(s) != code || s.Result.Notes[0].Text != text {
+		r.Notes[0].Text != text || !slices.Contains(s.Result.Notes, r.Notes[0]) {
 		t.Errorf("step %+v, notes %+v", r, s.Result.Notes)
 	}
 }
@@ -349,6 +372,38 @@ func TestIdentityStepSkipsAMultiVsysDevice(t *testing.T) {
 	s, steps := fetched(t, d)
 	expectNoIdentity(t, d, s, steps, "note.identity-multi-vsys",
 		"the device runs several vsys, so the identity data is not fetched and rules that name a user stay in doubt")
+}
+
+// The step runs only on a device whose system info says that it runs one
+// vsys, in any case. A system info that did not arrive, or that does not name
+// the mode, gives no identity data, with the note: a device of several vsys
+// would give one file that mixes the tables of its vsys (spec 2026-10-17 D10,
+// ruling T7-I2).
+func TestIdentityStepNeedsAKnownSingleVsys(t *testing.T) {
+	t.Parallel()
+	const info = "<show><system><info/></system></show>"
+	for name, answer := range map[string]string{
+		"a refused system info": fakepanos.Refusal("17", "show -> system is unexpected"),
+		"no mode":               fakepanos.Success("<system><hostname>lab</hostname><app-version>8000-1000</app-version></system>"),
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			d := fullDevice(t)
+			d.Ops[info] = answer
+			s, steps := fetched(t, d)
+			expectNoIdentity(t, d, s, steps, "note.identity-multi-vsys",
+				"the system info does not show that the device runs one vsys, so the identity data is not fetched and rules that name a user stay in doubt")
+		})
+	}
+	t.Run("off in another case", func(t *testing.T) {
+		t.Parallel()
+		d := fullDevice(t)
+		d.Ops[info] = fakepanos.Success("<system><hostname>lab</hostname><app-version>8000-1000</app-version><multi-vsys>OFF</multi-vsys></system>")
+		s, steps := fetched(t, d)
+		if s.Result.Identity == nil || steps["identity"].Status != task.OK {
+			t.Errorf("step %+v", steps["identity"])
+		}
+	})
 }
 
 // identity: false in the inventory turns the identity data off for the
@@ -648,6 +703,7 @@ func TestIdentityStepLogsNoNames(t *testing.T) {
 	d.Ops[fakepanos.UserIDsCmd] = strings.Replace(fakepanos.UserIDs, "Total: 3", "Total: 4", 1)
 	d.Ops[fakepanos.MappingPageCmd(10000, 1)] = page(1,
 		strings.Replace(entry("198.51.100.7", `example.com\alice`), "<timeout>14400</timeout>", "<timeout>Never</timeout>", 1))
+	d.Ops[fakepanos.RegisteredUsersCmd] = fakepanos.Refusal("17", "show -> refusal-text is unexpected")
 	l, err := runlog.Open(runlog.Options{Dir: t.TempDir(), Command: "fetch", Level: runlog.Debug})
 	if err != nil {
 		t.Fatal(err)
@@ -660,9 +716,10 @@ func TestIdentityStepLogsNoNames(t *testing.T) {
 	for _, want := range []string{
 		"[DEBUG] [API] lab: op " + fakepanos.UserIDsCmd + " -> HTTP 200, ",
 		"[DEBUG] [API] lab: op " + fakepanos.MappingPageCmd(10000, 1) + " -> HTTP 200, ",
-		"[WARN] [API] lab: identity: users.groups is missing: users.groups: line 14: the table lists 3 users and its total is 4\n",
-		"[WARN] [API] lab: identity: mappings is missing: mappings: entry 1: the timeout is no number of seconds\n",
+		"[WARN] [API] lab: identity: users.groups is missing: line 14: the table lists 3 users and its total is 4\n",
+		"[WARN] [API] lab: identity: mappings is missing: entry 1: the timeout is no number of seconds\n",
 		"[WARN] [API] lab: identity: sources.cie is missing: a CIE profile has no domain in the configuration\n",
+		"[WARN] [API] lab: identity: tags is missing: the device refused the command\n",
 		"[INFO] [API] lab: identity: 9 calls: 4 users, 9 groups, 0 mappings in 0 pages, 3 sources, ",
 	} {
 		if !strings.Contains(got, want) {
@@ -675,6 +732,13 @@ func TestIdentityStepLogsNoNames(t *testing.T) {
 	} {
 		if strings.Contains(got, name) {
 			t.Errorf("the log names %q", name)
+		}
+	}
+	// A warning gives the fixed cause of a refusal, not the device's text
+	// (ruling T7-M3).
+	for line := range strings.SplitSeq(got, "\n") {
+		if strings.Contains(line, "[WARN]") && strings.Contains(line, "refusal-text") {
+			t.Errorf("a warning quotes the device: %s", line)
 		}
 	}
 	if t.Failed() {

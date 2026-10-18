@@ -113,7 +113,7 @@ var registry = []Entry{
 	{Code: "note.ha-unreadable", Class: Note, Description: "the device's HA state cannot be read, so it is not paired with its peer"},
 	{Code: "note.identity-mappings-cut", Class: Note, Description: "the mapping table holds more than 512,000 entries; the snapshot keeps the first 512,000"},
 	{Code: "note.identity-mappings-moved", Class: Note, Description: "the mapping table changed while it was read in pages"},
-	{Code: "note.identity-multi-vsys", Class: Note, Description: "the device runs several vsys, so the identity data is not fetched"},
+	{Code: "note.identity-multi-vsys", Class: Note, Description: "the device runs several vsys, or its system info does not show that it runs one, so the identity data is not fetched"},
 	{Code: "note.identity-off", Class: Note, Description: "the inventory turns the identity data off for the device"},
 	{Code: "note.identity-part-missing", Class: Note, Description: "the device refused a part of the identity data, or its answer could not be read; the note names the part"},
 	{Code: "note.later-deny", Class: Note, Description: "a later hop on the path denies the flow"},

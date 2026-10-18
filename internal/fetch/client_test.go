@@ -26,7 +26,8 @@ func device() *fakepanos.Device {
 	return &fakepanos.Device{
 		User: testUser, Password: testPass, Key: testKey,
 		Ops: map[string]string{
-			"<show><system><info/></system></show>": fakepanos.Success("<system><hostname>lab</hostname><app-version>8000-1000</app-version></system>"),
+			"<show><system><info/></system></show>": fakepanos.Success(
+				"<system><hostname>lab</hostname><app-version>8000-1000</app-version><multi-vsys>off</multi-vsys></system>"),
 		},
 		Config: `<config version="11.2.0"><devices/></config>`,
 	}
