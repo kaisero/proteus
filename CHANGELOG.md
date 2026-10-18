@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Find a user, a group or a mapped address.** `search` and `lookup` now show a
+  user's groups and addresses, a group's members, and the user of an address;
+  `snapshot diff` reports changed group membership.
 - **Simulate a flow by its user.** `simulate policy` now matches the source user of
   a rule as the firewall does: the mapping of the source address wins over
   `--user`, and directory, XML API and dynamic user groups decide the rule.

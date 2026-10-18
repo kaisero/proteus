@@ -1,0 +1,84 @@
+{
+  "format": 2,
+  "command": "lookup",
+  "detail": "full",
+  "input": {
+    "expand": false,
+    "full": false,
+    "kind": "",
+    "limit": 0,
+    "name": "cn=domain users,cn=users,dc=example,dc=com",
+    "selection": {
+      "file": "TMP"
+    }
+  },
+  "results": [
+    {
+      "answer": "file/vsys1: identity-group cn=domain users,cn=users,dc=example,dc=com",
+      "device": "file",
+      "vsys": "vsys1",
+      "scope": "vsys:vsys1",
+      "card": {
+        "kind": "identity-group",
+        "name": "cn=domain users,cn=users,dc=example,dc=com",
+        "sections": [
+          {
+            "title": "source",
+            "rows": [
+              {
+                "label": "",
+                "text": "ldap:example.com"
+              }
+            ]
+          },
+          {
+            "title": "members",
+            "rows": [
+              {
+                "label": "",
+                "text": "3 members"
+              },
+              {
+                "label": "",
+                "items": [
+                  {
+                    "name": "example.com\\alice"
+                  },
+                  {
+                    "name": "example.com\\bob"
+                  },
+                  {
+                    "name": "example.com\\carol"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "summary": {
+    "answer": "1 with it, 0 without, 0 holes",
+    "found": 1,
+    "with": 1,
+    "without": 0,
+    "omitted": 0
+  },
+  "holes": [],
+  "unresolved": [],
+  "notes": [
+    {
+      "device": "file",
+      "vsys": "vsys1",
+      "code": "note.app-data-missing",
+      "text": "no application data: TMP does not exist; lookup finds no predefined application or container, and no application of a filter"
+    },
+    {
+      "device": "file",
+      "vsys": "vsys1",
+      "code": "note.identity-file",
+      "text": "identity data taken 2026-10-17T20:00:00Z from TMP"
+    }
+  ]
+}

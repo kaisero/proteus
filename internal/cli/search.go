@@ -45,7 +45,7 @@ func (a *app) searchCmd() *cobra.Command {
 	cmd.MarkFlagsMutuallyExclusive("exact", "within", "contains")
 	f.StringSliceVar(&o.kinds, "kind", nil, "only objects and groups of these kinds")
 	f.StringSliceVar(&o.fields, "field", nil, "only references and literals from these fields")
-	f.StringSliceVar(&o.show, "show", nil, "only these stages: objects, groups, refs, literals")
+	f.StringSliceVar(&o.show, "show", nil, "only these stages: objects, identity, groups, refs, literals")
 	f.BoolVar(&o.direct, "direct", false, "groups one level up only")
 	bindLimit(cmd, &o.limit)
 	bindWhy(cmd, &o.why)

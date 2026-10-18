@@ -1,0 +1,46 @@
+{
+  "format": 2,
+  "command": "search",
+  "detail": "full",
+  "input": {
+    "direct": false,
+    "fields": null,
+    "kinds": null,
+    "limit": 0,
+    "mode": "covers",
+    "selection": {
+      "file": "TMP"
+    },
+    "show": null,
+    "term": "198.51.100.10"
+  },
+  "results": [
+    {
+      "answer": "file/vsys1: mapping 198.51.100.10",
+      "device": "file",
+      "vsys": "vsys1",
+      "stage": "identity",
+      "kind": "mapping",
+      "name": "198.51.100.10",
+      "via": "user example\\alice, XMLAPI, timeout 14400 s",
+      "scope": "vsys:vsys1"
+    }
+  ],
+  "summary": {
+    "answer": "1 with results, 0 without, 0 holes",
+    "found": 1,
+    "with": 1,
+    "without": 0,
+    "omitted": 0
+  },
+  "holes": [],
+  "unresolved": [],
+  "notes": [
+    {
+      "device": "file",
+      "vsys": "vsys1",
+      "code": "note.identity-file",
+      "text": "identity data taken 2026-10-17T20:00:00Z from TMP"
+    }
+  ]
+}

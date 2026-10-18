@@ -1,0 +1,52 @@
+format: 2
+command: snapshot diff
+detail: full
+input:
+  from: ""
+  limit: 0
+  selection:
+    vsys:
+      - vsys1
+  to: ""
+results:
+  - answer: 'fw01/shared: 0 added, 0 removed, 0 changed'
+    device: fw01
+    from: 2026-09-28T10-00-00Z
+    to: 2026-09-28T10-01-00Z
+    scope: shared
+    changes: []
+  - answer: 'fw01/vsys:vsys1: 0 added, 0 removed, 0 changed'
+    device: fw01
+    from: 2026-09-28T10-00-00Z
+    to: 2026-09-28T10-01-00Z
+    scope: vsys:vsys1
+    changes: []
+  - answer: 'fw01/identity: 0 added, 0 removed, 2 changed'
+    device: fw01
+    from: 2026-09-28T10-00-00Z
+    to: 2026-09-28T10-01-00Z
+    scope: identity
+    changes:
+      - op: changed
+        kind: identity source
+        name: ldap:example.com
+        fields:
+          - path: groups
+            old: "3"
+            new: "4"
+      - op: changed
+        kind: identity user
+        name: example.com\alice
+        fields:
+          - path: group
+            old: ""
+            new: team-x
+summary:
+  answer: 1 with changes, 0 without, 0 holes
+  found: 2
+  with: 1
+  without: 0
+  omitted: 0
+holes: []
+unresolved: []
+notes: []

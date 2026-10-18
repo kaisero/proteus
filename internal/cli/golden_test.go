@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/okaiser/proteus/internal/estate"
+	"github.com/okaiser/proteus/internal/fakepanos"
 	"github.com/okaiser/proteus/internal/simulate/pathpolicy"
 	"github.com/okaiser/proteus/internal/simulate/securitypolicy"
 	"github.com/okaiser/proteus/internal/testconfig"
@@ -403,6 +404,58 @@ func TestGoldenUser(t *testing.T) {
 			goldenText(t, g.name, newCLI(t).want(0, append(args, "--why")...))
 		})
 	}
+}
+
+// search and lookup with the identity data on a file (spec 2026-10-17 §6.1,
+// §6.2): a UPN with its groups, rules and address, the mapped user of an
+// address, the card of a user and the card of a group.
+func TestGoldenUserFind(t *testing.T) {
+	t.Parallel()
+	for _, g := range []struct {
+		name string
+		args []string
+	}{
+		// With --why, so the JSON twin's answers are lines of the text.
+		{"search-user", []string{"search", "alice@example.com", "--why"}},
+		{"search-mapping", []string{"search", "198.51.100.10", "--why"}},
+		{"lookup-user", []string{"lookup", "alice@example.com", "--kind", "identity-user"}},
+		{"lookup-group", []string{"lookup", "cn=domain users,cn=users,dc=example,dc=com"}},
+	} {
+		t.Run(g.name, func(t *testing.T) {
+			t.Parallel()
+			args := append(slices.Clone(g.args), "--file", userConfig(t))
+			golden(t, g.name, newCLI(t).want(0, append(args, "--output", "json")...))
+			goldenFile(t, g.name+".yaml", newCLI(t).want(0, append(args, "--output", "yaml")...))
+			goldenText(t, g.name, newCLI(t).want(0, args...))
+		})
+	}
+}
+
+// identityChanged is the fake device after a change of its identity data:
+// alice joins team-x, the profile example.com counts 4 groups, and carol's
+// address moves. The mapping change shows nowhere (spec 2026-10-17 §6.3, D9).
+func identityChanged(d *fakepanos.Device) {
+	payroll := "cn=payroll,ou=groups,dc=example,dc=com \n"
+	cont := strings.Repeat(" ", 64)
+	d.Ops[fakepanos.UserIDsCmd] = strings.Replace(fakepanos.UserIDs, payroll, payroll+cont+"team-x \n", 1)
+	d.Ops[fakepanos.GroupMappingStatsCmd] = strings.Replace(fakepanos.GroupMappingStats, "<groups>3</groups>", "<groups>4</groups>", 1)
+	d.Ops[fakepanos.MappingPageCmd(10000, 1)] = strings.Replace(fakepanos.Mappings, "198.51.100.13", "198.51.100.15", 1)
+}
+
+// snapshot diff of two fetches whose identity data differ: one result of the
+// scope identity, with a user and a source change.
+func TestGoldenIdentityDiff(t *testing.T) {
+	t.Parallel()
+	d := lab(t)
+	c := newCLI(t)
+	c.inventory(inventoryFor(d.Start(t)))
+	c.want(0, "fetch", "fw01")
+	identityChanged(d)
+	c.want(0, "fetch", "fw01")
+	args := []string{"snapshot", "diff", "--vsys", "vsys1"}
+	golden(t, "snapshot-diff-identity", c.want(0, append(args, "--output", "json")...))
+	goldenFile(t, "snapshot-diff-identity.yaml", c.want(0, append(args, "--output", "yaml")...))
+	goldenText(t, "snapshot-diff-identity", c.want(0, args...))
 }
 
 // The user line names where the user came from, and a path hop with a user

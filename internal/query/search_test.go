@@ -87,7 +87,7 @@ func TestSearchInputRules(t *testing.T) {
 		want string
 	}{
 		{SearchInput{Term: "x", Mode: "fuzzy"}, `mode "fuzzy": want exact, within or contains`},
-		{SearchInput{Term: "x", Show: []string{"rules"}}, `--show "rules": want objects, groups, refs or literals`},
+		{SearchInput{Term: "x", Show: []string{"rules"}}, `--show "rules": want objects, identity, groups, refs or literals`},
 		{SearchInput{Term: "x", Selection: Selection{File: file.File, Device: []string{"fw01"}}}, "--device selects from the store"},
 		{SearchInput{Term: "x", Selection: Selection{File: file.File, Fresh: true}}, "--fresh selects from the store"},
 	} {
@@ -328,6 +328,89 @@ func TestNameShaped(t *testing.T) {
 	} {
 		if got := nameShaped(term); got != want {
 			t.Errorf("%q: %v, want %v", term, got, want)
+		}
+	}
+}
+
+// A UPN term finds the user by its primary name, its two groups with their
+// source, its mapped address, and every rule that names the user or a group,
+// in any form (spec 2026-10-17 §6.1, N2, M11, M12). A group shows once: the
+// object stage shows each group that a rule names, so the identity stage
+// adds none of them again.
+func TestSearchAUserByUPN(t *testing.T) {
+	t.Parallel()
+	e := searchFile(t, Env{}, identityConfig(t, "firewall-identity.xml", identityGzip(t)), "alice@example.com")
+	got := answers(e)
+	for _, want := range []string{
+		`file/vsys1: user example.com\alice | example.com\alice`,
+		"file/vsys1: user-group cn=domain users,cn=users,dc=example,dc=com | ldap:example.com, 3 members",
+		"file/vsys1: user-group cn=payroll,ou=groups,dc=example,dc=com | ldap:example.com, 1 members",
+		`file/vsys1: mapping 198.51.100.11 | user example.com\alice, XMLAPI, timeout 14400 s`,
+	} {
+		if !slices.Contains(got, want) {
+			t.Errorf("missing %q in:\n%s", want, strings.Join(got, "\n"))
+		}
+	}
+	rules := ruleFindings(e)
+	for _, want := range []string{"u-user", "u-upn", "u-ldap-group", "u-multi", "u-dn-case", "u-short"} {
+		if !rules[want] {
+			t.Errorf("no rule %s in %v", want, rules)
+		}
+	}
+	for _, f := range e.Results {
+		if f.Stage == search.StageIdentity && f.Kind != search.KindMapping {
+			t.Errorf("the object stage shows alice and her groups; the identity stage shows %s %s again", f.Kind, f.Name)
+		}
+	}
+	if slices.Contains(got, `file/vsys1: mapping 198.51.100.10 | user example\alice, XMLAPI, timeout 14400 s`) {
+		t.Error("a mapping stored as example\\alice is no mapping of example.com\\alice (M2)")
+	}
+}
+
+// A group DN with spaces and commas is a user term once the data knows it
+// (Review focus 5): search finds the group with its 3 members and the rule
+// u-ldap-group, and the rules that name it in another form.
+func TestSearchFindsAGroupDNWithSpaces(t *testing.T) {
+	t.Parallel()
+	e := searchFile(t, Env{}, identityConfig(t, "firewall-identity.xml", identityGzip(t)), "cn=domain users,cn=users,dc=example,dc=com")
+	if got := answers(e); !slices.Contains(got, "file/vsys1: user-group cn=domain users,cn=users,dc=example,dc=com | ldap:example.com, 3 members") {
+		t.Errorf("no group with 3 members in:\n%s", strings.Join(got, "\n"))
+	}
+	rules := ruleFindings(e)
+	for _, want := range []string{"u-ldap-group", "u-dn-case", "u-short"} {
+		if !rules[want] {
+			t.Errorf("no rule %s in %v", want, rules)
+		}
+	}
+}
+
+// One address finds its mapped user; --show identity keeps that stage only;
+// --kind takes the kinds of the stage identity (spec 2026-10-17 §6.1).
+func TestSearchShowsTheIdentityStage(t *testing.T) {
+	t.Parallel()
+	path := identityConfig(t, "firewall-identity.xml", identityGzip(t))
+	e := searchFile(t, Env{}, path, "198.51.100.10")
+	if got := answers(e); !slices.Equal(got, []string{`file/vsys1: mapping 198.51.100.10 | user example\alice, XMLAPI, timeout 14400 s`}) {
+		t.Errorf("198.51.100.10:\n%s", strings.Join(got, "\n"))
+	}
+	e, err := Search(context.Background(), Env{}, SearchInput{Term: `example.com\carol`, Show: []string{"identity"}, Selection: Selection{File: path}})
+	if err != nil || len(e.Results) == 0 {
+		t.Fatalf("--show identity: %v, %+v", err, e.Results)
+	}
+	for _, f := range e.Results {
+		if f.Stage != search.StageIdentity {
+			t.Errorf("--show identity: %s %s", f.Stage, f.Name)
+		}
+	}
+	e, err = Search(context.Background(), Env{}, SearchInput{
+		Term: `example.com\carol`, Kinds: []string{"identity-user", "identity-group", "mapping"}, Selection: Selection{File: path},
+	})
+	if err != nil || !slices.Contains(answers(e), `file/vsys1: identity-user example.com\carol | directory user`) {
+		t.Errorf("--kind of the identity stage: %v, %+v", err, e.Results)
+	}
+	for _, f := range e.Results {
+		if f.Stage != search.StageIdentity {
+			t.Errorf("--kind of the identity stage: %s %s %s", f.Stage, f.Kind, f.Name)
 		}
 	}
 }

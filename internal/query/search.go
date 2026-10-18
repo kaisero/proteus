@@ -22,14 +22,14 @@ import (
 
 // SearchInput is search: every place a value or name appears.
 type SearchInput struct {
-	Term string `json:"term" jsonschema:"the value or name to search for: an address, a prefix, a port, a name or an application"`
+	Term string `json:"term" jsonschema:"the value or name to search for: an address, a prefix, a port, a name, an application, a user or a group"`
 	// Mode overrides the match the term's type sets: exact, within or contains.
 	Mode string `json:"mode,omitempty" jsonschema:"exact, within or contains; empty lets the term's type decide"`
 	// Kinds, Fields and Show narrow the findings; Direct keeps groups one level
 	// up.
 	Kinds  []string `json:"kinds,omitempty" jsonschema:"object kinds to search; empty for every kind"`
 	Fields []string `json:"fields,omitempty" jsonschema:"rule fields to search; empty for every field"`
-	Show   []string `json:"show,omitempty" jsonschema:"finding stages to show: objects, groups, refs, literals"`
+	Show   []string `json:"show,omitempty" jsonschema:"finding stages to show: objects, identity, groups, refs, literals"`
 	Direct bool     `json:"direct,omitempty" jsonschema:"follow groups one level up only"`
 	// Selection is what the search runs against.
 	Selection Selection `json:"selection" jsonschema:"the file or the devices to search"`
@@ -39,9 +39,10 @@ type SearchInput struct {
 // searchModes are the modes a search takes, by name.
 var searchModes = map[string]search.Mode{"exact": search.Exact, "within": search.Within, "contains": search.Contains}
 
-// showNames are the stages a search shows, by name (spec 2026-09-27 §15 C6).
+// showNames are the stages a search shows, by name (spec 2026-09-27 §15 C6,
+// spec 2026-10-17 §6.1).
 var showNames = map[string]search.Stage{
-	"objects": search.StageObject, "groups": search.StageGroup,
+	"objects": search.StageObject, "identity": search.StageIdentity, "groups": search.StageGroup,
 	"refs": search.StageReference, "literals": search.StageLiteral,
 }
 
@@ -56,8 +57,8 @@ func (in SearchInput) Validate() *UsageError {
 	}
 	for _, st := range in.Show {
 		if _, ok := showNames[st]; !ok {
-			return usage(fmt.Sprintf("--show %q: want objects, groups, refs or literals", st),
-				fmt.Sprintf("show %q: want objects, groups, refs or literals", st))
+			return usage(fmt.Sprintf("--show %q: want objects, identity, groups, refs or literals", st),
+				fmt.Sprintf("show %q: want objects, identity, groups, refs or literals", st))
 		}
 	}
 	if u := in.checkLimit(); u != nil {
@@ -87,12 +88,14 @@ func (sel Selection) validateFile() *UsageError {
 // checkKinds refuses a kind that no selected configuration can hold, before
 // any target runs: a misspelt kind would find nothing and read as an answer.
 // The kinds a configuration can hold come from its schema digest; with several
-// targets, a kind is valid when any of them knows it.
+// targets, a kind is valid when any of them knows it. The kinds of the stage
+// identity come from the identity data, so every target knows them (spec
+// 2026-10-17 §6.1).
 func (in SearchInput) checkKinds(ts []estate.Target) *UsageError {
 	if len(in.Kinds) == 0 || len(ts) == 0 {
 		return nil
 	}
-	known := map[string]bool{}
+	known := map[string]bool{search.KindIdentityUser: true, search.KindIdentityGroup: true, search.KindMapping: true}
 	for _, t := range ts {
 		for _, k := range resolve.ObjectKinds(t.Config) {
 			known[k] = true

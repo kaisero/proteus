@@ -166,6 +166,7 @@ type Section struct{ ... }
 func App(a appid.App, sc config.Scope) Card
 func FilterCard(cfg *config.Config, idx *index.Index, apps *appid.Data, o resolve.Object) Card
 func Find(cfg *config.Config, idx *index.Index, apps *appid.Data, name, kind string) ([]Card, error)
+func FindIdentity(ids *identity.Data, name, kind string) []Card
 func Kinds(cfg *config.Config) []string
 func Object(cfg *config.Config, idx *index.Index, o resolve.Object) Card
 func Rule(cfg *config.Config, idx *index.Index, r resolve.Rule, rules int) Card

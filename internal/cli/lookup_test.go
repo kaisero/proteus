@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"slices"
 	"strings"
@@ -257,5 +258,53 @@ func TestLookupFilterCardText(t *testing.T) {
 		if s.Title == "applications" && len(s.Rows[1].Items) != len(all) {
 			t.Errorf("json holds %d applications, --full %d", len(s.Rows[1].Items), len(all))
 		}
+	}
+}
+
+// The text group card of the identity data shows the source, the count and
+// the first 20 members, one per line; --full shows all (spec 2026-10-17 §6.2).
+// The user card shows each section, a group with its source, and none for an
+// empty section.
+func TestLookupGroupCardText(t *testing.T) {
+	t.Parallel()
+	out := newCLI(t).want(0, "lookup", "cn=domain users,cn=users,dc=example,dc=com", "--file", userConfig(t))
+	for _, want := range []string{
+		"identity group  cn=domain users,cn=users,dc=example,dc=com vsys:vsys1\n",
+		"  source           ldap:example.com\n",
+		"  members          3 members\n                   example.com\\alice\n                   example.com\\bob\n",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q in:\n%s", want, out)
+		}
+	}
+	user := newCLI(t).want(0, "lookup", "alice@example.com", "--file", userConfig(t))
+	for _, want := range []string{
+		"  groups           cn=domain users,cn=users,dc=example,dc=com (ldap:example.com)\n",
+		"  mapped addresses 198.51.100.11 (XMLAPI, timeout 14400 s)\n",
+		"  tags             none\n",
+	} {
+		if !strings.Contains(user, want) {
+			t.Errorf("missing %q in:\n%s", want, user)
+		}
+	}
+	var items []card.Item
+	for i := 1; i <= 25; i++ {
+		items = append(items, card.Item{Name: fmt.Sprintf(`example.com\member-%02d`, i)})
+	}
+	big := card.Card{Kind: card.KindIdentityGroup, Name: "cn=big,ou=groups,dc=example,dc=com", Sections: []card.Section{
+		{Title: "members", Rows: []card.Row{{Text: "25 members"}, {Items: items}}},
+	}}
+	lines := func(full bool) []string {
+		var b bytes.Buffer
+		renderer{w: &b, full: full}.card(big)
+		return strings.Split(strings.TrimSpace(b.String()), "\n")
+	}
+	cut, all := lines(false), lines(true)
+	// The head, a blank line, the count, the members, and the cut line.
+	if len(cut) != 3+maxGroupMembers+1 || cut[len(cut)-1] != strings.Repeat(" ", 2+identityTitleWidth)+"… (+5 more)" {
+		t.Errorf("cut:\n%s", strings.Join(cut, "\n"))
+	}
+	if len(all) != 3+25 || strings.Contains(strings.Join(all, "\n"), "more") {
+		t.Errorf("--full:\n%s", strings.Join(all, "\n"))
 	}
 }

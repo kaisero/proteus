@@ -736,3 +736,168 @@ func TestSearchWithoutDataIsTodays(t *testing.T) {
 		}
 	}
 }
+
+// identityData is the identity fixture as Data.
+func identityData(t *testing.T) *identity.Data {
+	t.Helper()
+	p := filepath.Join(t.TempDir(), identity.FileName)
+	testconfig.Identity(t, p)
+	d, err := identity.Load(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return d
+}
+
+// withUsers searches the User-ID fixture with its identity data.
+func withUsers(t *testing.T, term string) []Finding {
+	t.Helper()
+	return run(t, "firewall-identity.xml", "vsys1", Query{Term: term, Providers: index.Providers{Users: identityData(t)}})
+}
+
+// One address finds its mapped user as the device stores it, with the type
+// and the timeout of the mapping (spec 2026-10-17 §6.1, M2).
+func TestSearchFindsTheMappedUserOfAnAddress(t *testing.T) {
+	t.Parallel()
+	got := withUsers(t, "198.51.100.10")
+	want := `identity mapping 198.51.100.10  user example\alice, XMLAPI, timeout 14400 s`
+	if !has(got, want) {
+		t.Errorf("missing %q in:\n%s", want, dump(got))
+	}
+	if v6 := withUsers(t, "2001:db8::11"); !has(v6, `identity mapping 2001:db8::11  user example.com\bob, XMLAPI, timeout 14400 s`) {
+		t.Errorf("an IPv6 mapping is found by its address:\n%s", dump(v6))
+	}
+}
+
+// A user term gives the user, each group that no object finding shows, with
+// its source and member count, and each mapped address (§6.1). A group that a
+// rule names comes from the object stage, in any form of its name, and the
+// identity stage does not show it again.
+func TestSearchAUserGivesItsGroupsAndAddresses(t *testing.T) {
+	t.Parallel()
+	got := withUsers(t, `example.com\carol`)
+	for _, want := range []string{
+		`identity identity-user example.com\carol  directory user`,
+		"identity mapping 198.51.100.13  user example.com\\carol, XMLAPI, timeout 14400 s",
+		"object user-group engineering  xmlapi, 1 members",
+		"object dynamic-user-group dug-a  dug, 1 members",
+	} {
+		if !has(got, want) {
+			t.Errorf("missing %q in:\n%s", want, dump(got))
+		}
+	}
+	for _, f := range got {
+		if f.Stage == StageIdentity && f.Kind == "identity-group" {
+			t.Errorf("a group that a rule names shows twice: %s", line(f))
+		}
+	}
+	bob := withUsers(t, `example.com\bob`)
+	if !has(bob, "identity identity-group team-x  xmlapi, 1 members") {
+		t.Errorf("a group that no rule names comes from the identity stage:\n%s", dump(bob))
+	}
+	if has(bob, `identity identity-user example.com\bob`) {
+		t.Errorf("u-multi names bob, so the object stage shows him:\n%s", dump(bob))
+	}
+}
+
+// A group term reaches every rule that names the group: by its DN in another
+// case (M11) and by its short name (M12). The user value space takes a group
+// term by its text only, as it takes --user (Review focus 3).
+func TestSearchAGroupDNReachesItsShortName(t *testing.T) {
+	t.Parallel()
+	got := withUsers(t, "cn=domain users,cn=users,dc=example,dc=com")
+	for _, want := range []string{
+		"object user-group example.com\\domain users  ldap:example.com, 3 members",
+		"reference security rule u-ldap-group source-user",
+		"reference security rule u-dn-case source-user",
+		"reference security rule u-short source-user",
+	} {
+		if !has(got, want) {
+			t.Errorf("missing %q in:\n%s", want, dump(got))
+		}
+	}
+	short := withUsers(t, `example.com\domain users`)
+	for _, want := range []string{"reference security rule u-ldap-group", "reference security rule u-dn-case", "reference security rule u-short"} {
+		if !has(short, want) {
+			t.Errorf("the short name: missing %q in:\n%s", want, dump(short))
+		}
+	}
+	if !has(withUsers(t, "team-x"), "identity identity-group team-x  xmlapi, 1 members") {
+		t.Error("a group that no rule names comes from the identity stage")
+	}
+}
+
+// Any-rules and the keyword rules are no findings of a user, a group or an
+// address (§6.1).
+func TestSearchLeavesKeywordRulesOut(t *testing.T) {
+	t.Parallel()
+	for _, term := range []string{`example.com\alice`, `other\ghost`, "198.51.100.12", "cn=domain users,cn=users,dc=example,dc=com"} {
+		for _, f := range withUsers(t, term) {
+			if slices.Contains([]string{"u-known", "u-unknown", "u-prelogon", "u-none"}, f.Name) {
+				t.Errorf("%s: %s", term, line(f))
+			}
+		}
+	}
+}
+
+// Without identity data, the findings are as before the User-ID support
+// (spec 2026-10-17 §5.5).
+func TestSearchWithoutIdentityDataIsTodays(t *testing.T) {
+	t.Parallel()
+	for term, want := range map[string][]string{
+		"198.51.100.10":     nil,
+		`example.com\alice`: nil,
+		"cn=domain users,cn=users,dc=example,dc=com": nil,
+		"alice": {
+			"object user alice  alice",
+			"object user-group local-admins  alice",
+			"reference security rule u-local source-user local-admins",
+			"reference user-group local-admins user alice",
+		},
+		"web-server": {"object address web-server  name"},
+	} {
+		got := run(t, "firewall-identity.xml", "vsys1", Query{Term: term})
+		if d := dump(got); d != strings.Join(want, "\n") {
+			t.Errorf("%s:\n%s\nwant:\n%s", term, d, strings.Join(want, "\n"))
+		}
+	}
+}
+
+// A DUG term in another case reaches the rule that names the DUG (U10, X2).
+// A group of a user and a DUG that groups[] lacks, as while the part groups
+// is missing, take their source by their form and count the users of U3
+// (spec 2026-10-17 §3.3).
+func TestSearchAGroupThatTheGroupListLacks(t *testing.T) {
+	t.Parallel()
+	if got := withUsers(t, "DUG-A"); !has(got, "object dynamic-user-group dug-a  dug, 1 members") || !has(got, "reference security rule u-dug source-user dug-a") {
+		t.Errorf("DUG-A:\n%s", dump(got))
+	}
+	d := identity.New(identity.File{
+		Format:       identity.Format,
+		Users:        []identity.User{{Name: `example.com\bob`, Groups: []string{"team-x", "dug-ab"}}, {Name: `example.com\carol`, Groups: []string{"dug-ab"}}},
+		DUGs:         []string{"dug-ab"},
+		PartsMissing: []string{identity.PartGroups},
+	})
+	search := func(term string) []Finding {
+		return run(t, "firewall-identity.xml", "vsys1", Query{Term: term, Providers: index.Providers{Users: d}})
+	}
+	if got := search(`example.com\bob`); !has(got, "identity identity-group team-x  xmlapi, 1 members") ||
+		!has(got, "object dynamic-user-group dug-ab  dug, 2 members") {
+		t.Errorf("bob:\n%s", dump(got))
+	}
+	if got := search("dug-ab"); !has(got, "object dynamic-user-group dug-ab  dug, 2 members") {
+		t.Errorf("dug-ab:\n%s", dump(got))
+	}
+}
+
+// With identity data, a term that names no user, group or mapped address
+// finds what it finds without the data.
+func TestSearchWithIdentityDataKeepsOtherTerms(t *testing.T) {
+	t.Parallel()
+	for _, term := range []string{"web-server", "alice", "192.0.2.10"} {
+		without := run(t, "firewall-identity.xml", "vsys1", Query{Term: term})
+		if with := withUsers(t, term); dump(with) != dump(without) {
+			t.Errorf("%s:\n%s\nwithout the data:\n%s", term, dump(with), dump(without))
+		}
+	}
+}

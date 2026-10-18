@@ -65,6 +65,14 @@
           "new": "allow application=dns destination=any source=net-home"
         }
       ]
+    },
+    {
+      "answer": "fw01/identity: 0 added, 0 removed, 0 changed",
+      "device": "fw01",
+      "from": "2026-09-28T10-00-00Z",
+      "to": "2026-09-28T10-01-00Z",
+      "scope": "identity",
+      "changes": []
     }
   ],
   "summary": {

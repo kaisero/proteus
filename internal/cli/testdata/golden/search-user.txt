@@ -1,0 +1,32 @@
+search alice@example.com (matches)
+
+file / vsys1   TMP
+  note: no application data: TMP does not exist; search finds no filter, container or implicit use of an application
+  note: identity data taken 2026-10-17T20:00:00Z from TMP
+  object    user          alice@example.com                          example.com\alice
+            file/vsys1: user alice@example.com
+  object    user          example.com\alice                          example.com\alice
+            file/vsys1: user example.com\alice
+  object    user-group    CN=Domain Users,CN=Users,DC=example,DC=com ldap:example.com, 3 members
+            file/vsys1: user-group CN=Domain Users,CN=Users,DC=example,DC=com
+  object    user-group    cn=domain users,cn=users,dc=example,dc=com ldap:example.com, 3 members
+            file/vsys1: user-group cn=domain users,cn=users,dc=example,dc=com
+  object    user-group    cn=payroll,ou=groups,dc=example,dc=com     ldap:example.com, 1 members
+            file/vsys1: user-group cn=payroll,ou=groups,dc=example,dc=com
+  object    user-group    example.com\domain users                   ldap:example.com, 3 members
+            file/vsys1: user-group example.com\domain users
+  identity  mapping       198.51.100.11                              user example.com\alice, XMLAPI, timeout 14400 s
+            file/vsys1: mapping 198.51.100.11
+  reference security rule u-dn-case                                  source-user -> CN=Domain Users,CN=Users,DC=example,DC=com
+            file/vsys1: security rule u-dn-case (source-user)
+  reference security rule u-ldap-group                               source-user -> cn=domain users,cn=users,dc=example,dc=com
+            file/vsys1: security rule u-ldap-group (source-user)
+  reference security rule u-multi                                    source-user -> cn=payroll,ou=groups,dc=example,dc=com
+            file/vsys1: security rule u-multi (source-user)
+  reference security rule u-short                                    source-user -> example.com\domain users
+            file/vsys1: security rule u-short (source-user)
+  reference security rule u-upn                                      source-user -> alice@example.com
+            file/vsys1: security rule u-upn (source-user)
+  reference security rule u-user                                     source-user -> example.com\alice
+            file/vsys1: security rule u-user (source-user)
+1 with results, 0 without, 0 holes

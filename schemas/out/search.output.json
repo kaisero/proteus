@@ -508,7 +508,8 @@
                     "description": "when the snapshot was taken (RFC 3339)"
                   },
                   "stage": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "the stage the finding came from: object, identity, group, reference or literal"
                   },
                   "kind": {
                     "type": "string"

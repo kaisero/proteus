@@ -1,13 +1,18 @@
 package query
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"net/netip"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
+	"github.com/okaiser/proteus/internal/drift"
+	"github.com/okaiser/proteus/internal/identity"
 	"github.com/okaiser/proteus/internal/simulate/pathlab"
 	"github.com/okaiser/proteus/internal/store"
 )
@@ -294,5 +299,150 @@ func TestDiffNotesTheConfigSourceChange(t *testing.T) {
 		if ok != (tc.want != "") || ok && (!strings.HasPrefix(n.Note, tc.want+": ") || n.Device != "fw01") {
 			t.Errorf("%q → %q: notes %+v", tc.older, tc.newer, e.Notes)
 		}
+	}
+}
+
+// identityFixture is the identity fixture as a file whose lists the caller
+// may change.
+func identityFixture(t *testing.T) identity.File {
+	t.Helper()
+	d, err := identity.Read(bytes.NewReader(identityGzip(t)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	f := d.File()
+	f.Sources.LDAP = slices.Clone(f.Sources.LDAP)
+	f.Users = slices.Clone(f.Users)
+	for i := range f.Users {
+		f.Users[i].Groups = slices.Clone(f.Users[i].Groups)
+	}
+	f.Mappings = slices.Clone(f.Mappings)
+	f.PartsMissing = slices.Clone(f.PartsMissing)
+	return f
+}
+
+// encodeIdentity is a file as a fetch stores it.
+func encodeIdentity(t *testing.T, f identity.File) []byte {
+	t.Helper()
+	var b bytes.Buffer
+	if err := identity.Encode(&b, f); err != nil {
+		t.Fatal(err)
+	}
+	return b.Bytes()
+}
+
+// diffWithIdentity diffs two snapshots of fw01 with these identity files; nil is
+// a snapshot without one.
+func diffWithIdentity(t *testing.T, older, newer []byte) Envelope[DiffInput, DiffResult] {
+	t.Helper()
+	l := newLab(t)
+	cfg := pathlab.Read(t, fixture("firewall-lab.xml"))
+	l.writeWith(store.Meta{Device: "fw01"}, cfg, older)
+	l.writeWith(store.Meta{Device: "fw01"}, cfg, newer)
+	e, err := SnapshotDiff(context.Background(), l.env(), DiffInput{Selection: Selection{Device: []string{"fw01"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return e
+}
+
+// identityResult is the result of the scope identity, if there is one.
+func identityResult(e Envelope[DiffInput, DiffResult]) (DiffResult, bool) {
+	i := slices.IndexFunc(e.Results, func(r DiffResult) bool { return r.Scope == "identity" })
+	if i < 0 {
+		return DiffResult{}, false
+	}
+	return e.Results[i], true
+}
+
+// With identity data in both snapshots, the diff has one result of the scope
+// identity: a user that gained a group, and a source whose group count
+// changed. The mappings changed too, and no mapping change shows (spec
+// 2026-10-17 §6.3, D9).
+func TestDiffUserGroupChanges(t *testing.T) {
+	t.Parallel()
+	before := identityFixture(t)
+	after := identityFixture(t)
+	after.Users[0].Groups = append(after.Users[0].Groups, "team-x") // example.com\alice
+	after.Sources.LDAP[0].Groups = 4
+	after.Mappings = append(after.Mappings[1:], identity.Mapping{IP: netip.MustParseAddr("198.51.100.20"), User: `example.com\bob`, Type: "XMLAPI", Timeout: 100})
+	e := diffWithIdentity(t, encodeIdentity(t, before), encodeIdentity(t, after))
+	r, ok := identityResult(e)
+	if !ok {
+		t.Fatalf("no identity result in %+v", e.Results)
+	}
+	want := []drift.Change{
+		{Op: drift.Changed, Kind: "identity source", Name: "ldap:example.com", Fields: []drift.FieldChange{{Path: "groups", Old: "3", New: "4"}}},
+		{Op: drift.Changed, Kind: "identity user", Name: `example.com\alice`, Fields: []drift.FieldChange{{Path: "group", New: "team-x"}}},
+	}
+	if !slices.EqualFunc(r.Changes, want, sameChange) {
+		t.Errorf("changes %+v, want %+v", r.Changes, want)
+	}
+	if r.Device != "fw01" || r.Answer != "fw01/identity: 0 added, 0 removed, 2 changed" || e.Summary.Found < 2 || e.Summary.With != 1 {
+		t.Errorf("result %+v, summary %+v", r, e.Summary)
+	}
+	same := diffWithIdentity(t, encodeIdentity(t, before), encodeIdentity(t, before))
+	if r, ok := identityResult(same); !ok || r.Changes == nil || len(r.Changes) != 0 {
+		t.Errorf("no change: %+v", r)
+	}
+}
+
+func sameChange(a, b drift.Change) bool {
+	return a.Op == b.Op && a.Kind == b.Kind && a.Name == b.Name && a.Old == b.Old && a.New == b.New && slices.Equal(a.Fields, b.Fields)
+}
+
+// identityChanges reads each change of identity.Diff as a drift change: a
+// user that came or went with its groups, and a source with its line.
+func TestIdentityChangesOfUsersAndSources(t *testing.T) {
+	t.Parallel()
+	before := identityFixture(t)
+	after := identityFixture(t)
+	after.Users = append(after.Users[1:], identity.User{Name: `example.com\eve`, Groups: []string{"team-x", "engineering"}})
+	after.Users[0].Groups = after.Users[0].Groups[1:] // example.com\bob leaves domain users
+	after.Sources.LDAP = append(after.Sources.LDAP, identity.LDAPSource{Name: "branch", Domain: "example.com", Base: "ou=branch,dc=example,dc=com", Groups: 1})
+	got := identityChanges(identity.New(before), identity.New(after))
+	want := []drift.Change{
+		{Op: drift.Added, Kind: "identity source", Name: "ldap:branch", New: "domain=example.com base=ou=branch,dc=example,dc=com groups=1"},
+		{Op: drift.Removed, Kind: "identity user", Name: `example.com\alice`, Old: "cn=domain users,cn=users,dc=example,dc=com; cn=payroll,ou=groups,dc=example,dc=com"},
+		{Op: drift.Changed, Kind: "identity user", Name: `example.com\bob`, Fields: []drift.FieldChange{{Path: "group", Old: "cn=domain users,cn=users,dc=example,dc=com"}}},
+		{Op: drift.Added, Kind: "identity user", Name: `example.com\eve`, New: "engineering; team-x"},
+	}
+	if !slices.EqualFunc(got, want, sameChange) {
+		t.Errorf("changes:\n%+v\nwant:\n%+v", got, want)
+	}
+	if got := identityChanges(nil, identity.New(after)); got != nil {
+		t.Errorf("one side: %+v", got)
+	}
+}
+
+// With identity data in one snapshot only, the diff has no identity result
+// and notes it (SG8). With none, there is neither. A part missing in either
+// snapshot is not compared, and the note names the part (PD19).
+func TestDiffWithOneIdentityFileNotes(t *testing.T) {
+	t.Parallel()
+	data := encodeIdentity(t, identityFixture(t))
+	for _, tc := range []struct {
+		name         string
+		older, newer []byte
+		note, result bool
+		mentions     string
+	}{
+		{"older without", nil, data, true, false, "2026-"},
+		{"newer without", data, nil, true, false, "2026-"},
+		{"neither", nil, nil, false, false, ""},
+	} {
+		e := diffWithIdentity(t, tc.older, tc.newer)
+		n, noted := noteWith(e.Notes, "note.identity-not-compared")
+		_, result := identityResult(e)
+		if noted != tc.note || result != tc.result || noted && (n.Device != "fw01" || !strings.Contains(n.Note, tc.mentions)) {
+			t.Errorf("%s: notes %+v, results %+v", tc.name, e.Notes, e.Results)
+		}
+	}
+	partial := identityFixture(t)
+	partial.PartsMissing = []string{identity.PartUserGroups}
+	e := diffWithIdentity(t, data, encodeIdentity(t, partial))
+	n, noted := noteWith(e.Notes, "note.identity-not-compared")
+	if _, result := identityResult(e); !noted || !result || !strings.Contains(n.Note, identity.PartUserGroups) {
+		t.Errorf("a part missing: notes %+v, results %+v", e.Notes, e.Results)
 	}
 }

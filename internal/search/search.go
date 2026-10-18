@@ -1,7 +1,9 @@
 // Package search answers "where does this value or name appear" in one scope, as one
 // list of findings in five stages: objects whose value holds the term, objects with
 // that name, the groups holding either, the references naming any of them, and the
-// rules that write the term directly into a field.
+// rules that write the term directly into a field. With the identity data, a stage
+// between the objects and the groups gives the users, groups and mapped addresses
+// that the term names.
 //
 // Rules whose field is "any" reach every value, but no object or reference leads to
 // them, so search leaves them out. Which rule traffic would hit is a simulation
@@ -12,6 +14,12 @@
 // fields that select it; the containers that hold it; the path through nested
 // application groups; and the allow rules that reach it only through the implicit
 // use of another application. Without the data the search is as before (§4.8).
+//
+// With the identity data in Query.Providers.Users, the stage identity gives the
+// user of a user term, its groups with their source and its mapped addresses,
+// the group of a group term, and the mapped user of one address (spec
+// 2026-10-17 §6.1). The rules that name the user or a group come through the
+// reference stage. Without the data the search is as before (§5.5).
 package search
 
 import (
@@ -24,6 +32,7 @@ import (
 	"strings"
 
 	"github.com/okaiser/proteus/internal/config"
+	"github.com/okaiser/proteus/internal/identity"
 	"github.com/okaiser/proteus/internal/index"
 	"github.com/okaiser/proteus/internal/resolve"
 )
@@ -45,13 +54,21 @@ type Stage string
 // The stages, in the order they run and print.
 const (
 	StageObject    Stage = "object"
+	StageIdentity  Stage = "identity"
 	StageGroup     Stage = "group"
 	StageReference Stage = "reference"
 	StageLiteral   Stage = "literal"
 )
 
 // Stages lists every stage in order.
-var Stages = []Stage{StageObject, StageGroup, StageReference, StageLiteral}
+var Stages = []Stage{StageObject, StageIdentity, StageGroup, StageReference, StageLiteral}
+
+// The kinds of the findings of the stage identity (spec 2026-10-17 §6.1).
+const (
+	KindIdentityUser  = "identity-user"  // a user of the identity data
+	KindIdentityGroup = "identity-group" // a group or a DUG of the identity data
+	KindMapping       = "mapping"        // a user-to-IP mapping, by its address
+)
 
 // Query is one search.
 type Query struct {
@@ -70,7 +87,7 @@ type Query struct {
 
 // Finding is one place the term appears.
 type Finding struct {
-	Stage Stage        `json:"stage"`
+	Stage Stage        `json:"stage" jsonschema:"the stage the finding came from: object, identity, group, reference or literal"`
 	Kind  string       `json:"kind"`
 	Name  string       `json:"name"`
 	Scope config.Scope `json:"-"`
@@ -92,6 +109,7 @@ func Run(cfg *config.Config, idx *index.Index, q Query) ([]Finding, []index.Unre
 		return nil, nil, ErrWithinNeedsAddress
 	}
 	s.objects()
+	s.identity()
 	s.groups()
 	s.references()
 	s.implicitUse()
@@ -112,6 +130,9 @@ type searcher struct {
 	// can have several: a tag and an address group, an address group and a
 	// service group.
 	names map[string]map[string]bool
+	// counts are the member counts of the groups of the identity data, by
+	// lower-case name, once a group that groups[] lacks needs one.
+	counts map[string]int
 }
 
 // foundAs records a name as found with a kind.
@@ -191,6 +212,7 @@ func (s *searcher) objects() {
 				s.addObject(h.Kind, h.Name, h.Scope, h.Via)
 			}
 		}
+		s.groupForms()
 	}
 	for name, kinds := range s.kindsByName() {
 		match := name == s.q.Term
@@ -204,6 +226,168 @@ func (s *searcher) objects() {
 			s.addObject(k.kind, name, k.scope, "name")
 		}
 	}
+}
+
+// groupForms adds, for a term that names a group or a DUG of the identity
+// data, the source-user members of the rules that name the same group in
+// another form: a DN in another case and a short name <domain>\<cn>, as
+// observed on fw01, PAN-OS 11.2.5 (spec 2026-10-17 M11, M12). The user value
+// space matches a group term by its text only, as it takes --user (Review
+// focus 3), so search adds the other forms here; the reference stage then
+// reaches their rules (§6.1).
+func (s *searcher) groupForms() {
+	d := s.q.Providers.Users
+	if d == nil {
+		return
+	}
+	g, ok := identityGroup(d, s.q.Term)
+	if !ok {
+		return
+	}
+	// A member that several rules name gives one finding: result drops the
+	// repeats.
+	for _, r := range s.idx.Rules() {
+		for _, m := range r.Fields[index.SourceUser.String()] {
+			mem := d.Member(m)
+			if (mem.Kind == identity.MemberGroup || mem.Kind == identity.MemberDUG) && strings.EqualFold(mem.Name, g.Name) {
+				kind := "user-group"
+				if mem.Kind == identity.MemberDUG {
+					kind = "dynamic-user-group"
+				}
+				s.addObject(kind, m, s.sc, s.groupVia(g))
+			}
+		}
+	}
+}
+
+// identityGroup is the group of the identity data that a name names: a group
+// of groups[] by its name in any case or by its short name, or a DUG of the
+// dynamic list (spec 2026-10-17 §5.2).
+func identityGroup(d *identity.Data, name string) (identity.Group, bool) {
+	if g, ok := d.Group(name); ok {
+		return g, true
+	}
+	if mem := d.Member(name); mem.Kind == identity.MemberDUG {
+		return identity.Group{Name: mem.Name, Source: mem.Source, Members: -1}, true
+	}
+	return identity.Group{}, false
+}
+
+// identity is the stage identity (spec 2026-10-17 §6.1, PD13). With the
+// identity data, one address gives its mapping, a user term the user, its
+// groups and its mapped addresses, and a group term the group. A user or a
+// group that the object stage found, by any form of its name, gives no
+// finding: that finding already names it, with its source and member count.
+// The rules come through the reference stage; a rule that names any,
+// known-user, unknown or pre-logon is no finding (the user value space skips
+// them). A text match of the directory is no question this stage answers.
+func (s *searcher) identity() {
+	d := s.q.Providers.Users
+	if d == nil || s.q.Mode == Contains {
+		return
+	}
+	if s.term.prefixes != nil {
+		if s.term.single && len(s.term.prefixes) == 1 {
+			if m, ok := d.Mapping(s.term.prefixes[0].Addr()); ok {
+				s.addIdentity(KindMapping, m.IP.String(), mappingVia(m))
+			}
+		}
+		return
+	}
+	shown := s.shownByObjects(d)
+	mapped := s.q.Term
+	if u, ok := d.User(s.q.Term); ok {
+		mapped = u.Name
+		if !shown[strings.ToLower(u.Name)] {
+			s.addIdentity(KindIdentityUser, u.Name, "directory user")
+		}
+		for _, name := range u.Groups {
+			if shown[strings.ToLower(name)] {
+				continue
+			}
+			g, ok := d.Group(name)
+			if !ok {
+				g = s.unlistedGroup(d, name)
+			}
+			shown[strings.ToLower(name)] = true
+			s.addIdentity(KindIdentityGroup, name, s.groupVia(g))
+		}
+	} else if g, ok := identityGroup(d, s.q.Term); ok && !shown[strings.ToLower(g.Name)] {
+		s.addIdentity(KindIdentityGroup, g.Name, s.groupVia(g))
+	}
+	// A mapping keeps its user as the device stores it, so a user outside
+	// the directory has mappings too, as observed on fw01, PAN-OS 11.2.5
+	// (spec 2026-10-17 M2, M3).
+	for _, m := range d.MappingsOf(mapped) {
+		s.addIdentity(KindMapping, m.IP.String(), mappingVia(m))
+	}
+}
+
+// shownByObjects is the users and groups that the object stage found, in
+// lower case: each by the name a rule writes, and by the name of the user or
+// group of the data that the name names (M11, M12, N2).
+func (s *searcher) shownByObjects(d *identity.Data) map[string]bool {
+	shown := map[string]bool{}
+	for _, f := range s.found {
+		if f.Stage != StageObject || (f.Kind != "user" && f.Kind != "user-group" && f.Kind != "dynamic-user-group") {
+			continue
+		}
+		shown[strings.ToLower(f.Name)] = true
+		shown[strings.ToLower(d.Member(f.Name).Name)] = true
+	}
+	return shown
+}
+
+// addIdentity records a finding of the stage identity, when its kind is
+// allowed.
+func (s *searcher) addIdentity(kind, name, via string) {
+	if s.kindAllowed(kind) {
+		s.found = append(s.found, Finding{Stage: StageIdentity, Kind: kind, Name: name, Scope: s.sc, Via: via})
+	}
+}
+
+// mappingVia names the user of a mapping as the device stores it, its type
+// and its timeout (U1).
+func mappingVia(m identity.Mapping) string {
+	return fmt.Sprintf("user %s, %s, timeout %d s", m.User, m.Type, m.Timeout)
+}
+
+// groupVia names the source of a group and its member count, as the user
+// value space names a group that a rule names (spec 2026-10-17 §6.1). A group
+// that groups[] lacks counts the users whose groups hold it (U3).
+func (s *searcher) groupVia(g identity.Group) string {
+	if g.Members < 0 {
+		g.Members = s.memberCount(g.Name)
+	}
+	return fmt.Sprintf("%s, %d members", g.Source, g.Members)
+}
+
+// unlistedGroup is a group of a user that groups[] lacks, such as while the
+// part groups is missing: its source by its form (§3.3), and its member count
+// to come (groupVia).
+func (s *searcher) unlistedGroup(d *identity.Data, name string) identity.Group {
+	f := d.File()
+	source := identity.Classify(name, f.Sources.LDAP, !d.Complete(identity.PartLDAP), f.DUGs, f.Sources.CIE, !d.Complete(identity.PartCIE))
+	return identity.Group{Name: name, Source: source, Members: -1}
+}
+
+// memberCount counts the users whose groups hold a group, in any case (U3,
+// M11, X2). It reads the groups of every user once per search, not once per
+// group.
+func (s *searcher) memberCount(group string) int {
+	if s.counts == nil {
+		s.counts = map[string]int{}
+		for _, u := range s.q.Providers.Users.File().Users {
+			seen := map[string]bool{}
+			for _, g := range u.Groups {
+				if k := strings.ToLower(g); !seen[k] {
+					seen[k] = true
+					s.counts[k]++
+				}
+			}
+		}
+	}
+	return s.counts[strings.ToLower(group)]
 }
 
 // addressObjects matches an address, prefix or range term against address objects.

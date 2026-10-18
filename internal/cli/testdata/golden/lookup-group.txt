@@ -1,0 +1,13 @@
+file / vsys1   TMP
+  note: no application data: TMP does not exist; lookup finds no predefined application or container, and no application of a filter
+  note: identity data taken 2026-10-17T20:00:00Z from TMP
+  file/vsys1: identity-group cn=domain users,cn=users,dc=example,dc=com
+identity group  cn=domain users,cn=users,dc=example,dc=com vsys:vsys1
+
+  source           ldap:example.com
+  members          3 members
+                   example.com\alice
+                   example.com\bob
+                   example.com\carol
+
+1 with it, 0 without, 0 holes

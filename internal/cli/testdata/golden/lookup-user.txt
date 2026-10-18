@@ -1,0 +1,14 @@
+file / vsys1   TMP
+  note: identity data taken 2026-10-17T20:00:00Z from TMP
+  file/vsys1: identity-user example.com\alice
+identity user  example.com\alice            vsys:vsys1
+
+  primary          example.com\alice
+  alternate names  alice@example.com
+  email            alice@example.com
+  groups           cn=domain users,cn=users,dc=example,dc=com (ldap:example.com)
+                   cn=payroll,ou=groups,dc=example,dc=com (ldap:example.com)
+  mapped addresses 198.51.100.11 (XMLAPI, timeout 14400 s)
+  tags             none
+
+1 with it, 0 without, 0 holes
