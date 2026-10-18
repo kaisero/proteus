@@ -1,0 +1,30 @@
+<response status="success"><result><![CDATA[
+
+Group Mapping(vsys1, type: active-directory): example.com 
+	Bind DN    : svc-ldap@example.com
+	Base       : dc=example,dc=com
+	Group Filter: (None)
+	User Filter: (None)
+	Servers    : configured 1 servers
+		192.0.2.53(389)
+			Last Action Time: 60 secs ago(took 0 secs)
+			Next Action Time: In 3540 secs
+	Number of Groups: 4
+	cn=domain users,cn=users,dc=example,dc=com
+	cn=payroll,ou=groups,dc=example,dc=com
+	cn=empty,ou=groups,dc=example,dc=com
+	cn=workstations,ou=groups,dc=example,dc=com
+
+Group Mapping(vsys1, type: active-directory): branch 
+	Bind DN    : svc-ldap@example.com
+	Base       : ou=branch,dc=example,dc=com
+	Group Filter: (None)
+	User Filter: (None)
+	Servers    : configured 1 servers
+		192.0.2.54(389)
+			Last Action Time: 60 secs ago(took 0 secs)
+			Next Action Time: In 3540 secs
+	Number of Groups: 1
+	cn=branch staff,ou=branch,dc=example,dc=com
+
+]]></result></response>

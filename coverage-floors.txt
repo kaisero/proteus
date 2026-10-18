@@ -41,3 +41,4 @@ github.com/okaiser/proteus/internal/query  98.1
 github.com/okaiser/proteus/internal/mcp  95.7
 github.com/okaiser/proteus/internal/appid  100.0
 github.com/okaiser/proteus/internal/tools/applab  93.6
+github.com/okaiser/proteus/internal/identity  100.0

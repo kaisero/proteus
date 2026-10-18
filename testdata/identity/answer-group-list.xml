@@ -1,0 +1,18 @@
+<response status="success"><result><![CDATA[
+cn=domain users,cn=users,dc=example,dc=com 
+cn=payroll,ou=groups,dc=example,dc=com 
+cn=empty,ou=groups,dc=example,dc=com 
+cn=workstations,ou=groups,dc=example,dc=com 
+cn=branch staff,ou=branch,dc=example,dc=com 
+engineering 
+team-x 
+help desk 
+dug-a 
+dug-ab 
+example-cie\cloud-team 
+custom-a * 
+
+Total: 12
+* : Custom Group
+
+]]></result></response>

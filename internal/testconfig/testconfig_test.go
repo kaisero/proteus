@@ -94,6 +94,42 @@ func TestContentWritesTheFixture(t *testing.T) {
 	}
 }
 
+// Identity writes the identity fixture, gzipped and mode 0600 as a snapshot
+// holds it, so the tests of every package read one file (spec 2026-10-17 §4.1,
+// §7).
+func TestIdentityWritesTheFixture(t *testing.T) {
+	t.Parallel()
+	dst := filepath.Join(t.TempDir(), "identity.json.gz")
+	Identity(t, dst)
+	info, err := os.Stat(dst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0o600 {
+		t.Errorf("mode %v, want 0600", info.Mode().Perm())
+	}
+	f, err := os.Open(dst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	zr, err := gzip.NewReader(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := io.ReadAll(zr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := os.ReadFile("../../testdata/identity/identity.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, want) {
+		t.Error("the file does not unzip to testdata/identity/identity.json")
+	}
+}
+
 // fatalTB records a failure instead of stopping the test.
 type fatalTB struct {
 	testing.TB

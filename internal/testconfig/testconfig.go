@@ -2,9 +2,10 @@
 // R7 wants a benchmark behind every performance figure, and the figures for
 // group trees only appear at a size no fixture in this repository has. The
 // index and card benchmarks read the same file, so their figures describe one
-// configuration. It also writes the App-ID content fixture, so the tests of
-// every package read one file. It imports testing; only tests import it. It
-// does not import internal/appid, so the appid tests can use it.
+// configuration. It also writes the App-ID content fixture and the identity
+// fixture, so the tests of every package read one file of each. It imports
+// testing; only tests import it. It does not import internal/appid or
+// internal/identity, so the tests of those packages can use it.
 package testconfig
 
 import (
@@ -123,8 +124,22 @@ func rule(b *strings.Builder, name, src, dst string) {
 // version 8000-1000, to dst.
 func Content(tb testing.TB, dst string) {
 	tb.Helper()
+	writeGzipped(tb, dst, "appid", "content.xml")
+}
+
+// Identity gzips testdata/identity/identity.json, the identity file of the
+// fixture in format 1 (spec 2026-10-17 §4.1), to dst, mode 0600 as a snapshot
+// holds it.
+func Identity(tb testing.TB, dst string) {
+	tb.Helper()
+	writeGzipped(tb, dst, "identity", "identity.json")
+}
+
+// writeGzipped gzips a file below testdata to dst, mode 0600.
+func writeGzipped(tb testing.TB, dst string, path ...string) {
+	tb.Helper()
 	_, self, _, _ := runtime.Caller(0)
-	raw, err := os.ReadFile(filepath.Join(filepath.Dir(self), "..", "..", "testdata", "appid", "content.xml"))
+	raw, err := os.ReadFile(filepath.Join(append([]string{filepath.Dir(self), "..", "..", "testdata"}, path...)...))
 	if err == nil {
 		err = os.WriteFile(dst, gzipped(raw), 0o600)
 	}

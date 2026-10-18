@@ -1,0 +1,13 @@
+<response status="success"><result><entry user="example.com\carol">
+<tag>
+<member>tag-a</member>
+<member>tag-b</member>
+</tag>
+</entry>
+<entry user="example.com\dave">
+<tag>
+<member>tag-a</member>
+</tag>
+</entry>
+<count>2</count>
+</result></response>
