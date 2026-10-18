@@ -38,7 +38,7 @@ func storeWith(t *testing.T) *store.Store {
 	for _, w := range []struct{ dev, file string }{
 		{"fw01", "firewall-lab.xml"}, {"fw01", "firewall-multivsys.xml"}, {"fw02", "firewall-zones.xml"},
 	} {
-		if _, err := st.Write(store.Meta{Device: w.dev}, map[string][]byte{store.ConfigDoc: fixture(t, w.file)}, 20); err != nil {
+		if _, err := st.Write(store.Meta{Device: w.dev}, map[string][]byte{store.ConfigDoc: fixture(t, w.file)}, nil, 20); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -147,7 +147,7 @@ func TestOpenFile(t *testing.T) {
 func TestOpenReportsAnUnreadableConfiguration(t *testing.T) {
 	t.Parallel()
 	st, _ := store.Open(t.TempDir())
-	if _, err := st.Write(store.Meta{Device: "bad"}, map[string][]byte{store.ConfigDoc: []byte("<nope/>")}, 20); err != nil {
+	if _, err := st.Write(store.Meta{Device: "bad"}, map[string][]byte{store.ConfigDoc: []byte("<nope/>")}, nil, 20); err != nil {
 		t.Fatal(err)
 	}
 	_, holes := Open(st, []string{"bad"}, nil, When{Now: t0})
@@ -164,11 +164,11 @@ func TestOpenReadsThePredefinedServices(t *testing.T) {
 	st, _ := store.Open(t.TempDir())
 	cfg := fixture(t, "firewall-lab.xml")
 	for dev, pre := range map[string]string{"with": fakePredefined, "bad": "<response><result><service>"} {
-		if _, err := st.Write(store.Meta{Device: dev}, map[string][]byte{store.ConfigDoc: cfg, "predefined": []byte(pre)}, 20); err != nil {
+		if _, err := st.Write(store.Meta{Device: dev}, map[string][]byte{store.ConfigDoc: cfg, "predefined": []byte(pre)}, nil, 20); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if _, err := st.Write(store.Meta{Device: "old"}, map[string][]byte{store.ConfigDoc: cfg}, 20); err != nil {
+	if _, err := st.Write(store.Meta{Device: "old"}, map[string][]byte{store.ConfigDoc: cfg}, nil, 20); err != nil {
 		t.Fatal(err)
 	}
 	ts, holes := Open(st, []string{"with", "old", "bad"}, nil, When{Now: t0})
@@ -230,7 +230,7 @@ func TestOpenSnapshot(t *testing.T) {
 		t.Errorf("missing id: %v", holes)
 	}
 	st = st.WithClock(func() time.Time { return t0.Add(2 * time.Hour) })
-	sn, err := st.Write(store.Meta{Device: "fw01"}, map[string][]byte{store.FIBDoc: []byte("<x/>")}, 20)
+	sn, err := st.Write(store.Meta{Device: "fw01"}, map[string][]byte{store.FIBDoc: []byte("<x/>")}, nil, 20)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -244,7 +244,7 @@ func TestOpenSnapshot(t *testing.T) {
 func TestGapOf(t *testing.T) {
 	t.Parallel()
 	st, _ := store.Open(t.TempDir())
-	if _, err := st.Write(store.Meta{Device: "bare"}, map[string][]byte{store.FIBDoc: []byte("<x/>")}, 20); err != nil {
+	if _, err := st.Write(store.Meta{Device: "bare"}, map[string][]byte{store.FIBDoc: []byte("<x/>")}, nil, 20); err != nil {
 		t.Fatal(err)
 	}
 	_, noConfig := st.Latest("bare")

@@ -51,7 +51,7 @@ func (l *lab) write(meta store.Meta, config []byte) {
 		store.InterfacesDoc: pathlab.Read(l.t, pathlab.OpdataFile(device+"-interface-all.xml")),
 		store.FIBDoc:        pathlab.Read(l.t, pathlab.OpdataFile(device+"-advanced-routing-fib.xml")),
 	}
-	if _, err := l.st.Write(meta, docs, 20); err != nil {
+	if _, err := l.st.Write(meta, docs, nil, 20); err != nil {
 		l.t.Fatal(err)
 	}
 	l.now = l.now.Add(time.Minute)

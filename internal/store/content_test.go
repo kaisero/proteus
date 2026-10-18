@@ -194,7 +194,7 @@ func TestWriteContentFailures(t *testing.T) {
 // snapshotWith stores a snapshot of a device that names a content version.
 func snapshotWith(t *testing.T, s *Store, device, version string) Snapshot {
 	t.Helper()
-	sn, err := s.Write(Meta{Device: device, AppVersion: version}, docs(t, false), 20)
+	sn, err := s.Write(Meta{Device: device, AppVersion: version}, docs(t, false), nil, 20)
 	if err != nil {
 		t.Fatal(err)
 	}

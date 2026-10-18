@@ -496,7 +496,7 @@ func TestSnapshotRowsSkipAPrunedSnapshot(t *testing.T) {
 		t.Fatal(err)
 	}
 	st = st.WithClock(func() time.Time { return time.Date(2026, 9, 28, 10, 0, 0, 0, time.UTC) })
-	sn, err := st.Write(store.Meta{Device: "fw01"}, map[string][]byte{store.ConfigDoc: []byte("<config/>")}, 20)
+	sn, err := st.Write(store.Meta{Device: "fw01"}, map[string][]byte{store.ConfigDoc: []byte("<config/>")}, nil, 20)
 	if err != nil {
 		t.Fatal(err)
 	}

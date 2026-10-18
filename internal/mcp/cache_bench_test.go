@@ -85,7 +85,7 @@ func snapshotOf(tb testing.TB, st *store.Store, device, path string) (store.Snap
 		tb.Fatal(err)
 	}
 	sn, err := st.Write(store.Meta{Device: device, Host: device + ".example.test", Serial: "000000000001"},
-		map[string][]byte{store.ConfigDoc: doc}, 1)
+		map[string][]byte{store.ConfigDoc: doc}, nil, 1)
 	if err != nil {
 		tb.Fatal(err)
 	}

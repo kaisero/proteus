@@ -1,6 +1,7 @@
 package store
 
 import (
+	"bytes"
 	"errors"
 	"io/fs"
 	"os"
@@ -10,6 +11,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/okaiser/proteus/internal/identity"
 )
 
 func clock(start time.Time) func() time.Time {
@@ -51,7 +54,7 @@ func docs(t *testing.T, withZones bool) map[string][]byte {
 func TestWriteThenLatest(t *testing.T) {
 	t.Parallel()
 	s := open(t)
-	sn, err := s.Write(Meta{Device: "fw01", Host: "192.0.2.10", Serial: "0001"}, docs(t, false), 20)
+	sn, err := s.Write(Meta{Device: "fw01", Host: "192.0.2.10", Serial: "0001"}, docs(t, false), nil, 20)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -83,7 +86,7 @@ func TestWriteFillsANamedDocument(t *testing.T) {
 	t.Parallel()
 	s := open(t)
 	sn, err := s.Write(Meta{Device: "fw01", Documents: []DocumentMeta{{Name: ConfigDoc}, {Name: FIBDoc, Error: "refused"}}},
-		docs(t, false), 20)
+		docs(t, false), nil, 20)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,11 +100,11 @@ func TestWriteFillsANamedDocument(t *testing.T) {
 func TestMetaConfigSourceRoundTrip(t *testing.T) {
 	t.Parallel()
 	s := open(t)
-	with, err := s.Write(Meta{Device: "fw01", ConfigSource: "running+template"}, docs(t, false), 20)
+	with, err := s.Write(Meta{Device: "fw01", ConfigSource: "running+template"}, docs(t, false), nil, 20)
 	if err != nil {
 		t.Fatal(err)
 	}
-	without, err := s.Write(Meta{Device: "fw01"}, map[string][]byte{}, 20)
+	without, err := s.Write(Meta{Device: "fw01"}, map[string][]byte{}, nil, 20)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -125,14 +128,138 @@ func TestMetaConfigSourceRoundTrip(t *testing.T) {
 	}
 }
 
+// identityData stands for an identity file. Write keeps the bytes as they
+// come: identity.Read checks them when a question loads them.
+var identityData = []byte("identity file of fw01")
+
+// The identity file lands beside the documents, private to its owner, and
+// meta.json says that the snapshot holds it (spec 2026-10-17 §4.1).
+func TestWriteKeepsAFileBesideTheDocuments(t *testing.T) {
+	t.Parallel()
+	s := open(t)
+	sn, err := s.Write(Meta{Device: "fw01"}, docs(t, false), identityData, 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.Get("fw01", sn.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join(sn.Dir, identity.FileName)
+	if !got.Meta.Identity || got.IdentityPath() != want || sn.IdentityPath() != want {
+		t.Errorf("identity %v, path %q, written path %q; want %s", got.Meta.Identity, got.IdentityPath(), sn.IdentityPath(), want)
+	}
+	fi, err := os.Stat(want)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fi.Mode().Perm() != 0o600 {
+		t.Errorf("mode = %v, want 0600", fi.Mode().Perm())
+	}
+	if b, err := os.ReadFile(want); err != nil || !bytes.Equal(b, identityData) {
+		t.Errorf("the identity file holds %q, %v", b, err)
+	}
+	mb, err := os.ReadFile(filepath.Join(sn.Dir, "meta.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(mb), `"identity": true`) {
+		t.Errorf("meta.json:\n%s", mb)
+	}
+	if len(got.Meta.Documents) != 1 || got.Meta.Documents[0].Name != ConfigDoc {
+		t.Errorf("the identity file is no document: %+v", got.Meta.Documents)
+	}
+}
+
+// Without the file, meta.json leaves the key out, also when the caller set
+// it: meta.json never names a file that is not there.
+func TestWriteWithoutTheFileLeavesIdentityOut(t *testing.T) {
+	t.Parallel()
+	s := open(t)
+	for _, data := range [][]byte{nil, {}} {
+		sn, err := s.Write(Meta{Device: "fw01", Identity: true}, docs(t, false), data, 20)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, err := s.Get("fw01", sn.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.Meta.Identity || sn.Meta.Identity || got.IdentityPath() != "" {
+			t.Errorf("%d bytes: identity %v, path %q", len(data), got.Meta.Identity, got.IdentityPath())
+		}
+		mb, err := os.ReadFile(filepath.Join(sn.Dir, "meta.json"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(string(mb), `"identity":`) {
+			t.Errorf("%d bytes: meta.json:\n%s", len(data), mb)
+		}
+		if _, err := os.Stat(filepath.Join(sn.Dir, identity.FileName)); !errors.Is(err, fs.ErrNotExist) {
+			t.Errorf("%d bytes: the identity file: %v", len(data), err)
+		}
+	}
+}
+
+// A pruned snapshot takes its identity file with it (spec 2026-10-17 §4.1).
+func TestPruneRemovesTheIdentityFile(t *testing.T) {
+	t.Parallel()
+	s := open(t)
+	old, err := s.Write(Meta{Device: "fw01"}, docs(t, false), identityData, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(old.IdentityPath()); err != nil {
+		t.Fatal(err)
+	}
+	kept, err := s.Write(Meta{Device: "fw01"}, docs(t, false), identityData, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(old.IdentityPath()); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("the pruned snapshot's identity file: %v", err)
+	}
+	if _, err := os.Stat(kept.IdentityPath()); err != nil {
+		t.Errorf("the kept snapshot's identity file: %v", err)
+	}
+}
+
+// A file beside the documents that cannot be written fails the write, and
+// nothing is left: no snapshot and no temporary directory.
+func TestWriteFailsOnAFileItCannotWrite(t *testing.T) {
+	t.Parallel()
+	for _, name := range []string{identity.FileName, "meta.json"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			s := fixed(t)
+			s.step = func(step string) {
+				if step != "documents" {
+					return
+				}
+				// A directory in the file's place: the file cannot be opened.
+				if err := os.Mkdir(filepath.Join(s.root, "fw01", ".2026-09-28T10-00-00Z.partial", name), 0o700); err != nil {
+					t.Error(err)
+				}
+			}
+			if _, err := s.Write(Meta{Device: "fw01"}, docs(t, false), identityData, 20); err == nil ||
+				!strings.Contains(err.Error(), name) {
+				t.Errorf("want an error that names %s, got %v", name, err)
+			}
+			if entries, _ := os.ReadDir(filepath.Join(s.root, "fw01")); len(entries) != 0 {
+				t.Errorf("a failed write left %v", entries)
+			}
+		})
+	}
+}
+
 // Nothing can be analysed without the configuration, so a fetch that lost it is
 // kept for the record but never becomes latest.
 func TestLatestMovesOnlyWithAConfiguration(t *testing.T) {
 	t.Parallel()
 	s := open(t)
-	first, _ := s.Write(Meta{Device: "fw01"}, docs(t, false), 20)
+	first, _ := s.Write(Meta{Device: "fw01"}, docs(t, false), nil, 20)
 	_, err := s.Write(Meta{Device: "fw01", Documents: []DocumentMeta{{Name: ConfigDoc, Error: "refused"}}},
-		map[string][]byte{}, 20)
+		map[string][]byte{}, nil, 20)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -150,7 +277,7 @@ func TestRetentionKeepsTheNewest(t *testing.T) {
 	t.Parallel()
 	s := open(t)
 	for range 5 {
-		if _, err := s.Write(Meta{Device: "fw01"}, docs(t, false), 3); err != nil {
+		if _, err := s.Write(Meta{Device: "fw01"}, docs(t, false), nil, 3); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -169,8 +296,8 @@ func TestRetentionKeepsTheNewest(t *testing.T) {
 func TestRetentionKeepsLatest(t *testing.T) {
 	t.Parallel()
 	s := open(t)
-	first, _ := s.Write(Meta{Device: "fw01"}, docs(t, false), 1)
-	if _, err := s.Write(Meta{Device: "fw01"}, map[string][]byte{}, 1); err != nil {
+	first, _ := s.Write(Meta{Device: "fw01"}, docs(t, false), nil, 1)
+	if _, err := s.Write(Meta{Device: "fw01"}, map[string][]byte{}, nil, 1); err != nil {
 		t.Fatal(err)
 	}
 	if got, err := s.Latest("fw01"); err != nil || got.ID != first.ID {
@@ -182,7 +309,7 @@ func TestRetentionKeepsLatest(t *testing.T) {
 func failed(t *testing.T, s *Store, keep int) Snapshot {
 	t.Helper()
 	sn, err := s.Write(Meta{Device: "fw01", Documents: []DocumentMeta{{Name: ConfigDoc, Error: "export failed"}}},
-		map[string][]byte{}, keep)
+		map[string][]byte{}, nil, keep)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -196,7 +323,7 @@ func TestRetentionCountsFailedFetchesApart(t *testing.T) {
 	s := open(t)
 	var good, bad []string
 	for range 3 {
-		sn, err := s.Write(Meta{Device: "fw01"}, docs(t, false), 3)
+		sn, err := s.Write(Meta{Device: "fw01"}, docs(t, false), nil, 3)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -225,9 +352,9 @@ func TestRetentionCountsFailedFetchesApart(t *testing.T) {
 func TestRetentionKeepsTheNewestGoodOnes(t *testing.T) {
 	t.Parallel()
 	s := open(t)
-	first, _ := s.Write(Meta{Device: "fw01"}, docs(t, false), 1)
+	first, _ := s.Write(Meta{Device: "fw01"}, docs(t, false), nil, 1)
 	failed(t, s, 1)
-	second, err := s.Write(Meta{Device: "fw01"}, docs(t, false), 1)
+	second, err := s.Write(Meta{Device: "fw01"}, docs(t, false), nil, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -242,11 +369,11 @@ func TestRetentionKeepsTheNewestGoodOnes(t *testing.T) {
 func TestRetentionCountsAnUnreadableSnapshotAsFailed(t *testing.T) {
 	t.Parallel()
 	s := open(t)
-	broken, _ := s.Write(Meta{Device: "fw01"}, docs(t, false), 1)
+	broken, _ := s.Write(Meta{Device: "fw01"}, docs(t, false), nil, 1)
 	if err := os.Remove(filepath.Join(broken.Dir, "meta.json")); err != nil {
 		t.Fatal(err)
 	}
-	good, err := s.Write(Meta{Device: "fw01"}, docs(t, false), 1)
+	good, err := s.Write(Meta{Device: "fw01"}, docs(t, false), nil, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -267,10 +394,10 @@ func TestWriteRefusesADuplicateID(t *testing.T) {
 		t.Fatal(err)
 	}
 	s = s.WithClock(func() time.Time { return time.Date(2026, 9, 28, 10, 0, 0, 0, time.UTC) })
-	if _, err := s.Write(Meta{Device: "fw01"}, docs(t, false), 20); err != nil {
+	if _, err := s.Write(Meta{Device: "fw01"}, docs(t, false), nil, 20); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.Write(Meta{Device: "fw01"}, docs(t, false), 20); err == nil {
+	if _, err := s.Write(Meta{Device: "fw01"}, docs(t, false), nil, 20); err == nil {
 		t.Error("two snapshots in one second must not overwrite each other")
 	}
 }
@@ -288,7 +415,7 @@ func TestWriteRefusesASecondWriter(t *testing.T) {
 	if err := os.WriteFile(half, []byte("<config"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	_, err := s.Write(Meta{Device: "fw01"}, docs(t, false), 20)
+	_, err := s.Write(Meta{Device: "fw01"}, docs(t, false), nil, 20)
 	if err == nil || !strings.Contains(err.Error(), "fw01@2026-09-28T10-00-00Z is being written by another fetch") {
 		t.Errorf("second writer: %v", err)
 	}
@@ -307,14 +434,14 @@ func TestWriteCannotMakeItsDirectories(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(s.root, "fw01"), nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.Write(Meta{Device: "fw01"}, docs(t, false), 20); err == nil || strings.Contains(err.Error(), "another fetch") {
+	if _, err := s.Write(Meta{Device: "fw01"}, docs(t, false), nil, 20); err == nil || strings.Contains(err.Error(), "another fetch") {
 		t.Errorf("a file in the device directory's place: %v", err)
 	}
 	dev := filepath.Join(s.root, "fw02")
 	if err := os.Mkdir(dev, 0o500); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.Write(Meta{Device: "fw02"}, docs(t, false), 20); err == nil || strings.Contains(err.Error(), "another fetch") {
+	if _, err := s.Write(Meta{Device: "fw02"}, docs(t, false), nil, 20); err == nil || strings.Contains(err.Error(), "another fetch") {
 		t.Errorf("a device directory without write permission: %v", err)
 	}
 }
@@ -325,7 +452,7 @@ func TestWriteCannotMakeItsDirectories(t *testing.T) {
 func TestWriteSyncsWhatItStores(t *testing.T) {
 	t.Parallel()
 	s := open(t)
-	sn, err := s.Write(Meta{Device: "fw01"}, docs(t, true), 20)
+	sn, err := s.Write(Meta{Device: "fw01"}, docs(t, true), nil, 20)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -351,7 +478,7 @@ func TestWriteSyncsWhatItStores(t *testing.T) {
 func TestWriteFailsOnADocumentItCannotWrite(t *testing.T) {
 	t.Parallel()
 	s := open(t)
-	if _, err := s.Write(Meta{Device: "fw01"}, map[string][]byte{"no/such": []byte("<x/>")}, 20); err == nil {
+	if _, err := s.Write(Meta{Device: "fw01"}, map[string][]byte{"no/such": []byte("<x/>")}, nil, 20); err == nil {
 		t.Error("a document name that is no file name must fail")
 	}
 	entries, _ := os.ReadDir(filepath.Join(s.root, "fw01"))
@@ -372,7 +499,7 @@ func TestConcurrentWritersOfOneID(t *testing.T) {
 	errs := make([]error, 8)
 	var wg sync.WaitGroup
 	for i := range errs {
-		wg.Go(func() { _, errs[i] = s.Write(Meta{Device: "fw01"}, docs(t, false), 20) })
+		wg.Go(func() { _, errs[i] = s.Write(Meta{Device: "fw01"}, docs(t, false), nil, 20) })
 	}
 	wg.Wait()
 	stored := 0
@@ -418,10 +545,10 @@ func TestASecondWriterAfterTheRename(t *testing.T) {
 	b := *a
 	b.step = func(name string) {
 		if name == "checked" {
-			first, firstErr = a.Write(Meta{Device: "fw01"}, docs(t, false), 20)
+			first, firstErr = a.Write(Meta{Device: "fw01"}, docs(t, false), nil, 20)
 		}
 	}
-	_, err := b.Write(Meta{Device: "fw01"}, docs(t, false), 20)
+	_, err := b.Write(Meta{Device: "fw01"}, docs(t, false), nil, 20)
 	if firstErr != nil {
 		t.Fatal(firstErr)
 	}
@@ -457,7 +584,7 @@ func TestTheFirstWriterLeavesTheNextOnesDirectory(t *testing.T) {
 			t.Error(err)
 		}
 	}
-	if _, err := s.Write(Meta{Device: "fw01"}, docs(t, false), 20); err != nil {
+	if _, err := s.Write(Meta{Device: "fw01"}, docs(t, false), nil, 20); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(next); err != nil {
@@ -474,7 +601,7 @@ func TestAFailedSyncNamesTheStoredSnapshot(t *testing.T) {
 			_ = os.RemoveAll(filepath.Join(s.root, "fw01", "2026-09-28T10-00-00Z"))
 		}
 	}
-	_, err := s.Write(Meta{Device: "fw01"}, docs(t, false), 20)
+	_, err := s.Write(Meta{Device: "fw01"}, docs(t, false), nil, 20)
 	if err == nil || !strings.HasPrefix(err.Error(), "store: fw01@2026-09-28T10-00-00Z is stored but not synced: ") {
 		t.Errorf("a failed sync: %v", err)
 	}
@@ -511,7 +638,7 @@ func TestPruneRemovesOldLeftovers(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if _, err := s.Write(Meta{Device: "fw01"}, docs(t, false), 20); err != nil {
+	if _, err := s.Write(Meta{Device: "fw01"}, docs(t, false), nil, 20); err != nil {
 		t.Fatal(err)
 	}
 	for p, want := range map[string]bool{
@@ -531,7 +658,7 @@ func TestAFailedLatestNamesTheStoredSnapshot(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(s.root, "fw01", "latest", "x"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	_, err := s.Write(Meta{Device: "fw01"}, docs(t, false), 20)
+	_, err := s.Write(Meta{Device: "fw01"}, docs(t, false), nil, 20)
 	if err == nil || !strings.HasPrefix(err.Error(), "store: fw01@2026-09-28T10-00-00Z is stored but latest does not name it: ") {
 		t.Errorf("a latest that cannot move: %v", err)
 	}
@@ -543,8 +670,8 @@ func TestAFailedLatestNamesTheStoredSnapshot(t *testing.T) {
 func TestResolveAndGet(t *testing.T) {
 	t.Parallel()
 	s := open(t)
-	a, _ := s.Write(Meta{Device: "fw01"}, docs(t, false), 20)
-	b, _ := s.Write(Meta{Device: "fw01"}, docs(t, false), 20)
+	a, _ := s.Write(Meta{Device: "fw01"}, docs(t, false), nil, 20)
+	b, _ := s.Write(Meta{Device: "fw01"}, docs(t, false), nil, 20)
 	if got, err := s.Resolve("fw01"); err != nil || got.ID != b.ID {
 		t.Errorf("Resolve(fw01) = %v, %v; want latest %s", got.ID, err, b.ID)
 	}
@@ -564,7 +691,7 @@ func TestResolveAndGet(t *testing.T) {
 func TestGetRejectsACorruptMeta(t *testing.T) {
 	t.Parallel()
 	s := open(t)
-	sn, _ := s.Write(Meta{Device: "fw01"}, docs(t, false), 20)
+	sn, _ := s.Write(Meta{Device: "fw01"}, docs(t, false), nil, 20)
 	if err := os.WriteFile(filepath.Join(sn.Dir, "meta.json"), []byte("{"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -578,8 +705,8 @@ func TestGetRejectsACorruptMeta(t *testing.T) {
 func TestGetTellsADamagedSnapshotFromAMissingOne(t *testing.T) {
 	t.Parallel()
 	s := open(t)
-	damaged, _ := s.Write(Meta{Device: "fw01"}, docs(t, false), 20)
-	gone, _ := s.Write(Meta{Device: "fw01"}, docs(t, false), 20)
+	damaged, _ := s.Write(Meta{Device: "fw01"}, docs(t, false), nil, 20)
+	gone, _ := s.Write(Meta{Device: "fw01"}, docs(t, false), nil, 20)
 	if err := os.Remove(filepath.Join(damaged.Dir, "meta.json")); err != nil {
 		t.Fatal(err)
 	}
@@ -599,7 +726,7 @@ func TestGetTellsADamagedSnapshotFromAMissingOne(t *testing.T) {
 func TestZonesFromAStoredSnapshot(t *testing.T) {
 	t.Parallel()
 	s := open(t)
-	sn, err := s.Write(Meta{Device: "fw01", Host: "192.0.2.10"}, docs(t, true), 20)
+	sn, err := s.Write(Meta{Device: "fw01", Host: "192.0.2.10"}, docs(t, true), nil, 20)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -610,13 +737,13 @@ func TestZonesFromAStoredSnapshot(t *testing.T) {
 	if len(z.Routers()) == 0 {
 		t.Error("the stored forwarding table names no router")
 	}
-	bare, _ := s.Write(Meta{Device: "fw02"}, docs(t, false), 20)
+	bare, _ := s.Write(Meta{Device: "fw02"}, docs(t, false), nil, 20)
 	if _, err := bare.Zones(); err == nil {
 		t.Error("a snapshot without interfaces and fib cannot place zones")
 	}
 	noFIB := docs(t, true)
 	delete(noFIB, FIBDoc)
-	half, _ := s.Write(Meta{Device: "fw03"}, noFIB, 20)
+	half, _ := s.Write(Meta{Device: "fw03"}, noFIB, nil, 20)
 	if _, err := half.Zones(); err == nil || !strings.Contains(err.Error(), "forwarding table") {
 		t.Errorf("a snapshot without a fib must say so, got %v", err)
 	}
@@ -627,7 +754,7 @@ func TestZonesFromAStoredSnapshot(t *testing.T) {
 func TestNoPartialSnapshotIsLeft(t *testing.T) {
 	t.Parallel()
 	s := open(t)
-	if _, err := s.Write(Meta{Device: "fw01"}, docs(t, false), 20); err != nil {
+	if _, err := s.Write(Meta{Device: "fw01"}, docs(t, false), nil, 20); err != nil {
 		t.Fatal(err)
 	}
 	entries, _ := os.ReadDir(filepath.Join(s.root, "fw01"))
@@ -640,7 +767,7 @@ func TestNoPartialSnapshotIsLeft(t *testing.T) {
 
 func TestWriteRejectsAnUnsafeDeviceName(t *testing.T) {
 	t.Parallel()
-	if _, err := open(t).Write(Meta{Device: "../x"}, docs(t, false), 20); err == nil {
+	if _, err := open(t).Write(Meta{Device: "../x"}, docs(t, false), nil, 20); err == nil {
 		t.Error("a device name must never leave the store")
 	}
 }
@@ -663,9 +790,9 @@ func TestDefaultRoot(t *testing.T) {
 func TestAtOrBefore(t *testing.T) {
 	t.Parallel()
 	s := open(t)
-	a, _ := s.Write(Meta{Device: "fw01"}, docs(t, false), 20)     // 10:00
-	_, _ = s.Write(Meta{Device: "fw01"}, map[string][]byte{}, 20) // 10:01, no config
-	c, _ := s.Write(Meta{Device: "fw01"}, docs(t, false), 20)     // 10:02
+	a, _ := s.Write(Meta{Device: "fw01"}, docs(t, false), nil, 20)     // 10:00
+	_, _ = s.Write(Meta{Device: "fw01"}, map[string][]byte{}, nil, 20) // 10:01, no config
+	c, _ := s.Write(Meta{Device: "fw01"}, docs(t, false), nil, 20)     // 10:02
 	at := func(h, m int) time.Time { return time.Date(2026, 9, 28, h, m, 30, 0, time.UTC) }
 	if _, err := s.AtOrBefore("fw01", at(9, 59)); err == nil {
 		t.Error("before the first snapshot there is none")
@@ -687,9 +814,9 @@ func TestAtOrBefore(t *testing.T) {
 func TestAtOrBeforeSkipsADamagedSnapshot(t *testing.T) {
 	t.Parallel()
 	s := open(t)
-	a, _ := s.Write(Meta{Device: "fw01"}, docs(t, false), 20) // 10:00
-	b, _ := s.Write(Meta{Device: "fw01"}, docs(t, false), 20) // 10:01
-	c, _ := s.Write(Meta{Device: "fw01"}, docs(t, false), 20) // 10:02
+	a, _ := s.Write(Meta{Device: "fw01"}, docs(t, false), nil, 20) // 10:00
+	b, _ := s.Write(Meta{Device: "fw01"}, docs(t, false), nil, 20) // 10:01
+	c, _ := s.Write(Meta{Device: "fw01"}, docs(t, false), nil, 20) // 10:02
 	if err := os.Remove(filepath.Join(c.Dir, "meta.json")); err != nil {
 		t.Fatal(err)
 	}
@@ -726,7 +853,7 @@ func TestAtCreatesNothingUntilAWrite(t *testing.T) {
 	if _, err := os.Stat(root); !errors.Is(err, fs.ErrNotExist) {
 		t.Fatalf("At created the root: %v", err)
 	}
-	if _, err := s.Write(Meta{Device: "fw01"}, map[string][]byte{ConfigDoc: []byte("<config/>")}, 0); err != nil {
+	if _, err := s.Write(Meta{Device: "fw01"}, map[string][]byte{ConfigDoc: []byte("<config/>")}, nil, 0); err != nil {
 		t.Fatal(err)
 	}
 	if fi, err := os.Stat(root); err != nil || fi.Mode().Perm() != 0o700 {

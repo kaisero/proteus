@@ -49,7 +49,7 @@ func networkStore(t *testing.T, snaps ...snap) *store.Store {
 	for _, s := range snaps {
 		docs := map[string][]byte{store.ConfigDoc: fixture(t, "firewall-lab.xml")}
 		maps.Copy(docs, s.docs)
-		if _, err := st.Write(store.Meta{Device: s.dev, Serial: s.serial, FetchedFrom: s.from}, docs, 20); err != nil {
+		if _, err := st.Write(store.Meta{Device: s.dev, Serial: s.serial, FetchedFrom: s.from}, docs, nil, 20); err != nil {
 			t.Fatal(err)
 		}
 	}

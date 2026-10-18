@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/okaiser/proteus/internal/identity"
 	"github.com/okaiser/proteus/internal/index"
 )
 
@@ -31,6 +32,16 @@ func (sn Snapshot) ContentPath() string {
 		return ""
 	}
 	return contentPath(filepath.Dir(filepath.Dir(sn.Dir)), sn.Meta.AppVersion)
+}
+
+// IdentityPath returns where the identity file of this snapshot is stored, or
+// "" when the snapshot holds none (spec 2026-10-17 §4.1). The file may be gone
+// or damaged: the reader reports it (§4.2).
+func (sn Snapshot) IdentityPath() string {
+	if !sn.Meta.Identity {
+		return ""
+	}
+	return filepath.Join(sn.Dir, identity.FileName)
 }
 
 // ConfigPath returns where this snapshot's configuration is stored, or an error

@@ -69,7 +69,7 @@ func labEnvApps(t *testing.T, apps string, snaps ...snap) query.Env {
 			store.FIBDoc:        pathlab.Read(t, pathlab.OpdataFile(s.device+"-advanced-routing-fib.xml")),
 		}
 		meta := store.Meta{Device: s.device, Host: s.device + ".example.test", Serial: "00000000000" + string(rune('1'+i)), AppVersion: apps}
-		if _, err := st.Write(meta, docs, 20); err != nil {
+		if _, err := st.Write(meta, docs, nil, 20); err != nil {
 			t.Fatal(err)
 		}
 		now = now.Add(time.Minute)

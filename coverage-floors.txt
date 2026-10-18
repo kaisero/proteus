@@ -17,7 +17,7 @@ github.com/okaiser/proteus/internal/resolve  97.8
 github.com/okaiser/proteus/internal/index  98.3
 github.com/okaiser/proteus/internal/inventory  97.1
 github.com/okaiser/proteus/internal/fetch  100.0
-github.com/okaiser/proteus/internal/store  95.3
+github.com/okaiser/proteus/internal/store  95.8
 github.com/okaiser/proteus/internal/cli      97.4
 github.com/okaiser/proteus/internal/estate  100.0
 github.com/okaiser/proteus/internal/search  100.0

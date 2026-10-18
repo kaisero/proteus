@@ -265,7 +265,8 @@ func TestTheExportDirectoryIsNoDeviceName(t *testing.T) {
 
 // Every key of the defaults and of a device is classified: a credential the
 // export drops, or a setting it keeps. A new key fails here until it is
-// added to one list, so a new secret cannot reach the export unseen.
+// added to one list, so a new secret cannot reach the export unseen. Each
+// kept key is a key of its type, so the lists hold no stale key.
 func TestEveryExportKeyIsClassified(t *testing.T) {
 	t.Parallel()
 	credentials := []string{"username", "password", "password_env"}
@@ -274,13 +275,20 @@ func TestEveryExportKeyIsClassified(t *testing.T) {
 			"insecure_tls", "timeout", "snapshot_keep", "store", "max_snapshot_age", "output",
 			"log_level", "log_dir", "log_keep", "color", "export_inventory",
 		},
-		reflect.TypeFor[Device](): {"name", "host", "insecure_tls", "timeout", "labels", "ha_peer"},
+		reflect.TypeFor[Device](): {"name", "host", "insecure_tls", "timeout", "labels", "ha_peer", "identity"},
 	}
 	for ty, keep := range kept {
+		var keys []string
 		for _, f := range reflect.VisibleFields(ty) {
 			key, _, _ := strings.Cut(f.Tag.Get("yaml"), ",")
+			keys = append(keys, key)
 			if !slices.Contains(credentials, key) && !slices.Contains(keep, key) {
 				t.Errorf("%s: yaml key %q is not classified as a credential or a kept setting", ty.Name(), key)
+			}
+		}
+		for _, key := range keep {
+			if !slices.Contains(keys, key) {
+				t.Errorf("%s: the kept setting %q is no yaml key of the type", ty.Name(), key)
 			}
 		}
 	}

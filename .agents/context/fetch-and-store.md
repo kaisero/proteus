@@ -106,6 +106,7 @@ The step never returns an error, so the snapshot is stored in every case (D3):
 
 ```
 <root>/<device>/<timestamp>/<document>.xml
+<root>/<device>/<timestamp>/identity.json.gz
 <root>/<device>/<timestamp>/meta.json
 <root>/<device>/latest -> <timestamp>
 <root>/.content/<app-version>.v<trim>.xml.gz
@@ -113,6 +114,9 @@ The step never returns an error, so the snapshot is stored in every case (D3):
 
 The root is `$PROTEUS_STORE`, else `~/.local/share/proteus`. `Write` fills a
 hidden directory and renames it into place, so a reader never sees half a snapshot.
+The identity file that `Write` gets goes into that directory as
+`identity.FileName`, mode 0600, before `meta.json`, which then holds
+`"identity": true`; `Snapshot.IdentityPath` names it (spec 2026-10-17 §4.1).
 It makes that directory with `os.Mkdir`, so a second writer of the same id fails at
 once, and checks again for the id after the Mkdir. Only the creator removes the
 directory, and only before its rename. Each file is synced before the rename; the
@@ -219,10 +223,11 @@ func (s *Store) List(device string) ([]string, error)
 func (s *Store) PruneContent() error
 func (s *Store) Resolve(ref string) (Snapshot, error)
 func (s *Store) WithClock(now func() time.Time) *Store
-func (s *Store) Write(meta Meta, docs map[string][]byte, keep int) (Snapshot, error)
+func (s *Store) Write(meta Meta, docs map[string][]byte, identityFile []byte, keep int) (Snapshot, error)
 func (s *Store) WriteContent(version string, b []byte) error
 func (sn Snapshot) ConfigPath() (string, error)
 func (sn Snapshot) ContentPath() string
+func (sn Snapshot) IdentityPath() string
 func (sn Snapshot) Path(doc string) string
 func (sn Snapshot) Zones() (*index.ZoneSnapshot, error)
 func At(root string) *Store

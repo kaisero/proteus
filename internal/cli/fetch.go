@@ -187,7 +187,7 @@ func (f fetcher) store(_ context.Context, d *deviceFetch) (task.Result, error) {
 		}
 		meta.Documents = append(meta.Documents, dm)
 	}
-	sn, err := f.st.Write(meta, res.Docs, d.Target.SnapshotKeep)
+	sn, err := f.st.Write(meta, res.Docs, nil, d.Target.SnapshotKeep)
 	if err != nil {
 		return task.Result{}, err
 	}
