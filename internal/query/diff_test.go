@@ -397,15 +397,17 @@ func TestIdentityChangesOfUsersAndSources(t *testing.T) {
 	t.Parallel()
 	before := identityFixture(t)
 	after := identityFixture(t)
-	after.Users = append(after.Users[1:], identity.User{Name: `example.com\eve`, Groups: []string{"team-x", "engineering"}})
-	after.Users[0].Groups = after.Users[0].Groups[1:] // example.com\bob leaves domain users
+	before.Users = before.Users[:3]                           // dave comes in after
+	after.Users = after.Users[1:]                             // alice goes
+	after.Users[0].Groups = after.Users[0].Groups[1:]         // example.com\bob leaves domain users
+	after.Users[2].Groups = []string{"team-x", "engineering"} // example.com\dave
 	after.Sources.LDAP = append(after.Sources.LDAP, identity.LDAPSource{Name: "branch", Domain: "example.com", Base: "ou=branch,dc=example,dc=com", Groups: 1})
 	got := identityChanges(identity.New(before), identity.New(after))
 	want := []drift.Change{
 		{Op: drift.Added, Kind: "identity source", Name: "ldap:branch", New: "domain=example.com base=ou=branch,dc=example,dc=com groups=1"},
 		{Op: drift.Removed, Kind: "identity user", Name: `example.com\alice`, Old: "cn=domain users,cn=users,dc=example,dc=com; cn=payroll,ou=groups,dc=example,dc=com"},
 		{Op: drift.Changed, Kind: "identity user", Name: `example.com\bob`, Fields: []drift.FieldChange{{Path: "group", Old: "cn=domain users,cn=users,dc=example,dc=com"}}},
-		{Op: drift.Added, Kind: "identity user", Name: `example.com\eve`, New: "engineering; team-x"},
+		{Op: drift.Added, Kind: "identity user", Name: `example.com\dave`, New: "engineering; team-x"},
 	}
 	if !slices.EqualFunc(got, want, sameChange) {
 		t.Errorf("changes:\n%+v\nwant:\n%+v", got, want)

@@ -901,3 +901,23 @@ func TestSearchWithIdentityDataKeepsOtherTerms(t *testing.T) {
 		}
 	}
 }
+
+// With --show identity, the object stage is hidden, so the identity stage
+// shows the groups of the user that the object findings would show.
+func TestSearchShowIdentityKeepsTheGroups(t *testing.T) {
+	t.Parallel()
+	got := run(t, "firewall-identity.xml", "vsys1", Query{
+		Term: `example.com\carol`, Show: []Stage{StageIdentity}, Providers: index.Providers{Users: identityData(t)},
+	})
+	for _, want := range []string{
+		"identity identity-group cn=domain users,cn=users,dc=example,dc=com  ldap:example.com, 3 members",
+		"identity identity-group engineering  xmlapi, 1 members",
+		"identity identity-group dug-a  dug, 1 members",
+		"identity identity-group dug-ab  dug, 1 members",
+		`identity identity-user example.com\carol  directory user`,
+	} {
+		if !has(got, want) {
+			t.Errorf("missing %q in:\n%s", want, dump(got))
+		}
+	}
+}

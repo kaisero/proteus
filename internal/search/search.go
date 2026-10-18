@@ -31,6 +31,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/okaiser/proteus/internal/card"
 	"github.com/okaiser/proteus/internal/config"
 	"github.com/okaiser/proteus/internal/identity"
 	"github.com/okaiser/proteus/internal/index"
@@ -64,10 +65,11 @@ const (
 var Stages = []Stage{StageObject, StageIdentity, StageGroup, StageReference, StageLiteral}
 
 // The kinds of the findings of the stage identity (spec 2026-10-17 §6.1).
+// A user and a group have the kinds of their lookup cards.
 const (
-	KindIdentityUser  = "identity-user"  // a user of the identity data
-	KindIdentityGroup = "identity-group" // a group or a DUG of the identity data
-	KindMapping       = "mapping"        // a user-to-IP mapping, by its address
+	KindIdentityUser  = card.KindIdentityUser  // a user of the identity data
+	KindIdentityGroup = card.KindIdentityGroup // a group or a DUG of the identity data
+	KindMapping       = "mapping"              // a user-to-IP mapping, by its address
 )
 
 // Query is one search.
@@ -323,11 +325,15 @@ func (s *searcher) identity() {
 	}
 }
 
-// shownByObjects is the users and groups that the object stage found, in
+// shownByObjects is the users and groups that the object stage shows, in
 // lower case: each by the name a rule writes, and by the name of the user or
-// group of the data that the name names (M11, M12, N2).
+// group of the data that the name names (M11, M12, N2). When Show hides the
+// object stage, it shows none, and the stage identity shows them all.
 func (s *searcher) shownByObjects(d *identity.Data) map[string]bool {
 	shown := map[string]bool{}
+	if len(s.q.Show) > 0 && !slices.Contains(s.q.Show, StageObject) {
+		return shown
+	}
 	for _, f := range s.found {
 		if f.Stage != StageObject || (f.Kind != "user" && f.Kind != "user-group" && f.Kind != "dynamic-user-group") {
 			continue
