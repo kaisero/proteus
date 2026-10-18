@@ -3,11 +3,11 @@
   "properties": {
     "value": {
       "type": "string",
-      "description": "the value or name to search for: an address, a prefix, a port, a name or an application"
+      "description": "the value or name to search for: an address, a prefix, a port, a name, an application, a user or a group"
     },
     "kind": {
       "type": "string",
-      "description": "an object kind to search, such as address or service; left out, every kind"
+      "description": "an object kind to search, such as address or service, or identity-user, identity-group or mapping; left out, every kind"
     },
     "device": {
       "type": [

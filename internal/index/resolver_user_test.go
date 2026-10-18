@@ -2,6 +2,7 @@ package index
 
 import (
 	"encoding/json"
+	"fmt"
 	"maps"
 	"os"
 	"slices"
@@ -277,6 +278,40 @@ func TestUserResolverDUGFromU3(t *testing.T) {
 	if _, rep := reached(idx, identity.New(f), `example.com\carol`); !slices.Contains(rep.Hits,
 		Hit{Name: "dug-a", Kind: "dynamic-user-group", Scope: idx.Scope(), Via: "dug, 1 members"}) {
 		t.Errorf("hits %+v", rep.Hits)
+	}
+}
+
+// A DUG that the group list lacks takes its member count from the data, which
+// counts it once: a resolve reads no list of members, so a DUG of 3000
+// members costs it no more allocations than a DUG of 300. The hit keeps its
+// Via text.
+//
+// It does not run in parallel: it counts the allocations of the process. It
+// does not run with the race detector, whose count varies.
+//
+//nolint:paralleltest // it counts allocations
+func TestUserResolverCountsNoDUGMembers(t *testing.T) {
+	if raceEnabled {
+		t.Skip("the race detector allocates on its own")
+	}
+	idx := identityIndex(t)
+	allocs := func(members int) float64 {
+		f := idFile(t)
+		f.Groups = slices.DeleteFunc(f.Groups, func(g identity.Group) bool { return g.Name == "dug-a" })
+		for i := range members - 1 { // carol is the first member
+			f.Users = append(f.Users, identity.User{Name: fmt.Sprintf(`example.com\member-%04d`, i), Groups: []string{"dug-a"}})
+		}
+		with := idx.With(Providers{Users: identity.New(f)})
+		_, rep := with.Candidates(SourceUser, `example.com\carol`)
+		if h, _ := memberHit(rep, "dug-a"); h.Via != fmt.Sprintf("dug, %d members", members) {
+			t.Errorf("%d members: hit %+v", members, h)
+		}
+		return testing.AllocsPerRun(20, func() { with.Candidates(SourceUser, `example.com\carol`) })
+	}
+	// Both counts are 256 or more: a smaller int goes into the Via text
+	// without an allocation.
+	if few, many := allocs(300), allocs(3000); few != many {
+		t.Errorf("a resolve allocates %.0f times for a DUG of 300 members and %.0f for one of 3000", few, many)
 	}
 }
 

@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The MCP tools read the User-ID data.** `simulate_policy`, `search` and `lookup`
+  now answer with each snapshot's identity data, as the commands do; the identity
+  data counts against the cache size.
 - **Find a user, a group or a mapped address.** `search` and `lookup` now show a
   user's groups and addresses, a group's members, and the user of an address;
   `snapshot diff` reports changed group membership.

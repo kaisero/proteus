@@ -28,7 +28,8 @@ const (
 // Its queries read names as the device compares them, in any case: user
 // names (N1, X2) and group names (M11, X2). New builds their lower-case maps
 // once. A query finds a name in a map; InGroup then reads the groups of one
-// user, and only Members reads the groups of every user.
+// user, and only Members reads the groups of every user. MemberCount reads
+// the count that New takes.
 type Data struct {
 	file File
 
@@ -37,7 +38,7 @@ type Data struct {
 	users  map[string]int      // primary name -> user
 	alts   map[string]int      // alternate name -> user
 	emails map[string]int      // email -> user
-	held   map[string]bool     // the groups and DUGs that U3 lists for the users
+	held   map[string]int      // the groups and DUGs that U3 lists for the users -> their users
 	groups map[string]int      // group name -> group
 	cns    map[string][]int    // the cn of an LDAP group DN -> groups: the <cn> of a short name (M12)
 	dugs   map[string]int      // DUG name -> DUG
@@ -138,22 +139,30 @@ type Counts struct {
 	Memberships int
 	Mappings    int
 	Tags        int // the entries of U9: users with registered tags
+	TagPairs    int // the user-tag pairs of U9: the tags of every entry
 }
 
-// Counts counts the users, groups, memberships, mappings and tag entries.
+// Counts counts the users, groups, memberships, mappings, tag entries and
+// user-tag pairs.
 func (d *Data) Counts() Counts {
 	c := Counts{Users: len(d.file.Users), Groups: len(d.file.Groups), Mappings: len(d.file.Mappings), Tags: len(d.file.Tags)}
 	for _, u := range d.file.Users {
 		c.Memberships += len(u.Groups)
 	}
+	for _, t := range d.file.Tags {
+		c.TagPairs += len(t.Tags)
+	}
 	return c
 }
 
 // index builds the lower-case maps of the queries. Of two entries with one
-// name in any case, the first in the file counts.
+// name in any case, the first in the file counts. It counts the users of each
+// group that U3 lists: a user that lists a group in two cases counts once
+// (M11).
 func (d *Data) index() {
 	d.users, d.alts, d.emails = map[string]int{}, map[string]int{}, map[string]int{}
-	d.held = map[string]bool{}
+	d.held = map[string]int{}
+	counted := map[string]int{} // group -> the last user counted, plus one
 	for i, u := range d.file.Users {
 		first(d.users, u.Name, i)
 		for _, a := range u.Alt {
@@ -161,7 +170,10 @@ func (d *Data) index() {
 		}
 		first(d.emails, u.Email, i)
 		for _, g := range u.Groups {
-			d.held[strings.ToLower(g)] = true
+			if k := strings.ToLower(g); counted[k] != i+1 {
+				counted[k] = i + 1
+				d.held[k]++
+			}
 		}
 	}
 	d.groups, d.cns = map[string]int{}, map[string][]int{}
@@ -347,6 +359,12 @@ func (d *Data) Members(group string) []string {
 	return out
 }
 
+// MemberCount is the number of users that Members gives for a group, without
+// the list: New counts them once (spec 2026-10-17 §8).
+func (d *Data) MemberCount(group string) int {
+	return d.held[strings.ToLower(d.groupName(group))]
+}
+
 // TagsOf gives the registered tags of a user, by the user name of the
 // registration in any case, as observed on fw01, PAN-OS 11.2.5 (spec
 // 2026-10-17 M8, X2). Two entries of one user in two cases give the tags of
@@ -396,7 +414,7 @@ func (d *Data) Known(name string) bool {
 	}
 	k := strings.ToLower(name)
 	_, mapped := d.mapped[k]
-	return mapped || d.held[k]
+	return mapped || d.held[k] > 0
 }
 
 // MemberKind is what a source-user member of a rule names (spec 2026-10-17

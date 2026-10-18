@@ -41,7 +41,7 @@
           "items": {
             "type": "string"
           },
-          "description": "the object kinds searched; empty for every kind"
+          "description": "the kinds searched: object kinds, identity-user, identity-group or mapping; empty for every kind"
         },
         "limit": {
           "type": "integer",
@@ -108,11 +108,11 @@
           "items": {
             "type": "string"
           },
-          "description": "the finding stages shown; empty for every stage"
+          "description": "the finding stages shown: objects, identity, groups, refs or literals; empty for every stage"
         },
         "term": {
           "type": "string",
-          "description": "the value or name searched for"
+          "description": "the value or name searched for: an address, a prefix, a port, a name, an application, a user or a group"
         }
       },
       "description": "the question as answered, with the flow as simulated",

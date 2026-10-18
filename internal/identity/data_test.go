@@ -294,6 +294,28 @@ func TestMembers(t *testing.T) {
 	}
 }
 
+// §8, U3: MemberCount is the length of Members, which New counts once, so a
+// caller reads no list of members. A user that lists a group twice, in two
+// cases, counts once (M11). A short name counts the members of its group
+// (M12).
+func TestMemberCount(t *testing.T) {
+	t.Parallel()
+	d := fixtureWith(t, func(f *identity.File) {
+		f.Users[0].Groups = append(f.Users[0].Groups, strings.ToUpper(domainUsers))
+	})
+	for _, name := range []string{
+		domainUsers, "CN=DOMAIN USERS,CN=USERS,DC=EXAMPLE,DC=COM", `example.com\domain users`,
+		"DUG-A", "dug-ab", "engineering", emptyGroup, "nobody", `example-cie\cloud-team`,
+	} {
+		if got, want := d.MemberCount(name), len(d.Members(name)); got != want {
+			t.Errorf("MemberCount(%q) = %d, want %d", name, got, want)
+		}
+	}
+	if got := d.MemberCount(domainUsers); got != 3 {
+		t.Errorf("MemberCount(domain users) = %d, want 3", got)
+	}
+}
+
 // M8, X2: the registered tags of a user, by the name of the registration in
 // any case. They feed lookup only (D13). Two registrations of one user in two
 // cases give the tags of both, each tag once in its own case (M14). The

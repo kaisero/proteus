@@ -3,8 +3,8 @@
 // generated from its types at start, the device enum from the exported
 // inventory, resources and instructions. A receiving middleware audits each
 // call and turns a panic into call.internal. A cache keeps each snapshot's
-// configuration, indexes and operational tables for every call, and bounds
-// the loads that fill it (§4.7, §4.8). A limiter bounds the calls that run
+// configuration, indexes, operational tables and identity data for every
+// call, and bounds the loads that fill it (§4.7, §4.8). A limiter bounds the calls that run
 // and wait, and answers call.busy and call.timeout. Serve runs it over any SDK
 // transport; Streams, over standard input and output, is the one the command
 // uses without --http. ServeHTTP runs it over Streamable HTTP behind a Host

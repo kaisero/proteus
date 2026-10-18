@@ -102,7 +102,7 @@ func TestIdentityStepAsksEveryPartInOrder(t *testing.T) {
 	}
 	data := identityData(t, s)
 	f := data.File()
-	if got, want := data.Counts(), (identity.Counts{Users: 4, Groups: 8, Memberships: 9, Mappings: 6, Tags: 2}); got != want {
+	if got, want := data.Counts(), (identity.Counts{Users: 4, Groups: 8, Memberships: 9, Mappings: 6, Tags: 2, TagPairs: 3}); got != want {
 		t.Errorf("counts = %+v, want %+v", got, want)
 	}
 	// U6 statistics and state join by profile, so each LDAP group takes its

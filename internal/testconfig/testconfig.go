@@ -3,8 +3,9 @@
 // group trees only appear at a size no fixture in this repository has. The
 // index and card benchmarks read the same file, so their figures describe one
 // configuration. It also writes the App-ID content fixture and the identity
-// fixture, so the tests of every package read one file of each. It imports
-// testing; only tests import it. It does not import internal/appid or
+// fixture, so the tests of every package read one file of each, and the
+// generated content and identity files of the benchmark of the MCP cache. It
+// imports testing; only tests import it. It does not import internal/appid or
 // internal/identity, so the tests of those packages can use it.
 package testconfig
 
@@ -133,6 +134,59 @@ func Content(tb testing.TB, dst string) {
 func Identity(tb testing.TB, dst string) {
 	tb.Helper()
 	writeGzipped(tb, dst, "identity", "identity.json")
+}
+
+// IdentityFile is a generated identity file in format 1 (spec 2026-10-17
+// §4.1), gzipped, with every part complete. Its users example.com\member-00000
+// … each have an alternate name and an email, groupsPerUser distinct LDAP
+// groups of a list of max(groupsPerUser, users/5), and one registered tag.
+// Its mappings map the addresses 2001:db8::1 … to the users in the form
+// example\member-00000 …, as a device stores them (M2): the documentation
+// prefix holds 100,000 addresses, and a parsed address keeps as many bytes
+// for IPv6 as for IPv4. The benchmark of the MCP cache measures what it
+// retains (§8).
+func IdentityFile(tb testing.TB, users, groupsPerUser, mappings int) []byte {
+	tb.Helper()
+	groups := max(groupsPerUser, users/5)
+	members := make([]int, groups)
+	var b strings.Builder
+	sep := func(i int) {
+		if i > 0 {
+			b.WriteByte(',')
+		}
+	}
+	fmt.Fprintf(&b, `{"format":1,"taken_at":"2026-10-17T20:00:00Z","sources":{"ldap":[{"name":"example.com",`+
+		`"domain":"example.com","base":"dc=example,dc=com","groups":%d}],"cie":[]},"users":[`, groups)
+	for i := range users {
+		sep(i)
+		fmt.Fprintf(&b, `{"name":"example.com\\member-%05d","alt":["member-%05d@example.com"],`+
+			`"email":"member-%05d@example.com","groups":[`, i, i, i)
+		for j := range groupsPerUser {
+			sep(j)
+			g := (i + j) % groups
+			members[g]++
+			fmt.Fprintf(&b, `"cn=group-%04d,ou=groups,dc=example,dc=com"`, g)
+		}
+		b.WriteString(`]}`)
+	}
+	b.WriteString(`],"groups":[`)
+	for g, n := range members {
+		sep(g)
+		fmt.Fprintf(&b, `{"name":"cn=group-%04d,ou=groups,dc=example,dc=com","source":"ldap:example.com","members":%d}`, g, n)
+	}
+	b.WriteString(`],"dugs":[],"tags":[`)
+	for i := range users {
+		sep(i)
+		fmt.Fprintf(&b, `{"user":"example.com\\member-%05d","tags":["tag-%d"]}`, i, i%10)
+	}
+	b.WriteString(`],"mappings":[`)
+	for i := range mappings {
+		sep(i)
+		fmt.Fprintf(&b, `{"ip":"2001:db8::%x:%x","user":"example\\member-%05d","type":"XMLAPI","timeout":14400}`,
+			(i+1)>>16, (i+1)&0xffff, i%max(users, 1))
+	}
+	b.WriteString("],\"parts_missing\":[]}\n")
+	return gzipped([]byte(b.String()))
 }
 
 // writeGzipped gzips a file below testdata to dst, mode 0600.

@@ -36,7 +36,7 @@
     },
     "user": {
       "type": "string",
-      "description": "the source user, such as corp\\alice; it decides the rules that name a user or a group of the user snapshot"
+      "description": "the source user: a primary name such as example.com\\alice, a UPN or an email; the mapping of the source address wins, as on the firewall"
     },
     "device": {
       "type": "string",

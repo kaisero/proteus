@@ -2,10 +2,12 @@ package mcp
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"net/netip"
 	"os"
 	"path/filepath"
@@ -48,6 +50,13 @@ func labEnv(t *testing.T, snaps ...snap) query.Env {
 // for none. A version's file holds the App-ID fixture.
 func labEnvApps(t *testing.T, apps string, snaps ...snap) query.Env {
 	t.Helper()
+	return labEnvWith(t, apps, nil, snaps...)
+}
+
+// labEnvWith is labEnvApps whose snapshots each hold the identity file ids;
+// nil for none.
+func labEnvWith(t *testing.T, apps string, ids []byte, snaps ...snap) query.Env {
+	t.Helper()
 	now := clock
 	root := t.TempDir()
 	st, err := store.Open(root)
@@ -69,7 +78,7 @@ func labEnvApps(t *testing.T, apps string, snaps ...snap) query.Env {
 			store.FIBDoc:        pathlab.Read(t, pathlab.OpdataFile(s.device+"-advanced-routing-fib.xml")),
 		}
 		meta := store.Meta{Device: s.device, Host: s.device + ".example.test", Serial: "00000000000" + string(rune('1'+i)), AppVersion: apps}
-		if _, err := st.Write(meta, docs, nil, 20); err != nil {
+		if _, err := st.Write(meta, docs, ids, 20); err != nil {
 			t.Fatal(err)
 		}
 		now = now.Add(time.Minute)
@@ -1122,5 +1131,101 @@ func TestPolicyToolHoldsAnUnknownApplicationAtTheHop(t *testing.T) {
 	}
 	if call := rec.last(t); call.Status != StatusOK {
 		t.Errorf("audit %+v", call)
+	}
+}
+
+// userRule allows the flows of example.com\alice, between any zones.
+const userRule = `<entry name="allow-alice"><from><member>any</member></from><to><member>any</member></to>` +
+	`<source><member>any</member></source><source-user><member>example.com\alice</member></source-user>` +
+	`<destination><member>any</member></destination>` +
+	`<application><member>any</member></application><service><member>any</member></service>` +
+	`<action>allow</action></entry>`
+
+// userLab is the path lab whose devices hold userRule. With mapped, each
+// snapshot holds the identity fixture, whose mapping of example.com\alice
+// is moved to the lab's source address.
+func userLab(t *testing.T, mapped bool) query.Env {
+	t.Helper()
+	var snaps []snap
+	for _, d := range pathlab.Devices {
+		cfg := bytes.Replace(pathlab.Read(t, pathlab.ConfigFile(d)), []byte("</zone>"),
+			[]byte("</zone><rulebase><security><rules>"+userRule+"</rules></security></rulebase>"), 1)
+		path := filepath.Join(t.TempDir(), d+".xml")
+		if err := os.WriteFile(path, cfg, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		snaps = append(snaps, snap{d, path})
+	}
+	if !mapped {
+		return labEnv(t, snaps...)
+	}
+	raw := bytes.Replace(pathlab.Read(t, filepath.Join("..", "..", "testdata", "identity", "identity.json")),
+		[]byte(`"198.51.100.11"`), []byte(`"`+pathlab.Source+`"`), 1)
+	var gz bytes.Buffer
+	zw := gzip.NewWriter(&gz)
+	if _, err := zw.Write(raw); err != nil {
+		t.Fatal(err)
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return labEnvWith(t, "", gz.Bytes(), snaps...)
+}
+
+// simulate_policy reads each snapshot's identity data through the cache: the
+// mapping of the source address gives example.com\alice, so allow-alice
+// decides on the first hop, and the full answer says where the user came
+// from. The cache holds the data: a second call answers the same after the
+// files go. Without the data, the rule that names a user stays in doubt (spec
+// 2026-10-17 §4.2, §5.1, §5.5, §8).
+func TestPolicyToolEvaluatesTheUser(t *testing.T) {
+	t.Parallel()
+	ask := func(cs *sdk.ClientSession) map[string]any {
+		t.Helper()
+		res, err := cs.CallTool(context.Background(), &sdk.CallToolParams{Name: "simulate_policy", Arguments: map[string]any{
+			"source": pathlab.Source, "destination": pathlab.Destination, "port": 443, "detail": "full",
+		}})
+		if err != nil || res.IsError {
+			t.Fatalf("%v %s", err, text(res))
+		}
+		var out struct {
+			Envelope struct {
+				Results []map[string]any `json:"results"`
+			} `json:"envelope"`
+		}
+		b, err := json.Marshal(res.StructuredContent)
+		if err == nil {
+			err = json.Unmarshal(b, &out)
+		}
+		if err != nil || len(out.Envelope.Results) != 1 {
+			t.Fatalf("%v: %s", err, text(res))
+		}
+		return out.Envelope.Results[0]
+	}
+	env := userLab(t, true)
+	cs := connect(t, env)
+	for call := range 2 {
+		r := ask(cs)
+		hops, _ := r["hops"].([]any)
+		if r["verdict"] != "allowed" || len(hops) == 0 {
+			t.Fatalf("call %d: verdict %v, %d hops", call, r["verdict"], len(hops))
+		}
+		sec, _ := hops[0].(map[string]any)["checks"].(map[string]any)["security"].(map[string]any)
+		user, _ := sec["user"].(map[string]any)
+		if sec["rule"] != "allow-alice" || user["name"] != `example.com\alice` || user["from"] != "mapping" || user["ip"] != pathlab.Source {
+			t.Errorf("call %d, first hop: rule %v, user %v", call, sec["rule"], sec["user"])
+		}
+		for _, d := range pathlab.Devices {
+			sn, err := env.Store.Latest(d)
+			if err == nil {
+				err = os.Remove(sn.IdentityPath())
+			}
+			if err != nil && !errors.Is(err, fs.ErrNotExist) {
+				t.Fatal(err)
+			}
+		}
+	}
+	if r := ask(connect(t, userLab(t, false))); r["verdict"] == "allowed" {
+		t.Errorf("without the identity data: %v", r["verdict"])
 	}
 }

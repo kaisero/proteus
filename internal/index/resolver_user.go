@@ -199,11 +199,11 @@ func memberKind(mem identity.Member) string {
 
 // groupVia names the source of a group and its member count, as a search
 // finding shows a group (spec 2026-10-17 §6.1). A DUG that the group list
-// lacks gets its count from U3.
+// lacks gets its count from U3, as the data counted it once.
 func groupVia(d *identity.Data, mem identity.Member) string {
 	g, ok := d.Group(mem.Name)
 	if !ok {
-		g.Members = len(d.Members(mem.Name))
+		g.Members = d.MemberCount(mem.Name)
 	}
 	return fmt.Sprintf("%s, %d members", mem.Source, g.Members)
 }

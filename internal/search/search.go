@@ -132,9 +132,6 @@ type searcher struct {
 	// can have several: a tag and an address group, an address group and a
 	// service group.
 	names map[string]map[string]bool
-	// counts are the member counts of the groups of the identity data, by
-	// lower-case name, once a group that groups[] lacks needs one.
-	counts map[string]int
 }
 
 // foundAs records a name as found with a kind.
@@ -360,10 +357,11 @@ func mappingVia(m identity.Mapping) string {
 
 // groupVia names the source of a group and its member count, as the user
 // value space names a group that a rule names (spec 2026-10-17 §6.1). A group
-// that groups[] lacks counts the users whose groups hold it (U3).
+// that groups[] lacks counts the users whose groups hold it (U3), as the data
+// counted them once (MemberCount).
 func (s *searcher) groupVia(g identity.Group) string {
 	if g.Members < 0 {
-		g.Members = s.memberCount(g.Name)
+		g.Members = s.q.Providers.Users.MemberCount(g.Name)
 	}
 	return fmt.Sprintf("%s, %d members", g.Source, g.Members)
 }
@@ -375,25 +373,6 @@ func (s *searcher) unlistedGroup(d *identity.Data, name string) identity.Group {
 	f := d.File()
 	source := identity.Classify(name, f.Sources.LDAP, !d.Complete(identity.PartLDAP), f.DUGs, f.Sources.CIE, !d.Complete(identity.PartCIE))
 	return identity.Group{Name: name, Source: source, Members: -1}
-}
-
-// memberCount counts the users whose groups hold a group, in any case (U3,
-// M11, X2). It reads the groups of every user once per search, not once per
-// group.
-func (s *searcher) memberCount(group string) int {
-	if s.counts == nil {
-		s.counts = map[string]int{}
-		for _, u := range s.q.Providers.Users.File().Users {
-			seen := map[string]bool{}
-			for _, g := range u.Groups {
-				if k := strings.ToLower(g); !seen[k] {
-					seen[k] = true
-					s.counts[k]++
-				}
-			}
-		}
-	}
-	return s.counts[strings.ToLower(group)]
 }
 
 // addressObjects matches an address, prefix or range term against address objects.

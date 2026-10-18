@@ -235,11 +235,11 @@ func TestJSONKeysSeeEveryField(t *testing.T) {
 }
 
 // §8: the fixture holds 4 users, 8 groups, 8 user-group pairs (DUGs among
-// them, D13), 6 mappings and 2 tag entries.
+// them, D13), 6 mappings, and 2 tag entries with 3 user-tag pairs.
 func TestCountsHoldTheMemberships(t *testing.T) {
 	t.Parallel()
 	got := loadFixture(t).Counts()
-	want := identity.Counts{Users: 4, Groups: 8, Memberships: 8, Mappings: 6, Tags: 2}
+	want := identity.Counts{Users: 4, Groups: 8, Memberships: 8, Mappings: 6, Tags: 2, TagPairs: 3}
 	if got != want {
 		t.Errorf("counts %+v, want %+v", got, want)
 	}

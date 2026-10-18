@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"io"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/okaiser/proteus/internal/appid"
 	"github.com/okaiser/proteus/internal/config"
+	"github.com/okaiser/proteus/internal/identity"
 	"github.com/okaiser/proteus/internal/resolve"
 )
 
@@ -176,5 +178,35 @@ func TestAppContentHasTheCount(t *testing.T) {
 	}
 	if n := len(raw); n < 5<<20 || n > 7<<20 {
 		t.Errorf("5552 applications take %d bytes, not about 6 MB", n)
+	}
+}
+
+// IdentityFile reads as an identity file with the counts asked: groupsPerUser
+// groups and one tag entry per user, every part complete (spec 2026-10-17
+// §8). A mapping keeps its user in the NetBIOS form, as a device stores it
+// (M2), and each user holds distinct groups.
+func TestIdentityFileHasTheCounts(t *testing.T) {
+	t.Parallel()
+	d, err := identity.Read(bytes.NewReader(IdentityFile(t, 10, 3, 100)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c := d.Counts(); c.Users != 10 || c.Memberships != 30 || c.Tags != 10 || c.TagPairs != 10 || c.Mappings != 100 || c.Groups < 3 {
+		t.Errorf("counts %+v, want 10 users, 30 memberships, 10 tag entries, 100 mappings", c)
+	}
+	for _, p := range []string{identity.PartLDAP, identity.PartGroups, identity.PartUserGroups, identity.PartTags, identity.PartMappings} {
+		if !d.Complete(p) {
+			t.Errorf("the part %s is not complete", p)
+		}
+	}
+	groups := d.GroupsOf(`example.com\member-00009`)
+	if len(groups) != 3 || groups[0] == groups[1] || groups[1] == groups[2] || groups[0] == groups[2] {
+		t.Errorf("groups of member-00009: %q", groups)
+	}
+	if m, ok := d.Mapping(netip.MustParseAddr("2001:db8::64")); !ok || m.User != `example\member-00009` {
+		t.Errorf("the mapping of the 100th address: %+v, %v", m, ok)
+	}
+	if got := d.TagsOf(`example.com\member-00009`); len(got) != 1 {
+		t.Errorf("tags of member-00009: %q", got)
 	}
 }
