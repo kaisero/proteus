@@ -951,3 +951,59 @@ func TestLabFilesHoldNoLabData(t *testing.T) {
 		t.Errorf("git tracks lab files with real data:\n%s", out)
 	}
 }
+
+// U18: with the values filled, no user check and no resolved flow names a
+// member of the lab XML API group, in any case.
+func TestRefuseXMLAPIMembers(t *testing.T) {
+	t.Parallel()
+	login := []byte(`<uid-message><payload><groups><entry name="uid-lab-xmlapi"><members>` +
+		`<entry name="${USER_X}"/><entry name="other\ghost"/></members></entry></groups></payload></uid-message>`)
+	vars := map[string]string{"USER_X": `example.com\xavier`}
+	ok := []Flow{
+		{Case: "u", Check: "user", User: `example.com\alice`, Subject: "alice@example.com"},
+		{Case: "p", Check: "policy", User: `example.com\xavier`}, // a policy flow may name a member (M7)
+	}
+	if err := refuseXMLAPIMembers(ok, login, vars); err != nil {
+		t.Errorf("no member named: %v", err)
+	}
+	for name, f := range map[string]Flow{
+		"user check":      {Case: "u", Check: "user", User: `EXAMPLE.COM\xavier`, Subject: "x@example.com"},
+		"user check UPN":  {Case: "u", Check: "user", User: `example.com\bob`, Subject: `other\ghost`},
+		"resolved flow":   {Case: "r", Check: "policy", User: "x@example.com", Subject: `example.com\xavier`, Expect: "resolved"},
+		"resolved by UPN": {Case: "r", Check: "policy", User: `other\ghost`, Subject: `example.com\bob`, Expect: "resolved"},
+	} {
+		if err := refuseXMLAPIMembers([]Flow{f}, login, vars); err == nil || !strings.Contains(err.Error(), "member of the lab XML API group") {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	if err := refuseXMLAPIMembers(ok, []byte("not xml"), vars); err == nil {
+		t.Error("a broken login file gave no error")
+	}
+	if err := refuseXMLAPIMembers(ok, login, nil); err == nil {
+		t.Error("an unfilled login file gave no error")
+	}
+}
+
+// M18: another try helps only where Compare reads the device answer.
+func TestDeviceDecides(t *testing.T) {
+	t.Parallel()
+	rule := Answer{Rule: "r", Action: "allow"}
+	for _, c := range []struct {
+		f    Flow
+		p    Answer
+		perr error
+		want bool
+	}{
+		{Flow{Check: "policy"}, rule, nil, true},
+		{Flow{Check: "policy", Expect: "resolved"}, rule, nil, true},
+		{Flow{Check: "policy", Expect: "unknown-inferred"}, rule, nil, false},
+		{Flow{Check: "policy", Expect: "doubt"}, rule, nil, false},
+		{Flow{Check: "policy"}, Answer{}, nil, false}, // proteus undecided
+		{Flow{Check: "policy"}, rule, fmt.Errorf("boom"), false},
+		{Flow{Check: "user"}, rule, nil, false},
+	} {
+		if got := deviceDecides(c.f, c.p, c.perr); got != c.want {
+			t.Errorf("%+v %+v %v: %v, want %v", c.f, c.p, c.perr, got, c.want)
+		}
+	}
+}

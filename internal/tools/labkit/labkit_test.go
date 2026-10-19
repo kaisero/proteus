@@ -553,6 +553,10 @@ func TestLabDataInCatchesIPv6(t *testing.T) {
 	if got := LabDataIn(text, nets); !slices.Equal(got, []string{"address fe80::1", "address 2001:db9::7"}) {
 		t.Errorf("LabDataIn = %q", got)
 	}
+	// Hex letters next to an address do not hide it.
+	if got := LabDataIn("cafe2001:db9::7 and 2001:db9::8beef", nets); !slices.Equal(got, []string{"address 2001:db9::7", "address 2001:db9::8bee"}) {
+		t.Errorf("LabDataIn next to hex letters = %q", got)
+	}
 	// Without the IPv6 range, every IPv6 address is lab data.
 	if got := LabDataIn("2001:db8::5", nets[:1]); !slices.Equal(got, []string{"address 2001:db8::5"}) {
 		t.Errorf("LabDataIn without the IPv6 range = %q", got)
@@ -573,6 +577,10 @@ func TestLabDomainsInCatchesDomains(t *testing.T) {
 	// The allowed domains are the caller's.
 	if got := LabDomainsIn("alice@example.com", nil); !slices.Equal(got, []string{"domain example.com"}) {
 		t.Errorf("LabDomainsIn without allowed domains = %q", got)
+	}
+	// md, sh and py are country domains: such a name is a file only after a /.
+	if got := LabDomainsIn("evil.md, corp.sh, docs/lab/app-id-lab.md and scripts/x.sh", allowed); !slices.Equal(got, []string{"domain evil.md", "domain corp.sh"}) {
+		t.Errorf("LabDomainsIn with country domains = %q", got)
 	}
 	// An example.com look-alike is no subdomain.
 	if got := LabDomainsIn("notexample.com", allowed); !slices.Equal(got, []string{"domain notexample.com"}) {

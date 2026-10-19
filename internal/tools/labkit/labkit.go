@@ -366,12 +366,34 @@ func LabDataIn(text string, nets []netip.Prefix) []string {
 	}
 	// A time such as 12:30:35 holds colons too; it reads as no address.
 	for _, s := range ipv6.FindAllString(text, -1) {
-		outside(s)
+		outside(ipv6Within(s))
 	}
 	for _, s := range serial.FindAllString(text, -1) {
 		out = append(out, "serial "+s)
 	}
 	return out
+}
+
+// ipv6Within is the address in a run of hex digits and colons. Hex letters
+// can touch an address, as in cafe2001:db8::1, so a run that does not read
+// loses up to four characters at its start, then at its end, until it reads.
+// The address found can then be longer than the one in the text, as in
+// 2001:db8::1beef: that still reports lab data.
+func ipv6Within(s string) string {
+	if _, err := netip.ParseAddr(s); err == nil {
+		return s
+	}
+	for i := 1; i <= 4 && i < len(s); i++ {
+		if _, err := netip.ParseAddr(s[i:]); err == nil {
+			return s[i:]
+		}
+	}
+	for i := 1; i <= 4 && i < len(s); i++ {
+		if _, err := netip.ParseAddr(s[:len(s)-i]); err == nil {
+			return s[:len(s)-i]
+		}
+	}
+	return s
 }
 
 var (
@@ -384,11 +406,16 @@ var (
 )
 
 // fileExtensions are the last labels of the file names that lab files name,
-// such as user-id-flows.tsv: no domain ends with them there.
+// such as user-id-flows.tsv: no domain ends with them. md, sh and py are
+// also country domains, so a name with them is a file only in a path, after
+// a /.
 var fileExtensions = map[string]bool{
-	"go": true, "gz": true, "json": true, "key": true, "log": true, "md": true,
-	"py": true, "sh": true, "tsv": true, "txt": true, "vars": true, "xml": true, "yaml": true,
+	"go": true, "gz": true, "json": true, "key": true, "log": true,
+	"tsv": true, "txt": true, "vars": true, "xml": true, "yaml": true,
 }
+
+// pathExtensions are file extensions that are also country domains.
+var pathExtensions = map[string]bool{"md": true, "py": true, "sh": true}
 
 // panosDomain is the device name of every PAN-OS firewall in its
 // configuration, as VsysXPath names it: a default, not lab data.
@@ -398,8 +425,9 @@ const panosDomain = "localhost.localdomain"
 // allowed and below none of them: a dotted name, as in an email or a
 // <domain>\<user> name, and the dc= components of a distinguished name. A
 // file name and the PAN-OS device name localhost.localdomain are no
-// domains. A NetBIOS name without a dot, such as example\alice, is not
-// found. Each tool gives its own allowed domains.
+// domains. Gaps: a NetBIOS name without a dot, such as example\alice, is not
+// found, and a domain that ends with a file extension of fileExtensions
+// passes. Each tool gives its own allowed domains.
 func LabDomainsIn(text string, allowed []string) []string {
 	var out []string
 	check := func(name string) {
@@ -412,8 +440,11 @@ func LabDomainsIn(text string, allowed []string) []string {
 		}
 		out = append(out, "domain "+lower)
 	}
-	for _, s := range domainName.FindAllString(text, -1) {
-		if !fileExtensions[strings.ToLower(s[strings.LastIndex(s, ".")+1:])] {
+	for _, loc := range domainName.FindAllStringIndex(text, -1) {
+		s := text[loc[0]:loc[1]]
+		ext := strings.ToLower(s[strings.LastIndex(s, ".")+1:])
+		inPath := loc[0] > 0 && text[loc[0]-1] == '/'
+		if !fileExtensions[ext] && (!pathExtensions[ext] || !inPath) {
 			check(s)
 		}
 	}

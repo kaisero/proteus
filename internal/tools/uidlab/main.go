@@ -16,9 +16,11 @@
 // a User-ID message, as observed on fw01, PAN-OS 11.2.5 (spec 2026-10-17
 // M10, M18). Then it runs four checks: a policy flow against simulate
 // policy, a user against lookup, an address against search and a group
-// against lookup. A policy flow that differs is tried twice more,
-// -retry-wait apart, and counts as a difference only when all three tries
-// differ (M18). It removes both temporary directories at the end, also after
+// against lookup. A policy flow that differs, and whose outcome the device
+// answer decides, is tried twice more, -retry-wait apart, and counts as a
+// difference only when all three tries differ (M18). Each try keeps its
+// device answers in -out. A user check or a resolved flow that names a
+// member of the XML API group of the -login file stops the run (U18). It removes both temporary directories at the end, also after
 // a failure or an interrupt; the run log of proteus is in one of them,
 // because it names the host (§10.4).
 //
@@ -62,8 +64,8 @@ import (
 // options are the flags. Each flag can also come from the variable its help
 // names.
 type options struct {
-	device, flows, vars, vsys, proteus, out, keyHeader, inventory, render string
-	settle, retry                                                         time.Duration
+	device, flows, vars, login, vsys, proteus, out, keyHeader, inventory, render string
+	settle, retry                                                                time.Duration
 }
 
 // snapshotFiles are the files of the snapshot that file mode reads (plan
@@ -80,6 +82,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	fs.StringVar(&o.device, "device", os.Getenv("DEVICE"), "the inventory name of the lab device ($DEVICE)")
 	fs.StringVar(&o.flows, "flows", FlowsFile, "the flow list")
 	fs.StringVar(&o.vars, "vars", VarsFile, "the variables file, untracked")
+	fs.StringVar(&o.login, "login", LoginFile, "the User-ID messages of the lab, for the XML API group members (U18)")
 	fs.StringVar(&o.vsys, "vsys", "vsys1", "the vsys proteus checks")
 	fs.StringVar(&o.proteus, "proteus", os.Getenv("UIDLAB_PROTEUS"), "the proteus binary ($UIDLAB_PROTEUS); built from ./cmd/proteus when empty")
 	fs.StringVar(&o.out, "out", os.Getenv("UIDLAB_OUT"), "where the answers go, outside the repository ($UIDLAB_OUT); a new temporary directory when empty")
@@ -112,7 +115,7 @@ func lab(ctx context.Context, o options, stdout, stderr io.Writer) error {
 		}
 		s, err := fill(string(b), vars)
 		if err != nil {
-			return err
+			return inVars(err, o.vars)
 		}
 		_, err = io.WriteString(stdout, s)
 		return err
@@ -127,7 +130,14 @@ func lab(ctx context.Context, o options, stdout, stderr io.Writer) error {
 	flows, err := ReadFlows(ff, vars)
 	_ = ff.Close()
 	if err != nil {
+		return inVars(err, o.vars)
+	}
+	login, err := os.ReadFile(o.login)
+	if err != nil {
 		return err
+	}
+	if err := refuseXMLAPIMembers(flows, login, vars); err != nil {
+		return inVars(err, o.vars)
 	}
 	if o.keyHeader == "" {
 		return errors.New("give the API key header file: -key-header <file>, or UIDLAB_KEY_HEADER=<file>")

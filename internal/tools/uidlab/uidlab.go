@@ -74,13 +74,68 @@ const (
 	flowPort     = "443"
 )
 
-// fill is labkit.Fill with the name of the variables file in its error.
+// missingValue is the error of a placeholder without a value; the caller
+// names the variables file it read.
+type missingValue struct{ err error }
+
+func (e missingValue) Error() string { return e.err.Error() }
+
+// fill is labkit.Fill with an error that the caller can name the variables
+// file in (inVars).
 func fill(s string, vars map[string]string) (string, error) {
 	out, err := labkit.Fill(s, vars)
 	if err != nil {
-		return "", fmt.Errorf("%w in %s", err, VarsFile)
+		return "", missingValue{err}
 	}
 	return out, nil
+}
+
+// inVars names the variables file in the error of a placeholder without a
+// value.
+func inVars(err error, path string) error {
+	if _, ok := errors.AsType[missingValue](err); ok {
+		return fmt.Errorf("%w in %s", err, path)
+	}
+	return err
+}
+
+// refuseXMLAPIMembers refuses a user check and a resolved flow that names a
+// member of a lab XML API group of the login file, with the values filled.
+// The groups message rewrites the U8 block of each member until the next
+// group-mapping refresh, as observed on fw01, PAN-OS 11.2.5 (spec 2026-10-17
+// U18), so such a check would compare a rewritten block.
+func refuseXMLAPIMembers(flows []Flow, login []byte, vars map[string]string) error {
+	filled, err := fill(string(login), vars)
+	if err != nil {
+		return err
+	}
+	var msg struct {
+		Groups []struct {
+			Members []struct {
+				Name string `xml:"name,attr"`
+			} `xml:"members>entry"`
+		} `xml:"payload>groups>entry"`
+	}
+	if err := xml.Unmarshal([]byte(filled), &msg); err != nil {
+		return fmt.Errorf("the login file is no User-ID message: %w", err)
+	}
+	members := map[string]bool{}
+	for _, g := range msg.Groups {
+		for _, m := range g.Members {
+			members[strings.ToLower(m.Name)] = true
+		}
+	}
+	for _, f := range flows {
+		if f.Check != checkUser && f.Expect != expectResolved {
+			continue
+		}
+		for _, n := range []string{f.User, f.Subject} {
+			if members[strings.ToLower(n)] {
+				return fmt.Errorf("%s names %s, a member of the lab XML API group: its U8 block is rewritten (U18)", f.Case, n)
+			}
+		}
+	}
+	return nil
 }
 
 // flowColumns are the columns of the flow list, in order.
@@ -704,7 +759,7 @@ func checkFlows(ctx context.Context, w io.Writer, out string, dev opSender, run 
 		var dAns Answer
 		status, try := "", 1
 		for ; ; try++ {
-			dAns, status, err = deviceTry(ctx, out, dev, f)
+			dAns, status, err = deviceTry(ctx, out, dev, f, try)
 			if err != nil {
 				return diffs, err
 			}
@@ -716,7 +771,7 @@ func checkFlows(ctx context.Context, w io.Writer, out string, dev opSender, run 
 					status = "DIFF: " + err.Error()
 				}
 			}
-			if status == "" || perr != nil || f.Check != checkPolicy || try == policyTries {
+			if status == "" || !deviceDecides(f, pAns, perr) || try == policyTries {
 				break
 			}
 			if err := wait(ctx, retry); err != nil {
@@ -737,10 +792,17 @@ func checkFlows(ctx context.Context, w io.Writer, out string, dev opSender, run 
 	return diffs, nil
 }
 
-// deviceTry sends the device commands of a flow, writes each answer to out
-// and reads them. A device that refuses or fails a command gives a DIFF
+// deviceDecides reports whether Compare reads the device answer of a policy
+// flow: a flow without a mark or marked resolved, with a proteus rule. Only
+// then can another try change the outcome (M18).
+func deviceDecides(f Flow, proteus Answer, perr error) bool {
+	return f.Check == checkPolicy && perr == nil && proteus.Rule != "" && (f.Expect == "" || f.Expect == expectResolved)
+}
+
+// deviceTry sends the device commands of a flow, writes each answer of the
+// try to out and reads them. A device that refuses or fails a command gives a DIFF
 // status; a 403 is an error that stops the run.
-func deviceTry(ctx context.Context, out string, dev opSender, f Flow) (Answer, string, error) {
+func deviceTry(ctx context.Context, out string, dev opSender, f Flow, try int) (Answer, string, error) {
 	cmds := DeviceCmds(f)
 	answers := make([][]byte, len(cmds))
 	for i, cmd := range cmds {
@@ -748,7 +810,7 @@ func deviceTry(ctx context.Context, out string, dev opSender, f Flow) (Answer, s
 		if errors.Is(err, labkit.ErrForbidden) {
 			return Answer{}, "", err
 		}
-		if werr := os.WriteFile(filepath.Join(out, fmt.Sprintf("%s.device-%d.xml", f.Case, i+1)), b, 0o600); werr != nil {
+		if werr := os.WriteFile(filepath.Join(out, fmt.Sprintf("%s.try-%d.device-%d.xml", f.Case, try, i+1)), b, 0o600); werr != nil {
 			return Answer{}, "", werr
 		}
 		if err != nil {

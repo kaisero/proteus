@@ -174,16 +174,30 @@ func labSetup(t *testing.T, d *fakeDevice, name, flows string) []string {
 		"  - {name: "+name+", host: "+strings.TrimPrefix(srv.URL, "https://")+", username: u, password: dummy}\n"+
 		"  - {name: fw-broken, host: "+strings.TrimPrefix(srv.URL, "https://")+", username: u, password: dummy}\n")
 	vars := write("lab.vars", "ZONE_FROM=zone-a\nZONE_TO=zone-b\nIP_U=198.51.100.99\nIP_A=198.51.100.11\n"+
-		"USER_A=example.com\\alice\nUPN_A=alice@example.com\nGROUP_DN=cn=domain users,cn=users,dc=example,dc=com\n")
+		"USER_A=example.com\\alice\nUPN_A=alice@example.com\nGROUP_DN=cn=domain users,cn=users,dc=example,dc=com\n"+
+		"USER_X=example.com\\xavier\n")
+	login := write("login.xml", `<uid-message><version>2.0</version><type>update</type><payload>`+
+		`<groups><entry name="uid-lab-xmlapi"><members><entry name="${USER_X}"/><entry name="other\ghost"/></members></entry></groups>`+
+		`</payload></uid-message>`)
 	self, err := os.Executable()
 	if err != nil {
 		t.Fatal(err)
 	}
 	return []string{
-		"-device", name, "-config", inv, "-flows", write("flows.tsv", flows), "-vars", vars,
+		"-device", name, "-config", inv, "-flows", write("flows.tsv", flows), "-vars", vars, "-login", login,
 		"-key-header", write("key", "X-PAN-KEY: dummy-key\n"), "-proteus", self,
 		"-out", filepath.Join(dir, "out"), "-settle", "0", "-retry-wait", "0",
 	}
+}
+
+// writeFile writes a file into dir and returns its path.
+func writeFile(t *testing.T, dir, name, s string) string {
+	t.Helper()
+	p := filepath.Join(dir, name)
+	if err := os.WriteFile(p, []byte(s), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return p
 }
 
 // flagValue returns the value of a flag in args.
@@ -224,7 +238,7 @@ func TestRunComparesAndCleansUp(t *testing.T) {
 		t.Errorf("stdout:\n%s\nstderr:\n%s", stdout.String(), stderr.String())
 	}
 	out := flagValue(args, "-out")
-	for _, name := range []string{"pol.device-1.xml", "pol.proteus.json", "usr.device-1.xml", "usr.device-2.xml", "adr.device-1.xml", "grp.proteus.json"} {
+	for _, name := range []string{"pol.try-1.device-1.xml", "pol.proteus.json", "usr.try-1.device-1.xml", "usr.try-1.device-2.xml", "adr.try-1.device-1.xml", "grp.proteus.json"} {
 		if _, err := os.Stat(filepath.Join(out, name)); err != nil {
 			t.Error(err)
 		}
@@ -272,6 +286,20 @@ func TestRunRetriesADifferingPolicyFlow(t *testing.T) {
 	if _, policies := d.counts(); policies != 2 {
 		t.Errorf("%d tries, want 2", policies)
 	}
+	// Each try keeps its device answer (M18).
+	out := t.TempDir()
+	d = &fakeDevice{policy: func(n int) string { return map[bool]string{true: policyOther, false: policyRule}[n == 1] }}
+	args := labSetup(t, d, "fw-test", policyOnly)
+	args[slices.Index(args, "-out")+1] = out
+	if code := run(args, io.Discard, io.Discard); code != 0 {
+		t.Fatalf("exit %d", code)
+	}
+	for try, want := range map[int]string{1: "uid-lab-catch", 2: "uid-lab-user"} {
+		b, err := os.ReadFile(filepath.Join(out, fmt.Sprintf("pol.try-%d.device-1.xml", try)))
+		if err != nil || !strings.Contains(string(b), want) {
+			t.Errorf("try %d: %q, %v", try, b, err)
+		}
+	}
 	// Three tries that differ are a difference.
 	d = &fakeDevice{policy: func(int) string { return policyOther }}
 	stdout.Reset()
@@ -281,6 +309,18 @@ func TestRunRetriesADifferingPolicyFlow(t *testing.T) {
 	}
 	if _, policies := d.counts(); policies != 3 {
 		t.Errorf("%d tries, want 3", policies)
+	}
+	// A flow whose answer does not depend on the device is tried once: a
+	// mark that records the device answer only, and an undecided proteus.
+	for _, row := range []string{
+		"pol\tM4\tpolicy\t${ZONE_FROM}\t${ZONE_TO}\t${IP_U}\t192.0.2.17\t-\t-\tunknown-inferred\n",
+		"pol\tD1\tpolicy\t${ZONE_FROM}\t${ZONE_TO}\t${IP_U}\t192.0.2.29\t${USER_A}\t-\tdoubt\n",
+	} {
+		d = &fakeDevice{policy: func(int) string { return policyOther }}
+		_ = run(labSetup(t, d, "fw-test", header+row), io.Discard, io.Discard)
+		if _, policies := d.counts(); policies != 1 {
+			t.Errorf("%q: %d tries, want 1", row, policies)
+		}
 	}
 }
 
@@ -305,7 +345,7 @@ func TestRunRenders(t *testing.T) {
 		t.Fatal(err)
 	}
 	stderr.Reset()
-	if code := run(append(args, "-render", file), io.Discard, &stderr); code != 1 || !strings.Contains(stderr.String(), "NOPE") {
+	if code := run(append(args, "-render", file), io.Discard, &stderr); code != 1 || !strings.Contains(stderr.String(), "NOPE in "+flagValue(args, "-vars")) {
 		t.Errorf("exit %d: %q", code, stderr.String())
 	}
 }
@@ -351,6 +391,12 @@ func TestRunRefusesBadInput(t *testing.T) {
 		"missing inventory": {set("-config", filepath.Join(dir, "none")), "inventory"},
 		"render missing":    {append(slices.Clone(good), "-render", filepath.Join(dir, "none")), "no such file"},
 		"bad vars":          {set("-vars", flagValue(good, "-key-header")), "variables"},
+		"missing login":     {set("-login", filepath.Join(dir, "none")), "no such file"},
+		"bad login":         {set("-login", flagValue(good, "-vars")), "login file"},
+		"unfilled flows":    {set("-vars", filepath.Join(dir, "none")), "in " + filepath.Join(dir, "none")},
+		// U18: a user check that names a member of the lab XML API group.
+		"xmlapi member": {set("-flows", writeFile(t, dir, "x.tsv", header+
+			"usr\tN5\tuser\t-\t-\t-\t-\t${USER_X}\tx@example.com\t-\n")), "member of the lab XML API group"},
 	} {
 		var stdout, stderr bytes.Buffer
 		if code := run(c.args, &stdout, &stderr); code == 0 || !strings.Contains(stderr.String(), c.want) {
