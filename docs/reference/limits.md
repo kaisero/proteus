@@ -131,6 +131,21 @@ evaluated:
 all 108 flows agreed: the rule, the action and the implicit marker. See
 `docs/lab/app-id-lab.md`.
 
+## Users
+
+### Measured agreement on fw01
+
+`make uid-lab` compares the User-ID answers of proteus with the device's own
+answers, case by case. On fw01 (PAN-OS 11.2.5), 2026-10-19, all 56 cases passed:
+
+- 45 policy flows. 41 agreed by rule and action. One of them agreed on its second
+  try, because the device applies new User-ID data late. For 4 flows the check
+  records the device answer only: 3 flows with no user, which proteus marks
+  `inferred`, and 1 rule with a CIE group, which proteus keeps in doubt.
+- 3 users: the primary name, the alternate names and the groups agreed.
+- 4 addresses: the mapped user and its type, or no mapping, agreed.
+- 4 groups: the source and the members agreed.
+
 ## simulate nat
 
 - A DIPP port, a dynamic-IP pool address and a dynamic destination's distribution
