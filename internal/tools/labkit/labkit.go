@@ -343,25 +343,86 @@ func CopySnapshot(root, device, dst string, files []string) (string, error) {
 
 var (
 	ipv4   = regexp.MustCompile(`\b[0-9]{1,3}(\.[0-9]{1,3}){3}\b`)
+	ipv6   = regexp.MustCompile(`[0-9A-Fa-f]*:[0-9A-Fa-f]*:[0-9A-Fa-f:]*`)
 	serial = regexp.MustCompile(`\b[0-9]{12,}\b`)
 )
 
-// LabDataIn returns what in a file's text looks like lab data: an IPv4
-// address outside the ranges in nets, or a serial number. Each tool gives its
-// own ranges.
+// LabDataIn returns what in a file's text looks like lab data: an IPv4 or
+// IPv6 address outside the ranges in nets, or a serial number. Each tool
+// gives its own ranges.
 func LabDataIn(text string, nets []netip.Prefix) []string {
 	var out []string
-	for _, s := range ipv4.FindAllString(text, -1) {
+	outside := func(s string) {
 		a, err := netip.ParseAddr(s)
 		if err != nil {
-			continue
+			return
 		}
 		if !slices.ContainsFunc(nets, func(p netip.Prefix) bool { return p.Contains(a) }) {
 			out = append(out, "address "+s)
 		}
 	}
+	for _, s := range ipv4.FindAllString(text, -1) {
+		outside(s)
+	}
+	// A time such as 12:30:35 holds colons too; it reads as no address.
+	for _, s := range ipv6.FindAllString(text, -1) {
+		outside(s)
+	}
 	for _, s := range serial.FindAllString(text, -1) {
 		out = append(out, "serial "+s)
+	}
+	return out
+}
+
+var (
+	// domainName is a dotted name whose last label starts with a letter and
+	// has two characters or more: 11.2.5 and e.g. are no domains.
+	domainName = regexp.MustCompile(`(?i)\b(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z][a-z0-9-]*[a-z0-9]\b`)
+	// dnDomain is the run of dc= components of a distinguished name.
+	dnDomain = regexp.MustCompile(`(?i)\bdc=[a-z0-9-]+(?:\s*,\s*dc=[a-z0-9-]+)*`)
+	dnLabel  = regexp.MustCompile(`(?i)dc=([a-z0-9-]+)`)
+)
+
+// fileExtensions are the last labels of the file names that lab files name,
+// such as user-id-flows.tsv: no domain ends with them there.
+var fileExtensions = map[string]bool{
+	"go": true, "gz": true, "json": true, "key": true, "log": true, "md": true,
+	"py": true, "sh": true, "tsv": true, "txt": true, "vars": true, "xml": true, "yaml": true,
+}
+
+// panosDomain is the device name of every PAN-OS firewall in its
+// configuration, as VsysXPath names it: a default, not lab data.
+const panosDomain = "localhost.localdomain"
+
+// LabDomainsIn returns each domain name in a file's text that is none of
+// allowed and below none of them: a dotted name, as in an email or a
+// <domain>\<user> name, and the dc= components of a distinguished name. A
+// file name and the PAN-OS device name localhost.localdomain are no
+// domains. A NetBIOS name without a dot, such as example\alice, is not
+// found. Each tool gives its own allowed domains.
+func LabDomainsIn(text string, allowed []string) []string {
+	var out []string
+	check := func(name string) {
+		lower := strings.ToLower(name)
+		if lower == panosDomain || slices.ContainsFunc(allowed, func(d string) bool {
+			d = strings.ToLower(d)
+			return lower == d || strings.HasSuffix(lower, "."+d)
+		}) {
+			return
+		}
+		out = append(out, "domain "+lower)
+	}
+	for _, s := range domainName.FindAllString(text, -1) {
+		if !fileExtensions[strings.ToLower(s[strings.LastIndex(s, ".")+1:])] {
+			check(s)
+		}
+	}
+	for _, s := range dnDomain.FindAllString(text, -1) {
+		var labels []string
+		for _, m := range dnLabel.FindAllStringSubmatch(s, -1) {
+			labels = append(labels, m[1])
+		}
+		check(strings.Join(labels, "."))
 	}
 	return out
 }

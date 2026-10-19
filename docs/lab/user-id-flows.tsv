@@ -1,0 +1,67 @@
+# User-ID lab flows (spec 2026-10-17 §10.3). Dummy names only: every ${...} value comes
+# from docs/lab/user-id-lab.vars. check is policy, user, ip or group. A policy flow runs
+# from ${ZONE_FROM} to ${ZONE_TO}, TCP port 443, to the destination of one lab rule of
+# user-id-lab-set.tsv; user is its --user and source-user. ${IP_A}, ${IP_N} and ${IP_G}
+# are mapped by user-id-lab-login.xml; ${IP_U} has no mapping. subject is the UPN of a
+# user check, the address of an ip check, the group of a group check, and the name the
+# device gets on a flow marked resolved. expected is -, resolved, unknown-inferred or
+# doubt. - is an empty column. Fact §5.1/<row> and §5.3/<row> name a row of the spec.
+# No UPN, alternate-name or user check names ${USER_X} or other\ghost, the members of the
+# lab XML API group (U18).
+case	fact	check	from	to	source	destination	user	subject	expected
+user-given	§5.1/given,§5.3/user,N1	policy	${ZONE_FROM}	${ZONE_TO}	${IP_U}	192.0.2.10	${USER_A}	-	-
+user-upper	N1	policy	${ZONE_FROM}	${ZONE_TO}	${IP_U}	192.0.2.10	${USER_A_UPPER}	-	-
+user-mapped	§5.1/mapped,M1,M2	policy	${ZONE_FROM}	${ZONE_TO}	${IP_A}	192.0.2.10	-	-	-
+user-mapped-given	§5.1/both,M1	policy	${ZONE_FROM}	${ZONE_TO}	${IP_A}	192.0.2.25	${USER_B}	-	-
+user-none	§5.1/none,§5.4	policy	${ZONE_FROM}	${ZONE_TO}	${IP_U}	192.0.2.10	-	-	unknown-inferred
+upn-rule	N2	policy	${ZONE_FROM}	${ZONE_TO}	${IP_U}	192.0.2.11	${USER_A}	-	-
+upn-given	N3,§5.2	policy	${ZONE_FROM}	${ZONE_TO}	${IP_U}	192.0.2.10	${UPN_A}	${USER_A}	resolved
+netbios-given	N3	policy	${ZONE_FROM}	${ZONE_TO}	${IP_U}	192.0.2.10	${NETBIOS_A}	-	-
+ldap-mapped	M2,§5.3/group	policy	${ZONE_FROM}	${ZONE_TO}	${IP_A}	192.0.2.12	-	-	-
+ldap-given	§5.3/group	policy	${ZONE_FROM}	${ZONE_TO}	${IP_U}	192.0.2.12	${USER_A}	-	-
+netbios-mapped-user	M2,N4	policy	${ZONE_FROM}	${ZONE_TO}	${IP_N}	192.0.2.25	-	-	-
+netbios-mapped-ldap	M2	policy	${ZONE_FROM}	${ZONE_TO}	${IP_N}	192.0.2.12	-	-	-
+netbios-mapped-dug	M2	policy	${ZONE_FROM}	${ZONE_TO}	${IP_N}	192.0.2.21	-	-	-
+netbios-mapped-known	M2	policy	${ZONE_FROM}	${ZONE_TO}	${IP_N}	192.0.2.17	-	-	-
+dn-case	M11	policy	${ZONE_FROM}	${ZONE_TO}	${IP_U}	192.0.2.13	${USER_A}	-	-
+short-name	M12	policy	${ZONE_FROM}	${ZONE_TO}	${IP_U}	192.0.2.14	${USER_A}	-	-
+short-name-as-user	M12	policy	${ZONE_FROM}	${ZONE_TO}	${IP_U}	192.0.2.14	${GROUP_SHORT}	-	-
+empty-group	M13,§5.3/no-group	policy	${ZONE_FROM}	${ZONE_TO}	${IP_U}	192.0.2.15	${USER_A}	-	-
+no-group	M13,§5.3/no-group	policy	${ZONE_FROM}	${ZONE_TO}	${IP_U}	192.0.2.16	${USER_A}	-	-
+no-group-literal	M13	policy	${ZONE_FROM}	${ZONE_TO}	${IP_U}	192.0.2.16	cn=uid-lab-no-such,${BASE_DN}	-	-
+known-mapped-ghost	M3	policy	${ZONE_FROM}	${ZONE_TO}	${IP_G}	192.0.2.17	-	-	-
+known-given	§5.3/known-user	policy	${ZONE_FROM}	${ZONE_TO}	${IP_U}	192.0.2.17	${USER_A}	-	-
+known-none	M4	policy	${ZONE_FROM}	${ZONE_TO}	${IP_U}	192.0.2.17	-	-	unknown-inferred
+unknown-none	M5,§5.3/unknown	policy	${ZONE_FROM}	${ZONE_TO}	${IP_U}	192.0.2.18	-	-	unknown-inferred
+unknown-given	M5	policy	${ZONE_FROM}	${ZONE_TO}	${IP_U}	192.0.2.18	${USER_A}	-	-
+prelogon	M6,§5.3/pre-logon	policy	${ZONE_FROM}	${ZONE_TO}	${IP_U}	192.0.2.19	pre-logon	-	-
+prelogon-user	M6	policy	${ZONE_FROM}	${ZONE_TO}	${IP_U}	192.0.2.19	${USER_A}	-	-
+xmlapi-member	M7,§5.3/group	policy	${ZONE_FROM}	${ZONE_TO}	${IP_U}	192.0.2.20	${USER_X}	-	-
+xmlapi-other	M7	policy	${ZONE_FROM}	${ZONE_TO}	${IP_U}	192.0.2.20	${USER_A}	-	-
+xmlapi-mapped-ghost	M15	policy	${ZONE_FROM}	${ZONE_TO}	${IP_G}	192.0.2.20	-	-	-
+xmlapi-given-ghost	M15	policy	${ZONE_FROM}	${ZONE_TO}	${IP_U}	192.0.2.20	other\ghost	-	-
+dug-tag	M8,§5.3/dug	policy	${ZONE_FROM}	${ZONE_TO}	${IP_U}	192.0.2.21	${USER_C}	-	-
+dug-no-tag	M8	policy	${ZONE_FROM}	${ZONE_TO}	${IP_U}	192.0.2.21	${USER_A}	-	-
+dug-and-both	M14	policy	${ZONE_FROM}	${ZONE_TO}	${IP_U}	192.0.2.22	${USER_C}	-	-
+dug-and-one	M14	policy	${ZONE_FROM}	${ZONE_TO}	${IP_U}	192.0.2.22	${USER_D}	-	-
+dug-or-one	M14	policy	${ZONE_FROM}	${ZONE_TO}	${IP_U}	192.0.2.23	${USER_D}	-	-
+dug-case	M14	policy	${ZONE_FROM}	${ZONE_TO}	${IP_U}	192.0.2.24	${USER_C}	-	-
+multi-user	M9	policy	${ZONE_FROM}	${ZONE_TO}	${IP_U}	192.0.2.25	${USER_B}	-	-
+multi-group	M9	policy	${ZONE_FROM}	${ZONE_TO}	${IP_U}	192.0.2.25	${USER_X}	-	-
+ghost-mapped	M17	policy	${ZONE_FROM}	${ZONE_TO}	${IP_G}	192.0.2.26	-	-	-
+ghost-given	M17	policy	${ZONE_FROM}	${ZONE_TO}	${IP_U}	192.0.2.26	other\ghost	-	-
+any-none	§5.3/any	policy	${ZONE_FROM}	${ZONE_TO}	${IP_U}	192.0.2.27	-	-	-
+absent	§5.3/absent	policy	${ZONE_FROM}	${ZONE_TO}	${IP_U}	192.0.2.28	${USER_A}	-	-
+cie-group	§5.3/cie,D1	policy	${ZONE_FROM}	${ZONE_TO}	${IP_U}	192.0.2.29	${USER_A}	-	doubt
+local-user	§5.3/local	policy	${ZONE_FROM}	${ZONE_TO}	${IP_U}	192.0.2.30	${LOCAL_USER}	-	-
+user-a	N5,U8	user	-	-	-	-	${USER_A}	${UPN_A}	-
+user-b	N5,U8	user	-	-	-	-	${USER_B}	${UPN_B}	-
+user-c	N5,U8	user	-	-	-	-	${USER_C}	${UPN_C}	-
+ip-upn	N4,M16,U1	ip	-	-	-	-	-	${IP_A}	-
+ip-primary	N4,M16	ip	-	-	-	-	-	${IP_N}	-
+ip-ghost	N4,M16	ip	-	-	-	-	-	${IP_G}	-
+ip-none	U1	ip	-	-	-	-	-	${IP_U}	-
+group-ldap	U4	group	-	-	-	-	-	${GROUP_DN}	-
+group-xmlapi	U4,M15	group	-	-	-	-	-	uid-lab-xmlapi	-
+group-dug	U4,M8	group	-	-	-	-	-	uid-lab-dug-a	-
+group-empty	U4,M13	group	-	-	-	-	-	${GROUP_EMPTY_DN}	-

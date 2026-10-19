@@ -545,3 +545,37 @@ func TestLabDataInCatchesLabData(t *testing.T) {
 		t.Errorf("LabDataIn = %q", got)
 	}
 }
+
+func TestLabDataInCatchesIPv6(t *testing.T) {
+	t.Parallel()
+	nets := []netip.Prefix{netip.MustParsePrefix("192.0.2.0/24"), netip.MustParsePrefix("2001:db8::/32")}
+	text := "src 2001:db8::5 and 2001:DB8:1::/48, not fe80::1 or 2001:db9::7; 12:30:35 is a time"
+	if got := LabDataIn(text, nets); !slices.Equal(got, []string{"address fe80::1", "address 2001:db9::7"}) {
+		t.Errorf("LabDataIn = %q", got)
+	}
+	// Without the IPv6 range, every IPv6 address is lab data.
+	if got := LabDataIn("2001:db8::5", nets[:1]); !slices.Equal(got, []string{"address 2001:db8::5"}) {
+		t.Errorf("LabDataIn without the IPv6 range = %q", got)
+	}
+}
+
+func TestLabDomainsInCatchesDomains(t *testing.T) {
+	t.Parallel()
+	allowed := []string{"example.com"}
+	text := "alice@example.com, EXAMPLE.COM\\alice, eu.example.com and dc=eu,dc=example,dc=com are dummy; " +
+		"bob@corp.test, corp.test\\bob, dc=corp, DC=Test and www.example.com.evil.test are lab data; " +
+		"localhost.localdomain is the PAN-OS default; user-id-flows.tsv, config.xml, identity.json.gz, " +
+		"PAN-OS 11.2.5, e.g. and §10.3 are no domains"
+	want := []string{"domain corp.test", "domain corp.test", "domain www.example.com.evil.test", "domain corp.test"}
+	if got := LabDomainsIn(text, allowed); !slices.Equal(got, want) {
+		t.Errorf("LabDomainsIn =\n%q\nwant\n%q", got, want)
+	}
+	// The allowed domains are the caller's.
+	if got := LabDomainsIn("alice@example.com", nil); !slices.Equal(got, []string{"domain example.com"}) {
+		t.Errorf("LabDomainsIn without allowed domains = %q", got)
+	}
+	// An example.com look-alike is no subdomain.
+	if got := LabDomainsIn("notexample.com", allowed); !slices.Equal(got, []string{"domain notexample.com"}) {
+		t.Errorf("LabDomainsIn = %q", got)
+	}
+}
