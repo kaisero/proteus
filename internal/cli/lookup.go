@@ -9,8 +9,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/okaiser/proteus/internal/card"
-	"github.com/okaiser/proteus/internal/query"
+	"github.com/kaisero/proteus/internal/card"
+	"github.com/kaisero/proteus/internal/query"
 )
 
 // Limits of a rendered card (spec §16 K3, K5). A filter card shows the first

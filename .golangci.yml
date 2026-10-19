@@ -58,4 +58,4 @@ formatters:
   settings:
     goimports:
       local-prefixes:
-        - github.com/okaiser/proteus
+        - github.com/kaisero/proteus

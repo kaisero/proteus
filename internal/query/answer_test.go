@@ -4,14 +4,14 @@ import (
 	"net/netip"
 	"testing"
 
-	"github.com/okaiser/proteus/internal/drift"
-	"github.com/okaiser/proteus/internal/reason"
-	"github.com/okaiser/proteus/internal/resolve"
-	"github.com/okaiser/proteus/internal/simulate"
-	"github.com/okaiser/proteus/internal/simulate/nat"
-	"github.com/okaiser/proteus/internal/simulate/pathpolicy"
-	"github.com/okaiser/proteus/internal/simulate/routing"
-	"github.com/okaiser/proteus/internal/simulate/securitypolicy"
+	"github.com/kaisero/proteus/internal/drift"
+	"github.com/kaisero/proteus/internal/reason"
+	"github.com/kaisero/proteus/internal/resolve"
+	"github.com/kaisero/proteus/internal/simulate"
+	"github.com/kaisero/proteus/internal/simulate/nat"
+	"github.com/kaisero/proteus/internal/simulate/pathpolicy"
+	"github.com/kaisero/proteus/internal/simulate/routing"
+	"github.com/kaisero/proteus/internal/simulate/securitypolicy"
 )
 
 // Each builder's lines, beside the ones the goldens show.

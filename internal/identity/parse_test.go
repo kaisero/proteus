@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/okaiser/proteus/internal/identity"
+	"github.com/kaisero/proteus/internal/identity"
 )
 
 // The group names of the answer fixtures.

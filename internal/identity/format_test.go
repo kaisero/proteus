@@ -17,8 +17,8 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/okaiser/proteus/internal/identity"
-	"github.com/okaiser/proteus/internal/testconfig"
+	"github.com/kaisero/proteus/internal/identity"
+	"github.com/kaisero/proteus/internal/testconfig"
 )
 
 const fixtures = "../../testdata/identity/"

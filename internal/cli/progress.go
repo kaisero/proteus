@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/okaiser/proteus/internal/task"
+	"github.com/kaisero/proteus/internal/task"
 )
 
 // lockedWriter serialises writes. stderr is wrapped in one, so the run log's echo,

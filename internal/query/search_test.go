@@ -7,10 +7,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/okaiser/proteus/internal/estate"
-	"github.com/okaiser/proteus/internal/reason"
-	"github.com/okaiser/proteus/internal/search"
-	"github.com/okaiser/proteus/internal/simulate"
+	"github.com/kaisero/proteus/internal/estate"
+	"github.com/kaisero/proteus/internal/reason"
+	"github.com/kaisero/proteus/internal/search"
+	"github.com/kaisero/proteus/internal/simulate"
 )
 
 // labStore is fw01 with the lab configuration, and fw02 with none.

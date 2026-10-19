@@ -1,6 +1,6 @@
 package config
 
-import "github.com/okaiser/proteus/internal/schema"
+import "github.com/kaisero/proteus/internal/schema"
 
 // pushedRulebases are the shared containers of rules pushed from Panorama. The
 // firewall schema does not declare them; they hold the shape of a vsys rulebase

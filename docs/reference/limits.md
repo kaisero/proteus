@@ -69,7 +69,7 @@ entry. The sections below group the limits by command.
   leaves the hop undecided.
 - **Shared gateways are not verified.** A shared gateway's vsys name comes from
   routing; such a path is not verified on a device.
-- **Hidden firewalls are only named.** proteus names a firewall in virtual wire or
+- **Hidden firewalls are only named.** Proteus names a firewall in virtual wire or
   Layer 2 mode on the path, and does not check its policy.
 - **The answer is static.** It analyzes stored snapshots and never sees live
   sessions.
@@ -90,8 +90,8 @@ hop's firewall the same question with `test security-policy-match`. On fw02,
 2026-10-08:
 
 - 9 of 9 decided hops agreed. 7 named the same rule. 2 agreed by action: the test
-  sends no application, so the firewall stops at a rule that proteus holds in
-  doubt. That rule has the same action as proteus's answer.
+  sends no application, so the firewall stops at a rule that Proteus holds in
+  doubt. That rule has the same action as Proteus's answer.
 - 1 hop was undecided: a rule on fw01 with service `application-default`.
 - fw01 is not probed yet.
 
@@ -121,7 +121,7 @@ evaluated:
   knows the application.
 - **The App-ID shift.** The firewall identifies an application over the first
   packets of a session and can match the session again when it knows the
-  application. proteus evaluates one application per flow, as
+  application. Proteus evaluates one application per flow, as
   `test security-policy-match` does. Every answer with an application carries
   `note.app-shift`.
 - **An open protocol.** Without `--protocol`, the protocol comes from the
@@ -131,7 +131,7 @@ evaluated:
   that names a service stays in doubt. `--protocol` decides them.
 - **An ICMP type.** An application identified by ICMP type matches its protocol.
   The type is not checked, and a note says so.
-- **A default rule after an implicit allow.** proteus evaluates the default rules
+- **A default rule after an implicit allow.** Proteus evaluates the default rules
   after the rules that allow the application through implicit use. The lab
   device's test command does not list default rules, so this order is not
   verified with traffic.
@@ -227,7 +227,7 @@ answers, case by case. On fw01 (PAN-OS 11.2.5), 2026-10-19, all 56 cases passed:
 ## simulate nat
 
 - A DIPP port, a dynamic-IP pool address and a dynamic destination's distribution
-  are chosen at runtime. proteus shows candidates.
+  are chosen at runtime. Proteus shows candidates.
 - NAT64 and NPTv6 are not simulated.
 - A rule's active/active binding is ignored, with a note.
 
@@ -249,14 +249,14 @@ answers, case by case. On fw01 (PAN-OS 11.2.5), 2026-10-19, all 56 cases passed:
   unresolved, with `gap.address-wildcard`, and exits with code 3.
 - **A device-level reference is matched by name alone.** A static route, an IKE
   gateway or other configuration outside any vsys that names an object is listed
-  as a reference with scope `config`. proteus does not decide which vsys's object
+  as a reference with scope `config`. Proteus does not decide which vsys's object
   that name refers to: a search in any vsys that finds an object of that name
   lists the reference.
 
 ## Host names
 
 - **Only the first IPv4 address is checked.** A source or destination given as a
-  host name is resolved with this machine's DNS. proteus checks the first IPv4
+  host name is resolved with this machine's DNS. Proteus checks the first IPv4
   address in the answer; IPv6 is not simulated. `simulate policy`,
   `simulate routing` and `simulate nat` name the other addresses in a note.
 - **The canonical name is this machine's view.** A note gives the name's
@@ -272,10 +272,10 @@ answers, case by case. On fw01 (PAN-OS 11.2.5), 2026-10-19, all 56 cases passed:
 
 `proteus mcp` answers with the limits above. These limits are its own:
 
-- **No authorization.** proteus does not decide who can call a tool. The gateway
+- **No authorization.** Proteus does not decide who can call a tool. The gateway
   in front of it, such as Portkey, owns that.
 - **A token holder can forge the identity.** The token proves that a request comes
-  through the gateway. proteus does not verify the identity header, and the audit
+  through the gateway. Proteus does not verify the identity header, and the audit
   records the identity as the gateway claimed it.
 - **Data is as fresh as the fetch schedule.** The server reads the store and never
   contacts a firewall. A note says when a snapshot is older than
@@ -318,7 +318,7 @@ stale-snapshot note.
 
 The [model check](../commands/mcp.md#model-check) asks a model 12 questions through the
 server and checks its replies against four rules. It has not run yet. Record each
-run here: the date, the model and its version, the gateway, the proteus version,
+run here: the date, the model and its version, the gateway, the Proteus version,
 and the result per question.
 
 ## URL matching

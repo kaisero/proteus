@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/okaiser/proteus/internal/reason"
-	"github.com/okaiser/proteus/internal/simulate"
-	"github.com/okaiser/proteus/internal/simulate/routing"
+	"github.com/kaisero/proteus/internal/reason"
+	"github.com/kaisero/proteus/internal/simulate"
+	"github.com/kaisero/proteus/internal/simulate/routing"
 )
 
 // The notes a result may carry (spec §4.8, E17).

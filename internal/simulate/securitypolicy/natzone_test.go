@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/okaiser/proteus/internal/config"
-	"github.com/okaiser/proteus/internal/resolve"
-	"github.com/okaiser/proteus/internal/simulate"
+	"github.com/kaisero/proteus/internal/config"
+	"github.com/kaisero/proteus/internal/resolve"
+	"github.com/kaisero/proteus/internal/simulate"
 )
 
 // net1 is fw01's stored interfaces and forwarding table as a network of one.

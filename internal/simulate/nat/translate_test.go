@@ -8,9 +8,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/okaiser/proteus/internal/config"
-	"github.com/okaiser/proteus/internal/resolve"
-	"github.com/okaiser/proteus/internal/simulate"
+	"github.com/kaisero/proteus/internal/config"
+	"github.com/kaisero/proteus/internal/resolve"
+	"github.com/kaisero/proteus/internal/simulate"
 )
 
 func fw01Interfaces(t *testing.T) []resolve.InterfaceState {

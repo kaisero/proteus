@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/okaiser/proteus/internal/config"
+	"github.com/kaisero/proteus/internal/config"
 )
 
 func loadT(t *testing.T, path string) *config.Config {

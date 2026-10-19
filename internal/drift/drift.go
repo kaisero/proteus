@@ -8,9 +8,9 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/okaiser/proteus/internal/config"
-	"github.com/okaiser/proteus/internal/resolve"
-	"github.com/okaiser/proteus/internal/schema"
+	"github.com/kaisero/proteus/internal/config"
+	"github.com/kaisero/proteus/internal/resolve"
+	"github.com/kaisero/proteus/internal/schema"
 )
 
 // Op is what happened to one object or rule.

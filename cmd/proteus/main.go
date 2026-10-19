@@ -7,7 +7,7 @@ import (
 	"os"
 	"runtime/debug"
 
-	"github.com/okaiser/proteus/internal/cli"
+	"github.com/kaisero/proteus/internal/cli"
 )
 
 // version is set at build time via -ldflags.

@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/okaiser/proteus/internal/appid"
-	"github.com/okaiser/proteus/internal/reason"
-	"github.com/okaiser/proteus/internal/simulate"
+	"github.com/kaisero/proteus/internal/appid"
+	"github.com/kaisero/proteus/internal/reason"
+	"github.com/kaisero/proteus/internal/simulate"
 )
 
 // portObjects are the services and custom applications of the port tests,

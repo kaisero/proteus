@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/okaiser/proteus/internal/fakepanos"
+	"github.com/kaisero/proteus/internal/fakepanos"
 )
 
 // --limit takes 1 or more on each question with many results; anything else

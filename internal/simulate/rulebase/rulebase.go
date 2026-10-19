@@ -13,11 +13,11 @@ import (
 
 	"github.com/RoaringBitmap/roaring/v2"
 
-	"github.com/okaiser/proteus/internal/config"
-	"github.com/okaiser/proteus/internal/index"
-	"github.com/okaiser/proteus/internal/reason"
-	"github.com/okaiser/proteus/internal/resolve"
-	"github.com/okaiser/proteus/internal/simulate"
+	"github.com/kaisero/proteus/internal/config"
+	"github.com/kaisero/proteus/internal/index"
+	"github.com/kaisero/proteus/internal/reason"
+	"github.com/kaisero/proteus/internal/resolve"
+	"github.com/kaisero/proteus/internal/simulate"
 )
 
 // Vsys is one vsys's configuration, loaded once for every rulebase check.

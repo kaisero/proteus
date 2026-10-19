@@ -10,7 +10,7 @@ import (
 
 	"github.com/RoaringBitmap/roaring/v2"
 
-	"github.com/okaiser/proteus/internal/resolve"
+	"github.com/kaisero/proteus/internal/resolve"
 )
 
 // A rule naming an external list, a region or a dynamic group, directly or

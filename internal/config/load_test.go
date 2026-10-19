@@ -10,8 +10,8 @@ import (
 	"testing"
 	"testing/fstest"
 
-	"github.com/okaiser/proteus/internal/digest"
-	"github.com/okaiser/proteus/internal/schema"
+	"github.com/kaisero/proteus/internal/digest"
+	"github.com/kaisero/proteus/internal/schema"
 )
 
 func TestLoadBareConfig(t *testing.T) {

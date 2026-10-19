@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/okaiser/proteus/internal/fakepanos"
-	"github.com/okaiser/proteus/internal/task"
+	"github.com/kaisero/proteus/internal/fakepanos"
+	"github.com/kaisero/proteus/internal/task"
 )
 
 // Every document is stored as <name>.xml, so a name must be unique and file-safe.

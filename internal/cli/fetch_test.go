@@ -13,15 +13,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/okaiser/proteus/internal/config"
-	"github.com/okaiser/proteus/internal/fakepanos"
-	"github.com/okaiser/proteus/internal/fetch"
-	"github.com/okaiser/proteus/internal/identity"
-	"github.com/okaiser/proteus/internal/index"
-	"github.com/okaiser/proteus/internal/inventory"
-	"github.com/okaiser/proteus/internal/resolve"
-	"github.com/okaiser/proteus/internal/store"
-	"github.com/okaiser/proteus/internal/testconfig"
+	"github.com/kaisero/proteus/internal/config"
+	"github.com/kaisero/proteus/internal/fakepanos"
+	"github.com/kaisero/proteus/internal/fetch"
+	"github.com/kaisero/proteus/internal/identity"
+	"github.com/kaisero/proteus/internal/index"
+	"github.com/kaisero/proteus/internal/inventory"
+	"github.com/kaisero/proteus/internal/resolve"
+	"github.com/kaisero/proteus/internal/store"
+	"github.com/kaisero/proteus/internal/testconfig"
 )
 
 func read(t *testing.T, p string) string {

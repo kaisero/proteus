@@ -31,11 +31,11 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/okaiser/proteus/internal/card"
-	"github.com/okaiser/proteus/internal/config"
-	"github.com/okaiser/proteus/internal/identity"
-	"github.com/okaiser/proteus/internal/index"
-	"github.com/okaiser/proteus/internal/resolve"
+	"github.com/kaisero/proteus/internal/card"
+	"github.com/kaisero/proteus/internal/config"
+	"github.com/kaisero/proteus/internal/identity"
+	"github.com/kaisero/proteus/internal/index"
+	"github.com/kaisero/proteus/internal/resolve"
 )
 
 // Mode is how the term is matched against values. Spec §15 C5.

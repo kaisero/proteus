@@ -4,7 +4,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/okaiser/proteus/internal/config"
+	"github.com/kaisero/proteus/internal/config"
 )
 
 // Object is one configuration object visible in a scope.

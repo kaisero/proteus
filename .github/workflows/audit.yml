@@ -1,0 +1,34 @@
+name: Audit
+
+# Dependency vulnerability scan with govulncheck. CodeQL covers the first-party
+# code; this covers the module tree. The schedule catches a newly disclosed CVE
+# in a pinned dependency without a code change.
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  govulncheck:
+    name: govulncheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version-file: go.mod
+      # The version is pinned in the Makefile, so CI and a local run scan alike.
+      - name: Scan dependencies
+        run: make vuln-tool vuln
+        # A CVE disclosed in a dependency must not fail an unrelated pull request.
+        # The schedule, the pushes and Dependabot stay the hard gate.
+        continue-on-error: ${{ github.event_name == 'pull_request' }}

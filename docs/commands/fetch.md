@@ -188,5 +188,5 @@ Use exactly one of the three: device names, `--label` or `--all`.
 - [snapshot](snapshot.md)
 - [inventory](inventory.md)
 - [Snapshots and the store](../concepts/snapshots.md)
-- [How proteus works](../concepts/index.md)
+- [How Proteus works](../concepts/index.md)
 - [Configuration](../reference/configuration.md)

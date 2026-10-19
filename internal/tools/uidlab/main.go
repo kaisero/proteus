@@ -55,10 +55,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/okaiser/proteus/internal/config"
-	"github.com/okaiser/proteus/internal/identity"
-	"github.com/okaiser/proteus/internal/store"
-	"github.com/okaiser/proteus/internal/tools/labkit"
+	"github.com/kaisero/proteus/internal/config"
+	"github.com/kaisero/proteus/internal/identity"
+	"github.com/kaisero/proteus/internal/store"
+	"github.com/kaisero/proteus/internal/tools/labkit"
 )
 
 // options are the flags. Each flag can also come from the variable its help

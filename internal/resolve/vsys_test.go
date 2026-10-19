@@ -3,7 +3,7 @@ package resolve
 import (
 	"testing"
 
-	"github.com/okaiser/proteus/internal/config"
+	"github.com/kaisero/proteus/internal/config"
 )
 
 func fwLab(t *testing.T) *config.Config {

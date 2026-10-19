@@ -1,8 +1,8 @@
 package query
 
 import (
-	"github.com/okaiser/proteus/internal/estate"
-	"github.com/okaiser/proteus/internal/simulate"
+	"github.com/kaisero/proteus/internal/estate"
+	"github.com/kaisero/proteus/internal/simulate"
 )
 
 // Doc is an envelope as JSON: what the command line prints with --output json

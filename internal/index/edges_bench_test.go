@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/okaiser/proteus/internal/config"
+	"github.com/kaisero/proteus/internal/config"
 )
 
 // writeFirewall generates a multi-vsys firewall configuration of a given size.

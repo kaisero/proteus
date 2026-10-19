@@ -7,12 +7,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/okaiser/proteus/internal/appid"
-	"github.com/okaiser/proteus/internal/identity"
-	"github.com/okaiser/proteus/internal/simulate"
-	"github.com/okaiser/proteus/internal/simulate/pathlab"
-	"github.com/okaiser/proteus/internal/simulate/routing"
-	"github.com/okaiser/proteus/internal/testconfig"
+	"github.com/kaisero/proteus/internal/appid"
+	"github.com/kaisero/proteus/internal/identity"
+	"github.com/kaisero/proteus/internal/simulate"
+	"github.com/kaisero/proteus/internal/simulate/pathlab"
+	"github.com/kaisero/proteus/internal/simulate/routing"
+	"github.com/kaisero/proteus/internal/testconfig"
 )
 
 // Review focus 2, D13: a hop whose content data lacks the flow's application

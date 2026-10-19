@@ -4,7 +4,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/okaiser/proteus/internal/appid"
+	"github.com/kaisero/proteus/internal/appid"
 )
 
 // selected returns the names of the fixture applications that f selects, by

@@ -1,0 +1,64 @@
+/* Proteus design system tokens: the colour and type tokens the docs use.
+   Values come from the design system's tokens.json. Change them there first,
+   then copy them here. The theme switch sets data-md-color-scheme, so the
+   light values key on "default" and the dark values on "slate". */
+
+[data-md-color-scheme="default"] {
+  --pt-bg: #f7f7f4;
+  --pt-surface: #ffffff;
+  --pt-surface-sunken: #f0f0ec;
+  --pt-border: #dcddd7;
+  --pt-border-strong: #8c9098;
+  --pt-fg: #121316;
+  --pt-fg-muted: #5a5e66;
+  --pt-fg-subtle: #6b6f77;
+  --pt-signal: #fa582d;
+  --pt-signal-fg: #c23a12;
+  --pt-signal-subtle: #fff1ec;
+  --pt-on-signal: #121316;
+  --pt-focus-ring: #dd4518;
+  --pt-selection: rgba(250, 88, 45, 0.18);
+  --pt-success-fg: #1e7a4c;
+  --pt-danger-fg: #b4193f;
+  --pt-warning-fg: #8a5a00;
+  --pt-info-fg: #2457c5;
+
+  /* The theme's search UI reads these as "r g b" triples. */
+  --pt-fg-rgb: 18 19 22;
+  --pt-bg-rgb: 247 247 244;
+  --pt-subtle-rgb: 240 240 236;
+}
+
+[data-md-color-scheme="slate"] {
+  --pt-bg: #121316;
+  --pt-surface: #1a1c20;
+  --pt-surface-sunken: #0d0e10;
+  --pt-border: #2c2f35;
+  --pt-border-strong: #6b6f77;
+  --pt-fg: #f7f7f4;
+  --pt-fg-muted: #a4a8af;
+  --pt-fg-subtle: #8a8e96;
+  --pt-signal: #fa582d;
+  --pt-signal-fg: #ff7a52;
+  --pt-signal-subtle: #2a160f;
+  --pt-on-signal: #121316;
+  --pt-focus-ring: #ff7a52;
+  --pt-selection: rgba(250, 88, 45, 0.32);
+  --pt-success-fg: #4cc38a;
+  --pt-danger-fg: #ff6685;
+  --pt-warning-fg: #e8b341;
+  --pt-info-fg: #6e9bff;
+
+  --pt-fg-rgb: 247 247 244;
+  --pt-bg-rgb: 18 19 22;
+  --pt-subtle-rgb: 26 28 32;
+}
+
+:root {
+  --pt-font-display: "IBM Plex Sans Condensed", "Arial Narrow", system-ui, sans-serif;
+  --pt-font-sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --pt-font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --pt-tracking-display: -0.015em;
+  --pt-radius-sm: 4px;
+  --pt-radius-md: 6px;
+}

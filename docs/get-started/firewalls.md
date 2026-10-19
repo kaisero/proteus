@@ -30,7 +30,7 @@ devices:
     and send false data. Set `insecure_tls: false` for each firewall whose
     certificate this machine trusts; see [TLS](../reference/configuration.md#tls).
 
-proteus refuses to read the inventory when other users can read it, so keep the
+Proteus refuses to read the inventory when other users can read it, so keep the
 file at mode `0600`.
 
 ## 2. Fetch
@@ -72,9 +72,9 @@ the path starts.
 
 ## Next
 
-- [How proteus works](../concepts/index.md) explains snapshots, scopes and
+- [How Proteus works](../concepts/index.md) explains snapshots, scopes and
   fidelity.
 - [Commands](../commands/index.md) lists every command with its examples and
   flags.
-- [Output and exit codes](../reference/output.md) shows how to use proteus in
+- [Output and exit codes](../reference/output.md) shows how to use Proteus in
   scripts.

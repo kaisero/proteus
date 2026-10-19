@@ -1,4 +1,4 @@
-module github.com/okaiser/proteus
+module github.com/kaisero/proteus
 
 go 1.26.9
 

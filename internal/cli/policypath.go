@@ -8,9 +8,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/okaiser/proteus/internal/query"
-	"github.com/okaiser/proteus/internal/simulate"
-	"github.com/okaiser/proteus/internal/simulate/pathpolicy"
+	"github.com/kaisero/proteus/internal/query"
+	"github.com/kaisero/proteus/internal/simulate"
+	"github.com/kaisero/proteus/internal/simulate/pathpolicy"
 )
 
 // policyOptions are simulate policy's flags and arguments.

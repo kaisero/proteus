@@ -11,11 +11,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/okaiser/proteus/internal/config"
-	"github.com/okaiser/proteus/internal/index"
-	"github.com/okaiser/proteus/internal/reason"
-	"github.com/okaiser/proteus/internal/resolve"
-	"github.com/okaiser/proteus/internal/simulate"
+	"github.com/kaisero/proteus/internal/config"
+	"github.com/kaisero/proteus/internal/index"
+	"github.com/kaisero/proteus/internal/reason"
+	"github.com/kaisero/proteus/internal/resolve"
+	"github.com/kaisero/proteus/internal/simulate"
 )
 
 // env loads one fixture's vsys1, with the fw01 forwarding table when zones is set.

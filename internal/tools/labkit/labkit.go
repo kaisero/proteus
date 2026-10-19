@@ -31,9 +31,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/okaiser/proteus/internal/estate"
-	"github.com/okaiser/proteus/internal/inventory"
-	"github.com/okaiser/proteus/internal/store"
+	"github.com/kaisero/proteus/internal/estate"
+	"github.com/kaisero/proteus/internal/inventory"
+	"github.com/kaisero/proteus/internal/store"
 )
 
 // VsysXPath is the vsys of a firewall that runs one vsys: a PAN-OS default

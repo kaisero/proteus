@@ -11,10 +11,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/okaiser/proteus/internal/drift"
-	"github.com/okaiser/proteus/internal/identity"
-	"github.com/okaiser/proteus/internal/simulate/pathlab"
-	"github.com/okaiser/proteus/internal/store"
+	"github.com/kaisero/proteus/internal/drift"
+	"github.com/kaisero/proteus/internal/identity"
+	"github.com/kaisero/proteus/internal/simulate/pathlab"
+	"github.com/kaisero/proteus/internal/store"
 )
 
 // diffLab is fw01 fetched twice, the second time changed and from another

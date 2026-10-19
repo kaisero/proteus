@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/okaiser/proteus/internal/inventory"
-	"github.com/okaiser/proteus/internal/reason"
-	"github.com/okaiser/proteus/internal/runlog"
-	"github.com/okaiser/proteus/internal/schema"
-	"github.com/okaiser/proteus/internal/task"
+	"github.com/kaisero/proteus/internal/inventory"
+	"github.com/kaisero/proteus/internal/reason"
+	"github.com/kaisero/proteus/internal/runlog"
+	"github.com/kaisero/proteus/internal/schema"
+	"github.com/kaisero/proteus/internal/task"
 )
 
 // State is one device's fetch as it goes: the target, the client once logged in, and

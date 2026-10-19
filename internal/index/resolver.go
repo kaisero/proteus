@@ -8,9 +8,9 @@ import (
 
 	"github.com/RoaringBitmap/roaring/v2"
 
-	"github.com/okaiser/proteus/internal/appid"
-	"github.com/okaiser/proteus/internal/config"
-	"github.com/okaiser/proteus/internal/identity"
+	"github.com/kaisero/proteus/internal/appid"
+	"github.com/kaisero/proteus/internal/config"
+	"github.com/kaisero/proteus/internal/identity"
 )
 
 // A resolver turns a query value into the object names in its own value space that

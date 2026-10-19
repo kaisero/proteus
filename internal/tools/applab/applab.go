@@ -15,7 +15,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/okaiser/proteus/internal/tools/labkit"
+	"github.com/kaisero/proteus/internal/tools/labkit"
 )
 
 // The lab files, relative to the repository root.

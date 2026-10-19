@@ -11,7 +11,7 @@ import (
 	"testing"
 )
 
-const module = "github.com/okaiser/proteus"
+const module = "github.com/kaisero/proteus"
 
 // ioPackages are what the read-only core must never reach. The core reads a file
 // the caller names; it opens no connection and runs no command.

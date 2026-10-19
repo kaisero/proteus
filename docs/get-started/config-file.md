@@ -61,7 +61,7 @@ first match: from-inside (allow)
 
 The `fidelity` line says how certain the answer is. `exact` means that the
 firewall computes the same result. Leave out `--from-zone` and `--to-zone`, and
-proteus derives the zones from the configuration; see
+Proteus derives the zones from the configuration; see
 [Fidelity](../concepts/fidelity.md).
 
 Add `--why` to see every stage and how many rules it kept.

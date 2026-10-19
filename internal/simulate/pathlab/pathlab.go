@@ -19,10 +19,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/okaiser/proteus/internal/config"
-	"github.com/okaiser/proteus/internal/index"
-	"github.com/okaiser/proteus/internal/resolve"
-	"github.com/okaiser/proteus/internal/simulate"
+	"github.com/kaisero/proteus/internal/config"
+	"github.com/kaisero/proteus/internal/index"
+	"github.com/kaisero/proteus/internal/resolve"
+	"github.com/kaisero/proteus/internal/simulate"
 )
 
 // The two devices, in inventory order, and the lab flow between them.

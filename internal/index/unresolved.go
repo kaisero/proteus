@@ -3,7 +3,7 @@ package index
 import (
 	"fmt"
 
-	"github.com/okaiser/proteus/internal/reason"
+	"github.com/kaisero/proteus/internal/reason"
 )
 
 // Unresolved records something a lookup could not evaluate, and why.

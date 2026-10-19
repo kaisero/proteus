@@ -61,7 +61,7 @@ t-dip-pool: source 198.18.11.5 -> 198.18.250.64/29, port unchanged; fallback 198
 security policy matches: 198.18.11.5 -> 198.18.250.200, port 443, zones client -> transport
 ```
 
-The firewall picks a pool address at runtime. proteus shows the whole pool on the `source` row and the first candidate address on the `after` line.
+The firewall picks a pool address at runtime. Proteus shows the whole pool on the `source` row and the first candidate address on the `after` line.
 
 ### The rules above the match
 
@@ -196,7 +196,7 @@ The box shows the firewall, the vsys, the logical router and the age of the snap
 | `rule` | the matched rule and the zone pair it matched on; `none: …` with the reason when no rule matches or the packet drops before NAT |
 | `source` | the source translation |
 | `dest` | the destination translation |
-| `doubt` | a rule that proteus cannot decide, with the reason |
+| `doubt` | a rule that Proteus cannot decide, with the reason |
 | `note` | a fact that limits the answer, such as an ignored active/active binding |
 
 A rule that names a service is a `doubt` when you give no `--port`. A rule that a bi-directional rule implies carries `(implicit rule of the bi-directional <rule>)`.
@@ -231,9 +231,9 @@ The `place` stage uses the interface where the source is connected, or where its
 
 ## Limits
 
-- A DIPP port, a dynamic-IP pool address and the distribution of a dynamic destination are chosen at runtime. proteus shows them as candidates.
-- proteus does not simulate NAT64 and NPTv6.
-- proteus ignores the active/active binding of a rule and adds a note.
+- A DIPP port, a dynamic-IP pool address and the distribution of a dynamic destination are chosen at runtime. Proteus shows them as candidates.
+- Proteus does not simulate NAT64 and NPTv6.
+- Proteus ignores the active/active binding of a rule and adds a note.
 
 See [Limits: simulate nat](../reference/limits.md#simulate-nat) and [Limits: host names](../reference/limits.md#host-names).
 

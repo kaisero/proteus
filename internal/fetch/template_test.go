@@ -15,11 +15,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/okaiser/proteus/internal/config"
-	"github.com/okaiser/proteus/internal/fakepanos"
-	"github.com/okaiser/proteus/internal/runlog"
-	"github.com/okaiser/proteus/internal/schema"
-	"github.com/okaiser/proteus/internal/task"
+	"github.com/kaisero/proteus/internal/config"
+	"github.com/kaisero/proteus/internal/fakepanos"
+	"github.com/kaisero/proteus/internal/runlog"
+	"github.com/kaisero/proteus/internal/schema"
+	"github.com/kaisero/proteus/internal/task"
 )
 
 var update = flag.Bool("update", false, "rewrite testdata/config/firewall-lab-merged.xml")

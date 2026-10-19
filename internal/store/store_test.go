@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/okaiser/proteus/internal/identity"
+	"github.com/kaisero/proteus/internal/identity"
 )
 
 func clock(start time.Time) func() time.Time {

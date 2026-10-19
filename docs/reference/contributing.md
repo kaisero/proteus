@@ -1,6 +1,6 @@
 # Contributing
 
-Build, test and extend proteus, and write these docs in one style. Read
+Build, test and extend Proteus, and write these docs in one style. Read
 `AGENTS.md` before you change a package.
 
 ## Setup
@@ -98,8 +98,8 @@ in that header, so the key never goes in a URL.
 
 ## Update the schema digest
 
-proteus embeds one digest and reads every PAN-OS version with it. Replace it with
-the schema of a newer release when that release changes a field proteus reads.
+Proteus embeds one digest and reads every PAN-OS version with it. Replace it with
+the schema of a newer release when that release changes a field Proteus reads.
 
 1. Copy the schema off a firewall of that release. The files are vendor files.
    Do not commit them.
@@ -141,6 +141,22 @@ make docs           # build site/ and fail on a broken link or anchor
 
 A push to `main` publishes the site to GitHub Pages. A pull request builds it,
 so a broken link fails the check before the merge.
+
+## Release
+
+Work lands on `develop`. A pull request from `develop` to `main` is a release:
+
+1. Set the new version in `VERSION`, for example `0.0.2`.
+2. Add a `## [0.0.2] - <date>` section to `CHANGELOG.md` with the release notes.
+3. Open a pull request from `develop` to `main`.
+
+The pull request checks that the version is new, that `CHANGELOG.md` has its
+section, and that every platform builds. The merge tags `v0.0.2` and publishes a
+GitHub release with the archives, `SHA256SUMS`, a build provenance attestation
+and the notes of that section. A version with a suffix, such as `0.1.0-rc.1`,
+becomes a prerelease.
+
+`make release-build` builds the same archives into `dist/` on your machine.
 
 ## Docs style
 

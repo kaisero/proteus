@@ -14,9 +14,9 @@ import (
 
 	"github.com/gaissmai/bart"
 
-	"github.com/okaiser/proteus/internal/reason"
-	"github.com/okaiser/proteus/internal/resolve"
-	"github.com/okaiser/proteus/internal/simulate"
+	"github.com/kaisero/proteus/internal/reason"
+	"github.com/kaisero/proteus/internal/resolve"
+	"github.com/kaisero/proteus/internal/simulate"
 )
 
 // Placed says how the start of a path was found.

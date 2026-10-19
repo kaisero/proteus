@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/okaiser/proteus/internal/config"
-	"github.com/okaiser/proteus/internal/identity"
-	"github.com/okaiser/proteus/internal/reason"
+	"github.com/kaisero/proteus/internal/config"
+	"github.com/kaisero/proteus/internal/identity"
+	"github.com/kaisero/proteus/internal/reason"
 )
 
 func usersIndex(t *testing.T) *Index {

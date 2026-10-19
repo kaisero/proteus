@@ -18,7 +18,7 @@ import (
 
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/okaiser/proteus/internal/runlog"
+	"github.com/kaisero/proteus/internal/runlog"
 )
 
 // HTTPOptions configure the Streamable HTTP server (spec §4.4).

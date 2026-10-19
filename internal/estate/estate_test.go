@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/okaiser/proteus/internal/index"
-	"github.com/okaiser/proteus/internal/reason"
-	"github.com/okaiser/proteus/internal/store"
+	"github.com/kaisero/proteus/internal/index"
+	"github.com/kaisero/proteus/internal/reason"
+	"github.com/kaisero/proteus/internal/store"
 )
 
 var t0 = time.Date(2026, 9, 28, 10, 0, 0, 0, time.UTC)

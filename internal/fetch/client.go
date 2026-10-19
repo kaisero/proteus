@@ -16,8 +16,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/okaiser/proteus/internal/inventory"
-	"github.com/okaiser/proteus/internal/runlog"
+	"github.com/kaisero/proteus/internal/inventory"
+	"github.com/kaisero/proteus/internal/runlog"
 )
 
 // Client talks to one firewall's XML API.

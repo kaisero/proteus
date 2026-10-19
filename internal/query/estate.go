@@ -8,13 +8,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/okaiser/proteus/internal/config"
-	"github.com/okaiser/proteus/internal/estate"
-	"github.com/okaiser/proteus/internal/index"
-	"github.com/okaiser/proteus/internal/reason"
-	"github.com/okaiser/proteus/internal/resolve"
-	"github.com/okaiser/proteus/internal/simulate"
-	"github.com/okaiser/proteus/internal/store"
+	"github.com/kaisero/proteus/internal/config"
+	"github.com/kaisero/proteus/internal/estate"
+	"github.com/kaisero/proteus/internal/index"
+	"github.com/kaisero/proteus/internal/reason"
+	"github.com/kaisero/proteus/internal/resolve"
+	"github.com/kaisero/proteus/internal/simulate"
+	"github.com/kaisero/proteus/internal/store"
 )
 
 // Errors of an env that lacks what a query reads. The command line always

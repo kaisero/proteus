@@ -16,13 +16,13 @@ import (
 	"slices"
 	"time"
 
-	"github.com/okaiser/proteus/internal/estate"
-	"github.com/okaiser/proteus/internal/index"
-	"github.com/okaiser/proteus/internal/inventory"
-	"github.com/okaiser/proteus/internal/reason"
-	"github.com/okaiser/proteus/internal/runlog"
-	"github.com/okaiser/proteus/internal/simulate"
-	"github.com/okaiser/proteus/internal/store"
+	"github.com/kaisero/proteus/internal/estate"
+	"github.com/kaisero/proteus/internal/index"
+	"github.com/kaisero/proteus/internal/inventory"
+	"github.com/kaisero/proteus/internal/reason"
+	"github.com/kaisero/proteus/internal/runlog"
+	"github.com/kaisero/proteus/internal/simulate"
+	"github.com/kaisero/proteus/internal/store"
 )
 
 // FormatVersion is the envelope's format. A change that breaks a consumer

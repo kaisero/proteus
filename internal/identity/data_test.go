@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/okaiser/proteus/internal/identity"
+	"github.com/kaisero/proteus/internal/identity"
 )
 
 // fixtureWith builds the data of the fixture file after change.

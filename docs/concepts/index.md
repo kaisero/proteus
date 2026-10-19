@@ -1,6 +1,6 @@
-# How proteus works
+# How Proteus works
 
-proteus answers questions about PAN-OS firewalls from stored copies of their
+Proteus answers questions about PAN-OS firewalls from stored copies of their
 configuration and operational state. It reads from a firewall only during
 `proteus fetch`, and it never writes to one: the API client refuses every command
 except `<show>` commands and the configuration export. The configuration of a
@@ -42,7 +42,7 @@ The **inventory** is a YAML file that lists your firewalls. Each entry is a
 
 A rule field accepts values from several kinds of object. A security rule's
 `source`, for example, accepts an address, an address group, a region, an external
-dynamic list and an IP block list. Each kind is a **value space**, and proteus
+dynamic list and an IP block list. Each kind is a **value space**, and Proteus
 reads the value spaces of every field from the PAN-OS schema.
 
 The type of a search term sets how it matches:
@@ -70,6 +70,6 @@ A rule field reaches a value in one of four ways:
 
 Every PAN-OS firewall carries its configuration schema. The schema says which
 fields exist, which lists hold named entries, and which objects a field can
-reference. proteus embeds a compact **digest** of the PAN-OS 11.2 schema and reads
+reference. Proteus embeds a compact **digest** of the PAN-OS 11.2 schema and reads
 every configuration version with it. [Architecture](architecture.md#the-schema-digest)
 explains how the digest is built.

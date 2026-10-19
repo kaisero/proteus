@@ -12,11 +12,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/okaiser/proteus/internal/estate"
-	"github.com/okaiser/proteus/internal/fakepanos"
-	"github.com/okaiser/proteus/internal/simulate/pathpolicy"
-	"github.com/okaiser/proteus/internal/simulate/securitypolicy"
-	"github.com/okaiser/proteus/internal/testconfig"
+	"github.com/kaisero/proteus/internal/estate"
+	"github.com/kaisero/proteus/internal/fakepanos"
+	"github.com/kaisero/proteus/internal/simulate/pathpolicy"
+	"github.com/kaisero/proteus/internal/simulate/securitypolicy"
+	"github.com/kaisero/proteus/internal/testconfig"
 )
 
 var update = flag.Bool("update", false, "rewrite the golden files in testdata/golden")

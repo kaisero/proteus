@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/okaiser/proteus/internal/reason"
-	"github.com/okaiser/proteus/internal/runlog"
+	"github.com/kaisero/proteus/internal/reason"
+	"github.com/kaisero/proteus/internal/runlog"
 )
 
 type counter struct{ n int }

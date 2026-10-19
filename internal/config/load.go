@@ -9,8 +9,8 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/okaiser/proteus/internal/digest"
-	"github.com/okaiser/proteus/internal/schema"
+	"github.com/kaisero/proteus/internal/digest"
+	"github.com/kaisero/proteus/internal/schema"
 )
 
 // Config is a loaded configuration: the parsed file, the schema that describes it,

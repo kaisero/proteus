@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/okaiser/proteus/internal/config"
+	"github.com/kaisero/proteus/internal/config"
 )
 
 // A sibling vsys's rules must never appear.

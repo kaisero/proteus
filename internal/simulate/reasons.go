@@ -3,7 +3,7 @@ package simulate
 import (
 	"strings"
 
-	"github.com/okaiser/proteus/internal/reason"
+	"github.com/kaisero/proteus/internal/reason"
 )
 
 // Reasons is a list of reasons, such as a hop's notes. JSON writes each as

@@ -15,8 +15,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/okaiser/proteus/internal/identity"
-	"github.com/okaiser/proteus/internal/tools/labkit"
+	"github.com/kaisero/proteus/internal/identity"
+	"github.com/kaisero/proteus/internal/tools/labkit"
 )
 
 // The lab files, relative to the repository root (spec 2026-10-17 §10.3).

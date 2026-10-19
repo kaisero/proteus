@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/okaiser/proteus/internal/card"
-	"github.com/okaiser/proteus/internal/simulate/pathlab"
-	"github.com/okaiser/proteus/internal/store"
+	"github.com/kaisero/proteus/internal/card"
+	"github.com/kaisero/proteus/internal/simulate/pathlab"
+	"github.com/kaisero/proteus/internal/store"
 )
 
 // A lookup over the store: the cards with their target and a summary; a name

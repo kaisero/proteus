@@ -4,7 +4,7 @@ import (
 	"net/netip"
 	"testing"
 
-	"github.com/okaiser/proteus/internal/resolve"
+	"github.com/kaisero/proteus/internal/resolve"
 )
 
 // As observed on fw02, PAN-OS 12.2.3 (L2): 10.88.2.1/0.0.255.0 matches

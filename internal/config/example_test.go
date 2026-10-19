@@ -3,7 +3,7 @@ package config_test
 import (
 	"fmt"
 
-	"github.com/okaiser/proteus/internal/config"
+	"github.com/kaisero/proteus/internal/config"
 )
 
 // Point the library at a configuration file and it reports what it is.

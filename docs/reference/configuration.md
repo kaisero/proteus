@@ -1,6 +1,6 @@
 # Configuration
 
-proteus reads its settings from the inventory file, environment variables and
+Proteus reads its settings from the inventory file, environment variables and
 flags, and writes its data to fixed paths.
 
 ## The inventory
@@ -12,7 +12,7 @@ The inventory is a YAML file that lists your firewalls and the default settings.
 | --- | --- |
 | Default path | `~/.config/proteus/config.yaml`, or `$XDG_CONFIG_HOME/proteus/config.yaml` |
 | Other path | `--config <path>` or `PROTEUS_CONFIG` |
-| Mode | `0600`. proteus refuses to read the file when other users can read it. |
+| Mode | `0600`. Proteus refuses to read the file when other users can read it. |
 
 ```yaml
 version: 1
@@ -168,7 +168,7 @@ mcp:
   max_cache: 2048                        # MB
 ```
 
-proteus refuses an unknown key, a negative number, a duration it cannot read, a
+Proteus refuses an unknown key, a negative number, a duration it cannot read, a
 `listen` without a port, an `identity_header` that is not an HTTP header name, and
 an empty `audit_claims` entry. A number that is left out or set to `0` takes its
 default, so `max_queue: 0` keeps the queue at 16.
@@ -205,7 +205,7 @@ The inventory never holds the token: `token_file` names the file that holds it.
 | `PROTEUS_MCP_TOKEN`, the token itself | middle |
 | `PROTEUS_MCP_TOKEN_FILE`, or `token_file` from the export | lowest |
 
-proteus has no `--token` flag, because the process list shows every flag. It trims
+Proteus has no `--token` flag, because the process list shows every flag. It trims
 trailing whitespace from the token and refuses a token file that other users can
 write. A read-only secret mount (mode 0444, owned by root) is accepted. `--http`
 needs a token of at least 32 bytes.
@@ -233,10 +233,10 @@ the port from the request's Host before it compares.
 | HTTP, header missing or not a JSON object | `unknown` (`identity_source: none`) |
 | HTTP, JSON object with none of the `audit_claims` | `unknown` (`identity_source: header`) |
 
-Before a line takes the audit file past `audit_max_mb`, proteus renames the file
+Before a line takes the audit file past `audit_max_mb`, Proteus renames the file
 to `<audit_log>.<UTC time>-<sequence>` and starts a new one with mode 0600. It
 keeps the `audit_keep` renamed files with the highest sequence numbers and removes
-the older ones. proteus also sets an existing audit file to mode 0600.
+the older ones. Proteus also sets an existing audit file to mode 0600.
 
 `audit_log: -` writes the lines to standard output, for a container platform that
 collects them. With `--http`, nothing else goes to standard output. Over stdio,
@@ -255,7 +255,7 @@ The server writes a call's run log only when the call ends `internal` or
 `--log-level` and `--store` apply to the server too, and `max_snapshot_age` comes
 from the export's `defaults:`.
 
-## Files proteus writes
+## Files Proteus writes
 
 | Path | Mode | Content |
 | --- | --- | --- |

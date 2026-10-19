@@ -1,7 +1,7 @@
 package index
 
 import (
-	"github.com/okaiser/proteus/internal/config"
+	"github.com/kaisero/proteus/internal/config"
 )
 
 // edgeList is every reference edge in a configuration, in document order, each

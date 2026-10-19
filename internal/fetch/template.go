@@ -10,10 +10,10 @@ import (
 	"io"
 	"slices"
 
-	"github.com/okaiser/proteus/internal/config"
-	"github.com/okaiser/proteus/internal/runlog"
-	"github.com/okaiser/proteus/internal/schema"
-	"github.com/okaiser/proteus/internal/task"
+	"github.com/kaisero/proteus/internal/config"
+	"github.com/kaisero/proteus/internal/runlog"
+	"github.com/kaisero/proteus/internal/schema"
+	"github.com/kaisero/proteus/internal/task"
 )
 
 // MergeStats counts what a merge did: the template elements it added, each

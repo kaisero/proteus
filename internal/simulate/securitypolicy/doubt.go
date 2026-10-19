@@ -5,10 +5,10 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/okaiser/proteus/internal/reason"
-	"github.com/okaiser/proteus/internal/resolve"
-	"github.com/okaiser/proteus/internal/simulate"
-	"github.com/okaiser/proteus/internal/simulate/rulebase"
+	"github.com/kaisero/proteus/internal/reason"
+	"github.com/kaisero/proteus/internal/resolve"
+	"github.com/kaisero/proteus/internal/simulate"
+	"github.com/kaisero/proteus/internal/simulate/rulebase"
 )
 
 // Doubt names a candidate the check cannot decide, and why. It does not change

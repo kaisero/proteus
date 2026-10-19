@@ -1,5 +1,5 @@
 [project]
-site_name = "proteus"
+site_name = "Proteus"
 site_description = "Answer questions about PAN-OS firewalls from their configuration and operational state."
 site_url = "https://kaisero.github.io/proteus/"
 repo_url = "https://github.com/kaisero/proteus"
@@ -42,9 +42,19 @@ nav = [
   ] },
 ]
 
-extra_css = ["stylesheets/extra.css"]
+extra_css = [
+  "stylesheets/tokens.css",
+  "stylesheets/theme.css",
+  "stylesheets/extra.css",
+]
 
 [project.theme]
+# The design system: logo, favicon, fonts and colours. The overrides folder
+# holds the logo mark and the extra page head; docs/stylesheets the colours.
+custom_dir = "overrides"
+favicon = "assets/images/favicon.svg"
+icon.logo = "proteus/mark"
+font = false
 features = [
   "content.code.copy",
   "content.tabs.link",
@@ -60,12 +70,16 @@ features = [
 [[project.theme.palette]]
 media = "(prefers-color-scheme: light)"
 scheme = "default"
+primary = "custom"
+accent = "custom"
 toggle.icon = "lucide/sun"
 toggle.name = "Switch to dark mode"
 
 [[project.theme.palette]]
 media = "(prefers-color-scheme: dark)"
 scheme = "slate"
+primary = "custom"
+accent = "custom"
 toggle.icon = "lucide/moon"
 toggle.name = "Switch to light mode"
 

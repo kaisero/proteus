@@ -3,7 +3,7 @@ package fetch
 import (
 	"context"
 
-	"github.com/okaiser/proteus/internal/resolve"
+	"github.com/kaisero/proteus/internal/resolve"
 )
 
 // ActiveOptions tune the ha step.

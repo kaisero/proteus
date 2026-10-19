@@ -10,11 +10,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/okaiser/proteus/internal/fakepanos"
-	"github.com/okaiser/proteus/internal/identity"
-	"github.com/okaiser/proteus/internal/reason"
-	"github.com/okaiser/proteus/internal/runlog"
-	"github.com/okaiser/proteus/internal/task"
+	"github.com/kaisero/proteus/internal/fakepanos"
+	"github.com/kaisero/proteus/internal/identity"
+	"github.com/kaisero/proteus/internal/reason"
+	"github.com/kaisero/proteus/internal/runlog"
+	"github.com/kaisero/proteus/internal/task"
 )
 
 // identityCmds are the identity commands of a fetch whose table fits one

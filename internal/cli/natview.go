@@ -5,9 +5,9 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/okaiser/proteus/internal/query"
-	"github.com/okaiser/proteus/internal/simulate"
-	"github.com/okaiser/proteus/internal/simulate/nat"
+	"github.com/kaisero/proteus/internal/query"
+	"github.com/kaisero/proteus/internal/simulate"
+	"github.com/kaisero/proteus/internal/simulate/nat"
 )
 
 // renderNAT draws a NAT answer (spec §18 N9): the answer line, one box as in

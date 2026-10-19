@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/okaiser/proteus/internal/fakepanos"
-	"github.com/okaiser/proteus/internal/task"
+	"github.com/kaisero/proteus/internal/fakepanos"
+	"github.com/kaisero/proteus/internal/task"
 )
 
 // The HA pair shapes are synthetic: no lab device runs HA yet.

@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/okaiser/proteus/internal/identity"
+	"github.com/kaisero/proteus/internal/identity"
 )
 
 var takenAt = time.Date(2026, 10, 17, 20, 0, 0, 0, time.UTC)

@@ -14,7 +14,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/okaiser/proteus/internal/tools/labkit"
+	"github.com/kaisero/proteus/internal/tools/labkit"
 )
 
 // root is the repository root, seen from this package.

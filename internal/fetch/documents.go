@@ -10,8 +10,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/okaiser/proteus/internal/reason"
-	"github.com/okaiser/proteus/internal/runlog"
+	"github.com/kaisero/proteus/internal/reason"
+	"github.com/kaisero/proteus/internal/runlog"
 )
 
 // A Document is one thing fetched from a device and stored as <Name>.xml.

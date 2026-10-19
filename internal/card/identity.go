@@ -3,7 +3,7 @@ package card
 import (
 	"fmt"
 
-	"github.com/okaiser/proteus/internal/identity"
+	"github.com/kaisero/proteus/internal/identity"
 )
 
 // The kinds of the identity cards (spec 2026-10-17 §6.2, PD14). The identity

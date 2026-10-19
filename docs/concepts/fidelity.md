@@ -27,8 +27,8 @@ An answer can also carry these parts:
 
 | Part | Meaning | Exit code |
 | --- | --- | --- |
-| hole | a device or vsys that proteus could not read; the answer covers the rest | 3 |
-| unresolved | a value that proteus recognized but could not evaluate; the answer can miss matches | 3 |
+| hole | a device or vsys that Proteus could not read; the answer covers the rest | 3 |
+| unresolved | a value that Proteus recognized but could not evaluate; the answer can miss matches | 3 |
 | note | a qualification that leaves the answer unchanged, for example an old snapshot | 0 |
 
 A script can refuse to act on an answer that exits with code 3. See

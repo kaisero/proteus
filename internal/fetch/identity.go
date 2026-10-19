@@ -10,12 +10,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/okaiser/proteus/internal/config"
-	"github.com/okaiser/proteus/internal/identity"
-	"github.com/okaiser/proteus/internal/reason"
-	"github.com/okaiser/proteus/internal/resolve"
-	"github.com/okaiser/proteus/internal/runlog"
-	"github.com/okaiser/proteus/internal/task"
+	"github.com/kaisero/proteus/internal/config"
+	"github.com/kaisero/proteus/internal/identity"
+	"github.com/kaisero/proteus/internal/reason"
+	"github.com/kaisero/proteus/internal/resolve"
+	"github.com/kaisero/proteus/internal/runlog"
+	"github.com/kaisero/proteus/internal/task"
 )
 
 // The commands of the identity data, each a <show> command, in the order the

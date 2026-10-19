@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/okaiser/proteus/internal/identity"
+	"github.com/kaisero/proteus/internal/identity"
 )
 
 // diff gives the changes from the fixture after before changes it to the

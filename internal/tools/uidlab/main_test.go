@@ -17,8 +17,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/okaiser/proteus/internal/identity"
-	"github.com/okaiser/proteus/internal/tools/labkit"
+	"github.com/kaisero/proteus/internal/identity"
+	"github.com/kaisero/proteus/internal/tools/labkit"
 )
 
 // TestMain makes the test binary a fake proteus when the tool runs it: the

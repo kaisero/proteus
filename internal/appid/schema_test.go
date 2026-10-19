@@ -4,9 +4,9 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/okaiser/proteus/internal/appid"
-	"github.com/okaiser/proteus/internal/config"
-	"github.com/okaiser/proteus/internal/schema"
+	"github.com/kaisero/proteus/internal/appid"
+	"github.com/kaisero/proteus/internal/config"
+	"github.com/kaisero/proteus/internal/schema"
 )
 
 // filterPath is the hand-modelled node of the S10 map (AGENTS.md R8).

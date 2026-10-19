@@ -11,14 +11,14 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/okaiser/proteus/internal/estate"
-	"github.com/okaiser/proteus/internal/fetch"
-	"github.com/okaiser/proteus/internal/inventory"
-	"github.com/okaiser/proteus/internal/reason"
-	"github.com/okaiser/proteus/internal/runlog"
-	"github.com/okaiser/proteus/internal/simulate"
-	"github.com/okaiser/proteus/internal/store"
-	"github.com/okaiser/proteus/internal/task"
+	"github.com/kaisero/proteus/internal/estate"
+	"github.com/kaisero/proteus/internal/fetch"
+	"github.com/kaisero/proteus/internal/inventory"
+	"github.com/kaisero/proteus/internal/reason"
+	"github.com/kaisero/proteus/internal/runlog"
+	"github.com/kaisero/proteus/internal/simulate"
+	"github.com/kaisero/proteus/internal/store"
+	"github.com/kaisero/proteus/internal/task"
 )
 
 // fetchConcurrency bounds how many devices are fetched at once. It is a constant

@@ -8,12 +8,12 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/okaiser/proteus/internal/estate"
-	"github.com/okaiser/proteus/internal/query"
-	"github.com/okaiser/proteus/internal/simulate"
-	"github.com/okaiser/proteus/internal/simulate/nat"
-	"github.com/okaiser/proteus/internal/simulate/routing"
-	"github.com/okaiser/proteus/internal/simulate/securitypolicy"
+	"github.com/kaisero/proteus/internal/estate"
+	"github.com/kaisero/proteus/internal/query"
+	"github.com/kaisero/proteus/internal/simulate"
+	"github.com/kaisero/proteus/internal/simulate/nat"
+	"github.com/kaisero/proteus/internal/simulate/routing"
+	"github.com/kaisero/proteus/internal/simulate/securitypolicy"
 )
 
 // flowFlags are the flow of spec §11.3 as flags (spec §15 C12).

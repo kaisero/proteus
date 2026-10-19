@@ -20,7 +20,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/okaiser/proteus/internal/inventory"
+	"github.com/kaisero/proteus/internal/inventory"
 )
 
 // mcpTokenValue is a dummy bearer token of 32 bytes.

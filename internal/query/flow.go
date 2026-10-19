@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/okaiser/proteus/internal/index"
-	"github.com/okaiser/proteus/internal/runlog"
-	"github.com/okaiser/proteus/internal/simulate"
+	"github.com/kaisero/proteus/internal/index"
+	"github.com/kaisero/proteus/internal/runlog"
+	"github.com/kaisero/proteus/internal/simulate"
 )
 
 // dnsTimeout bounds one name's resolution. A server's call timeout must exceed it.

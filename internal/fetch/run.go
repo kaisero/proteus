@@ -1,6 +1,6 @@
 package fetch
 
-import "github.com/okaiser/proteus/internal/reason"
+import "github.com/kaisero/proteus/internal/reason"
 
 // Outcome is what happened to one document.
 type Outcome struct {
