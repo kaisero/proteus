@@ -137,7 +137,7 @@ template value, as on the firewall. `config.xml` holds the result, and
 | the firewall answers `No template pushed to device`, as a firewall that Panorama does not manage | `config.xml` holds the running configuration; `config_source` is `running`; no note |
 | the firewall refuses the template, or its answer holds no template | `config.xml` holds the running configuration without the template values, with `note.config-no-template` |
 | the template call fails on the way | the `documents` stage is `partial`, `config.xml` holds the running configuration, and `fetch` exits 3 |
-| the template arrives and does not merge | the `template` stage is `partial`, `config.xml` holds the running configuration without the template values, with `note.config-no-template`, and `fetch` exits 3 |
+| the template arrives and does not merge | the `template` stage is `partial`, `config.xml` holds the base configuration (running, or the export after a fallback) without the template values, with `note.config-no-template`, and `fetch` exits 3 |
 | the firewall refuses `show config running`, or answers without a configuration | `fetch` exports the configuration, with `note.config-not-running`; the export can hold uncommitted changes; `config_source` is `export` or `export+template` |
 
 The template values can name nodes that the schema digest does not describe, mainly
