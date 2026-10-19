@@ -913,17 +913,16 @@ fw02 (PAN-OS 12.2.3).
   `docs/plans/2026-10-18-user-id.md` Task 14
 - For a directory group without members, `show user group name` names no source.
   `lookup` names the source `ldap:<profile>`, such as `ldap:example.com`, by the
-  form of the group's DN. The lab check
-  compares no source for such a group.
+  form of the group's DN. The lab check compares no source for such a group.
 - Decide whether the card should say that the device names no source.
 
 ### 90. A partial commit clears another admin's journal entries on a shared list
 
 - **Tag:** research · **Component:** tools/uidlab, tools/applab · **Source:** plan
   `docs/plans/2026-10-18-user-id.md` Task 14
-- On fw01, a partial commit of the lab admin that covered a list, such as `tag`, cleared
-  the journal entries of another admin on that list. That admin's entries held no
-  content difference, so the net change was nil.
+- On fw01, a partial commit of the lab admin that covered a list, such as `tag`,
+  cleared the journal entries of another admin on that list. That admin's entries
+  held no content difference, so the net change was nil.
 - The lab rules forbid a change to other admins' pending changes. Keep lab changes
   off lists that other admins have changed, or check the journal before each
   commit, and find out whether a content change of another admin can be committed

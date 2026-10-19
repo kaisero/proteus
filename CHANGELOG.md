@@ -468,11 +468,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `snapshot_keep` now keeps the newest N snapshots with a configuration and the
   newest N without one. Before, it counted both together, so N failed exports in
   a row removed every snapshot but the one `latest` names.
-- **`proteus mcp` reads the `PROTEUS_USERS` file once, at start.** A missing or
-  invalid file stops the start with exit 2 and names the file; a change needs a
-  restart. Before, every call read the file again: the server started with a bad
-  file and failed each call that needed it, and calls could answer from
-  different versions of the file.
 - **The run log of an MCP call that timed out now keeps what came late.** It
   records what the work did after the timeout, when it returned, and the stack
   of a panic. Before, the log closed at the timeout, so a later panic was lost.

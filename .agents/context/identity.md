@@ -270,6 +270,7 @@ func Classify(group string, ldap []LDAPSource, ldapMissing bool, dugs []string, 
 func Diff(before, after *Data) []Change
 func Encode(w io.Writer, f File) error
 func Load(path string) (*Data, error)
+func MembersText(n int) string
 func New(f File) *Data
 func ParseCIEStatus(b []byte) ([]CIESource, error)
 func ParseGroupList(b []byte) ([]string, error)

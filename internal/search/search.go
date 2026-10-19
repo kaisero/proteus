@@ -363,10 +363,7 @@ func (s *searcher) groupVia(g identity.Group) string {
 	if g.Members < 0 {
 		g.Members = s.q.Providers.Users.MemberCount(g.Name)
 	}
-	if g.Members == 1 {
-		return g.Source + ", 1 member"
-	}
-	return fmt.Sprintf("%s, %d members", g.Source, g.Members)
+	return g.Source + ", " + identity.MembersText(g.Members)
 }
 
 // unlistedGroup is a group of a user that groups[] lacks, such as while the

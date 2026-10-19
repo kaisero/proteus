@@ -182,6 +182,12 @@ evaluated:
   the answer is `inferred`: on the lab firewall each email was also an alternate
   name, so no device was seen to resolve an email. An email in a rule matches no
   user.
+- **A short name in doubt.** A rule that names a short name `<domain>\<cn>`,
+  when the data cannot resolve it to one group, stays a candidate with
+  `doubt.user-data-missing`. This happens when the domain of the group-mapping
+  profile is not known, when two groups have that cn, or when `sources.ldap` is
+  missing. A user of the same text does not decide the rule either. No device
+  showed two groups with one cn (`docs/todo.md` item 82).
 - **A local user group as `--user`.** proteus matches a rule that names the group
   by its text. No device fact shows what the firewall does.
 - **A hop after NAT.** In path mode, a hop after source NAT looks up the

@@ -658,3 +658,14 @@ func TestKnown(t *testing.T) {
 		t.Error("without groups: a group that no user holds is known")
 	}
 }
+
+// A member count reads "1 member" for one and "<n> members" else, in every
+// answer that counts the members of a group.
+func TestMembersText(t *testing.T) {
+	t.Parallel()
+	for n, want := range map[int]string{0: "0 members", 1: "1 member", 2: "2 members", 20: "20 members"} {
+		if got := identity.MembersText(n); got != want {
+			t.Errorf("MembersText(%d) = %q, want %q", n, got, want)
+		}
+	}
+}

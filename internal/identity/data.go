@@ -4,6 +4,7 @@ import (
 	"net/netip"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -357,6 +358,16 @@ func (d *Data) Members(group string) []string {
 	}
 	slices.SortFunc(out, byName)
 	return out
+}
+
+// MembersText is a member count as every answer writes it: "1 member", else
+// "<n> members". search, the user value space, the lookup card and the lab
+// tool share it, so the spellings cannot drift.
+func MembersText(n int) string {
+	if n == 1 {
+		return "1 member"
+	}
+	return strconv.Itoa(n) + " members"
 }
 
 // MemberCount is the number of users that Members gives for a group, without

@@ -298,8 +298,11 @@ UPN, an alternate name and an email give the primary name, in any case. A rule
 that names `any`, `known-user`, `unknown` or `pre-logon` is no finding.
 
 A group term finds each rule that names the group: by its DN, by its DN in
-another case, and by its short name `<domain>\<cn>`. [simulate
-policy](simulate-policy.md#how-a-rule-matches) matches the same rules.
+another case, and by its short name `<domain>\<cn>`. For a user of the group,
+[simulate policy](simulate-policy.md#how-a-rule-matches-a-user) matches the same
+rules. The group name given as `--user` is no user and matches no rule (see
+[Names](simulate-policy.md#names)): search shows where a name is used, and
+simulate shows what the firewall matches.
 
 search reads the User-ID data at once for an address, for a term with `\`, `@` or
 `=`, and for a term that a rule names as `source-user`. For another term, it reads

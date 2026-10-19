@@ -205,16 +205,7 @@ func groupVia(d *identity.Data, mem identity.Member) string {
 	if !ok {
 		g.Members = d.MemberCount(mem.Name)
 	}
-	return mem.Source + ", " + memberCount(g.Members)
-}
-
-// memberCount is a member count as a search finding writes it: "1 member",
-// else "<n> members".
-func memberCount(n int) string {
-	if n == 1 {
-		return "1 member"
-	}
-	return fmt.Sprintf("%d members", n)
+	return mem.Source + ", " + identity.MembersText(g.Members)
 }
 
 // doubtOf says why the identity data cannot judge a member, if it cannot. Such

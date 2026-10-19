@@ -592,7 +592,7 @@ its first address. An IPv6 mapping is found by its address. A mapping of the use
 | a primary name, such as `example.com\alice` | as it is, in any case |
 | `--user` as a UPN or another alternate name, such as `alice@example.com` | as its primary name, with `note.user-resolved` |
 | `--user` as an email | as its primary name; the answer is `inferred`, because no device was seen to resolve an email |
-| `--user` that no user of the data has | as given, with `note.user-not-in-directory`; it matches `any`, `known-user` and a rule that names the same text only |
+| `--user` that no user of the data has | as given, with `note.user-not-in-directory`; it matches `any`, `known-user` and a rule that names the same text only, unless that text is a member in doubt (see [How a rule matches a user](#how-a-rule-matches-a-user)) |
 | `--user` as a group, such as `example.com\domain users` | as no user: it matches no rule by its text, as on the firewall |
 | a mapped user | as the firewall stores it, against primary names only |
 | a rule that names a UPN or an alternate name | as the primary name of that user |
@@ -606,7 +606,7 @@ names `example\alice` only, as on the firewall.
 keywords, not users. Leave `--user` out for a flow without a user.
 `--user pre-logon` is valid.
 
-#### How a rule matches
+#### How a rule matches a user
 
 The `match-user` stage keeps a rule when one member of its `source-user` matches
 the user of the flow:
@@ -622,6 +622,7 @@ the user of the flow:
 | a dynamic user group | a user that the firewall lists as a member; proteus does not evaluate the tag filter |
 | a Cloud Identity Engine group | no flow: the rule stays a candidate, in doubt (`doubt.user-cie-group`) |
 | a local user or a local user group | as the local user database of the configuration holds it |
+| a short name `<domain>\<cn>` that the data cannot resolve to one group: the domain of its group-mapping profile is not known, two groups have that cn, or `sources.ldap` is missing | no flow: the rule stays a candidate, in doubt (`doubt.user-data-missing`, which names `sources.ldap`); a user of the same text keeps the rule in doubt too |
 | a group that the data does not hold | no flow |
 
 When a part of the User-ID data is missing, the answer is never `exact`. A member

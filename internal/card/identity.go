@@ -90,13 +90,13 @@ func groupCard(ids *identity.Data, name string) (Card, bool) {
 		}
 		g = identity.Group{Name: mem.Name, Source: mem.Source}
 	}
-	members := []Row{{Text: plural(0, "member", "members")}}
+	members := []Row{{Text: identity.MembersText(0)}}
 	if names := ids.Members(g.Name); len(names) > 0 {
 		items := make([]Item, len(names))
 		for i, n := range names {
 			items[i] = Item{Name: n}
 		}
-		members = []Row{{Text: plural(len(names), "member", "members")}, {Items: items}}
+		members = []Row{{Text: identity.MembersText(len(names))}, {Items: items}}
 	}
 	return Card{Kind: KindIdentityGroup, Name: g.Name, Sections: []Section{
 		{Title: "source", Rows: []Row{{Text: g.Source}}},

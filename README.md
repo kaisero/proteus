@@ -7,7 +7,7 @@
 Ask your PAN-OS firewalls questions. proteus answers from a stored copy of each
 firewall's configuration, operational state and User-ID data, and never writes
 to a device. The stored configuration is the running configuration merged with
-the template that Panorama pushed, without uncommitted changes.
+the template that Panorama pushed, normally without uncommitted changes.
 
 **[Full documentation →](https://kaisero.github.io/proteus/)**
 

@@ -66,7 +66,9 @@ primary name first (`userTerm`, through `Resolve`, PD18). The stage `identity`
 (`mapping`), each only when no object finding names it (`shownByObjects`; with
 `--show` without `objects`, every one). `groupForms` lets a group term reach a rule
 that names the group by its short name or its DN in another case: search shows
-where a group is named, while `simulate` keeps same-text matching. `Contains`
+where a group is named. `simulate` matches a rule's group member in every form for
+a user of the group, and removes the same-text matches of a group, a DUG or a CIE
+group given as the user (`literalGroups`, M12); a member in doubt stays in doubt. `Contains`
 mode runs no identity stage. When to load the data: [identity](identity.md#loading-pd10-42).
 
 ### card

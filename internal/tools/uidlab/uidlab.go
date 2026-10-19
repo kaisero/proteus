@@ -364,7 +364,7 @@ func describe(f Flow, a Answer) string {
 		if a.Name == "" {
 			return "no user"
 		}
-		return fmt.Sprintf("%s, %d names, %d groups", a.Name, len(a.Names), len(a.Groups))
+		return fmt.Sprintf("%s, %s, %s", a.Name, plural(len(a.Names), "name"), plural(len(a.Groups), "group"))
 	case checkIP:
 		if a.Name == "" {
 			return "no mapping"
@@ -375,9 +375,17 @@ func describe(f Flow, a Answer) string {
 		if src == "" {
 			src = "no source"
 		}
-		return fmt.Sprintf("%s, %d members", src, len(a.Names))
+		return src + ", " + identity.MembersText(len(a.Names))
 	}
 	return ""
+}
+
+// plural is a count with its noun: "1 name", "2 names".
+func plural(n int, noun string) string {
+	if n == 1 {
+		return "1 " + noun
+	}
+	return fmt.Sprintf("%d %ss", n, noun)
 }
 
 // ParseDevice reads the device's answers to DeviceCmds, in their order,

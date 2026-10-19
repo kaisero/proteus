@@ -452,11 +452,11 @@ func TestDescribe(t *testing.T) {
 		{Flow{Check: "policy"}, Answer{}, "no rule"},
 		{Flow{Check: "policy"}, Answer{Rule: "r", Action: "allow"}, "r (allow)"},
 		{Flow{Check: "policy"}, Answer{Rule: "d", Action: "deny", Default: true, Inferred: true, Doubt: true}, "d (deny, default rule, inferred, CIE doubt)"},
-		{Flow{Check: "user"}, Answer{Name: "u", Names: []string{"a"}, Groups: []string{"g", "h"}}, "u, 1 names, 2 groups"},
+		{Flow{Check: "user"}, Answer{Name: "u", Names: []string{"a"}, Groups: []string{"g", "h"}}, "u, 1 name, 2 groups"},
 		{Flow{Check: "user"}, Answer{}, "no user"},
 		{Flow{Check: "ip"}, Answer{Name: "u", Source: "XMLAPI"}, "u (XMLAPI)"},
 		{Flow{Check: "ip"}, Answer{}, "no mapping"},
-		{Flow{Check: "group"}, Answer{Source: "dug", Names: []string{"a"}}, "dug, 1 members"},
+		{Flow{Check: "group"}, Answer{Source: "dug", Names: []string{"a"}}, "dug, 1 member"},
 		{Flow{Check: "group"}, Answer{}, "no source, 0 members"},
 		{Flow{Check: "route"}, Answer{}, ""},
 	} {
