@@ -937,3 +937,13 @@ fw02 (PAN-OS 12.2.3).
 - The capacity of the mapping tables comes from the official docs only (U17). The
   fetch keeps at most 512,000 mappings, the start-point limit of the command.
 - Check both on a lab firewall when a change depends on them.
+
+### 92. The default mode of the device probe compares stale text
+
+- **Tag:** bug · **Component:** scripts · **Source:** plan
+  `docs/plans/2026-10-18-user-id.md` Tasks 3 and 16
+- The default mode of `scripts/device-probe.sh` says in its header and its summary
+  that proteus ignores zones and applications. On fw01, 2 of 7 flows agree in that
+  mode, in Task 3 and in Task 16, with each binary.
+- Update the text and the comparison of the default mode to the current
+  `simulate policy`, or remove the mode.
