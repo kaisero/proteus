@@ -41,8 +41,8 @@ proteus fetch --all
 proteus snapshot show
 ```
 
-[`fetch`](../commands/fetch.md) logs in to each firewall, reads its configuration
-and operational state, and stores one snapshot per firewall. It fetches up to
+[`fetch`](../commands/fetch.md) logs in to each firewall, reads its configuration,
+its operational state and its User-ID data, and stores one snapshot per firewall. It fetches up to
 eight firewalls at the same time, and a failed firewall leaves the others
 running.
 

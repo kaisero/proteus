@@ -99,6 +99,16 @@ func identityFor(t estate.Target, maxAge time.Duration, now time.Time) (*identit
 // then can the identity data change the answer to a flow without --user: a
 // mapped source address is no reason to load the data, as no answer knows the
 // mapping before the load (spec 2026-10-17 §4.2, SG9).
+//
+// Three walks read the source-user members of the rules, each with its own
+// filter, because each asks another question. namesUser keeps known-user,
+// unknown and pre-logon: with no user they make the answer inferred, so the
+// data must load (§5.4). searchNeedsIdentity keeps every member but any, as
+// a term of that text can name a user or a group of the data. The user value
+// space (index.newUserResolver) drops the four keywords and the local users
+// and groups: the security check judges the keywords, and the local user
+// database judges the local names, so only the other members are matched
+// against the data (§5.3).
 func namesUser(rules []resolve.Rule) bool {
 	for _, r := range rules {
 		for _, m := range r.Fields[index.SourceUser.String()] {

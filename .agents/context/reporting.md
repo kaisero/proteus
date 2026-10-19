@@ -57,8 +57,8 @@ answer rather than discovered later:
 | zone with no interface, interface in no zone | nothing can be placed there |
 | virtual router running BGP or OSPF | routes learned at runtime are not in the file |
 | address no route covers | the arriving zone is unknown |
-| no user directory supplied | only the local database was searched |
-| stale user snapshot | membership may have changed since it was taken |
+| no identity data (`gap.no-user-directory`) | only the local database was searched; with the cause when a file does not load |
+| an identity file of a `--file` question older than `max_snapshot_age` (`gap.user-directory-stale`) | membership and mappings may have changed since the fetch |
 
 ### Deduplication
 

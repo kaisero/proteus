@@ -11,7 +11,7 @@ file / vsys1   TMP
             file/vsys1: user-group CN=Domain Users,CN=Users,DC=example,DC=com
   object    user-group    cn=domain users,cn=users,dc=example,dc=com ldap:example.com, 3 members
             file/vsys1: user-group cn=domain users,cn=users,dc=example,dc=com
-  object    user-group    cn=payroll,ou=groups,dc=example,dc=com     ldap:example.com, 1 members
+  object    user-group    cn=payroll,ou=groups,dc=example,dc=com     ldap:example.com, 1 member
             file/vsys1: user-group cn=payroll,ou=groups,dc=example,dc=com
   object    user-group    example.com\domain users                   ldap:example.com, 3 members
             file/vsys1: user-group example.com\domain users

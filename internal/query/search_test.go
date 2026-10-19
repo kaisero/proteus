@@ -344,7 +344,7 @@ func TestSearchAUserByUPN(t *testing.T) {
 	for _, want := range []string{
 		`file/vsys1: user example.com\alice | example.com\alice`,
 		"file/vsys1: user-group cn=domain users,cn=users,dc=example,dc=com | ldap:example.com, 3 members",
-		"file/vsys1: user-group cn=payroll,ou=groups,dc=example,dc=com | ldap:example.com, 1 members",
+		"file/vsys1: user-group cn=payroll,ou=groups,dc=example,dc=com | ldap:example.com, 1 member",
 		`file/vsys1: mapping 198.51.100.11 | user example.com\alice, XMLAPI, timeout 14400 s`,
 	} {
 		if !slices.Contains(got, want) {

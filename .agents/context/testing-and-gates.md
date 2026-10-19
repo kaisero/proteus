@@ -31,8 +31,9 @@ keeps the test helpers `internal/fakepanos`, `internal/simulate/pathlab` and
 It runs in `test-race`. `internal/testconfig` writes the generated group-tree
 configuration the index and card benchmarks share, gzips
 `testdata/appid/content.xml` into a test's directory (`Content`), and generates a
-content file for the MCP cache benchmark (`AppContent`). It does not import
-`internal/appid`, so the `appid` tests can use it.
+content file for the MCP cache benchmark (`AppContent`), and a generated identity
+file for the same benchmark (`IdentityFile`: users, groups per user, mappings). It
+does not import `internal/appid` or `internal/identity`, so their tests can use it.
 
 ### The coverage ratchet
 
@@ -46,7 +47,8 @@ Current floors: config 98.1, resolve 95.8, index 95.1, internal/schema 85.9,
 internal/digest 71.8, internal/tools/schemadigest 59.2,
 inventory 96.2, fetch 100.0, store 88.1, estate 100.0, search 97.3, drift 91.1,
 runlog 93.0, simulate 100.0, internal/simulate/securitypolicy 97.5, internal/cli 93.4,
-internal/appid 100.0, internal/tools/applab 93.6.
+internal/appid 100.0, internal/tools/applab 93.6, internal/identity 100.0,
+internal/tools/labkit 96.8, internal/tools/uidlab 96.0.
 `coverage-floors.txt` is the authority; these figures only orient.
 
 The fetcher's tests run against `internal/fakepanos`, a fake XML API over TLS on
@@ -73,6 +75,9 @@ The fetcher's tests run against `internal/fakepanos`, a fake XML API over TLS on
 | `firewall-urlcat-edge.xml` | Category Match, unreadable members, malformed ports |
 | `firewall-urlprofile.xml` | rule to category through a profile group and directly |
 | `firewall-users.xml` | local users, groups, a dynamic user group |
+| `firewall-identity.xml` | User-ID: one rule per `source-user` form (a user, a UPN, LDAP, XML API and dynamic user groups, a DN in another case, a short name, empty groups, a CIE group, an outside user, the keywords, no `source-user`, a local group); the goldens copy it beside a gzipped `testdata/identity/identity.json` as `identity.json.gz` |
+| `firewall-lab-template.xml`, `firewall-lab-merged.xml` | a pushed template in the answer's shape for `firewall-lab.xml`, and the expected merge: each row of spec 2026-10-17 §2.2 and the two device cases of C11 |
+| `firewall-lab-indented.xml` | `firewall-lab.xml` indented as `show config running` answers: it loads and compares as the compact file (C12) |
 | `firewall-zones.xml`, `firewall-zones-shared.xml` | every interface shape, routes, limits |
 | `firewall-apps.xml` | custom application, group, filter, container |
 | `firewall-appid.xml` | App-ID: custom applications with and without a default and in mixed case, `application-tag`, filters, nested groups, a container and the rules of the CLI App-ID goldens; the goldens copy it beside a gzipped `testdata/appid/content.xml` as `apps.xml.gz` |
@@ -104,6 +109,40 @@ marker). It sends only `<show>` and `<test><security-policy-match>`
 placeholders only; the real values live in the ignored
 `docs/lab/app-id-lab.vars`. `docs/lab/app-id-lab.md` holds the procedure and the
 results: on fw02 all 108 flows agreed.
+
+### User-ID fixtures
+
+`testdata/identity/` holds plain files with dummy values (`example.com`, `alice`,
+`bob`, `carol`, `dave`, `other\ghost`, TEST-NET and `2001:db8::/32` addresses):
+one `answer-*.xml` per device answer shape of spec 2026-10-17 X1 (U1, U3, U4, U5,
+U6, U7, U8, U9, the long-name U3 layout, `user-ids match-user`, a mapping by
+address with and without a match, two mapping pages, the dataplane table), and
+`identity.json`, the format-1 file. A test gzips what it needs. Each fixture case
+names its fact. `internal/fakepanos` answers the identity commands with dummy data
+unless `Ops` names them; `DropCmd` and a per-command `Stall` exercise the
+transport cases.
+
+### The User-ID lab check
+
+`make uid-lab DEVICE=<name> UIDLAB_KEY_HEADER=<file>` runs `internal/tools/uidlab`
+by hand, never in CI (spec 2026-10-17 §10.3): on a fresh snapshot it compares
+`simulate policy --file` with the device's `test security-policy-match` per policy
+flow, `lookup` of a user and of a group with `user-attributes`, `user-ids
+match-user` and `group name`, and `search` of an address with
+`ip-user-mapping-mp ip`. A policy flow that differs is tried twice more (M18).
+Both lab tools send through `internal/tools/labkit`, which allows only `<show>` and
+`<test><security-policy-match>` (`TestOnlyShowAndPolicyMatch`, AGENTS.md R2).
+
+Five User-ID lab files are tracked, with placeholders such as `${USER_A}`, dummy
+names `uid-lab-*` and destinations in 192.0.2.0/24 only (spec D12):
+`docs/lab/user-id-flows.tsv`, `user-id-lab-set.tsv`, `user-id-lab-delete.tsv`,
+`user-id-lab-login.xml` and `user-id-lab-logout.xml`. The real values live in the
+ignored `docs/lab/user-id-lab.vars`; `uidlab -render <file>` fills a file for the
+shell only. CI reads the tracked files: `TestFlowListCoversTheFacts`,
+`TestLabConfigIsIsolated`, `TestTheLabXMLAPIGroupMeetsNoUserCheck`,
+`TestTheLogoutEndsWithShortLogins` and `TestLabFilesHoldNoLabData` (no address
+outside the TEST-NETs and `2001:db8::/32`, no serial, no domain but
+`example.com`). On fw01 all 56 cases passed (`docs/reference/limits.md#users`).
 
 ### The device probe
 

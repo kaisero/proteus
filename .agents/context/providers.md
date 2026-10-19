@@ -1,25 +1,25 @@
 # providers
 
-Validated against 86fd84f on 2026-09-27 · Purpose: how facts a configuration does not hold reach a lookup, without the read-only core fetching anything.
+Validated against 4c57e88 on 2026-10-19 · Purpose: how facts a configuration does not hold reach a lookup, without the read-only core fetching anything.
 
 ## Purpose & responsibilities
 
 Some questions cannot be answered from a file. Which groups a user belongs to comes
-from User-ID, which learns it from a directory. The core defines the shape of
-that data and reads it. **The caller fetches it.** The core performs no network
+from User-ID, which learns it from a directory. `internal/identity` defines the
+shape of that data and reads it. **The caller fetches it**: `fetch` stores it with
+each snapshot, and `query` loads it. The core performs no network
 access at all; `store.Snapshot.Zones()` builds a zone snapshot from a fetched one.
 
 ## How it works
 
 ```go
 type Providers struct {
-	Users UserDirectory
+	Users *identity.Data // the device's User-ID data, or nil
 	Zones ZoneLocator
-	Apps  *appid.Data // the device's App-ID content data, or nil
+	Apps  *appid.Data    // the device's App-ID content data, or nil
 }
 
-type UserDirectory interface{ GroupsOf(user string) []string }
-type ZoneLocator    interface{ ZonesOf(addr netip.Addr) []string }
+type ZoneLocator interface{ ZonesOf(addr netip.Addr) []ZonePlacement }
 
 func (i *Index) With(p Providers) *View
 func (v *View) Candidates(f Field, value string) (*roaring.Bitmap, Report)
@@ -35,34 +35,25 @@ of the shared index with the facts for one question.
 
 `Index.Candidates` is sugar for `With(Providers{}).Candidates`.
 
-### The user snapshot
+### The identity data
 
-```json
-{
-  "taken_at": "2026-09-27T12:00:00Z",
-  "source": "User-ID on fw01",
-  "groups": { "alice": ["local-admins", "engineering"] },
-  "max_age": 86400000000000
-}
-```
+`Providers.Users` is the identity file of the snapshot, parsed (`*identity.Data`,
+spec 2026-10-17). It is a value, not an interface: one file is immutable and
+belongs to one snapshot. `UserDirectory`, `StaleReporter`, `UserSnapshot`,
+`LoadUserSnapshot` and `PROTEUS_USERS` are gone (PD6, §7). `query` loads the file
+(`estate.Target.Identity`, through `Env.Identity`, an `estate.IdentitySource`; the
+MCP cache keeps one LRU item per snapshot) once per question per file
+(`identityMemo`), only when the question needs it (PD10). The caller resolves
+`--user` and a search term to a primary name first (`Resolve`, PD8, PD18).
 
-`LoadUserSnapshot(r)` reads it. `taken_at` is **required**: a snapshot that cannot
-be reported stale is worse than none, because a mapping read days ago can place a
-user in a group they have since left. Lookups are case-insensitive, since a
-directory and a firewall rule rarely agree on case.
-
-### Staleness
-
-```go
-type StaleReporter interface{ Stale() (reason string, stale bool) }
-```
-
-A provider may implement this; `UserSnapshot` does. The user resolver type-asserts
-for it and passes the reason into `Report.Unresolved`. Default tolerance is one
-day.
-
-Without any directory the answer still works and says what it missed: only the
-local user database was searched, so a rule naming a directory group is absent.
+With the data, the user value space returns the `source-user` members of the
+rules that the user satisfies, and a member the data cannot judge as an
+unresolved entry (`doubt.user-cie-group`, `doubt.user-data-missing`). Without it,
+the answer still works and says what it missed: only the local user database was
+searched, so a rule naming a directory group carries `gap.no-user-directory`, and
+a dynamic user group `gap.dynamic-user-group`. A `--file` identity file older than
+`max_snapshot_age` adds `gap.user-directory-stale` (in `query`, not in the index).
+See [identity](identity.md).
 
 ### ZoneLocator
 
@@ -77,11 +68,11 @@ address -> longest matching route in each router -> interface -> zone
 `ZonesOf` returns `[]ZonePlacement{Zone, Interface, Router, Route, Vsys}`, not
 `[]string`. A placement carries the reasoning, like every other answer here.
 
-Three things separate it from `UserSnapshot`:
+Three things separate it from the identity data:
 
 - **No staleness.** An upstream tool supplies a forwarding table fresh enough for the
-  question. `TakenAt` is provenance, unenforced, and `ZoneSnapshot` deliberately does
-  not implement `StaleReporter`.
+  question. `TakenAt` is provenance, unenforced, and no answer reports the age of a
+  zone snapshot.
 - **It is authoritative.** Where a snapshot places nothing, the configuration is not
   consulted instead. Falling back would hide a disagreement, and the two disagree
   routinely: a lab firewall's configuration held one static route where its device held
@@ -117,7 +108,9 @@ builds its view with empty providers, so it never sees the data (D5). See
 ## Build / run pointers
 
 - `go test ./internal/index/ -run 'User|Snapshot'`
-- `PROTEUS_USERS=testdata/users-snapshot.json ./bin/proteus search 'ACME\carol' --file testdata/config/firewall-users.xml`
+- `./bin/proteus search 'example.com\carol' --file <dir>/config.xml`, with
+  `testdata/config/firewall-identity.xml` as the configuration and
+  `testdata/identity/identity.json`, gzipped, as `<dir>/identity.json.gz`
 
 ## Public API
 
@@ -201,6 +194,7 @@ func ReadEdges(cfg *config.Config) (*Edges, error)
 
 ## See also
 
-- `internal/index/snapshot.go`, `internal/index/resolver_user.go`, `internal/index/resolver.go`
-- [reporting](reporting.md) — where the staleness reason surfaces
+- `internal/index/zonesnapshot.go`, `internal/index/resolver_user.go`, `internal/index/resolver.go`
+- [identity](identity.md) — the identity file and its queries
+- [reporting](reporting.md) — where the gap reasons surface
 - [value-spaces](value-spaces.md) — the user and zone spaces

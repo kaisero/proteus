@@ -201,7 +201,7 @@ func TestUserResolverMatchesTheRuleForms(t *testing.T) {
 			"cn=domain users,cn=users,dc=example,dc=com": {Kind: "user-group", Via: "ldap:example.com, 3 members"},
 			"CN=Domain Users,CN=Users,DC=example,DC=com": {Kind: "user-group", Via: "ldap:example.com, 3 members"},
 			`example.com\domain users`:                   {Kind: "user-group", Via: "ldap:example.com, 3 members"},
-			"cn=payroll,ou=groups,dc=example,dc=com":     {Kind: "user-group", Via: "ldap:example.com, 1 members"},
+			"cn=payroll,ou=groups,dc=example,dc=com":     {Kind: "user-group", Via: "ldap:example.com, 1 member"},
 		} {
 			want.Name, want.Scope = member, vsys1
 			if h, ok := memberHit(rep, member); !ok || h != want {
@@ -242,7 +242,7 @@ func TestUserResolverXMLAPIGroup(t *testing.T) {
 	idx, d := identityIndex(t), idData(t)
 	got, rep := reached(idx, d, `example.com\carol`)
 	wantReached(t, idx, `example.com\carol`, got, "u-xmlapi", "u-ldap-group", "u-dn-case", "u-short", "u-dug", "u-dug-ab")
-	if h, _ := memberHit(rep, "engineering"); h.Kind != "user-group" || h.Via != "xmlapi, 1 members" {
+	if h, _ := memberHit(rep, "engineering"); h.Kind != "user-group" || h.Via != "xmlapi, 1 member" {
 		t.Errorf("hit %+v", h)
 	}
 	if got, _ := reached(idx, d, `example.com\bob`); got["u-xmlapi"] {
@@ -261,7 +261,7 @@ func TestUserResolverDUGFromU3(t *testing.T) {
 		t.Errorf("carol reaches %v", got)
 	}
 	for _, dug := range []string{"dug-a", "dug-ab"} {
-		if h, _ := memberHit(rep, dug); h.Kind != "dynamic-user-group" || h.Via != "dug, 1 members" {
+		if h, _ := memberHit(rep, dug); h.Kind != "dynamic-user-group" || h.Via != "dug, 1 member" {
 			t.Errorf("hit of %s %+v", dug, h)
 		}
 	}
@@ -276,7 +276,7 @@ func TestUserResolverDUGFromU3(t *testing.T) {
 	f := idFile(t)
 	f.Groups = slices.DeleteFunc(f.Groups, func(g identity.Group) bool { return g.Name == "dug-a" })
 	if _, rep := reached(idx, identity.New(f), `example.com\carol`); !slices.Contains(rep.Hits,
-		Hit{Name: "dug-a", Kind: "dynamic-user-group", Scope: idx.Scope(), Via: "dug, 1 members"}) {
+		Hit{Name: "dug-a", Kind: "dynamic-user-group", Scope: idx.Scope(), Via: "dug, 1 member"}) {
 		t.Errorf("hits %+v", rep.Hits)
 	}
 }

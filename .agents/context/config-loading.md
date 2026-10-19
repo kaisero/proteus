@@ -26,6 +26,19 @@ Two details are load-bearing and both have regression tests:
 - **Paths anchor at `<config>`.** A file arrives bare from
   `type=export&category=configuration` or wrapped in `<response><result>` from
   `type=config&action=show`. Both load.
+- **`Parse(r, name)` reads bytes as `Load` reads a file**, bare or wrapped, and
+  reads no file beside it (so no predefined services). The identity step of
+  `fetch` reads the merged configuration it holds this way, for the LDAP and CIE
+  domains (spec 2026-10-17 §3.2, SG2).
+- **A snapshot's `config.xml` is the running configuration merged with the pushed
+  template** (spec 2026-10-17 §2). The running answer is indented: the tree trims
+  text, so an indented and a compact file of one tree load and compare equal (C12,
+  `firewall-lab-indented.xml`). The attributes `ptpl` (a template value) and `src`
+  (a template node of a `config get`) add no field: the R3 walk counts elements,
+  and `drift` ignores both (`ignoredAttrs`). The template adds nodes the digest may
+  not describe, mainly under `deviceconfig/plugins` (C3); the load counts them as
+  undescribed, once per managed device. `SchemaRoot()` gives the digest's root to
+  `fetch.MergeTemplate`, which reads the `tlo` mark there (R1).
 - **A nested `<config>` is an ordinary child.** A firewall file holds one under
   `shared/log-settings`. Parsing stops only when
   the outermost one closes. Stopping at the first nested close found 1 reference

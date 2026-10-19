@@ -203,6 +203,40 @@ of `app-remote`. The data comes from the snapshot, or with `--file` from
 `apps.xml.gz` beside the configuration (see
 [Simulate policy](simulate-policy.md#where-the-app-id-data-comes-from)).
 
+### Search for a user
+
+```text
+$ proteus search alice@example.com --file users/config.xml
+search alice@example.com (matches)
+
+file / vsys1   users/config.xml
+  note: application data of content 8000-1000 from users/apps.xml.gz
+  note: identity data taken 2026-10-19T02:00:00Z from users/identity.json.gz
+  object    user          alice@example.com                          example.com\alice
+  object    user          example.com\alice                          example.com\alice
+  object    user-group    CN=Domain Users,CN=Users,DC=example,DC=com ldap:example.com, 3 members
+  object    user-group    cn=domain users,cn=users,dc=example,dc=com ldap:example.com, 3 members
+  object    user-group    cn=payroll,ou=groups,dc=example,dc=com     ldap:example.com, 1 member
+  object    user-group    example.com\domain users                   ldap:example.com, 3 members
+  identity  mapping       198.51.100.11                              user example.com\alice, XMLAPI, timeout 14400 s
+  reference security rule u-dn-case                                  source-user -> CN=Domain Users,CN=Users,DC=example,DC=com
+  reference security rule u-ldap-group                               source-user -> cn=domain users,cn=users,dc=example,dc=com
+  reference security rule u-multi                                    source-user -> cn=payroll,ou=groups,dc=example,dc=com
+  reference security rule u-short                                    source-user -> example.com\domain users
+  reference security rule u-upn                                      source-user -> alice@example.com
+  reference security rule u-user                                     source-user -> example.com\alice
+1 with results, 0 without, 0 holes
+```
+
+The UPN `alice@example.com` is an alternate name of `example.com\alice`, so search
+reads it as that user. The `object` rows are the `source-user` members of the
+rules that the user satisfies, each with the user or with the source and member
+count of the group. The rules name one directory group in three forms: the DN,
+the DN in another case, and the short name. The `identity` row is the address
+that the firewall maps to the user. The data comes from the snapshot, or with
+`--file` from `identity.json.gz` beside the configuration (see
+[Users](#users)).
+
 ## Reading the output
 
 The first line repeats the term and the match in parentheses. Each block is one
@@ -215,7 +249,8 @@ Each row starts with its stage. The stages print in this order:
 
 | Stage | What it finds |
 | --- | --- |
-| `object` | objects whose value holds the term, and objects with that name |
+| `object` | objects whose value holds the term, and objects with that name; with User-ID data, the users and groups of the rules that a user term satisfies |
+| `identity` | with User-ID data: the user and its groups that no `object` row shows, and the mapped addresses (see [Users](#users)) |
 | `group` | groups that hold one of those objects, at any depth |
 | `reference` | rules, NAT rules, groups and profiles that name one of them |
 | `literal` | rules that write the term directly into a field |
@@ -235,18 +270,43 @@ The term's type sets the default match (see
 | prefix or range, such as `10.124.0.0/24` | `overlaps` | objects and literals whose value overlaps it |
 | port, such as `tcp/8006` or `8006` | `covers` | every service whose range holds the port, such as `tcp/8000-8100` |
 | URL, such as `shop.example.com/cart` | `matches` | values that match by PAN-OS URL tokens |
-| user, such as `ACME\carol` | `matches` | the user groups that hold the user, with a user snapshot |
+| user, such as `example.com\alice`, a UPN or an email | `matches` | with User-ID data: the user's groups with their source, the rules that name the user or a group, and the mapped addresses; without it, the local user groups that hold the user |
+| group, such as a group DN | `matches` | with User-ID data: the rules that name the group, with its source and member count |
 | anything else | `matches` | objects with that exact name or value |
 | any term with `--within`, `--exact` or `--contains` | `within`, `exact` or `contains` | see [Flags](#flags) |
 
-A configuration does not say which directory groups a user belongs to. Set
-`PROTEUS_USERS` to a [user snapshot](../reference/configuration.md#the-user-snapshot)
-to search for a user:
+An address with a mapping also gives an `identity` row with the mapped user.
 
-```bash
-PROTEUS_USERS=testdata/users-snapshot.json \
-  proteus search 'ACME\carol' --file testdata/config/firewall-users.xml
-```
+### Users
+
+A configuration does not say which directory groups a user belongs to. The
+User-ID data of a snapshot does. `proteus fetch` stores it with each snapshot, and
+`--file` reads `identity.json.gz` beside the configuration (see
+[User-ID data](../concepts/snapshots.md#user-id-data)).
+
+| Finding | What it says |
+| --- | --- |
+| `object user` | a `source-user` member that names the user, with the primary name |
+| `object user-group`, `object dynamic-user-group` | a group of a rule that holds the user, with its source and member count, such as `ldap:example.com, 3 members` |
+| `identity identity-user` | the user, when no `object` row shows it |
+| `identity identity-group` | a group of the user that no `object` row shows |
+| `identity mapping` | an address that the firewall maps to the user, with the type and the timeout; for an address term, the mapped user |
+| `reference security rule` | a rule that names the user or one of its groups |
+
+The term reads as `--user` of [simulate policy](simulate-policy.md#names) does: a
+UPN, an alternate name and an email give the primary name, in any case. A rule
+that names `any`, `known-user`, `unknown` or `pre-logon` is no finding.
+
+A group term finds each rule that names the group: by its DN, by its DN in
+another case, and by its short name `<domain>\<cn>`. [simulate
+policy](simulate-policy.md#how-a-rule-matches) matches the same rules.
+
+search reads the User-ID data at once for an address, for a term with `\`, `@` or
+`=`, and for a term that a rule names as `source-user`. For another term, it reads
+the data only when the first search of a vsys finds nothing, and then searches
+that vsys again. A `--file` configuration whose `identity.json.gz` proteus cannot
+read then adds `gap.no-user-directory` with the cause, also for a term that is no
+user.
 
 ### URL categories in security profiles
 
@@ -293,7 +353,7 @@ Search takes the selection flags `--device`, `--label`, `--vsys`, `--at`,
 | `--contains` | off | keeps names and values that hold the term as text |
 | `--kind <kinds>` | every kind | keeps objects and groups of these kinds, such as `address,service` |
 | `--field <fields>` | every field | keeps references and literals from these fields, such as `source,destination` |
-| `--show <stages>` | every stage | keeps these stages: `objects`, `groups`, `refs`, `literals` |
+| `--show <stages>` | every stage | keeps these stages: `objects`, `identity`, `groups`, `refs`, `literals` |
 | `--direct` | off | keeps only the groups one level up from an object |
 | `--why` | off | adds each finding's answer line under its row |
 | `--limit N` | every finding | keeps the first N findings (see [Results](../reference/output.md#results)) |
@@ -327,6 +387,8 @@ below the findings, as `note: fw02/vsys1: <text>`.
   with scope `config`.
 - Without App-ID data, search finds no filter, container or implicit use of an
   application.
+- Without User-ID data, search finds no directory group of a user and no mapped
+  address.
 
 See [Limits](../reference/limits.md#search).
 
@@ -336,5 +398,6 @@ See [Limits](../reference/limits.md#search).
 - [simulate policy](simulate-policy.md)
 - [From a value to a rule](../concepts/index.md#from-a-value-to-a-rule)
 - [App-ID data](../concepts/snapshots.md#app-id-data)
+- [User-ID data](../concepts/snapshots.md#user-id-data)
 - [Holes, unresolved entries and notes](../concepts/fidelity.md#holes-unresolved-entries-and-notes)
 - [Output and exit codes](../reference/output.md)

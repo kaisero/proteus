@@ -10,8 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **The MCP tools read the User-ID data.** `simulate_policy`, `search` and `lookup`
-  now answer with each snapshot's identity data, as the commands do; the identity
-  data counts against the cache size.
+  now answer with each snapshot's User-ID data, as the commands do; that data
+  counts against the cache size.
 - **Find a user, a group or a mapped address.** `search` and `lookup` now show a
   user's groups and addresses, a group's members, and the user of an address;
   `snapshot diff` reports changed group membership.
@@ -326,7 +326,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
-- **`PROTEUS_USERS` is gone.** The user directory now comes with each snapshot, or
+- **`PROTEUS_USERS` is gone.** The User-ID data now comes with each snapshot, or
   from `identity.json.gz` next to a `--file` configuration.
 - **`panos-demo` and `panos-schemagen` are gone.** `proteus` is now the only
   binary; a schema digest for a new PAN-OS version is made with `make

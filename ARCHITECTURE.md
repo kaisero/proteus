@@ -12,8 +12,12 @@ It is an application, not a library. Every package lives under `internal/`, so
 none of them is an API that must stay stable for outside code; a later MCP server
 belongs in this module and can import them. The read-only core (`config`,
 `resolve`, `index`) does not talk to devices and it does not write. Above it,
-`fetch` reads devices with show commands and a configuration export, `store` keeps what it read as timestamped snapshots,
-and `inventory` says which devices there are. R12 keeps the core free of I/O.
+`fetch` reads devices with show commands: the running configuration, which it
+merges with the pushed template, the operational state and the User-ID data. It
+exports the configuration only when a device refuses `show config running`,
+because the export holds uncommitted changes. `store` keeps what it read as
+timestamped snapshots, and `inventory` says which devices there are. R12 keeps
+the core free of I/O.
 
 ## Why read the schema
 
@@ -153,6 +157,10 @@ detail and the measurements.
    mitigation and is not yet designed.
 3. **Runtime data.** Registered-IP group members are not in a configuration file
    at all. App-ID dependencies are not either: they come from the device's App-ID
-   content, which `fetch` stores once per content version.
+   content, which `fetch` stores once per content version. The users, groups and
+   user-to-address mappings come from User-ID, which `fetch` stores with each
+   snapshot of a single-vsys firewall: they change all the time, so each
+   snapshot keeps its own copy. A multi-vsys firewall and the User-ID hub stay
+   open.
 4. **NAT semantics.** The NAT rulebase is read, but translated-address fields are
    not resolved.

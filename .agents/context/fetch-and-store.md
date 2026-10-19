@@ -48,9 +48,16 @@ a URL. A transport error is retried once; a refusal (HTTP 4xx, or
 A `Document` is a name and a fetch function. `Documents` lists them:
 `config` (`show config running`), `template` (`show config pushed-template`),
 `system-info`, `interfaces`, `fib`, `rib`, `ha`, `predefined`. `config` has a
-`Fallback`: a device that refuses `show config running` is exported, with
-`note.config-not-running`, because the export holds the candidate (spec 2026-10-17
-C12).
+`Fallback`: a device that refuses `show config running`, or whose answer holds no
+`response/result/config`, is exported, with `note.config-not-running`, because the
+export holds the candidate (spec 2026-10-17 C12, PD1); a transport error fails the
+document without the fallback. `unwrapConfig` slices `response/result/config` out
+of the running answer byte for byte (PD2). `template` is optional:
+`unwrapTemplate` slices `response/result/template/config` (C9) into `template.xml`;
+the text `No template pushed to device`, or a template `config` without an
+element, is no template and no note (C7); a refusal, or a success answer with
+neither, gives `note.config-no-template`; a transport error fails the document,
+so `documents` is `partial` and the fetch exits 3.
 **Adding a fetcher is adding one `Document` value and listing it.** A document with
 `Optional` set is one a release may refuse: an API refusal, or an answer that fails
 `Optional.Check`, adds the `Optional.Refused` note to `Result.Notes`, stores
@@ -64,9 +71,17 @@ Advanced Routing device the legacy route command answers success with a deprecat
 text, so the Advanced Routing command must come first (verified on fw02).
 
 `Steps()` are a device's fetch as `internal/task` steps on a `State` (`NewState`):
-`login`, `ha`, `documents`, `template`, `applications`. The `template` step merges
-the pushed template into `config` (`MergeTemplate`, spec 2026-10-17 §2.2: a local
-template object, leaf or member list wins) and sets `Result.ConfigSource`. The CLI runs them with `task.Run`, between its own
+`login`, `ha`, `documents`, `template`, `applications`, `identity`. The `template`
+step merges the pushed template into `config` (`MergeTemplate(base, template,
+root)`, spec 2026-10-17 §2.2: an element whose schema node has `tlo="yes"`, a leaf
+and a member list keep the base whole; any other matched element, `devices/entry`
+and `vsys/entry` too, merges by its children; a template element the base lacks is
+inserted byte for byte; no base byte changes, C11). `root` is
+`config.SchemaRoot()`. It sets `Result.ConfigSource` (`running+template`,
+`running`, `export+template`, `export`), which `meta.json` keeps as
+`config_source`; a digest or merge failure keeps the base and makes the step
+`partial`. The `identity` step (`identity.go`, spec 2026-10-17 §3) runs last; see
+[identity](identity.md). The CLI runs them with `task.Run`, between its own
 `resolve` and `store` steps, with the device's name as the task's kind, so every
 error starts `<device>/<step>: `. A failed document is recorded in
 `Result.Outcomes` and the rest continue (spec S10); the `documents` step is then
@@ -105,7 +120,7 @@ The step never returns an error, so the snapshot is stored in every case (D3):
 ### Store
 
 ```
-<root>/<device>/<timestamp>/<document>.xml
+<root>/<device>/<timestamp>/<document>.xml        config.xml, template.xml, system-info.xml, …
 <root>/<device>/<timestamp>/identity.json.gz
 <root>/<device>/<timestamp>/meta.json
 <root>/<device>/latest -> <timestamp>

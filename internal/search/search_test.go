@@ -392,9 +392,9 @@ func TestSearchAUserFindsItsRules(t *testing.T) {
 		t.Errorf("without the data carol's XML API group is unknown:\n%s", dump(without))
 	}
 	for _, want := range []string{
-		"object user-group engineering  xmlapi, 1 members",
+		"object user-group engineering  xmlapi, 1 member",
 		"reference security rule u-xmlapi source-user engineering",
-		"object dynamic-user-group dug-a  dug, 1 members",
+		"object dynamic-user-group dug-a  dug, 1 member",
 		"reference security rule u-dug source-user dug-a",
 	} {
 		if !has(with, want) {
@@ -779,8 +779,8 @@ func TestSearchAUserGivesItsGroupsAndAddresses(t *testing.T) {
 	for _, want := range []string{
 		`identity identity-user example.com\carol  directory user`,
 		"identity mapping 198.51.100.13  user example.com\\carol, XMLAPI, timeout 14400 s",
-		"object user-group engineering  xmlapi, 1 members",
-		"object dynamic-user-group dug-a  dug, 1 members",
+		"object user-group engineering  xmlapi, 1 member",
+		"object dynamic-user-group dug-a  dug, 1 member",
 	} {
 		if !has(got, want) {
 			t.Errorf("missing %q in:\n%s", want, dump(got))
@@ -792,7 +792,7 @@ func TestSearchAUserGivesItsGroupsAndAddresses(t *testing.T) {
 		}
 	}
 	bob := withUsers(t, `example.com\bob`)
-	if !has(bob, "identity identity-group team-x  xmlapi, 1 members") {
+	if !has(bob, "identity identity-group team-x  xmlapi, 1 member") {
 		t.Errorf("a group that no rule names comes from the identity stage:\n%s", dump(bob))
 	}
 	if has(bob, `identity identity-user example.com\bob`) {
@@ -822,7 +822,7 @@ func TestSearchAGroupDNReachesItsShortName(t *testing.T) {
 			t.Errorf("the short name: missing %q in:\n%s", want, dump(short))
 		}
 	}
-	if !has(withUsers(t, "team-x"), "identity identity-group team-x  xmlapi, 1 members") {
+	if !has(withUsers(t, "team-x"), "identity identity-group team-x  xmlapi, 1 member") {
 		t.Error("a group that no rule names comes from the identity stage")
 	}
 }
@@ -869,7 +869,7 @@ func TestSearchWithoutIdentityDataIsTodays(t *testing.T) {
 // (spec 2026-10-17 §3.3).
 func TestSearchAGroupThatTheGroupListLacks(t *testing.T) {
 	t.Parallel()
-	if got := withUsers(t, "DUG-A"); !has(got, "object dynamic-user-group dug-a  dug, 1 members") || !has(got, "reference security rule u-dug source-user dug-a") {
+	if got := withUsers(t, "DUG-A"); !has(got, "object dynamic-user-group dug-a  dug, 1 member") || !has(got, "reference security rule u-dug source-user dug-a") {
 		t.Errorf("DUG-A:\n%s", dump(got))
 	}
 	d := identity.New(identity.File{
@@ -881,7 +881,7 @@ func TestSearchAGroupThatTheGroupListLacks(t *testing.T) {
 	search := func(term string) []Finding {
 		return run(t, "firewall-identity.xml", "vsys1", Query{Term: term, Providers: index.Providers{Users: d}})
 	}
-	if got := search(`example.com\bob`); !has(got, "identity identity-group team-x  xmlapi, 1 members") ||
+	if got := search(`example.com\bob`); !has(got, "identity identity-group team-x  xmlapi, 1 member") ||
 		!has(got, "object dynamic-user-group dug-ab  dug, 2 members") {
 		t.Errorf("bob:\n%s", dump(got))
 	}
@@ -911,13 +911,20 @@ func TestSearchShowIdentityKeepsTheGroups(t *testing.T) {
 	})
 	for _, want := range []string{
 		"identity identity-group cn=domain users,cn=users,dc=example,dc=com  ldap:example.com, 3 members",
-		"identity identity-group engineering  xmlapi, 1 members",
-		"identity identity-group dug-a  dug, 1 members",
-		"identity identity-group dug-ab  dug, 1 members",
+		"identity identity-group engineering  xmlapi, 1 member",
+		"identity identity-group dug-a  dug, 1 member",
+		"identity identity-group dug-ab  dug, 1 member",
 		`identity identity-user example.com\carol  directory user`,
 	} {
 		if !has(got, want) {
 			t.Errorf("missing %q in:\n%s", want, dump(got))
+		}
+	}
+	// One member is "1 member", in the identity stage and in the object
+	// stage that the user value space fills.
+	for _, f := range append(got, withUsers(t, `example.com\carol`)...) {
+		if strings.HasSuffix(f.Via, " 1 members") {
+			t.Errorf("one member counts as %q: %s", f.Via, line(f))
 		}
 	}
 }

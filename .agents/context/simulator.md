@@ -33,13 +33,14 @@ logs one `[STEP]` line at info and the debug lines at debug, wraps errors as
 
 ### securitypolicy
 
-Nine stages, each ANDing into the running candidate set:
+Ten stages, each ANDing into the running candidate set:
 
 | Slug | Fidelity |
 |---|---|
 | `resolve-source`, `resolve-destination` | exact for an address; inferred for an FQDN resolved by this machine's DNS; undermatch for an FQDN with no address or any unresolved value |
 | `derive-zones` | exact when given; inferred when derived (forwarding table or configuration); not evaluated when no zone was found |
 | `match-application` | exact; a no-op without a flow application or without App-ID data; overmatch naming rules kept for an unknown name (`doubt.application-unknown`) or a filter the custom flow application cannot be judged by (`doubt.application`) |
+| `match-user` | exact; a no-op without identity data (the rules keep `doubt.not-evaluated.user`); overmatch naming rules kept for a member the data cannot judge (`doubt.user-cie-group`, `doubt.user-data-missing`); inferred for no identified user (no user, or `pre-logon`) when a candidate names a user, for a source without a mapping in a missing or partial table, and for a user given as an email |
 | `match-service` | exact; overmatch naming rules kept for `application-default` (without an evaluated application, or with the port or protocol open: `doubt.app-port-open`), a predefined service or no service; not evaluated without `--port` |
 | `match-url` | exact; overmatch naming rules kept for a category the configuration does not define; not evaluated without `--url` when a candidate names a category |
 | `drop-disabled` | exact |
@@ -94,6 +95,24 @@ both (I6). So an explicit match wins over an earlier implicit one (I2), and an
 implicit candidate never "may match first" against an explicit winner. A deciding
 implicit rule sets `Verdict.Implicit` and `note.app-implicit`. Every evaluated run
 adds `note.app-shift` (§4.6).
+
+**User** (spec 2026-10-17 §5, PD7-PD9, PD12, PD17-PD21; deep-dive
+[identity](identity.md)). `Run` loads nothing: the caller puts the device's
+`*identity.Data` in `Providers.Users` (`query` loads it only when `--user` is given
+or a rule names a `source-user` other than `any`; PBF builds its view with empty
+providers, so PBF keeps the user doubt). `match-user` runs after
+`match-application` and before `match-service`. `flowUser` takes the user: the
+mapping of the first source address wins over `Flow.User` (M1, D5), a mapped user
+stays as stored (M2), a mapping of `unknown` is none; else `--user` through
+`Resolve`. `Verdict.User` (`FlowUser`: name, from, given, ip, directory) carries it;
+`Judged` is set when a candidate names a user. The match: the user value space
+(`View.Candidates(SourceUser, user)`), minus `literalGroups` (a group, DUG, CIE or
+in-doubt member of the same text as the value never matches by its text, M12,
+Task 13 fix), plus `RulesWithAny`, the digest default of an absent `source-user`,
+and one keyword through `RulesReaching`: `known-user` for an identified user,
+`unknown` for none, `pre-logon` for `pre-logon`. Members the data cannot judge
+keep their rule in doubt (`keepUser`). `--user any|known-user|unknown` is refused
+in `query` (PD17).
 
 `match-service` with an evaluated application checks `application-default` with
 `appid.Default.Match` on the rule's applications (for an implicit rule, the union
@@ -158,8 +177,12 @@ its own code, PBF or NAT undermatch, each NAT rule in doubt, a start by a defaul
 route), zone validity (both zones named, defined in the
 hop's vsys, not a placeholder), and each `Check` in list order. Today the one check
 is `Security`: securitypolicy with the hop's zones given and each endpoint trimmed
-to the traced address. Its fidelity is the weakest of the address, zone and
-`first-match` stages, capped by a routed start or inferred NAT. A hop that routing drops runs no check. The fold: the first undecided or
+to the traced address. Its fidelity is the weakest of the address, zone,
+`match-user` and `first-match` stages (`decisionStages`), capped by a routed start
+or inferred NAT. A hop whose source an earlier hop translated, and whose check
+judged a user (`FlowUser.Judged`), adds `note.user-after-nat` and is `inferred`
+(D11, PD12): it looks the translated source up in its own firewall's mappings,
+and no lab path with NAT and User-ID exists (O2). A hop that routing drops runs no check. The fold: the first undecided or
 stopping hop sets `At`; undecided wins over stop on one hop; a later stop after an
 undecided point is a note; hops after a stop carry `AfterDeny`; with no point,
 routing's end decides (delivered or local: allowed; dropped: denied; any other end:

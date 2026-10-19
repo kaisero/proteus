@@ -203,6 +203,29 @@ The App-ID data comes from `apps.xml.gz` beside the configuration. `allow-remote
 names `app-remote`, whose implicit use holds `web-browsing`. The run gives no
 zones, so proteus derives them and the answer is `inferred`.
 
+### A user on one configuration
+
+```text
+$ proteus simulate policy 198.51.100.11 192.0.2.10 --port 443 \
+    --from-zone inside --to-zone outside --file users/config.xml
+198.51.100.11 -> 192.0.2.10 tcp/443
+file / vsys1   users/config.xml
+  note: identity data taken 2026-10-19T02:00:00Z from users/identity.json.gz
+  note: the user example.com\alice comes from the mapping of 198.51.100.11
+  zones      from inside, to outside (given)
+  user       example.com\alice (from the mapping of 198.51.100.11)
+  relevance  unknown: no stored forwarding table
+  fidelity   exact
+  1. u-ldap-group allow [local vsys:vsys1]
+first match: u-ldap-group (allow)
+```
+
+The User-ID data comes from `identity.json.gz` beside the configuration. The
+source address has a mapping to `example.com\alice`, so the flow has that user,
+as on the firewall. `u-ldap-group` names the directory group
+`cn=domain users,cn=users,dc=example,dc=com`, which holds the user. A `--user`
+flag would not change the answer: the mapping wins. See [Users](#users).
+
 ## Reading the output
 
 ### Path mode
@@ -230,6 +253,7 @@ row with the hop's answer:
 | `policy  interzone-default (deny)` | no rule matches, and a default rule decides |
 | `policy  undecided: <reason>` | the hop is undecided |
 | `policy  not evaluated: <reason>` | the check did not run, for example after a routing drop |
+| `user  <user> (<from>)` | the user of the hop's check and where it comes from, see [Users](#users) |
 | `doubt  <reason>` | a doubt that comes from the path or the zones, see [Undecided](#undecided) |
 
 Each hop's check uses the hop's flow. That flow has the addresses after any NAT
@@ -294,6 +318,7 @@ The header shows the flow, then one block per vsys:
 | `file / <vsys>   <path>` | the configuration and the vsys of the check |
 | `note: <text>` | a note, for example the App-ID data file that the run reads |
 | `zones` | the zones and where they come from: `given` or `configuration` |
+| `user` | with User-ID data: the user of the flow and where it comes from, or `none`, see [Users](#users) |
 | `relevance` | always `unknown: no stored forwarding table` for a file |
 | `fidelity` | the [fidelity](../concepts/fidelity.md) of the answer, with the rules in doubt |
 | `unresolved: <vsys>: <reason>` | the rule that keeps the answer undecided |
@@ -374,6 +399,7 @@ the candidates that remain, and the detail.
 | `resolve-destination` | the same for the destination |
 | `derive-zones` | keeps rules whose zones and rule-type match, given or derived |
 | `match-application` | keeps rules whose application matches `--application`, explicit or through implicit use |
+| `match-user` | with User-ID data: keeps rules whose `source-user` matches the user of the flow, see [Users](#users) |
 | `match-service` | keeps rules whose service holds `--port`, or whose `application-default` holds it |
 | `match-url` | keeps rules whose URL category matches `--url` |
 | `drop-disabled` | removes disabled rules |
@@ -392,7 +418,7 @@ undecided.
 | --- | --- |
 | a candidate above the match names an application | an application or service `application-default` without `--application` or without App-ID data; an application that the App-ID data does not hold, see [Applications](#applications) |
 | a candidate above the match names a service that proteus cannot read | a predefined service such as `service-https` that the snapshot does not hold, a service group that holds one, or no service |
-| a candidate above the match names a value without data | a user, a HIP profile or a schedule |
+| a candidate above the match names a value without data | a user or a group without User-ID data, a Cloud Identity Engine group, a group that a missing part of the User-ID data cannot judge, a HIP profile or a schedule |
 | a candidate above the match names a URL category | without `--url`, or a category that the configuration does not define, such as a PAN-DB category |
 | a candidate names a runtime source or destination | an external dynamic list, a region or a dynamic address group; these rules stay candidates, because their members are known only at runtime |
 | a doubt on the path | ECMP (proteus does not follow the other next hops), a PBF rule that can redirect the flow, a NAT or PBF answer that can miss matches, or a start that only a default route places |
@@ -525,6 +551,115 @@ proteus: --application office-suite is an application container in content 8000-
 In path mode, such a name leaves that hop undecided. The reason names the device
 and its content version, because another hop can have another content version.
 
+### Users
+
+`--user <name>` gives the user of the flow. With User-ID data, proteus matches the
+`source-user` of each rule as the firewall does: the mapping of the source
+address, the directory groups, the XML API groups and the dynamic user groups
+decide the rule.
+
+#### Where the User-ID data comes from
+
+| Mode | Source |
+| --- | --- |
+| path mode | each hop reads the User-ID data of its own snapshot; `proteus fetch` stores it, see [User-ID data](../concepts/snapshots.md#user-id-data) and [fetch](fetch.md) |
+| `--file` | `identity.json.gz` in the directory of the configuration; the note `note.identity-file` names the file and the time the data was taken; nothing checks that the file belongs to the configuration; a file older than `max_snapshot_age` adds `gap.user-directory-stale`; copy the file out of a snapshot, see [snapshot](snapshot.md#user-id-data) |
+| no data | a snapshot or a directory without the file: a rule that names a user or a group stays in doubt (`doubt.not-evaluated.user`); a file that proteus cannot read adds `gap.no-user-directory` with the cause, and the answer is the same as without data |
+
+proteus reads the data only when `--user` is given or a rule of the vsys names a
+`source-user` other than `any`.
+
+#### The user of a flow
+
+The firewall takes the user from the mapping of the source address. proteus does
+the same:
+
+| `--user` | Mapping of the source | User of the flow | Note |
+| --- | --- | --- | --- |
+| given | none | `--user`, read as its primary name | `note.user-resolved` when proteus reads an alternate name or an email; `note.user-not-in-directory` when no user of the data has the name |
+| none | present | the mapped user, as the firewall stores it | `note.user-from-mapping`; `note.user-not-in-directory` when the name is no primary name |
+| given | present, another user | the mapped user: the mapping wins | `note.user-from-mapping` names both users |
+| none | none | no user, see [No user](#no-user) | `note.user-unknown-inferred` when a candidate names a user |
+
+The source address of the check is the first address of the flow: for an FQDN,
+its first address. An IPv6 mapping is found by its address. A mapping of the user
+`unknown` counts as no mapping.
+
+#### Names
+
+| Name | How proteus reads it |
+| --- | --- |
+| a primary name, such as `example.com\alice` | as it is, in any case |
+| `--user` as a UPN or another alternate name, such as `alice@example.com` | as its primary name, with `note.user-resolved` |
+| `--user` as an email | as its primary name; the answer is `inferred`, because no device was seen to resolve an email |
+| `--user` that no user of the data has | as given, with `note.user-not-in-directory`; it matches `any`, `known-user` and a rule that names the same text only |
+| `--user` as a group, such as `example.com\domain users` | as no user: it matches no rule by its text, as on the firewall |
+| a mapped user | as the firewall stores it, against primary names only |
+| a rule that names a UPN or an alternate name | as the primary name of that user |
+| a rule that names an email | as written: an email in a rule matches no user |
+
+A firewall can store a mapping in the NetBIOS form, such as `example\alice`.
+That name is no primary name, so it matches `any`, `known-user` and a rule that
+names `example\alice` only, as on the firewall.
+
+`--user any`, `--user known-user` and `--user unknown` exit 2: these are rule
+keywords, not users. Leave `--user` out for a flow without a user.
+`--user pre-logon` is valid.
+
+#### How a rule matches
+
+The `match-user` stage keeps a rule when one member of its `source-user` matches
+the user of the flow:
+
+| Member | Matches |
+| --- | --- |
+| `any`, or no `source-user` | every flow |
+| `known-user` | a flow with a user other than `pre-logon` |
+| `unknown` | a flow without a user |
+| `pre-logon` | `--user pre-logon` only |
+| a user | the user of the flow |
+| a directory or XML API group | a user that the group holds, as the firewall lists the members; the group name takes any case, and the short name `<domain>\<cn>` of a directory group names the group |
+| a dynamic user group | a user that the firewall lists as a member; proteus does not evaluate the tag filter |
+| a Cloud Identity Engine group | no flow: the rule stays a candidate, in doubt (`doubt.user-cie-group`) |
+| a local user or a local user group | as the local user database of the configuration holds it |
+| a group that the data does not hold | no flow |
+
+When a part of the User-ID data is missing, the answer is never `exact`. A member
+that the missing part cannot judge keeps its rule in doubt
+(`doubt.user-data-missing`, which names the part):
+
+| Missing part | Members in doubt |
+| --- | --- |
+| `users.groups` | each group and dynamic user group |
+| `groups` | each member that is no user of the data |
+| `users.names` | each member with `@` that is no primary name |
+| `mappings` | none; a source without a mapping has a user in doubt, and the answer is `inferred` with `note.identity-part-missing` |
+
+A mapping table that `fetch` cut or read while it changed counts as a missing
+`mappings` part. A source with a mapping keeps its fidelity: the mapping decides.
+
+#### No user
+
+A flow without `--user` and without a mapping has no user. It matches `any`,
+`unknown` and the rules without a `source-user`. When a candidate names a
+`source-user` other than `any`, the answer is `inferred`, with
+`note.user-unknown-inferred`. proteus follows the PAN-OS admin guide, where
+`known-user` takes an identified user only. The firewall's own
+`test security-policy-match` matches `known-user` without a user, and no traffic
+test confirms `unknown`. `--user pre-logon` is no identified user either, and its
+answer is `inferred` too.
+
+When no candidate names a user, the user decides nothing, and the fidelity stays.
+
+#### A hop after NAT
+
+In path mode, each hop looks up the source address that its firewall sees: after
+NAT on an earlier hop, the translated address. The hop reads the mappings of its
+own firewall only. When an earlier hop translated the source and a candidate of
+the hop names a user, the hop adds `note.user-after-nat`, and its fidelity is
+`inferred`: no lab path with NAT and User-ID showed this. A hop without User-ID
+data keeps the doubt of a check without data.
+
 ## Flags
 
 | Flag | Default | Description |
@@ -536,7 +671,7 @@ and its content version, because another hop can have another content version.
 | `--to-zone <zone>` | derived | with `--file`: the destination zone; give both zones or neither |
 | `--url <url>` | none | URL, matched against custom URL categories |
 | `--application <name>` | none | a predefined or custom application, matched with App-ID data, see [Applications](#applications) |
-| `--user <user>` | none | source user; proteus accepts the flag and does not evaluate it yet |
+| `--user <user>` | none | source user: a primary name such as `example.com\alice`, a UPN or an email; a mapping of the source address wins, see [Users](#users) |
 | `--no-dns` | off | do not resolve an FQDN endpoint |
 | `--router <name>` | none | path mode with `--device`: start in this logical router |
 | `--each` | off | check every selected firewall on its own; arrives in a later release |
@@ -582,15 +717,20 @@ The other codes are in [Output and exit codes](../reference/output.md#exit-codes
 
 ## Limits
 
-- proteus does not evaluate `--user`, so a rule that names a user is in doubt.
+- Without User-ID data, a rule that names a user or a group is in doubt.
+- A rule that names a Cloud Identity Engine group is in doubt.
+- A flow without a user, or with `--user pre-logon`, is `inferred` when a
+  candidate names a user.
+- A hop after NAT that judges a user is `inferred`.
 - Without `--application`, or without App-ID data, a rule that names an
   application is in doubt.
-- Policy-based forwarding does not evaluate the application.
+- Policy-based forwarding does not evaluate the application or the user.
 - proteus does not check the return path.
 - `--file` does not check NAT.
 
-See [Limits: simulate policy](../reference/limits.md#simulate-policy) and
-[Limits: applications](../reference/limits.md#applications).
+See [Limits: simulate policy](../reference/limits.md#simulate-policy),
+[Limits: applications](../reference/limits.md#applications) and
+[Limits: users](../reference/limits.md#users).
 
 ## See also
 
@@ -600,5 +740,6 @@ See [Limits: simulate policy](../reference/limits.md#simulate-policy) and
 - [fetch](fetch.md)
 - [Fidelity](../concepts/fidelity.md)
 - [App-ID data](../concepts/snapshots.md#app-id-data)
+- [User-ID data](../concepts/snapshots.md#user-id-data)
 - [Rule layers](../concepts/scope.md#rule-layers)
 - [Output and exit codes](../reference/output.md)

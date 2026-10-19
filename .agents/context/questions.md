@@ -29,6 +29,14 @@ cache in the server, a per-question memo in `query`); a `Loaded.Apps` from the
 config source wins. `OpenFile` reads `AppsFile`, `apps.xml.gz` in the directory of
 the configuration. A question that needs no application data never calls `Apps`.
 
+User-ID data (spec 2026-10-17 §4.2, §7): each target carries `Identity`, a lazy
+loader, and `IdentityPath`. For a snapshot it reads `Snapshot.IdentityPath()` (""
+without the file) through `When.Identity`, an `IdentitySource` (`DiskIdentity` by
+default, the MCP cache in the server, `identityMemo` per question in `query`); a
+`Loaded.Identity` from the config source wins. `OpenFile` reads `IdentityFile`,
+`identity.json.gz` in the directory of the configuration. `query.identityFor`
+turns a load into data and notes (PD11). See [identity](identity.md).
+
 ### search
 
 `Run(cfg, idx, Query)` runs five stages in order: objects by value (address terms
@@ -48,6 +56,19 @@ application (`Via` `implicit use by <app>`), leaving out any-rules and rules an
 explicit finding already holds. `query.Search` makes the term canonical first
 (D17): `Refs` and the interner match case exactly.
 
+With User-ID data in `Query.Providers.Users` (spec 2026-10-17 §6.1, PD13), a user
+term reaches, through the user value space, the `source-user` members of the rules
+that the user satisfies; the object findings carry `Via` `<source>, <n> members`
+for a group ("1 member" for one). `query.Search` replaces the term with its
+primary name first (`userTerm`, through `Resolve`, PD18). The stage `identity`
+(after `object`) adds a mapping for one address, and for a user term the user
+(`identity-user`), its groups (`identity-group`) and its mapped addresses
+(`mapping`), each only when no object finding names it (`shownByObjects`; with
+`--show` without `objects`, every one). `groupForms` lets a group term reach a rule
+that names the group by its short name or its DN in another case: search shows
+where a group is named, while `simulate` keeps same-text matching. `Contains`
+mode runs no identity stage. When to load the data: [identity](identity.md#loading-pd10-42).
+
 ### card
 
 `Find(cfg, idx, apps, name, kind)` returns one `Card` per element of that name visible in
@@ -65,6 +86,14 @@ cache, read once per kind; a dynamic group shows its filter as written. Every `I
 name no object defines is `Literal` (an address or prefix) or `Predefined` (in
 source, destination, service, category). The command cuts trees at three levels
 and lists at five items; JSON carries the whole card.
+
+`FindIdentity(ids, name, kind)` (PD14) builds the cards of the User-ID data:
+`identity-user` (primary, alternate names, email, groups with their source,
+mapped addresses with type and timeout, tags) by `Resolve`, and `identity-group`
+(source, member count, members) by name in any case or short name, a DUG too. The
+text cuts a group's members at 20 (`maxGroupMembers`), `--full` lifts it.
+`query.Lookup` calls it for an identity kind, or with no kind when the first look
+finds nothing (`needsIdentity`).
 
 ### drift
 
@@ -97,6 +126,14 @@ object whose form holds a secret or an undescribed value has no short line.
 Position is not compared. Predefined services are never
 read. `query.Diff` adds `note.app-version-changed` when the two snapshots'
 `app_version` differ; it never compares applications (spec 2026-10-16 §5.3).
+It adds `note.config-source-changed` when their `config_source` differs (a
+snapshot without the key counts as `export`, spec 2026-10-17 §2.4). With User-ID
+data in both snapshots, `identityDiff` adds one result with the scope `identity`
+(PD15): `identity.Diff` as `drift.Change` values of kinds `identity user` (groups
+gained or lost, one `group` field each) and `identity source` (came, went, or a
+group count change). It never compares mappings (D9). One side without data gives
+no result and `note.identity-not-compared`; a part missing on either side is not
+compared, and the same note names it.
 
 ## Build / run pointers
 

@@ -5,7 +5,9 @@
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 Ask your PAN-OS firewalls questions. proteus answers from a stored copy of each
-firewall's configuration and operational state, and never writes to a device.
+firewall's configuration, operational state and User-ID data, and never writes
+to a device. The stored configuration is the running configuration merged with
+the template that Panorama pushed, without uncommitted changes.
 
 **[Full documentation →](https://kaisero.github.io/proteus/)**
 
@@ -14,9 +16,11 @@ firewall's configuration and operational state, and never writes to a device.
 Use proteus to
 
 - Find every object, group, rule and profile that uses an address, prefix, port,
-  URL, user or name, across all firewalls
-- Show a rule or an object in full, laid out like the firewall's rule editor
-- Check which security rule a flow hits, on one firewall or along its whole path
+  URL, user, group or name, across all firewalls
+- Show a rule, an object, a user or a group in full, laid out like the firewall's
+  rule editor
+- Check which security rule a flow hits, on one firewall or along its whole path,
+  with its application and its user
 - Trace what NAT does to a packet and which zones the security policy must match
 - Trace the path of a packet across your firewalls
 - Compare two snapshots of a firewall to see which objects and rules changed

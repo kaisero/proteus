@@ -68,7 +68,8 @@ faster. Baking it in would poison the cache or force rebuilds.
 
 ## D8 — The read-only core performs no I/O
 
-Providers are interfaces; fetching is the caller's job. This keeps the core
+Providers are interfaces or immutable values (the App-ID and the User-ID data);
+fetching and loading are the caller's job. This keeps the core
 offline, deterministic and testable, and it matches D3: the core answers from
 what it was given.
 
@@ -145,6 +146,58 @@ than approximating it.
 exist for the package to compile. While it was gitignored, a pristine checkout did
 not build. It is committed, and it is the only copy: the schemadigest tool
 writes the digests there.
+
+## D16 — A snapshot holds `show config running`, merged with the pushed template
+
+**This was decided three times** (spec 2026-10-17 D2, owner decisions of
+2026-10-18). The export misses every value that a Panorama template pushes (C1):
+zones, interfaces, identity sources. The first plan took `show config merged`,
+which holds them. Lab round 3 showed that the merged view is the candidate: it held
+every uncommitted change of the calling admin (X4). The second plan took the export
+plus the pushed template. The C10 runs then showed that the export holds the
+candidate too: uncommitted changes of the lab admin and of another admin (C12).
+`show config running` held none, and the pushed template holds none, because a
+template changes only by a Panorama push, which commits (C10).
+
+So the base is `show config running`, and proteus merges the template itself
+(`fetch.MergeTemplate`): an element whose schema node has `tlo="yes"`, a leaf and a
+member list keep the local value whole; every other matched element merges by its
+children (C6, C11). That rule gave the device's own merged view of a candidate
+without content changes, element for element. `show config effective-running`
+holds no uncommitted change either, but it adds Panorama device-group content
+without marks (C8), so it is the check, not the source. The export stays as the
+fallback for a device that refuses `show config running`, with
+`note.config-not-running`.
+
+**Would change it:** a device whose running answer lacks a node that it runs, or a
+template form the merge does not know (a pushed interface, a variable;
+`docs/todo.md` item 80).
+
+## D17 — Dynamic user group membership comes from the device's user list
+
+The device lists the dynamic user groups of each user, as it evaluates them, in
+`show user user-ids all` (U3). proteus takes membership from there and evaluates
+no tag filter (spec 2026-10-17 D13, owner decision 2026-10-18). A filter evaluator
+would need the precedence and the parentheses of the filter grammar, which no lab
+round tested (M14), and it could only disagree with the device. A user that U3 does
+not list is in no DUG. The registered tags (U9) show in `lookup` only.
+
+**Would change it:** a device whose U3 lags behind its tag registrations in a way
+that matters for a snapshot.
+
+## D18 — The User-ID data belongs to each snapshot
+
+`PROTEUS_USERS` named one user-to-group file for every device and every time. It
+had no tie to the snapshot an answer read, so a question about last week used
+today's groups. Mappings and groups change all the time, so each snapshot keeps its
+own `identity.json.gz` (spec 2026-10-17 D4, D8). `fetch` parses the answers at
+fetch time and keeps no raw answer; a question loads the file only when it needs it
+(PD10), and the MCP cache keeps it per snapshot. No fetch falls back to the data
+of an older snapshot: an old mapping looks current and is wrong. Only single-vsys
+firewalls get the data (D10), because the file has no vsys key.
+
+**Would change it:** a need for mapping history (`docs/todo.md` item 74) or for
+multi-vsys data (item 67).
 
 ## See also
 

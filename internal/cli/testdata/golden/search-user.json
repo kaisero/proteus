@@ -62,7 +62,7 @@
       "stage": "object",
       "kind": "user-group",
       "name": "cn=payroll,ou=groups,dc=example,dc=com",
-      "via": "ldap:example.com, 1 members",
+      "via": "ldap:example.com, 1 member",
       "scope": "vsys:vsys1"
     },
     {

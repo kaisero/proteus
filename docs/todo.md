@@ -38,7 +38,7 @@ Every item names its **component** (the package or area it changes) and one **ta
 | 19 | feature | fetch, estate, simulate/routing | Active/active HA pairs |
 | 20 | feature | inventory, fetch | Skip the RIB for a device with a full BGP table |
 | 21 | feature | simulate, estate, cmd | Estate simulation for policy (M5): path mode done, fan-out open |
-| 22 | feature | simulate/securitypolicy, index | Evaluate user (application: done, App-ID support) |
+| 22 | done | simulate/securitypolicy, index | ~~Evaluate user~~ (User-ID support; items 66 to 91 hold what stays open) |
 | 23 | qa | simulate/securitypolicy, index | Derived zones on overlay networks |
 | 24 | done | resolve, card, simulate/securitypolicy | ~~Table of predefined services~~ (fetched from the device, no table) |
 | 25 | feature | card, cmd | NAT and PBF rules in `lookup` |
@@ -82,6 +82,32 @@ Every item names its **component** (the package or area it changes) and one **ta
 | 63 | test | simulate/securitypolicy | A default rule after an implicit allow, with traffic |
 | 64 | qa | simulate/pathpolicy, simulate/routing, simulate/nat | The open protocol of routing and NAT in path mode |
 | 65 | qa | store, fetch | A content file without containers serves until the trim version changes |
+| 66 | perf | fetch, store, estate | Parse every document at fetch time and load snapshot data lazily |
+| 67 | feature | fetch, identity, simulate/securitypolicy | Identity data of a multi-vsys firewall and the User-ID hub |
+| 68 | test | identity, simulate/securitypolicy | A Cloud Identity Engine lab |
+| 69 | test | simulate/securitypolicy | Traffic tests of `unknown` and of `known-user` against `pre-logon` |
+| 70 | test | simulate/pathpolicy | A path with NAT and a mapping on the later hop |
+| 71 | test | fetch, identity | The user tables of 10,000 users |
+| 72 | research | identity, tools/uidlab | How an XML API group goes away |
+| 73 | research | identity | Why `email-lookup` and `user-attributes` differ |
+| 74 | feature | identity, query, drift | Mapping history and mapping changes in `snapshot diff` |
+| 75 | research | identity, simulate/securitypolicy | The cause of the NetBIOS form of a mapping (N6) |
+| 76 | test | identity, simulate/securitypolicy | An email that is no alternate name (N7) |
+| 77 | test | fetch | The pushed template of a managed firewall without a template (C7) |
+| 78 | test | fetch, identity | User-ID answers with data on PAN-OS 12.2 |
+| 79 | research | fetch | Uncommitted changes of another admin in `show config running` (C12) |
+| 80 | test | fetch | A template that pushes an interface, and a template with variables (C11) |
+| 81 | test | identity, simulate/securitypolicy | A nested test group in the lab directory (X3) |
+| 82 | research | identity | Two directory groups with one cn |
+| 83 | research | identity | A short name with an escaped cn |
+| 84 | research | identity | One domain for LDAP and CIE |
+| 85 | research | identity | A registered user in two cases |
+| 86 | research | identity | One alternate name or email on two users |
+| 87 | test | tools/applab | The App-ID lab on PAN-OS 11.2 |
+| 88 | research | index, simulate/securitypolicy | A local user group given as `--user` |
+| 89 | qa | card | The source of an empty directory group |
+| 90 | research | tools/uidlab, tools/applab | A partial commit clears another admin's journal entries on a shared list |
+| 91 | research | identity, simulate/securitypolicy | Other User-ID facts the lab rounds could not show |
 
 ---
 
@@ -183,6 +209,9 @@ item 7, and delete the fetched data and API keys from the scratch directory.
   interface or next hop. Covers path monitoring, symmetric return, and that a rule
   naming an application does not apply to a session's first packet. Also closes part
   of item 23.
+- Policy-based forwarding does not evaluate the user either: a PBF rule that names
+  a user keeps its doubt, as one that names an application does (spec
+  `docs/specs/2026-10-17-user-id-design.md` §5.3).
 
 ### 11. Simulate NAT
 
@@ -265,9 +294,10 @@ item 7, and delete the fetched data and API keys from the scratch directory.
 
 ### 22. Evaluate user
 
-- **Tag:** feature · **Component:** simulate/securitypolicy, index · **Source:** spec §11.6, README known limits
-- The `first-match` stage reports the user as not evaluated. `--user` is accepted
-  and not used.
+- **Tag:** done · **Component:** simulate/securitypolicy, index · **Source:** spec §11.6, README known limits
+- Done as User-ID support (spec `docs/specs/2026-10-17-user-id-design.md`): the
+  `match-user` stage evaluates `--user` and the mapping of the source address from
+  the User-ID data of each snapshot. Items 66 to 91 hold what stays open.
 - The application is done: `match-application` evaluates it from the App-ID data
   (spec `docs/specs/2026-10-16-app-id-design.md`). Items 59 to 65 hold what stays
   open.
@@ -654,3 +684,257 @@ names another.
   file in `<store>/.content/` or the trim version changes.
 - Let a hit read the file's header and count a file without containers as a miss,
   or ask the device for the containers only.
+
+## User-ID follow-ups
+
+Source for each: spec `docs/specs/2026-10-17-user-id-design.md`, unless the item
+names another. The lab facts come from fw01 (PAN-OS 11.2.5) and, read only, from
+fw02 (PAN-OS 12.2.3).
+
+### 66. Parse every document at fetch time and load snapshot data lazily
+
+- **Tag:** perf · **Component:** fetch, store, estate · **Source:** spec §11
+- `fetch` parses the User-ID answers into one file at fetch time, and a question
+  loads that file only when it needs it. The other documents are stored as the
+  device sent them and are parsed at each load.
+- Parse every document at fetch time in the same way, and load each part of a
+  snapshot only for a question that needs it.
+
+### 67. Identity data of a multi-vsys firewall and the User-ID hub
+
+- **Tag:** feature · **Component:** fetch, identity, simulate/securitypolicy · **Source:** spec D10, §3.4, §11
+- `fetch` stores no User-ID data for a firewall with several vsys, and adds
+  `note.identity-multi-vsys`. Each vsys can have its own mappings and group
+  mapping, and a User-ID hub vsys can share its data with the others.
+- Fetch the data per vsys with the `vsys` request parameter (U12), keep one file
+  per vsys or one file with a vsys key, and model the hub. Verify on a multi-vsys
+  lab firewall first.
+
+### 68. A Cloud Identity Engine lab
+
+- **Tag:** test · **Component:** identity, simulate/securitypolicy · **Source:** spec D1, §5.6, U16
+- A rule that names a CIE group stays a candidate with `doubt.user-cie-group`. The
+  CIE profiles of fw01 never synced, so no CIE group was seen on a device.
+- Set up a working CIE tenant and a rule with a CIE group. Record the group form in
+  `user-ids all` and `group list`, and check the documented fact that CIE fetches
+  only the users and groups that security rules name. Then evaluate CIE groups as
+  directory groups, and make the CIE flow of `make uid-lab` a compared flow.
+
+### 69. Traffic tests of `unknown` and of `known-user` against `pre-logon`
+
+- **Tag:** test · **Component:** simulate/securitypolicy · **Source:** spec §5.4, O1, SG12
+- A flow without a user matches `any` and `unknown`, not `known-user`, as the
+  admin guide defines them. `test security-policy-match` matches `known-user` here
+  (M4) and refuses `unknown` as input (M5). `pre-logon` matches neither keyword.
+  These answers are `inferred`.
+- Send traffic from an unmapped source against an `unknown` rule, and from a
+  `pre-logon` user against a `known-user` rule. Read the traffic log. When it
+  confirms the admin guide, the fidelity becomes `exact`.
+
+### 70. A path with NAT and a mapping on the later hop
+
+- **Tag:** test · **Component:** simulate/pathpolicy · **Source:** spec D11, §5.1, O2
+- A hop after source NAT looks up the translated address in the mappings of its
+  own firewall, with `note.user-after-nat`, and is `inferred`. No lab path with NAT
+  and User-ID exists.
+- Build a lab path of two firewalls with source NAT on the first, map the
+  translated address on the second, and compare the second hop with its
+  `test security-policy-match`.
+
+### 71. The user tables of 10,000 users
+
+- **Tag:** test · **Component:** fetch, identity · **Source:** spec §3.3, O3
+- `user-ids all` and `user-attributes user all` have no paging. The lab directory
+  is small, so their size and whether they cut a large answer are not known. A user
+  count that differs from `Total: N` makes `users.groups` missing.
+- Read both on a directory of 10,000 users. Record the size, check the count, and
+  check the time-out of 60 s per call.
+
+### 72. How an XML API group goes away
+
+- **Tag:** research · **Component:** identity, tools/uidlab · **Source:** spec O4
+- A `<groups>` entry with empty `<members>` empties an XML API group, but the
+  `xmlapi` list still names it. `xmlapi-group delete` of the op schema was not
+  tried. Three empty lab groups stay on fw01 for this reason.
+- Try the delete command on a lab group, check the group list, and remove the
+  three groups when it works. Then let the lab cleanup use it.
+
+### 73. Why `email-lookup` and `user-attributes` differ
+
+- **Tag:** research · **Component:** identity · **Source:** spec U15, O5
+- `email-lookup email all` returned fewer users than `user-attributes user all`
+  shows with an email. proteus reads the email from `user-attributes` and does not
+  use `email-lookup`.
+- Find out which users `email-lookup` leaves out, and why.
+
+### 74. Mapping history and mapping changes in `snapshot diff`
+
+- **Tag:** feature · **Component:** identity, query, drift · **Source:** spec §11, D9
+- `snapshot diff` compares users and identity sources, not mappings: a mapping
+  changes at each login and time-out. Each snapshot keeps the mappings of its own
+  time only.
+- Decide what a mapping change worth a report is, such as an address that moved to
+  another user, and whether a question can ask for the user of an address at a past
+  time.
+
+### 75. The cause of the NetBIOS form of a mapping (N6)
+
+- **Tag:** research · **Component:** identity, simulate/securitypolicy · **Source:** spec N4, N6
+- fw01 stores a login sent as `example.com\alice` as `example\alice`. That form
+  matches no user rule and no group (M2). It is not known whether the NetBIOS name
+  of the domain or the domain of a CIE profile gives the short form. fw01 has CIE
+  profiles, and `group-mapping state all` names no NetBIOS domain.
+- Check on a firewall without CIE profiles. proteus compares a mapped user as
+  stored, so no code depends on the answer.
+
+### 76. An email that is no alternate name (N7)
+
+- **Tag:** test · **Component:** identity, simulate/securitypolicy · **Source:** spec N7, D7, §5.2
+- On fw01 each email equals the UPN, which is also an alternate name. So it is not
+  known whether the firewall resolves an email. Until then, an email as `--user`
+  or as a search term resolves with fidelity `inferred` (`identity.InputEmail`),
+  and an email in a rule matches no user (`identity.RuleEmail`).
+- On a firewall with a user whose email is no alternate name, check how a `login`
+  by email is stored, whether `user-attributes` by email returns the user, and
+  whether a rule that names the email matches. Then set both constants.
+
+### 77. The pushed template of a managed firewall without a template (C7)
+
+- **Tag:** test · **Component:** fetch · **Source:** spec C7, §2.1
+- fw02 has no Panorama, and `show config pushed-template` answers
+  `No template pushed to device`. proteus reads that as no template, with no note.
+  A firewall that Panorama manages without a template was not seen.
+- Read the answer on such a firewall. When it differs, add its form to the
+  no-template case, or let it give `note.config-no-template`.
+
+### 78. User-ID answers with data on PAN-OS 12.2
+
+- **Tag:** test · **Component:** fetch, identity · **Source:** spec C7, X1
+- fw02 (12.2.3) holds no User-ID data. Its empty answers have the layouts of fw01,
+  but the layouts with data on 12.2 were not seen.
+- Read every User-ID answer with data on a 12.2 firewall and compare the layouts
+  with the fixtures.
+
+### 79. Uncommitted changes of another admin in `show config running` (C12)
+
+- **Tag:** research · **Component:** fetch · **Source:** spec C12, X4, D2
+- On fw01, `show config running` held no uncommitted change of the lab admin or
+  of another admin, and the export held both. Two cases are not shown: a firewall
+  where the owner cannot make the change of another admin, and PAN-OS 12.2, where
+  the export can also be the candidate.
+- Check both. A difference changes the fallback note, not the source.
+
+### 80. A template that pushes an interface, and a template with variables (C11)
+
+- **Tag:** test · **Component:** fetch · **Source:** spec C11, §2.2
+- The fw01 template holds one zone without interfaces and no interface, and no
+  template variable. The merge copies each value as the answer holds it.
+- Push a template with an interface and one with a variable to a lab firewall.
+  Check that the merged configuration agrees with `show config effective-running`
+  and `show interface all`, and how the answer writes a variable.
+
+### 81. A nested test group in the lab directory (X3)
+
+- **Tag:** test · **Component:** identity, simulate/securitypolicy · **Source:** spec X3
+- `user-ids all` lists a user under each group that holds it, nested groups too,
+  and the firewall agrees. The lab directory showed this only with the Active
+  Directory default, where the builtin Users group holds Domain Users.
+- Add a nested test group to the lab directory and repeat the X3 check.
+
+### 82. Two directory groups with one cn
+
+- **Tag:** research · **Component:** identity · **Source:** plan
+  `docs/plans/2026-10-18-user-id.md` Task 5
+- The short name `example.com\<cn>` names a directory group by its cn (M12). Two
+  groups with one cn in one domain give a short name of two groups. proteus keeps
+  a rule that names such a short name in doubt.
+- Check which group the firewall takes, or whether it refuses the name.
+
+### 83. A short name with an escaped cn
+
+- **Tag:** research · **Component:** identity · **Source:** plan
+  `docs/plans/2026-10-18-user-id.md` Task 5
+- A cn can hold an escaped character, such as `cn=smith\, john`. proteus compares
+  the short name of such a group as stored. No device showed the short name of
+  such a group.
+- Check how the firewall writes and matches it.
+
+### 84. One domain for LDAP and CIE
+
+- **Tag:** research · **Component:** identity · **Source:** plan
+  `docs/plans/2026-10-18-user-id.md` Task 5
+- When a domain is the domain of an LDAP profile and of a CIE profile, proteus
+  reads a short name that resolves as the LDAP group. While the LDAP domain is not
+  known, the name is in doubt.
+- Check which source the firewall takes. This needs the CIE lab (item 68).
+
+### 85. A registered user in two cases
+
+- **Tag:** research · **Component:** identity · **Source:** plan
+  `docs/plans/2026-10-18-user-id.md` Task 5
+- `registered-user all` can hold one user under two cases of its name. proteus
+  merges the tags of both. No device showed it.
+- Register tags under two cases of one name and read the answer.
+
+### 86. One alternate name or email on two users
+
+- **Tag:** research · **Component:** identity · **Source:** plan
+  `docs/plans/2026-10-18-user-id.md` Task 5
+- When two users share an alternate name or an email, proteus reads the name as
+  the first of them in the file. A primary name comes before an alternate name,
+  and an alternate name before an email.
+- Check what the firewall does with such a name in a rule and in a `login`.
+
+### 87. The App-ID lab on PAN-OS 11.2
+
+- **Tag:** test · **Component:** tools/applab · **Source:** plan
+  `docs/plans/2026-10-18-user-id.md` Task 3
+- fw01 (11.2.5) refuses an application container in the `exclude` list of an
+  application filter. fw02 (12.2.3) takes it. So `lab-filter-excont`, and
+  `lab-rule-s13`, which names it, are missing in an App-ID lab run on fw01. The 3
+  P13 flows stay undecided on fw01, because a production rule with `any` zones and
+  `application-default` stands behind the lab rules.
+- Add an 11.2 variant of the filter to the lab files, and isolate the P13 flows
+  from production rules.
+
+### 88. A local user group given as `--user`
+
+- **Tag:** research · **Component:** index, simulate/securitypolicy · **Source:** plan
+  `docs/plans/2026-10-18-user-id.md` Task 13
+- A directory group, a dynamic user group or a short name given as `--user` is no
+  user and matches no rule by its text (M12). A local user group given as `--user`
+  still matches a rule that names it, by its text. No device fact shows what the
+  firewall does, and no lab flow covers it.
+- Check the case on a lab firewall with a local user group, and add a lab flow.
+
+### 89. The source of an empty directory group
+
+- **Tag:** qa · **Component:** card · **Source:** plan
+  `docs/plans/2026-10-18-user-id.md` Task 14
+- For a directory group without members, `show user group name` names no source.
+  `lookup` names the source `ldap:<profile>`, such as `ldap:example.com`, by the
+  form of the group's DN. The lab check
+  compares no source for such a group.
+- Decide whether the card should say that the device names no source.
+
+### 90. A partial commit clears another admin's journal entries on a shared list
+
+- **Tag:** research · **Component:** tools/uidlab, tools/applab · **Source:** plan
+  `docs/plans/2026-10-18-user-id.md` Task 14
+- On fw01, a partial commit of the lab admin that covered a list, such as `tag`, cleared
+  the journal entries of another admin on that list. That admin's entries held no
+  content difference, so the net change was nil.
+- The lab rules forbid a change to other admins' pending changes. Keep lab changes
+  off lists that other admins have changed, or check the journal before each
+  commit, and find out whether a content change of another admin can be committed
+  this way.
+
+### 91. Other User-ID facts the lab rounds could not show
+
+- **Tag:** research · **Component:** identity, simulate/securitypolicy · **Source:** spec M14, U17
+- The precedence and the parentheses of a DUG tag filter were not tested (M14).
+  proteus takes DUG membership from the firewall's own user list (D13), so no
+  answer depends on it today.
+- The capacity of the mapping tables comes from the official docs only (U17). The
+  fetch keeps at most 512,000 mappings, the start-point limit of the command.
+- Check both on a lab firewall when a change depends on them.
