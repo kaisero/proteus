@@ -665,8 +665,21 @@ func TestATransportErrorFailsTheTemplateDocument(t *testing.T) {
 
 // A digest that does not load, or a merge that fails, keeps the base and makes
 // the step partial; the log names no value of the configuration (spec §3.5).
+// The document template fails, so the fetch exits 3, and the snapshot carries
+// note.config-no-template, as without the template (spec §2.1, PD1).
 func TestAFailedMergeKeepsTheBase(t *testing.T) {
 	t.Parallel()
+	failed := func(t *testing.T, s State, notes string) {
+		t.Helper()
+		i := slices.IndexFunc(s.Result.Outcomes, func(o Outcome) bool { return o.Name == "template" })
+		if i < 0 || s.Result.Outcomes[i].Err == nil ||
+			slices.ContainsFunc(s.Result.Outcomes[i+1:], func(o Outcome) bool { return o.Name == "template" }) {
+			t.Errorf("outcomes %+v", s.Result.Outcomes)
+		}
+		if codes(s) != notes {
+			t.Errorf("notes %s", codes(s))
+		}
+	}
 	t.Run("digest", func(t *testing.T) {
 		t.Parallel()
 		d := fullDevice(t)
@@ -683,6 +696,7 @@ func TestAFailedMergeKeepsTheBase(t *testing.T) {
 		if !bytes.Equal(s.Result.Docs["template"], templateConfig(t)) {
 			t.Error("the template that arrived is kept")
 		}
+		failed(t, s, "note.config-no-template")
 	})
 	t.Run("merge", func(t *testing.T) {
 		t.Parallel()
@@ -702,6 +716,7 @@ func TestAFailedMergeKeepsTheBase(t *testing.T) {
 		if string(s.Result.Docs["config"]) != d.Config || s.Result.ConfigSource != "export" {
 			t.Errorf("source %q, config %s", s.Result.ConfigSource, s.Result.Docs["config"])
 		}
+		failed(t, s, "note.config-not-running,note.config-no-template")
 		b := readFile(t, l.Path())
 		if !strings.Contains(string(b), "[WARN] [API] lab: template not merged: ") ||
 			strings.Contains(string(b), "secret-name") || strings.Contains(string(b), "192.0.2.1") {

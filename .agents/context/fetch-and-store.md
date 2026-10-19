@@ -79,8 +79,9 @@ and `vsys/entry` too, merges by its children; a template element the base lacks 
 inserted byte for byte; no base byte changes, C11). `root` is
 `config.SchemaRoot()`. It sets `Result.ConfigSource` (`running+template`,
 `running`, `export+template`, `export`), which `meta.json` keeps as
-`config_source`; a digest or merge failure keeps the base and makes the step
-`partial`. The `identity` step (`identity.go`, spec 2026-10-17 §3) runs last; see
+`config_source`; a digest or merge failure keeps the base, makes the step
+`partial`, fails the `template` outcome (exit 3) and adds
+`note.config-no-template`. The `identity` step (`identity.go`, spec 2026-10-17 §3) runs last; see
 [identity](identity.md). The CLI runs them with `task.Run`, between its own
 `resolve` and `store` steps, with the device's name as the task's kind, so every
 error starts `<device>/<step>: `. A failed document is recorded in

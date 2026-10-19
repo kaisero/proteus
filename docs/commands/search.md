@@ -307,7 +307,7 @@ simulate shows what the firewall matches.
 search reads the User-ID data at once for an address, for a term with `\`, `@` or
 `=`, and for a term that a rule names as `source-user`. For another term, it reads
 the data only when the first search of a vsys finds nothing, and then searches
-that vsys again. A `--file` configuration whose `identity.json.gz` proteus cannot
+that vsys again. A `--file` configuration whose `identity.json.gz` Proteus cannot
 read then adds `gap.no-user-directory` with the cause, also for a term that is no
 user.
 

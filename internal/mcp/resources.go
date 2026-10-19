@@ -30,7 +30,7 @@ const limits = `# What proteus cannot know
 - Predefined services (service-http, service-https) are fetched from the device into each snapshot. A snapshot stored before they were fetched, or from a device that refused them, keeps a rule that names one in doubt.
 - The application is evaluated with implicit use and default ports. Policy-based forwarding does not evaluate it. One application per flow is evaluated: the firewall can evaluate a session again when App-ID identifies it later.
 - HIP, schedule, external dynamic lists and dynamic address groups are not evaluated.
-- The user comes from the mapping of the source address or the user given; CIE groups and unverified dynamic user group filters stay in doubt; with no user, unknown is inferred; a hop after NAT is inferred.
+- The user comes from the mapping of the source address or the user given; dynamic user groups take their members from the firewall's user list; CIE groups stay in doubt; with no user, unknown is inferred; a hop after NAT is inferred.
 - Only the forward path is checked; asymmetric routing is not detected. IPv4 only.
 - Policy-based forwarding is named, not followed. ECMP follows the lowest next hop. A path ends where it leaves the inventory.
 - Firewalls in virtual wire or Layer 2 mode are not seen on a path; shared gateways are not verified.

@@ -106,9 +106,26 @@ func cloneWith[T any](s []T, f func(T) T) []T {
 	return out
 }
 
-// File returns the file of the data. Callers must not change its lists: they
-// belong to the Data.
-func (d *Data) File() File { return d.file }
+// File returns a copy of the file of the data, every list with it: the MCP
+// cache shares one Data between calls, so a change of the copy must not
+// reach it (AGENTS.md R2). The names stay shared: a string never changes.
+func (d *Data) File() File {
+	f := d.file
+	f.Sources = Sources{LDAP: slices.Clone(f.Sources.LDAP), CIE: slices.Clone(f.Sources.CIE)}
+	f.Users = cloneWith(f.Users, func(u User) User {
+		u.Alt, u.Groups = slices.Clone(u.Alt), slices.Clone(u.Groups)
+		return u
+	})
+	f.Groups = slices.Clone(f.Groups)
+	f.DUGs = slices.Clone(f.DUGs)
+	f.Tags = cloneWith(f.Tags, func(t Tags) Tags {
+		t.Tags = slices.Clone(t.Tags)
+		return t
+	})
+	f.Mappings = slices.Clone(f.Mappings)
+	f.PartsMissing = slices.Clone(f.PartsMissing)
+	return f
+}
 
 // TakenAt is the time of the fetch that took the data.
 func (d *Data) TakenAt() time.Time { return d.file.TakenAt }
@@ -309,7 +326,8 @@ func (d *Data) GroupsOf(user string) []string {
 // PAN-OS 11.2.5: a DN in another case names the same group (M11), and an XML
 // API group and a DUG match the primary name in any case (X2). DUG membership
 // comes from U3 only, so a user that U3 does not list is in no DUG (D13). The
-// group of a short name is the group of its DN (M12).
+// group of a short name is the group of its DN (M12). Classify the name with
+// Member first; InGroup does not judge a short name in doubt.
 func (d *Data) InGroup(user, group string) bool {
 	i, ok := d.users[strings.ToLower(user)]
 	return ok && holds(d.file.Users[i].Groups, d.groupName(group))
@@ -333,6 +351,16 @@ func (d *Data) Group(name string) (Group, bool) {
 		return d.file.Groups[i], true
 	}
 	return Group{}, false
+}
+
+// GroupSource is the source of a group (§3.3): as groups[] records it, else
+// by its form, as when the part groups is missing.
+func (d *Data) GroupSource(name string) string {
+	if g, ok := d.Group(name); ok {
+		return g.Source
+	}
+	src := d.file.Sources
+	return Classify(name, src.LDAP, !d.Complete(PartLDAP), d.file.DUGs, src.CIE, !d.Complete(PartCIE))
 }
 
 // groupName gives the name of the group that a name names (Group), else the

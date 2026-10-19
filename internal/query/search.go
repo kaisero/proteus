@@ -27,7 +27,7 @@ type SearchInput struct {
 	Mode string `json:"mode,omitempty" jsonschema:"exact, within or contains; empty lets the term's type decide"`
 	// Kinds, Fields and Show narrow the findings; Direct keeps groups one level
 	// up.
-	Kinds  []string `json:"kinds,omitempty" jsonschema:"object kinds to search; empty for every kind"`
+	Kinds  []string `json:"kinds,omitempty" jsonschema:"object kinds to search, or identity-user, identity-group and mapping for the User-ID data; empty for every kind"`
 	Fields []string `json:"fields,omitempty" jsonschema:"rule fields to search; empty for every field"`
 	Show   []string `json:"show,omitempty" jsonschema:"finding stages to show: objects, identity, groups, refs, literals"`
 	Direct bool     `json:"direct,omitempty" jsonschema:"follow groups one level up only"`

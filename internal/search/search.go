@@ -370,9 +370,7 @@ func (s *searcher) groupVia(g identity.Group) string {
 // part groups is missing: its source by its form (§3.3), and its member count
 // to come (groupVia).
 func (s *searcher) unlistedGroup(d *identity.Data, name string) identity.Group {
-	f := d.File()
-	source := identity.Classify(name, f.Sources.LDAP, !d.Complete(identity.PartLDAP), f.DUGs, f.Sources.CIE, !d.Complete(identity.PartCIE))
-	return identity.Group{Name: name, Source: source, Members: -1}
+	return identity.Group{Name: name, Source: d.GroupSource(name), Members: -1}
 }
 
 // addressObjects matches an address, prefix or range term against address objects.

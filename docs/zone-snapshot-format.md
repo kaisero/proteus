@@ -34,7 +34,7 @@ sections. All parsing lives in the library, so a capture that went wrong stays
 distinguishable from a device that answered oddly.
 
 `taken_at` is not enforced, which is a deliberate difference from the identity file
-of a `--file` question, whose age proteus checks. A user-to-group mapping read days ago is a realistic and silent error; a forwarding
+of a `--file` question, whose age Proteus checks. A user-to-group mapping read days ago is a realistic and silent error; a forwarding
 table is expected to be supplied fresh by whatever captured it, so the library does not
 second-guess its age.
 

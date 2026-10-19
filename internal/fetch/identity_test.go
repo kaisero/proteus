@@ -284,6 +284,41 @@ func TestIdentityStepNotesMovedMappings(t *testing.T) {
 	}
 }
 
+// A page after the first that the device refuses, or that does not read,
+// makes the part mappings missing: the step keeps none of the earlier pages,
+// so an unmapped source stays in doubt (spec 2026-10-17 §3.2, §3.4, PD19).
+// The note names the cause, and for an unreadable page the entry index.
+func TestIdentityStepDropsTheTableAtABadLaterPage(t *testing.T) {
+	t.Parallel()
+	for name, tc := range map[string]struct{ answer, why string }{
+		"refused": {fakepanos.Refusal("17", "show -> user is unexpected"), "the device refused the command"},
+		"unreadable": {
+			page(4, entry("198.51.100.3", `example.com\carol`), entry("not-an-address", `example.com\dave`)),
+			"entry 2: the address does not read",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			d := fullDevice(t)
+			d.Ops[fakepanos.MappingPageCmd(2, 1)] = page(4, entry("198.51.100.1", `example.com\alice`), entry("198.51.100.2", `example.com\bob`))
+			d.Ops[fakepanos.MappingPageCmd(2, 3)] = tc.answer
+			s, steps := fetched(t, d, pageSize(2))
+			if got := pagesAsked(d); !slices.Equal(got, []string{fakepanos.MappingPageCmd(2, 1), fakepanos.MappingPageCmd(2, 3)}) {
+				t.Errorf("pages %q", got)
+			}
+			f := identityFile(t, s)
+			if !slices.Equal(f.PartsMissing, []string{identity.PartMappings}) || len(f.Mappings) != 0 {
+				t.Errorf("missing %v, mappings %q", f.PartsMissing, addresses(f))
+			}
+			want := "these parts of the identity data are missing, so answers that need them stay in doubt: " +
+				"mappings (" + tc.why + ")"
+			if n := steps["identity"].Notes; codes(s) != "note.identity-part-missing" || len(n) != 1 || n[0].Text != want {
+				t.Errorf("notes %+v", n)
+			}
+		})
+	}
+}
+
 // A table larger than the cap keeps its first entries, and it is partial,
 // with a note (spec §3.2, SG13). No page starts after the cap. The cap is the
 // start-point limit of U1.

@@ -5,7 +5,7 @@ configuration and operational state. It reads from a firewall only during
 `proteus fetch`, and it never writes to one: the API client refuses every command
 except `<show>` commands and the configuration export. The configuration of a
 snapshot comes from `show config running` and `show config pushed-template`,
-which proteus merges. The export is the fallback for a firewall that refuses
+which Proteus merges. The export is the fallback for a firewall that refuses
 `show config running`.
 
 ```mermaid

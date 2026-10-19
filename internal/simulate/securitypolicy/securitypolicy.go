@@ -223,12 +223,11 @@ type state struct {
 	svcDoubts map[uint32]reason.Reason
 	portNotes map[uint32][]reason.Reason
 	// users is the target's identity data, nil without it. userEvaluated is
-	// whether match-user evaluated the user: the data is there. userKept are
-	// the rules it kept for a member the data cannot judge, and userDoubts
-	// gives each its reasons (spec 2026-10-17 §5.5).
+	// whether match-user evaluated the user: the data is there. userDoubts
+	// gives the reasons of each rule it kept for a member the data cannot
+	// judge (spec 2026-10-17 §5.5).
 	users         *identity.Data
 	userEvaluated bool
-	userKept      *roaring.Bitmap
 	userDoubts    map[uint32][]reason.Reason
 	// notes are the run's own notes, after the target's.
 	notes   simulate.Reasons

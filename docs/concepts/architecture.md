@@ -9,7 +9,7 @@ every package follows.
 
 | Goal | What it means |
 | --- | --- |
-| Read-only | The API client sends only `<show>` commands, such as `show config running` and `show config pushed-template`, and the configuration export as the fallback. proteus merges the running configuration and the pushed template itself. |
+| Read-only | The API client sends only `<show>` commands, such as `show config running` and `show config pushed-template`, and the configuration export as the fallback. Proteus merges the running configuration and the pushed template itself. |
 | Correct before complete | An answer that may be incomplete says so. A wrong answer that looks complete is the worst outcome. |
 | Schema first | Field knowledge comes from the PAN-OS schema. |
 | Scope-correct | Every answer is keyed by device and vsys. See [Scope](scope.md). |

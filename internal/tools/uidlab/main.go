@@ -20,9 +20,10 @@
 // answer decides, is tried twice more, -retry-wait apart, and counts as a
 // difference only when all three tries differ (M18). Each try keeps its
 // device answers in -out. A user check or a resolved flow that names a
-// member of the XML API group of the -login file stops the run (U18). It removes both temporary directories at the end, also after
-// a failure or an interrupt; the run log of proteus is in one of them,
-// because it names the host (§10.4).
+// member of the XML API group of the -login file stops the run (U18). It
+// removes both temporary directories at the end, also after a failure or an
+// interrupt; the run log of proteus is in one of them, because it names the
+// host (§10.4).
 //
 // The device answers op commands only: <show> and
 // <test><security-policy-match>, and labkit.CheckOp refuses any other command

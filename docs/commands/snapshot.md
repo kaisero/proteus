@@ -220,7 +220,7 @@ When the App-ID content version differs between the two snapshots, the note
 
 When the two snapshots come from different configuration sources, the note
 `note.config-source-changed` names both sources. A snapshot that an older release
-of proteus fetched holds the configuration export. Across the change to the
+of Proteus fetched holds the configuration export. Across the change to the
 running configuration with the pushed template, the template values show as
 added once, and the uncommitted changes that the export held show as removed.
 The empty elements below `shared/content-preview` show as removed too. See

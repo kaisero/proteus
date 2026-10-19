@@ -406,6 +406,17 @@ func TestGoldenUser(t *testing.T) {
 	}
 }
 
+// A rule keyword as --user is a usage error (spec 2026-10-17 §5.2, PD17):
+// --user known-user exits 2 with the reason and prints no answer.
+func TestAUserKeywordExitsTwo(t *testing.T) {
+	t.Parallel()
+	out, errOut, code := newCLI(t).run("simulate", "policy", "203.0.113.5", "192.0.2.11", "--user", "known-user",
+		"--port", "443", "--from-zone", "inside", "--to-zone", "outside", "--file", userConfig(t))
+	if code != exitUsage || out != "" || !strings.Contains(errOut, "--user known-user is a rule keyword, not a user") {
+		t.Errorf("exit %d, want 2\nstdout:\n%s\nstderr:\n%s", code, out, errOut)
+	}
+}
+
 // search and lookup with the identity data on a file (spec 2026-10-17 §6.1,
 // §6.2): a UPN with its groups, rules and address, the mapped user of an
 // address, the card of a user and the card of a group.

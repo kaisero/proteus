@@ -144,8 +144,9 @@ stays in its part.
 (PD18): a primary name, then an alternate name, then an email when
 `identity.InputEmail` is true, each in any case; of two users with one name in
 one tier, the first in the file counts. `InputEmail` is true (N7 not shown, PD21):
-a simulation whose user came from an email is `inferred` with
-`note.user-resolved`. `identity.RuleEmail` is false (SG4): an email in a rule
+a simulation whose user came from an email that is no alternate name of the
+user is `inferred` with `note.user-resolved`; an email that is also an
+alternate name, such as the UPN, stays `exact`. `identity.RuleEmail` is false (SG4): an email in a rule
 names no user. `TestEmailConstantsFollowTheFacts` pins both.
 
 `(*Data).Member` reads a `source-user` member of a rule as the device does:
@@ -210,7 +211,7 @@ three ways on purpose; the doc comment of `namesUser` says why.
 | PD18 | `InputEmail` and `Resolve` serve `--user`, a search term and `lookup`; a rule member follows `RuleEmail`. |
 | PD19 | Missing data never gives an exact answer: a member a missing part cannot judge is `doubt.user-data-missing`; a source without a mapping in a missing, cut or moved table is a user in doubt, `inferred`, with `note.identity-part-missing`. |
 | PD20 | DUG membership comes from U3; no code evaluates a DUG filter; tags feed `lookup` only. |
-| PD21 | N7 not shown: `InputEmail` true, an email gives `inferred`; `RuleEmail` false; a test pins each constant. |
+| PD21 | N7 not shown: `InputEmail` true, an email that is no alternate name gives `inferred`; `RuleEmail` false; a test pins each constant. |
 
 ## Build / run pointers
 
@@ -251,6 +252,7 @@ func (d *Data) Complete(part string) bool
 func (d *Data) Counts() Counts
 func (d *Data) File() File
 func (d *Data) Group(name string) (Group, bool)
+func (d *Data) GroupSource(name string) string
 func (d *Data) GroupsOf(user string) []string
 func (d *Data) InGroup(user, group string) bool
 func (d *Data) Known(name string) bool

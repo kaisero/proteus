@@ -137,6 +137,7 @@ template value, as on the firewall. `config.xml` holds the result, and
 | the firewall answers `No template pushed to device`, as a firewall that Panorama does not manage | `config.xml` holds the running configuration; `config_source` is `running`; no note |
 | the firewall refuses the template, or its answer holds no template | `config.xml` holds the running configuration without the template values, with `note.config-no-template` |
 | the template call fails on the way | the `documents` stage is `partial`, `config.xml` holds the running configuration, and `fetch` exits 3 |
+| the template arrives and does not merge | the `template` stage is `partial`, `config.xml` holds the running configuration without the template values, with `note.config-no-template`, and `fetch` exits 3 |
 | the firewall refuses `show config running`, or answers without a configuration | `fetch` exports the configuration, with `note.config-not-running`; the export can hold uncommitted changes; `config_source` is `export` or `export+template` |
 
 The template values can name nodes that the schema digest does not describe, mainly
@@ -158,7 +159,7 @@ source, the registered user tags, and the identity sources. It sends nine
 | a firewall with one vsys | `identity.json.gz` in the snapshot, and `"identity": true` in `meta.json` |
 | a firewall with several vsys, or system info that does not show the vsys mode | no file, with `note.identity-multi-vsys`; rules that name a user stay in doubt |
 | `identity: false` on the device in the [inventory](inventory.md) | no call and no file, with `note.identity-off` |
-| the firewall refuses one command, or proteus cannot read one answer | that part of the file is empty, and `parts_missing` in the file and `note.identity-part-missing` name it; the stage is still `ok` |
+| the firewall refuses one command, or Proteus cannot read one answer | that part of the file is empty, and `parts_missing` in the file and `note.identity-part-missing` name it; the stage is still `ok` |
 | the mapping table changes while `fetch` reads its pages | `fetch` keeps the pages, with `note.identity-mappings-moved`, and the file marks the mappings as partial |
 | the mapping table holds more than 512,000 entries | the file keeps the first 512,000, with `note.identity-mappings-cut`, and marks the mappings as partial |
 | a call fails on the way | the stage is `partial`, the snapshot has no file, and `fetch` exits 3 |

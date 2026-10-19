@@ -553,7 +553,7 @@ and its content version, because another hop can have another content version.
 
 ### Users
 
-`--user <name>` gives the user of the flow. With User-ID data, proteus matches the
+`--user <name>` gives the user of the flow. With User-ID data, Proteus matches the
 `source-user` of each rule as the firewall does: the mapping of the source
 address, the directory groups, the XML API groups and the dynamic user groups
 decide the rule.
@@ -564,19 +564,19 @@ decide the rule.
 | --- | --- |
 | path mode | each hop reads the User-ID data of its own snapshot; `proteus fetch` stores it, see [User-ID data](../concepts/snapshots.md#user-id-data) and [fetch](fetch.md) |
 | `--file` | `identity.json.gz` in the directory of the configuration; the note `note.identity-file` names the file and the time the data was taken; nothing checks that the file belongs to the configuration; a file older than `max_snapshot_age` adds `gap.user-directory-stale`; copy the file out of a snapshot, see [snapshot](snapshot.md#user-id-data) |
-| no data | a snapshot or a directory without the file: a rule that names a user or a group stays in doubt (`doubt.not-evaluated.user`); a file that proteus cannot read adds `gap.no-user-directory` with the cause, and the answer is the same as without data |
+| no data | a snapshot or a directory without the file: a rule that names a user or a group stays in doubt (`doubt.not-evaluated.user`); a file that Proteus cannot read adds `gap.no-user-directory` with the cause, and the answer is the same as without data |
 
-proteus reads the data only when `--user` is given or a rule of the vsys names a
+Proteus reads the data only when `--user` is given or a rule of the vsys names a
 `source-user` other than `any`.
 
 #### The user of a flow
 
-The firewall takes the user from the mapping of the source address. proteus does
+The firewall takes the user from the mapping of the source address. Proteus does
 the same:
 
 | `--user` | Mapping of the source | User of the flow | Note |
 | --- | --- | --- | --- |
-| given | none | `--user`, read as its primary name | `note.user-resolved` when proteus reads an alternate name or an email; `note.user-not-in-directory` when no user of the data has the name |
+| given | none | `--user`, read as its primary name | `note.user-resolved` when Proteus reads an alternate name or an email; `note.user-not-in-directory` when no user of the data has the name |
 | none | present | the mapped user, as the firewall stores it | `note.user-from-mapping`; `note.user-not-in-directory` when the name is no primary name |
 | given | present, another user | the mapped user: the mapping wins | `note.user-from-mapping` names both users |
 | none | none | no user, see [No user](#no-user) | `note.user-unknown-inferred` when a candidate names a user |
@@ -587,11 +587,12 @@ its first address. An IPv6 mapping is found by its address. A mapping of the use
 
 #### Names
 
-| Name | How proteus reads it |
+| Name | How Proteus reads it |
 | --- | --- |
 | a primary name, such as `example.com\alice` | as it is, in any case |
 | `--user` as a UPN or another alternate name, such as `alice@example.com` | as its primary name, with `note.user-resolved` |
-| `--user` as an email | as its primary name; the answer is `inferred`, because no device was seen to resolve an email |
+| `--user` as an email that is no alternate name of the user | as its primary name; the answer is `inferred`, because no device was seen to resolve an email |
+| `--user` as an email that is also an alternate name, such as the UPN | as its primary name, with `note.user-resolved`; the answer stays `exact` |
 | `--user` that no user of the data has | as given, with `note.user-not-in-directory`; it matches `any`, `known-user` and a rule that names the same text only, unless that text is a member in doubt (see [How a rule matches a user](#how-a-rule-matches-a-user)) |
 | `--user` as a group, such as `example.com\domain users` | as no user: it matches no rule by its text, as on the firewall |
 | a mapped user | as the firewall stores it, against primary names only |
@@ -619,7 +620,7 @@ the user of the flow:
 | `pre-logon` | `--user pre-logon` only |
 | a user | the user of the flow |
 | a directory or XML API group | a user that the group holds, as the firewall lists the members; the group name takes any case, and the short name `<domain>\<cn>` of a directory group names the group |
-| a dynamic user group | a user that the firewall lists as a member; proteus does not evaluate the tag filter |
+| a dynamic user group | a user that the firewall lists as a member; Proteus does not evaluate the tag filter |
 | a Cloud Identity Engine group | no flow: the rule stays a candidate, in doubt (`doubt.user-cie-group`) |
 | a local user or a local user group | as the local user database of the configuration holds it |
 | a short name `<domain>\<cn>` that the data cannot resolve to one group: the domain of its group-mapping profile is not known, two groups have that cn, or `sources.ldap` is missing | no flow: the rule stays a candidate, in doubt (`doubt.user-data-missing`, which names `sources.ldap`); a user of the same text keeps the rule in doubt too |
@@ -644,7 +645,7 @@ A mapping table that `fetch` cut or read while it changed counts as a missing
 A flow without `--user` and without a mapping has no user. It matches `any`,
 `unknown` and the rules without a `source-user`. When a candidate names a
 `source-user` other than `any`, the answer is `inferred`, with
-`note.user-unknown-inferred`. proteus follows the PAN-OS admin guide, where
+`note.user-unknown-inferred`. Proteus follows the PAN-OS admin guide, where
 `known-user` takes an identified user only. The firewall's own
 `test security-policy-match` matches `known-user` without a user, and no traffic
 test confirms `unknown`. `--user pre-logon` is no identified user either, and its

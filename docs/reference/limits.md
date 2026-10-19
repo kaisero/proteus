@@ -161,7 +161,7 @@ evaluated:
 
 - **No User-ID data.** A snapshot without `identity.json.gz`, or `--file` without
   the file beside the configuration, keeps a rule that names a user or a group in
-  doubt. A file that proteus cannot read gives `gap.no-user-directory` with the
+  doubt. A file that Proteus cannot read gives `gap.no-user-directory` with the
   cause, and the answer is the same.
 - **A firewall with several vsys.** `fetch` stores no User-ID data for it, with
   `note.identity-multi-vsys`. The User-ID hub is not modelled.
@@ -169,7 +169,7 @@ evaluated:
   with `doubt.user-cie-group`. It never decides. The lab profiles never synced, so
   no CIE group was seen on a device.
 - **Dynamic user groups.** Their members come from the firewall's own user list.
-  A user that the list does not show is in no dynamic user group. proteus does not
+  A user that the list does not show is in no dynamic user group. Proteus does not
   evaluate the tag filter of a group.
 - **No user.** A flow without `--user` and without a mapping matches `any` and
   `unknown`, and not `known-user`, as the PAN-OS admin guide defines them. The
@@ -178,17 +178,18 @@ evaluated:
 - **`pre-logon`.** `--user pre-logon` matches a `pre-logon` rule only, and neither
   `known-user` nor `unknown`. No traffic test confirms it, so the answer is
   `inferred` when a candidate names a user.
-- **An email as `--user`.** proteus reads it as the primary name of its user, and
-  the answer is `inferred`: on the lab firewall each email was also an alternate
-  name, so no device was seen to resolve an email. An email in a rule matches no
-  user.
+- **An email as `--user`.** Proteus reads it as the primary name of its user. An
+  email that is no alternate name of the user makes the answer `inferred`: on the
+  lab firewall each email was also an alternate name, so no device was seen to
+  resolve an email. An email that is also an alternate name, such as the UPN,
+  stays `exact`. An email in a rule matches no user.
 - **A short name in doubt.** A rule that names a short name `<domain>\<cn>`,
   when the data cannot resolve it to one group, stays a candidate with
   `doubt.user-data-missing`. This happens when the domain of the group-mapping
   profile is not known, when two groups have that cn, or when `sources.ldap` is
   missing. A user of the same text does not decide the rule either. No device
   showed two groups with one cn (`docs/todo.md` item 82).
-- **A local user group as `--user`.** proteus matches a rule that names the group
+- **A local user group as `--user`.** Proteus matches a rule that names the group
   by its text. No device fact shows what the firewall does.
 - **A hop after NAT.** In path mode, a hop after source NAT looks up the
   translated address in its own mappings. No lab path with NAT and User-ID showed
@@ -197,13 +198,13 @@ evaluated:
 - **The age of a mapping.** A mapping is as old as its snapshot. A user can log
   off or log in after the fetch. The stored timeout is the login timeout, and it
   does not count down.
-- **A missing or partial part.** When the firewall refused a command, or proteus
+- **A missing or partial part.** When the firewall refused a command, or Proteus
   could not read an answer, that part of the data is missing. A rule member that
   the part would decide stays in doubt (`doubt.user-data-missing`). A mapping
   table that `fetch` cut or read while it changed makes a source without a
   mapping a user in doubt: the answer is `inferred`, with
   `note.identity-part-missing`.
-- **Nested groups.** proteus takes the groups of a user as the firewall lists
+- **Nested groups.** Proteus takes the groups of a user as the firewall lists
   them, nested groups included. The lab directory showed nesting only with the
   Active Directory default, where the builtin Users group holds Domain Users.
 - **An XML API group message.** After a User-ID `<groups>` message, the firewall
@@ -213,13 +214,13 @@ evaluated:
 
 ### Measured agreement on fw01
 
-`make uid-lab` compares the User-ID answers of proteus with the device's own
+`make uid-lab` compares the User-ID answers of Proteus with the device's own
 answers, case by case. On fw01 (PAN-OS 11.2.5), 2026-10-19, all 56 cases passed:
 
 - 45 policy flows. 41 agreed by rule and action. One of them agreed on its second
   try, because the device applies new User-ID data late. For 4 flows the check
-  records the device answer only: 3 flows with no user, which proteus marks
-  `inferred`, and 1 rule with a CIE group, which proteus keeps in doubt.
+  records the device answer only: 3 flows with no user, which Proteus marks
+  `inferred`, and 1 rule with a CIE group, which Proteus keeps in doubt.
 - 3 users: the primary name, the alternate names and the groups agreed.
 - 4 addresses: the mapped user and its type, or no mapping, agreed.
 - 4 groups: the source and the members agreed.

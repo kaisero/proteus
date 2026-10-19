@@ -11,6 +11,7 @@ import (
 	"slices"
 
 	"github.com/kaisero/proteus/internal/config"
+	"github.com/kaisero/proteus/internal/reason"
 	"github.com/kaisero/proteus/internal/runlog"
 	"github.com/kaisero/proteus/internal/schema"
 	"github.com/kaisero/proteus/internal/task"
@@ -249,7 +250,9 @@ func holdsElement(b []byte) bool {
 //   - A template: the merge is the configuration, and the template's config
 //     element is the document template.
 //   - A digest that does not load, or a merge that fails: the base stays, the
-//     step is partial, and the log names the error, which holds no value.
+//     step is partial, and the log names the error, which holds no value. The
+//     document template fails, so the fetch exits 3, and the snapshot carries
+//     note.config-no-template, as a snapshot without its template values does.
 func templateStep(_ context.Context, s *State) (task.Result, error) {
 	tpl, none := s.template()
 	base, ok := s.Result.Docs[RunningConfig.Name]
@@ -276,13 +279,32 @@ func templateStep(_ context.Context, s *State) (task.Result, error) {
 	}
 	if err != nil {
 		s.Log.Warnf(runlog.TagAPI, "%s: template not merged: %v", s.Target.Name, err)
-		return task.Result{Status: task.Partial, Detail: "the template was not merged: " + err.Error()}, nil
+		s.failTemplate(fmt.Errorf("the template was not merged: %w", err))
+		s.Result.Notes = append(s.Result.Notes, templateNotMerged)
+		return task.Result{
+			Status: task.Partial, Detail: "the template was not merged: " + err.Error(),
+			Notes: []reason.Reason{templateNotMerged},
+		}, nil
 	}
 	s.Result.Docs[RunningConfig.Name] = merged
 	s.Result.ConfigSource = source + "+template"
 	detail := fmt.Sprintf("%s added, %s kept", plural(st.Added, "template element"), plural(st.KeptLocal, "local element"))
 	s.Log.Infof(runlog.TagAPI, "%s: template: %s", s.Target.Name, detail)
 	return task.Result{Detail: detail}, nil
+}
+
+// templateNotMerged is note.config-no-template for a template that arrived and
+// did not merge (spec 2026-10-17 §2.1).
+var templateNotMerged = reason.New("note.config-no-template",
+	"the template was not merged, so the snapshot holds its base configuration without the template values")
+
+// failTemplate gives the document template the error err: the snapshot lacks
+// its values, as after a transport error (PD1).
+func (s *State) failTemplate(err error) {
+	// The documents step recorded the template that arrived.
+	if i := slices.IndexFunc(s.Result.Outcomes, func(o Outcome) bool { return o.Name == PushedTemplate.Name }); i >= 0 {
+		s.Result.Outcomes[i].Err = err
+	}
 }
 
 // template returns the config element of the pushed template, which takes the

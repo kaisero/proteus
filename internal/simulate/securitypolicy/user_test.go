@@ -250,10 +250,11 @@ func TestAGivenUPNResolves(t *testing.T) {
 			t.Errorf("stage %s", st.Fidelity)
 		}
 	}
-	// The primary name in another case is no resolution.
+	// The primary name in another case is no resolution, and the user is
+	// not given otherwise: the device compares names in any case (N1).
 	r, v := userRun(t, idData(t), userFlow(noUser, "192.0.2.11", `EXAMPLE.COM\ALICE`))
 	decides(t, v, "upper case", "u-user")
-	if _, ok := hasCode(r.Notes, "note.user-resolved"); ok || v.User.Given != `EXAMPLE.COM\ALICE` {
+	if _, ok := hasCode(r.Notes, "note.user-resolved"); ok || v.User.Name != `example.com\alice` || v.User.Given != "" {
 		t.Errorf("notes %v, user %+v", r.Notes, v.User)
 	}
 }

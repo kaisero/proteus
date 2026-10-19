@@ -128,8 +128,8 @@ type item struct {
 // (spec §4.8) and its identity data (spec 2026-10-17 §8), and each App-ID
 // content version's data (spec 2026-10-16 §7). Which snapshot latest or at
 // means is read from the store on each call; a snapshot's content never
-// changes, so what the cache holds for it stays true. Notes are never cached: each call builds them from the
-// snapshot meta and its clock.
+// changes, so what the cache holds for it stays true. Notes are never cached:
+// each call builds them from the snapshot meta and its clock.
 //
 // The least recently used items go when the estimated size passes the limit.
 // An item that goes is only dropped from the cache: a call that still reads

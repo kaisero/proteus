@@ -625,6 +625,11 @@ func TestResourcesAndInstructions(t *testing.T) {
 		strings.Contains(got, "recorded only") {
 		t.Errorf("limits %q", got)
 	}
+	// Dynamic user groups take their members from the device (D13, PD20).
+	if got := read(limitsURI); strings.Contains(got, "dynamic user group filters") ||
+		!strings.Contains(got, "dynamic user groups take their members from the firewall's user list") {
+		t.Errorf("limits %q", got)
+	}
 }
 
 // A panic in a call gives call.internal with the stack in the audit, and the

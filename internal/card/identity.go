@@ -58,7 +58,7 @@ func userCard(ids *identity.Data, u identity.User) Card {
 		alt = append(alt, Item{Name: a})
 	}
 	for _, g := range u.Groups {
-		groups = append(groups, Item{Name: g, Value: groupSource(ids, g)})
+		groups = append(groups, Item{Name: g, Value: ids.GroupSource(g)})
 	}
 	// A mapping keeps its user as the device stores it: example\alice is no
 	// mapping of example.com\alice, as observed on fw01, PAN-OS 11.2.5 (spec
@@ -102,14 +102,4 @@ func groupCard(ids *identity.Data, name string) (Card, bool) {
 		{Title: "source", Rows: []Row{{Text: g.Source}}},
 		{Title: "members", Rows: members},
 	}}, true
-}
-
-// groupSource is the source of a group of a user (§3.3): as groups[] records
-// it, else by its form, as when the part groups is missing.
-func groupSource(ids *identity.Data, name string) string {
-	if g, ok := ids.Group(name); ok {
-		return g.Source
-	}
-	f := ids.File()
-	return identity.Classify(name, f.Sources.LDAP, !ids.Complete(identity.PartLDAP), f.DUGs, f.Sources.CIE, !ids.Complete(identity.PartCIE))
 }

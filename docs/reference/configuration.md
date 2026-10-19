@@ -99,7 +99,7 @@ A configuration holds no mapping from users to groups or addresses. `fetch`
 stores the User-ID data of each single-vsys firewall with its snapshot, as
 `identity.json.gz`. A question about a snapshot reads that file.
 
-With `--file <config.xml>`, proteus reads `identity.json.gz` in the directory of
+With `--file <config.xml>`, Proteus reads `identity.json.gz` in the directory of
 the configuration file, when it exists. Copy the file out of a snapshot (see
 [User-ID data](../commands/snapshot.md#user-id-data)). The answer then carries
 `note.identity-file`, which names the file and the time the data was taken, and
@@ -117,10 +117,10 @@ The file is gzip-compressed JSON with `"format": 1`:
 | `dugs` | the dynamic user groups |
 | `tags` | the registered tags of each user |
 | `mappings` | each mapped address with its user, type and timeout |
-| `parts_missing` | the parts that the firewall refused or that proteus could not read |
+| `parts_missing` | the parts that the firewall refused or that Proteus could not read |
 | `mappings_partial` | `true` when `fetch` cut the mapping table or read it while it changed |
 
-A file that proteus cannot read, such as a damaged gzip file, bad JSON or another
+A file that Proteus cannot read, such as a damaged gzip file, bad JSON or another
 `format`, gives `gap.no-user-directory` with the cause. The answer is then the same
 as without data.
 

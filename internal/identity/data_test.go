@@ -669,3 +669,53 @@ func TestMembersText(t *testing.T) {
 		}
 	}
 }
+
+// File gives a copy: the MCP cache shares one Data between calls, so a change
+// of the copy's lists never reaches the Data (AGENTS.md R2).
+func TestFileIsACopy(t *testing.T) {
+	t.Parallel()
+	in := fixtureFile(t)
+	in.PartsMissing = []string{identity.PartTags}
+	d := identity.New(in)
+	want := identity.New(in).File() // a Data of its own, with lists of its own
+	f := d.File()
+	if len(f.Users) == 0 || len(f.Users[0].Alt) == 0 || len(f.Users[0].Groups) == 0 || len(f.Groups) == 0 ||
+		len(f.DUGs) == 0 || len(f.Tags) == 0 || len(f.Mappings) == 0 || len(f.Sources.LDAP) == 0 || len(f.Sources.CIE) == 0 {
+		t.Fatal("the fixture lacks a list, so the test proves nothing")
+	}
+	f.Users[0].Name = "changed"
+	f.Users[0].Alt[0] = "changed"
+	f.Users[0].Groups[0] = "changed"
+	f.Groups[0].Name = "changed"
+	f.DUGs[0] = "changed"
+	f.Tags[0].Tags[0] = "changed"
+	f.Mappings[0].User = "changed"
+	f.Sources.LDAP[0].Base = "changed"
+	f.Sources.CIE[0].Domain = "changed"
+	f.PartsMissing[0] = "changed"
+	if got := d.File(); !reflect.DeepEqual(got, want) {
+		t.Errorf("a change of the copy reached the data:\n%+v\nwant\n%+v", got, want)
+	}
+}
+
+// GroupSource names the source of a group as groups[] records it, else by its
+// form (§3.3), as when the part groups is missing.
+func TestGroupSource(t *testing.T) {
+	t.Parallel()
+	f := fixtureFile(t)
+	f.Groups = slices.DeleteFunc(f.Groups, func(g identity.Group) bool {
+		return g.Name == "dug-ab" || g.Name == "cn=payroll,ou=groups,dc=example,dc=com"
+	})
+	d := identity.New(f)
+	for name, want := range map[string]string{
+		"engineering": "xmlapi",
+		"CN=Domain Users,CN=Users,DC=example,DC=com": "ldap:example.com",
+		"cn=payroll,ou=groups,dc=example,dc=com":     "ldap:example.com",
+		"dug-ab":                                     "dug",
+		"example-cie\\cloud-team":                    "cie:cie-a",
+	} {
+		if got := d.GroupSource(name); got != want {
+			t.Errorf("%s: %q, want %q", name, got, want)
+		}
+	}
+}

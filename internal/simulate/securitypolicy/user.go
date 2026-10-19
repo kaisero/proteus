@@ -109,10 +109,9 @@ func flowUser(d *identity.Data, f simulate.Flow) userOf {
 		return out
 	}
 	out.user = FlowUser{Name: name, From: userFromGiven, Directory: true}
-	if name != given {
-		out.user.Given = given
-	}
+	// A name in another case is the same name (N1): it is no resolution.
 	if !strings.EqualFold(name, given) {
+		out.user.Given = given
 		u, _ := d.User(name)
 		out.email = !slices.ContainsFunc(u.Alt, func(a string) bool { return strings.EqualFold(a, given) })
 		text := fmt.Sprintf("the given user %s is read as its primary name %s", given, name)
@@ -162,7 +161,7 @@ func matchUser(_ context.Context, s *state) (simulate.Outcome, error) {
 		return simulate.Outcome{Fidelity: simulate.Exact, Detail: "no identity data"}, nil
 	}
 	s.userEvaluated = true
-	s.userKept, s.userDoubts = roaring.New(), map[uint32][]reason.Reason{}
+	s.userDoubts = map[uint32][]reason.Reason{}
 	of := flowUser(s.users, s.in.Flow)
 	s.verdict.User = &of.user
 	s.notes = append(s.notes, of.notes...)
@@ -213,7 +212,6 @@ func matchUser(_ context.Context, s *state) (simulate.Outcome, error) {
 		b.AndNot(match)
 		s.keepUser(kept, b, un.Why())
 	}
-	s.userKept = kept
 	s.cand.And(roaring.Or(match, kept))
 
 	out := simulate.Outcome{Fidelity: simulate.Exact, Candidates: s.cand}
