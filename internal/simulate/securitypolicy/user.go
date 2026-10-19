@@ -187,6 +187,7 @@ func matchUser(_ context.Context, s *state) (simulate.Outcome, error) {
 	var rep index.Report
 	if u.Name != "" {
 		match, rep = s.view.Candidates(index.SourceUser, u.Name)
+		match.AndNot(s.literalGroups(u.Name, rep))
 	} else {
 		match = s.idx.RulesWithAny(index.SourceUser)
 	}
@@ -250,6 +251,53 @@ func matchUser(_ context.Context, s *state) (simulate.Outcome, error) {
 	}
 	out.Debug = append(out.Debug, "left: "+names(s.rules, s.cand))
 	return out, nil
+}
+
+// literalGroups are the rules that the user value reaches only through a
+// member of the same text that names a group, a DUG or a CIE group, or that
+// the data cannot judge. A group name is no user: as observed on fw01,
+// PAN-OS 11.2.5, the short name of a group as source-user matches nothing
+// (spec 2026-10-17 M12, §5.2). A member in doubt can be a group, so its text
+// does not decide either; the caller keeps its rule in doubt. A member of the
+// same text that names no group, such as other\ghost, still matches (M17).
+// The index matches a value by its text, for search too (§6.1), so the
+// simulation takes these rules out here.
+func (s *state) literalGroups(value string, rep index.Report) *roaring.Bitmap {
+	inDoubt := map[string]bool{}
+	for _, un := range rep.Unresolved {
+		if un.Code == "doubt.user-cie-group" || un.Code == "doubt.user-data-missing" {
+			inDoubt[strings.ToLower(un.Value)] = true
+		}
+	}
+	blocked := func(text string) bool {
+		if !strings.EqualFold(text, value) {
+			return false
+		}
+		switch s.users.Member(text).Kind {
+		case identity.MemberGroup, identity.MemberDUG, identity.MemberCIE, identity.MemberInDoubt:
+			return true
+		}
+		return inDoubt[strings.ToLower(text)]
+	}
+	literal, other := roaring.New(), s.idx.RulesWithAny(index.SourceUser)
+	texts := []string{value}
+	for _, un := range rep.Unresolved {
+		texts = append(texts, un.Value)
+	}
+	for _, t := range texts {
+		if blocked(t) {
+			literal.Or(s.idx.RulesReaching(index.SourceUser, t))
+		}
+	}
+	for _, h := range rep.Hits {
+		if blocked(h.Name) {
+			literal.Or(s.idx.RulesReaching(index.SourceUser, h.Name))
+		} else {
+			other.Or(s.idx.RulesReaching(index.SourceUser, h.Name))
+		}
+	}
+	literal.AndNot(other)
+	return literal
 }
 
 // unknownNote is the note of a flow without an identified user (spec

@@ -25,7 +25,7 @@ github.com/okaiser/proteus/internal/card  98.3
 github.com/okaiser/proteus/internal/drift  100.0
 github.com/okaiser/proteus/internal/runlog  97.5
 github.com/okaiser/proteus/internal/simulate  100.0
-github.com/okaiser/proteus/internal/simulate/securitypolicy  99.4
+github.com/okaiser/proteus/internal/simulate/securitypolicy  99.7
 github.com/okaiser/proteus/internal/simulate/routing  100.0
 github.com/okaiser/proteus/internal/simulate/topology  100.0
 github.com/okaiser/proteus/internal/simulate/rulebase  100.0

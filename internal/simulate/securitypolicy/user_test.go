@@ -333,22 +333,49 @@ func TestAnOutsideUserMatchesItsLiteralRule(t *testing.T) {
 }
 
 // Ruling M17: a flow user that equals a rule member as written matches that
-// rule, also when the data cannot judge the member or another member of the
-// rule. The rule is exact and has no doubt.
-func TestALiteralValueDecidesAMemberInDoubt(t *testing.T) {
+// rule when the member names no group and the data can judge it. A member in
+// doubt does not decide: the rule stays a candidate in doubt (Task 13 fix
+// ruling). A rule with a CIE group and the literal user still matches by the
+// literal.
+func TestALiteralValueDoesNotDecideAMemberInDoubt(t *testing.T) {
 	t.Parallel()
 	// Without groups, other\ghost can be a group, so the member is in doubt.
-	r, v := userRun(t, without(t, identity.PartGroups), userFlow("198.51.100.12", "192.0.2.25", ""))
-	decides(t, v, "a member in doubt", "u-ghost")
-	if len(v.Doubts) != 0 || stage(r, "match-user").Fidelity.Level() != "exact" {
-		t.Errorf("doubts %s, stage %s", doubtList(v), stage(r, "match-user").Fidelity)
+	_, v := userRun(t, without(t, identity.PartGroups), userFlow("198.51.100.12", "192.0.2.25", ""))
+	if len(v.Undecided) == 0 || !slices.Contains(doubtCodesOf(v, "u-ghost"), "doubt.user-data-missing") {
+		t.Errorf("a member in doubt: first %s, undecided %v, doubts %s", first(v), v.Undecided, doubtList(v))
 	}
 	// A rule with a CIE group and the literal user.
 	path := appConfig(t, "", userRule("u-both", "allow", "any", users(`example-cie\cloud-team`, `other\ghost`)))
-	r, v = run(t, userEnv(t, path, idData(t)), userFlow("198.51.100.12", "192.0.2.25", ""))
+	r, v := run(t, userEnv(t, path, idData(t)), userFlow("198.51.100.12", "192.0.2.25", ""))
 	decides(t, v, "a CIE group and the literal user", "u-both")
 	if len(v.Doubts) != 0 || stage(r, "match-user").Fidelity.Level() != "exact" {
 		t.Errorf("doubts %s, stage %s", doubtList(v), stage(r, "match-user").Fidelity)
+	}
+}
+
+// M12, §5.2: a group name given as the user is no user. As observed on fw01,
+// PAN-OS 11.2.5, the short name as source-user matches nothing (spec
+// 2026-10-17 M12), so the rule that names the group by that text does not
+// match. The same holds for every form of a group and for a DUG.
+func TestAGroupNameIsNoUser(t *testing.T) {
+	t.Parallel()
+	for _, c := range []struct{ user, dst, rule string }{
+		{`example.com\domain users`, "192.0.2.20", "u-short"},
+		{`example.com\domain users`, "192.0.2.19", "u-dn-case"},
+		{`example.com\domain users`, "192.0.2.10", "u-ldap-group"},
+		{"cn=domain users,cn=users,dc=example,dc=com", "192.0.2.10", "u-ldap-group"},
+		{"CN=Domain Users,CN=Users,DC=example,DC=com", "192.0.2.19", "u-dn-case"},
+		{"dug-a", "192.0.2.17", "u-dug"},
+		{"engineering", "192.0.2.16", "u-xmlapi"},
+	} {
+		_, v := userRun(t, idData(t), userFlow(noUser, c.dst, c.user))
+		decides(t, v, c.user+" at "+c.rule, "interzone-default")
+	}
+	// A CIE group name as the user keeps the CIE rule in doubt, as any user
+	// does (§5.6).
+	_, v := userRun(t, idData(t), userFlow(noUser, "192.0.2.24", `example-cie\cloud-team`))
+	if len(v.Undecided) == 0 || !slices.Contains(doubtCodesOf(v, "u-cie"), "doubt.user-cie-group") {
+		t.Errorf("a CIE group name: first %s, undecided %v, doubts %s", first(v), v.Undecided, doubtList(v))
 	}
 }
 
