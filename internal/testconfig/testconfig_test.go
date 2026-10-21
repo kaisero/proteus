@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"io"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/kaisero/proteus/internal/appid"
 	"github.com/kaisero/proteus/internal/config"
+	"github.com/kaisero/proteus/internal/identity"
 	"github.com/kaisero/proteus/internal/resolve"
 )
 
@@ -94,6 +96,42 @@ func TestContentWritesTheFixture(t *testing.T) {
 	}
 }
 
+// Identity writes the identity fixture, gzipped and mode 0600 as a snapshot
+// holds it, so the tests of every package read one file (spec 2026-10-17 §4.1,
+// §7).
+func TestIdentityWritesTheFixture(t *testing.T) {
+	t.Parallel()
+	dst := filepath.Join(t.TempDir(), "identity.json.gz")
+	Identity(t, dst)
+	info, err := os.Stat(dst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0o600 {
+		t.Errorf("mode %v, want 0600", info.Mode().Perm())
+	}
+	f, err := os.Open(dst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	zr, err := gzip.NewReader(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := io.ReadAll(zr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := os.ReadFile("../../testdata/identity/identity.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, want) {
+		t.Error("the file does not unzip to testdata/identity/identity.json")
+	}
+}
+
 // fatalTB records a failure instead of stopping the test.
 type fatalTB struct {
 	testing.TB
@@ -140,5 +178,35 @@ func TestAppContentHasTheCount(t *testing.T) {
 	}
 	if n := len(raw); n < 5<<20 || n > 7<<20 {
 		t.Errorf("5552 applications take %d bytes, not about 6 MB", n)
+	}
+}
+
+// IdentityFile reads as an identity file with the counts asked: groupsPerUser
+// groups and one tag entry per user, every part complete (spec 2026-10-17
+// §8). A mapping keeps its user in the NetBIOS form, as a device stores it
+// (M2), and each user holds distinct groups.
+func TestIdentityFileHasTheCounts(t *testing.T) {
+	t.Parallel()
+	d, err := identity.Read(bytes.NewReader(IdentityFile(t, 10, 3, 100)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c := d.Counts(); c.Users != 10 || c.Memberships != 30 || c.Tags != 10 || c.TagPairs != 10 || c.Mappings != 100 || c.Groups < 3 {
+		t.Errorf("counts %+v, want 10 users, 30 memberships, 10 tag entries, 100 mappings", c)
+	}
+	for _, p := range []string{identity.PartLDAP, identity.PartGroups, identity.PartUserGroups, identity.PartTags, identity.PartMappings} {
+		if !d.Complete(p) {
+			t.Errorf("the part %s is not complete", p)
+		}
+	}
+	groups := d.GroupsOf(`example.com\member-00009`)
+	if len(groups) != 3 || groups[0] == groups[1] || groups[1] == groups[2] || groups[0] == groups[2] {
+		t.Errorf("groups of member-00009: %q", groups)
+	}
+	if m, ok := d.Mapping(netip.MustParseAddr("2001:db8::64")); !ok || m.User != `example\member-00009` {
+		t.Errorf("the mapping of the 100th address: %+v, %v", m, ok)
+	}
+	if got := d.TagsOf(`example.com\member-00009`); len(got) != 1 {
+		t.Errorf("tags of member-00009: %q", got)
 	}
 }

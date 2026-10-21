@@ -37,6 +37,7 @@ devices:
     labels:
       site: vienna
     # ha_peer: fw01-b.example.net
+    # identity: false            # do not fetch the User-ID data of this device
 ```
 
 `snapshot_keep` counts two groups separately. A fetch keeps the newest N snapshots
@@ -53,6 +54,7 @@ A fetch never removes the snapshot that `latest` names.
 | `username`, `password_env` | Override the defaults for this device. |
 | `insecure_tls`, `timeout` | Override the defaults for this device. |
 | `ha_peer` | The reachable host of the HA peer, when the address that the device reports is unreachable. |
+| `identity` | `true` by default: `fetch` stores the User-ID data of the device with each snapshot. `identity: false` turns that step off, and the fetch adds `note.identity-off`. See [User-ID data](../commands/fetch.md#user-id-data). |
 
 ### Passwords
 
@@ -87,30 +89,40 @@ inventory's `defaults:`, an environment variable, and a flag.
 | log directory | `log_dir` | `PROTEUS_LOG_DIR` | `--log-dir` | `~/.local/state/proteus/log` |
 | logs kept | `log_keep` | | | `20` |
 | inventory export | `export_inventory` | | | `false` |
-| user snapshot | | `PROTEUS_USERS` | | none |
 
 The `XDG_CONFIG_HOME`, `XDG_DATA_HOME` and `XDG_STATE_HOME` variables move the
 default paths.
 
-## The user snapshot
+## The identity file
 
-A configuration holds no mapping from users to directory groups.
-`PROTEUS_USERS` points to a JSON file with that mapping:
+A configuration holds no mapping from users to groups or addresses. `fetch`
+stores the User-ID data of each single-vsys firewall with its snapshot, as
+`identity.json.gz`. A question about a snapshot reads that file.
 
-```json
-{
-  "taken_at": "2026-09-28T08:00:00Z",
-  "groups": {
-    "ACME\\carol": ["engineering"],
-    "ACME\\alice": ["engineering", "finance"]
-  }
-}
-```
+With `--file <config.xml>`, Proteus reads `identity.json.gz` in the directory of
+the configuration file, when it exists. Copy the file out of a snapshot (see
+[User-ID data](../commands/snapshot.md#user-id-data)). The answer then carries
+`note.identity-file`, which names the file and the time the data was taken, and
+`gap.user-directory-stale` when the file is older than `max_snapshot_age`.
+Nothing checks that the file belongs to the configuration.
 
-`taken_at` is required, and an answer that uses an old user snapshot carries a
-note. Each command reads the file when it runs. `proteus mcp` reads it once at
-start and stops with exit 2 when it cannot, so a changed file needs a server
-restart.
+The file is gzip-compressed JSON with `"format": 1`:
+
+| Key | Content |
+| --- | --- |
+| `taken_at` | when `fetch` read the data |
+| `sources` | the LDAP group-mapping profiles and the Cloud Identity Engine profiles |
+| `users` | each user with its primary name, alternate names, email, and groups |
+| `groups` | each group with its source and member count |
+| `dugs` | the dynamic user groups |
+| `tags` | the registered tags of each user |
+| `mappings` | each mapped address with its user, type and timeout |
+| `parts_missing` | the parts that the firewall refused or that Proteus could not read |
+| `mappings_partial` | `true` when `fetch` cut the mapping table or read it while it changed |
+
+A file that Proteus cannot read, such as a damaged gzip file, bad JSON or another
+`format`, gives `gap.no-user-directory` with the cause. The answer is then the same
+as without data.
 
 ## The inventory export
 
@@ -249,6 +261,7 @@ from the export's `defaults:`.
 | --- | --- | --- |
 | `~/.config/proteus/config.yaml` | 0600 | the inventory, written once by `inventory init` |
 | `~/.local/share/proteus/<device>/<time>/` | 0700 / 0600 | one snapshot |
+| `<store>/<device>/<time>/identity.json.gz` | 0600 | the User-ID data of the snapshot, see [The identity file](#the-identity-file) |
 | `<store>/.content/` | 0700 / 0600 | one App-ID content file per content version, `<version>.v<trim>.xml.gz` |
 | `~/.local/state/proteus/log/` | 0700 / 0600 | one log file per run, `<command>-<time>-<seq>.log` |
 | `<store>/.proteus/inventory.yaml` | 0700 / 0600 | the inventory export, with `export_inventory: true` |

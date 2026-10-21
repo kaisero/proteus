@@ -1,0 +1,98 @@
+<template cfg-version="11.2.0" detail-version="11.2.5" urldb="paloaltonetworks">
+  <!-- The template that Panorama pushed for firewall-lab.xml, in the shape of
+       the answer to show config pushed-template (spec 2026-10-17 C9): the name
+       of the template stack, then config, indented, with ptpl on each element
+       but one phash. Every value is a dummy. A template holds no address
+       object: the entry net-home is synthetic. firewall-lab.xml holds no zone,
+       so net-home is the template object that the base also holds, and its
+       local entry hides it (C6, C11). The digest does not describe the plugin
+       example_plugin (C3). -->
+  <name>tpl-stack</name>
+  <config ptpl="000000000001">
+    <mgt-config ptpl="000000000001">
+      <password-profile ptpl="000000000001">
+        <entry name="tpl-password" ptpl="000000000001">
+          <password-change ptpl="000000000001">
+            <expiration-period ptpl="000000000001">365</expiration-period>
+          </password-change>
+        </entry>
+      </password-profile>
+    </mgt-config>
+    <shared ptpl="000000000001">
+      <local-user-database ptpl="000000000001">
+        <user ptpl="000000000001">
+          <entry name="tpl-admin" ptpl="000000000001">
+            <phash>$5$dummysalt$DUMMYHASHTEMPLATE00</phash>
+          </entry>
+        </user>
+      </local-user-database>
+      <log-settings ptpl="000000000001">
+        <profiles ptpl="000000000001">
+          <entry name="tpl-logs" ptpl="000000000001">
+            <description ptpl="000000000001">dummy log forwarding profile</description>
+          </entry>
+        </profiles>
+      </log-settings>
+    </shared>
+    <devices ptpl="000000000001">
+      <entry name="localhost.localdomain" ptpl="000000000001">
+        <deviceconfig ptpl="000000000001">
+          <system ptpl="000000000001">
+            <update-schedule ptpl="000000000001">
+              <threats ptpl="000000000001">
+                <recurring ptpl="000000000001">
+                  <every-30-mins ptpl="000000000001">
+                    <at ptpl="000000000001">5</at>
+                    <action ptpl="000000000001">download-and-install</action>
+                  </every-30-mins>
+                </recurring>
+              </threats>
+            </update-schedule>
+          </system>
+          <plugins ptpl="000000000001">
+            <dlp version="1.0.0" ptpl="000000000001">
+              <internal ptpl="000000000001">
+                <pattern-updated ptpl="000000000001">updated</pattern-updated>
+              </internal>
+            </dlp>
+            <example_plugin version="2.0.0" ptpl="000000000001">
+              <enabled ptpl="000000000001">yes</enabled>
+            </example_plugin>
+          </plugins>
+        </deviceconfig>
+        <network ptpl="000000000001">
+          <profiles ptpl="000000000001">
+            <interface-management-profile ptpl="000000000001">
+              <entry name="tpl-mgmt" ptpl="000000000001">
+                <ping ptpl="000000000001">yes</ping>
+              </entry>
+            </interface-management-profile>
+          </profiles>
+        </network>
+        <vsys ptpl="000000000001">
+          <entry name="vsys1" ptpl="000000000001">
+            <address ptpl="000000000001">
+              <entry name="net-home" ptpl="000000000001">
+                <ip-netmask ptpl="000000000001">192.0.2.0/24</ip-netmask>
+                <description ptpl="000000000001">a template value that the local entry hides</description>
+              </entry>
+            </address>
+            <cloud-identity-engine ptpl="000000000001">
+              <entry name="cie-a" ptpl="000000000001">
+                <region ptpl="000000000001">americas</region>
+                <cloud-identity-engine-instance ptpl="000000000001">instance-a</cloud-identity-engine-instance>
+                <domain ptpl="000000000001">example-cie</domain>
+                <primary-user ptpl="000000000001">mail</primary-user>
+              </entry>
+            </cloud-identity-engine>
+            <zone ptpl="000000000001">
+              <entry name="tpl-zone" ptpl="000000000001">
+                <enable-user-identification ptpl="000000000001">yes</enable-user-identification>
+              </entry>
+            </zone>
+          </entry>
+        </vsys>
+      </entry>
+    </devices>
+  </config>
+</template>

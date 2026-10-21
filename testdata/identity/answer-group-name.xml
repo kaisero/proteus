@@ -1,0 +1,11 @@
+<response status="success"><result><![CDATA[
+short name:  example.com\domain users
+
+source type: ldap
+source:      example.com
+
+[1     ] example.com\alice
+[2     ] example.com\bob
+[3     ] example.com\carol
+
+]]></result></response>

@@ -1,0 +1,20 @@
+<response status="success"><result><![CDATA[
+User Name                         Vsys    Groups
+------------------------------------------------------------------
+example.com\alice                 vsys1                           cn=domain users,cn=users,dc=example,dc=com 
+                                                                cn=payroll,ou=groups,dc=example,dc=com 
+example.com\pc01$                 vsys1                           cn=workstations,ou=groups,dc=example,dc=com 
+other\ghost                       vsys1                           engineering 
+example.com\bob                   vsys1                           cn=domain users,cn=users,dc=example,dc=com 
+                                                                team-x 
+                                                                help desk 
+example.com\carol                 vsys1                           cn=domain users,cn=users,dc=example,dc=com 
+                                                                engineering 
+                                                                dug-a 
+                                                                dug-ab 
+                                                                custom-a * 
+
+Total: 5
+* : Custom Group
+
+]]></result></response>

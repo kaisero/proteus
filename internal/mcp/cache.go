@@ -15,6 +15,7 @@ import (
 	"github.com/kaisero/proteus/internal/appid"
 	"github.com/kaisero/proteus/internal/config"
 	"github.com/kaisero/proteus/internal/estate"
+	"github.com/kaisero/proteus/internal/identity"
 	"github.com/kaisero/proteus/internal/index"
 	"github.com/kaisero/proteus/internal/resolve"
 	"github.com/kaisero/proteus/internal/store"
@@ -44,6 +45,25 @@ import (
 // a generated file of 5552 applications, as many as content 9159 has (F4):
 // 9.0 MiB. contentBytes is that value rounded up to a multiple of 4 MiB, and
 // the benchmark fails above it.
+//
+// One snapshot's identity data is one item of identityBytes (spec 2026-10-17
+// §8): a fixed part, and parts per mapping, per user and group, and per
+// membership. The benchmark measures the two generated files of §8 and
+// fails when the estimate falls short of either. Four files of each shape
+// fit the parts: an empty file, the mappings alone, the users and groups
+// alone with one tag per user, and the whole file. Measured on an Apple M3
+// Pro, the largest value of 13 runs:
+//
+//   - 1,000 users with 20 groups each and 10,000 mappings: 2.01 MB, of it
+//     9.8 KB fixed, 74.7 bytes per mapping, 452.2 per user and group and
+//     36.1 per membership;
+//   - 10,000 users with 50 groups each and 100,000 mappings: 24.95 MB, of it
+//     9.2 KB fixed, 72.9 bytes per mapping, 416.3 per user and group and
+//     25.3 per membership.
+//
+// Each part takes the larger shape's value, rounded up: the fixed part to a
+// multiple of 4 KiB, each other part to a multiple of 8 bytes. A user and a
+// group take one part, and a tag of a user counts as a membership.
 const (
 	configFixedBytes = 32 << 20
 	configPerByte    = 13
@@ -58,23 +78,43 @@ const (
 	// contentBytes sizes one App-ID content version: the parsed applications
 	// and containers of its file. The benchmark checks it.
 	contentBytes = 12 << 20
+	// The parts of identityBytes. The benchmark checks them.
+	identityFixedBytes    = 12 << 10
+	identityPerMapping    = 80
+	identityPerUser       = 456
+	identityPerMembership = 40
 )
 
 // configBytes estimates what a loaded configuration of a file's size retains
 // with its indexes.
 func configBytes(fileBytes int64) int64 { return configFixedBytes + configPerByte*fileBytes }
 
+// identityBytes estimates what a snapshot's identity data retains, by its
+// counts. Each user-tag pair counts as a membership (spec 2026-10-17 §8).
+func identityBytes(c identity.Counts) int64 {
+	return identityFixedBytes + identityPerMapping*int64(c.Mappings) +
+		identityPerUser*int64(c.Users+c.Groups) + identityPerMembership*int64(c.Memberships+c.TagPairs)
+}
+
 // itemKey names a cached item: a kind and a snapshot, or the content file of
 // a content version.
 type itemKey struct {
-	kind   string // "config", "ha", "tables" or "content"
-	member string // "" for content
+	kind   string // "config", "ha", "tables", "identity" or "content"
+	member string // the device; "" for content
 	id     string // the snapshot id, or the content file's base name
 }
 
 // contentKey is the key of a content file: its base name,
 // <version>.v<trim>.xml.gz, names the content version (spec 2026-10-16 §3.1).
 func contentKey(path string) itemKey { return itemKey{kind: "content", id: filepath.Base(path)} }
+
+// identityKey is the key of a snapshot's identity file,
+// <store>/<device>/<id>/identity.json.gz: the device and the snapshot id
+// (spec 2026-10-17 §4.1, §8).
+func identityKey(path string) itemKey {
+	dir := filepath.Dir(path)
+	return itemKey{kind: "identity", member: filepath.Base(filepath.Dir(dir)), id: filepath.Base(dir)}
+}
 
 // item is one cached value and its estimated size.
 type item struct {
@@ -84,12 +124,12 @@ type item struct {
 }
 
 // Cache keeps what the calls read of the store, per (member, snapshot id):
-// each snapshot's configuration with its indexes, and its operational
-// tables (spec §4.8), and each App-ID content version's data (spec 2026-10-16
-// §7). Which snapshot latest or at means is read from the store
-// on each call; a snapshot's content never changes, so what the cache holds
-// for it stays true. Notes are never cached: each call builds them from the
-// snapshot meta and its clock.
+// each snapshot's configuration with its indexes, its operational tables
+// (spec §4.8) and its identity data (spec 2026-10-17 §8), and each App-ID
+// content version's data (spec 2026-10-16 §7). Which snapshot latest or at
+// means is read from the store on each call; a snapshot's content never
+// changes, so what the cache holds for it stays true. Notes are never cached:
+// each call builds them from the snapshot meta and its clock.
 //
 // The least recently used items go when the estimated size passes the limit.
 // An item that goes is only dropped from the cache: a call that still reads
@@ -103,6 +143,9 @@ type Cache struct {
 	load func(path string) (*config.Config, config.Report, error)
 	// loadApps reads a content file; appid.Load, or a test's stand-in.
 	loadApps func(path string) (*appid.Data, error)
+	// loadIdentity reads an identity file; identity.Load, or a test's
+	// stand-in.
+	loadIdentity func(path string) (*identity.Data, error)
 
 	mu    sync.Mutex
 	max   int64      // bytes
@@ -116,7 +159,7 @@ type Cache struct {
 // once with at most maxQueue waiting.
 func newCache(maxBytes int64, maxLoads, maxQueue int, strict bool) *Cache {
 	return &Cache{
-		loads: newLoader(maxLoads, maxQueue, strict), load: config.Load, loadApps: appid.Load,
+		loads: newLoader(maxLoads, maxQueue, strict), load: config.Load, loadApps: appid.Load, loadIdentity: identity.Load,
 		max: maxBytes, order: list.New(), items: map[itemKey]*list.Element{},
 	}
 }
@@ -373,7 +416,8 @@ func (v *callCache) settle(err error) error {
 }
 
 // Config implements estate.ConfigSource. A snapshot that names a content
-// version reads its content data through the entry.
+// version reads its content data through the entry. A snapshot that holds an
+// identity file reads it through the cache (Identity).
 func (v *callCache) Config(sn store.Snapshot) (estate.Loaded, error) {
 	e, err := v.c.config(v.ctx, sn)
 	if err != nil {
@@ -382,6 +426,9 @@ func (v *callCache) Config(sn store.Snapshot) (estate.Loaded, error) {
 	l := estate.Loaded{Config: e.cfg, Report: e.rep, Indexes: callIndexes{v: v, e: e, member: sn.Device, id: sn.ID}}
 	if path := sn.ContentPath(); path != "" {
 		l.Apps = func() (*appid.Data, error) { return v.entryApps(e, path) }
+	}
+	if path := sn.IdentityPath(); path != "" {
+		l.Identity = func() (*identity.Data, error) { return v.Identity(path) }
 	}
 	return l, nil
 }
@@ -430,6 +477,33 @@ func (v *callCache) Apps(path string) (*appid.Data, error) {
 		return nil, v.fail(err)
 	}
 	return d.(*appid.Data), nil
+}
+
+// Identity implements estate.IdentitySource: a snapshot's identity file,
+// cached as one item of identityBytes, or loaded once for every caller that
+// asks while it loads (spec 2026-10-17 §4.2, §8). The load takes a load slot.
+// A file that does not load is not kept, as Apps keeps none: the next call
+// reads it again, and the answer names the cause (gap.no-user-directory).
+func (v *callCache) Identity(path string) (*identity.Data, error) {
+	k := identityKey(path)
+	if d, ok := v.c.get(k); ok {
+		return d.(*identity.Data), nil
+	}
+	d, err := v.c.loads.do(v.ctx, "identity|"+k.member+"|"+k.id, func() (any, error) {
+		if d, ok := v.c.get(k); ok {
+			return d, nil
+		}
+		d, err := v.c.loadIdentity(path)
+		if err != nil {
+			return nil, err
+		}
+		v.c.put(k, d, identityBytes(d.Counts()), false)
+		return d, nil
+	})
+	if err != nil {
+		return nil, v.fail(err)
+	}
+	return d.(*identity.Data), nil
 }
 
 // callIndexes is a cached configuration's indexes as one call builds them:

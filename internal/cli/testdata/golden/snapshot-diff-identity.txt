@@ -1,0 +1,12 @@
+fw01   2026-09-28T10-00-00Z -> 2026-09-28T10-01-00Z
+  shared     no changes
+    fw01/shared: 0 added, 0 removed, 0 changed
+  vsys:vsys1 no changes
+    fw01/vsys:vsys1: 0 added, 0 removed, 0 changed
+  identity
+    fw01/identity: 0 added, 0 removed, 2 changed
+    changed identity source ldap:example.com
+      groups: 3 -> 4
+    changed identity user   example.com\alice
+      group: (unset) -> team-x
+1 with changes, 0 without, 0 holes

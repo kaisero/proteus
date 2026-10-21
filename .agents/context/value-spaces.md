@@ -75,7 +75,7 @@ a specific one.
 | `resolver_address.go` | address, address-group | `bart` prefix trie for prefixes and ranges; a map for FQDN values |
 | `resolver_url.go` | custom-url-category | exact member map plus parsed wildcard patterns |
 | `resolver_service.go` | service, service-group | protocol plus port-range interval containment |
-| `resolver_user.go` | user, user-group, dynamic-user-group | local database, then the caller's directory |
+| `resolver_user.go` | user, user-group, dynamic-user-group | the local user database (users, and groups by their `user` members); with User-ID data in `Providers.Users`, every `source-user` member of the rules, as written, that the user satisfies (`identity.Data.Member`, then `InGroup`; a group hit's `Via` is `<source>, <n> members`); a CIE group and a member a missing part touches are unresolved (`doubt.user-cie-group`, `doubt.user-data-missing`); without the data `gap.no-user-directory` and `gap.dynamic-user-group` |
 | `resolver_zone.go` | zone | interface addresses and static routes as a routing table, longest prefix wins |
 | `resolver_app.go` | application, application-group, application-filter, application-container | custom applications by name in any case; with App-ID data in `Providers.Apps` also predefined applications, the filters that select one (`appid.Filter.Selects`, with `application-tag` tags) and the containers that hold it; without data `gap.application-filter` and `gap.application-container` per filter and container, and without containers in the data the container gaps stay |
 
@@ -94,6 +94,15 @@ already answers it.
   documentation-derived and labelled as such.
 - **A service group spells its membership `members`**, an address group `static`,
   a local user group `user`. All three are read in `resolve.objectValue`.
+- **The user space takes a user as the device compares it** (spec 2026-10-17
+  PD8): a primary name, or a mapped name as stored. The caller resolves `--user`
+  and a search term first (`identity.Data.Resolve`). A value is a user term when
+  `looksLikeUser` holds or the data knows it, so a group DN with spaces is one too.
+  The four keywords `any`, `known-user`, `unknown` and `pre-logon` are no member of
+  the space: `securitypolicy` judges them (PD9). The index matches a value by its
+  text, so a group name of the same text as the value reaches its rule here;
+  `securitypolicy` takes such rules out (`literalGroups`, M12), and search keeps
+  them, because search shows where a name is written. See [identity](identity.md).
 - **An application hit keeps its scope.** A custom application or a filter keeps
   the scope that defines it; a content application or a container gets the
   predefined scope (`config.ScopePredefined`), so R5 and R10 hold. A custom
@@ -136,11 +145,8 @@ type Providers struct{ ... }
 type Ref struct{ ... }
 type Report struct{ ... }
 type Set struct{ ... }
-type StaleReporter interface{ ... }
 type UnparsedFilter struct{ ... }
 type Unresolved struct{ ... }
-type UserDirectory interface{ ... }
-type UserSnapshot struct{ ... }
 type View struct{ ... }
 type ZoneLocator interface{ ... }
 type ZonePlacement struct{ ... }
@@ -174,8 +180,6 @@ func (in *Interner) Name(id uint32) string
 func (s *Set) Config() *config.Config
 func (s *Set) Index(sc config.Scope, rb resolve.Rulebase) (*Index, error)
 func (s *Set) Provider(sc config.Scope) func(resolve.Rulebase) (*Index, error)
-func (s *UserSnapshot) GroupsOf(user string) []string
-func (s *UserSnapshot) Stale() (string, bool)
 func (s *ZoneSnapshot) Describe() string
 func (s *ZoneSnapshot) Routers() []string
 func (s *ZoneSnapshot) UnroutedInterfaces() []string
@@ -185,7 +189,6 @@ func (u Unresolved) Why() reason.Reason
 func (v *View) Candidates(f Field, value string) (*roaring.Bitmap, Report)
 func (v *View) Opaque(f Field) (*roaring.Bitmap, map[uint32][]reason.Reason)
 func Build(cfg *config.Config, edges *Edges, sc config.Scope, rb resolve.Rulebase) (*Index, error)
-func LoadUserSnapshot(r io.Reader) (*UserSnapshot, error)
 func LoadZoneSnapshot(r io.Reader) (*ZoneSnapshot, error)
 func New(cfg *config.Config, sc config.Scope, rb resolve.Rulebase) (*Index, error)
 func NewInterner() *Interner

@@ -5,11 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/kaisero/proteus/internal/config"
 	"github.com/kaisero/proteus/internal/drift"
 	"github.com/kaisero/proteus/internal/estate"
+	"github.com/kaisero/proteus/internal/identity"
 	"github.com/kaisero/proteus/internal/reason"
 	"github.com/kaisero/proteus/internal/resolve"
 	"github.com/kaisero/proteus/internal/store"
@@ -70,9 +72,9 @@ type DiffResult struct {
 	whole []drift.Change
 }
 
-// SnapshotDiff compares two snapshots of each selected device, per scope. A
-// device without two snapshots to compare, or whose configuration cannot be
-// read, is a hole. The summary counts the changes and the devices with and
+// SnapshotDiff compares two snapshots of each selected device, per scope, and
+// their identity data in the scope identity (identityDiff). A device without
+// two snapshots to compare, or whose configuration cannot be read, is a hole. The summary counts the changes and the devices with and
 // without a change. A limit keeps the first changes over all devices.
 func SnapshotDiff(ctx context.Context, env Env, in DiffInput) (Envelope[DiffInput, DiffResult], error) {
 	var none Envelope[DiffInput, DiffResult]
@@ -93,6 +95,7 @@ func SnapshotDiff(ctx context.Context, env Env, in DiffInput) (Envelope[DiffInpu
 	e := envelope[DiffInput, DiffResult]("snapshot diff", in)
 	e.Results, e.Summary = []DiffResult{}, &Summary{}
 	compared := 0
+	ids := env.identitySource()
 	for _, d := range names {
 		if err := ctx.Err(); err != nil {
 			return none, err
@@ -124,6 +127,13 @@ func SnapshotDiff(ctx context.Context, env Env, in DiffInput) (Envelope[DiffInpu
 			e.Notes = append(e.Notes, NoteOf(d, "", reason.New("note.app-version-changed",
 				fmt.Sprintf("content version %s → %s", was, now))))
 		}
+		// Across a change of the configuration source, template values show as
+		// added and the uncommitted changes of an export as removed, once
+		// (spec 2026-10-17 §2.4).
+		if was, now := configSource(older.Meta), configSource(newer.Meta); was != now {
+			e.Notes = append(e.Notes, NoteOf(d, "", reason.New("note.config-source-changed", fmt.Sprintf(
+				"configuration source %s → %s: template values and uncommitted changes show as added or removed once", was, now))))
+		}
 		was, err1 := env.configs().Config(older)
 		now, err2 := env.configs().Config(newer)
 		if err1 != nil || err2 != nil {
@@ -141,6 +151,15 @@ func SnapshotDiff(ctx context.Context, env Env, in DiffInput) (Envelope[DiffInpu
 			e.Summary.Found += len(ch)
 			e.Results = append(e.Results, DiffResult{Answer: DiffAnswer(d, sc.String(), ch), Device: d, From: older.ID, To: newer.ID, Scope: sc.String(), Changes: ch})
 		}
+		ch, notes, ok := identityDiff(ids, older, newer)
+		for _, n := range notes {
+			e.Notes = append(e.Notes, NoteOf(d, "", n))
+		}
+		if ok {
+			changed = changed || len(ch) > 0
+			e.Summary.Found += len(ch)
+			e.Results = append(e.Results, DiffResult{Answer: DiffAnswer(d, identityScope, ch), Device: d, From: older.ID, To: newer.ID, Scope: identityScope, Changes: ch})
+		}
 		compared++
 		if changed {
 			e.Summary.With++
@@ -151,6 +170,111 @@ func SnapshotDiff(ctx context.Context, env Env, in DiffInput) (Envelope[DiffInpu
 	e.Summary.Answer = diffCount(e.Summary, len(e.Holes))
 	cutChanges(&e, in.ResultLimit)
 	return e, nil
+}
+
+// identityScope is the scope of the identity result of a diff (spec
+// 2026-10-17 §6.3, PD15).
+const identityScope = "identity"
+
+// identityDiff compares the identity data of two snapshots (spec 2026-10-17
+// §6.3, SG8). With data in both, ok holds and the changes come from
+// identityChanges, and a part missing in either snapshot gives
+// note.identity-not-compared, which names the part: identity.Diff does not
+// compare what that part judges (PD19). With data in one snapshot only, ok
+// does not hold, and the note says so: every user would show as added. With
+// none, there is nothing. A file that does not load gives
+// gap.no-user-directory with the cause, and counts as no data (PD11).
+func identityDiff(src estate.IdentitySource, older, newer store.Snapshot) ([]drift.Change, []reason.Reason, bool) {
+	var notes []reason.Reason
+	load := func(sn store.Snapshot) *identity.Data {
+		if sn.IdentityPath() == "" {
+			return nil
+		}
+		d, err := src.Identity(sn.IdentityPath())
+		if err != nil {
+			notes = append(notes, reason.New("gap.no-user-directory", fmt.Sprintf("no identity data in snapshot %s: %v", sn.ID, err)))
+			return nil
+		}
+		return d
+	}
+	before, after := load(older), load(newer)
+	switch {
+	case before == nil && after == nil:
+		return nil, notes, false
+	case before == nil || after == nil:
+		without := older.ID
+		if after == nil {
+			without = newer.ID
+		}
+		return nil, append(notes, reason.New("note.identity-not-compared", fmt.Sprintf(
+			"the snapshot %s has no identity data, so users and sources are not compared", without))), false
+	}
+	for _, p := range []struct{ part, what string }{
+		{identity.PartUserGroups, "users"},
+		{identity.PartUserNames, "users"},
+		{identity.PartLDAP, "LDAP sources"},
+		{identity.PartCIE, "CIE sources"},
+	} {
+		var in []string
+		for _, side := range []struct {
+			d  *identity.Data
+			id string
+		}{{before, older.ID}, {after, newer.ID}} {
+			if !side.d.Complete(p.part) && !slices.Contains(in, side.id) {
+				in = append(in, side.id)
+			}
+		}
+		if len(in) > 0 {
+			notes = append(notes, reason.New("note.identity-not-compared", fmt.Sprintf(
+				"the part %s of the identity data is missing in snapshot %s, so %s are not compared", p.part, strings.Join(in, " and "), p.what)))
+		}
+	}
+	ch := identityChanges(before, after)
+	if ch == nil {
+		ch = []drift.Change{}
+	}
+	return ch, notes, true
+}
+
+// identityChanges gives the identity changes from before to after as drift
+// changes (spec 2026-10-17 §6.3, PD15): kind identity user, a user that came
+// or went with its groups and DUGs, or a user whose groups changed, one field
+// group per group gained or lost; kind identity source, a source that came or
+// went with its line, or a source whose group count changed. identity.Diff
+// never compares mappings (D9). A nil side gives nil.
+func identityChanges(before, after *identity.Data) []drift.Change {
+	var out []drift.Change
+	for _, c := range identity.Diff(before, after) {
+		dc := drift.Change{Op: drift.Op(c.Op), Kind: "identity " + c.Kind, Name: c.Name}
+		switch {
+		case c.Kind == "user" && dc.Op == drift.Changed:
+			for _, g := range c.Added {
+				dc.Fields = append(dc.Fields, drift.FieldChange{Path: "group", New: g})
+			}
+			for _, g := range c.Removed {
+				dc.Fields = append(dc.Fields, drift.FieldChange{Path: "group", Old: g})
+			}
+		case c.Kind == "user":
+			// A DN holds commas, so the groups of the line part with "; ".
+			dc.New, dc.Old = strings.Join(c.Added, "; "), strings.Join(c.Removed, "; ")
+		case dc.Op == drift.Changed:
+			dc.Fields = []drift.FieldChange{{Path: "groups", Old: c.Old, New: c.New}}
+		default:
+			dc.Old, dc.New = c.Old, c.New
+		}
+		out = append(out, dc)
+	}
+	return out
+}
+
+// configSource is where a snapshot's configuration came from. A snapshot
+// without the key exported it: every fetch before the switch did (spec
+// 2026-10-17 §2.4).
+func configSource(m store.Meta) string {
+	if m.ConfigSource == "" {
+		return "export"
+	}
+	return m.ConfigSource
 }
 
 // cutChanges keeps the first Limit changes of a complete answer, in its

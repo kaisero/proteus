@@ -413,9 +413,11 @@ func TestPolicyPathInputErrors(t *testing.T) {
 	c := pathLab(t)
 	c.want(2, "simulate", "policy", "10.0.0.0/8", pathlab.Destination)
 	c.want(2, "simulate", "policy", pathlab.Source, pathlab.Destination, "--port", "https")
-	c.env["PROTEUS_USERS"] = filepath.Join(c.dir, "no-such-users.json")
-	c.want(1, "simulate", "policy", pathlab.Source, pathlab.Destination)
 	newCLI(t).want(1, "simulate", "policy", pathlab.Source, pathlab.Destination)
+	// PROTEUS_USERS is gone: a missing file that it names stops nothing
+	// (spec 2026-10-17 D8).
+	c.env["PROTEUS_USERS"] = filepath.Join(c.dir, "no-such-users.json")
+	c.want(0, "simulate", "policy", pathlab.Source, pathlab.Destination)
 }
 
 // --file keeps the single-target answer: no rule and no default rule, a zone

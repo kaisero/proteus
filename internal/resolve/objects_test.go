@@ -1,6 +1,7 @@
 package resolve
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -426,5 +427,51 @@ func TestNamesakes(t *testing.T) {
 		if got := strings.Join(Namesakes(kind), " "); got != want {
 			t.Errorf("%s: %s, want %s", kind, got, want)
 		}
+	}
+}
+
+// vsysScope is the scope of one vsys.
+func vsysScope(name string) config.Scope { return config.Scope{Sort: config.ScopeVsys, Name: name} }
+
+// A CIE profile and its domain come from the configuration: from the merge
+// with the pushed template on fw01, whose own configuration holds none (as
+// observed on fw01, PAN-OS 11.2.5, spec 2026-10-17 C1). The fetch reads the
+// domain there, as U7 has no domain column (SG2). A sibling vsys sees none
+// (R5).
+func TestCloudIdentityEngines(t *testing.T) {
+	t.Parallel()
+	merged := loadT(t, "../../testdata/config/firewall-lab-merged.xml")
+	if got := CloudIdentityEngines(merged, vsysScope("vsys1")); !slices.Equal(got, []CloudIdentityEngine{{Name: "cie-a", Domain: "example-cie"}}) {
+		t.Errorf("vsys1 = %+v", got)
+	}
+	if got := CloudIdentityEngines(merged, vsysScope("vsys2")); len(got) != 0 {
+		t.Errorf("vsys2 = %+v", got)
+	}
+	if got := CloudIdentityEngines(loadT(t, "../../testdata/config/firewall-lab.xml"), vsysScope("vsys1")); len(got) != 0 {
+		t.Errorf("the base without the template = %+v", got)
+	}
+}
+
+// A group-mapping profile names the domain of its users and groups when the
+// configuration sets one. A profile without it has an unknown domain: the
+// fetch does not guess one (ruling Q1). A sibling vsys sees none (R5).
+func TestGroupMappings(t *testing.T) {
+	t.Parallel()
+	cfg, _, err := config.Parse(strings.NewReader(`<config><devices><entry name="localhost.localdomain"><vsys>`+
+		`<entry name="vsys1"><group-mapping>`+
+		`<entry name="example.com"><server-profile>ldap-a</server-profile><domain>example.com</domain></entry>`+
+		`<entry name="branch"><server-profile>ldap-b</server-profile></entry>`+
+		`</group-mapping></entry>`+
+		`<entry name="vsys2"><group-mapping><entry name="other"><domain>other</domain></entry></group-mapping></entry>`+
+		`</vsys></entry></devices></config>`), "inline")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []GroupMapping{{Name: "example.com", Domain: "example.com"}, {Name: "branch"}}
+	if got := GroupMappings(cfg, vsysScope("vsys1")); !slices.Equal(got, want) {
+		t.Errorf("vsys1 = %+v, want %+v", got, want)
+	}
+	if got := GroupMappings(loadT(t, "../../testdata/config/firewall-lab-merged.xml"), vsysScope("vsys1")); len(got) != 0 {
+		t.Errorf("a configuration without group mapping = %+v", got)
 	}
 }

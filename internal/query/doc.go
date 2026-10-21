@@ -93,12 +93,12 @@ func (in NATInput) Echo() NATEcho {
 type SearchEcho struct {
 	Direct    bool      `json:"direct" jsonschema:"whether groups are followed one level up only"`
 	Fields    []string  `json:"fields" jsonschema:"the rule fields searched; empty for every field"`
-	Kinds     []string  `json:"kinds" jsonschema:"the object kinds searched; empty for every kind"`
+	Kinds     []string  `json:"kinds" jsonschema:"the kinds searched: object kinds, identity-user, identity-group or mapping; empty for every kind"`
 	Limit     int       `json:"limit" jsonschema:"the most results kept; 0 for every result"`
 	Mode      string    `json:"mode" jsonschema:"how the term matches: the mode asked (exact, within or contains) or the one the term sets (covers, overlaps or matches)"`
 	Selection Selection `json:"selection" jsonschema:"the file or the devices searched"`
-	Show      []string  `json:"show" jsonschema:"the finding stages shown; empty for every stage"`
-	Term      string    `json:"term" jsonschema:"the value or name searched for"`
+	Show      []string  `json:"show" jsonschema:"the finding stages shown: objects, identity, groups, refs or literals; empty for every stage"`
+	Term      string    `json:"term" jsonschema:"the value or name searched for: an address, a prefix, a port, a name, an application, a user or a group"`
 }
 
 // Echo is the input block.
@@ -113,9 +113,9 @@ func (in SearchInput) Echo() SearchEcho {
 type LookupEcho struct {
 	Expand    bool      `json:"expand" jsonschema:"whether the text card expands groups"`
 	Full      bool      `json:"full" jsonschema:"whether the text card shows every field"`
-	Kind      string    `json:"kind" jsonschema:"the kind asked for; empty for any kind"`
+	Kind      string    `json:"kind" jsonschema:"the kind asked for, such as security-rule, application, identity-user or identity-group; empty for any kind"`
 	Limit     int       `json:"limit" jsonschema:"the most results kept; 0 for every result"`
-	Name      string    `json:"name" jsonschema:"the rule or object name looked up"`
+	Name      string    `json:"name" jsonschema:"the rule, object, application, user or group name looked up"`
 	Selection Selection `json:"selection" jsonschema:"the file or the devices read"`
 }
 

@@ -16,10 +16,12 @@ import (
 	"github.com/kaisero/proteus/internal/config"
 	"github.com/kaisero/proteus/internal/fakepanos"
 	"github.com/kaisero/proteus/internal/fetch"
+	"github.com/kaisero/proteus/internal/identity"
 	"github.com/kaisero/proteus/internal/index"
 	"github.com/kaisero/proteus/internal/inventory"
 	"github.com/kaisero/proteus/internal/resolve"
 	"github.com/kaisero/proteus/internal/store"
+	"github.com/kaisero/proteus/internal/testconfig"
 )
 
 func read(t *testing.T, p string) string {
@@ -252,6 +254,65 @@ func TestFetchWithoutThePredefinedServicesIsComplete(t *testing.T) {
 	}
 }
 
+// meta.json names where the configuration came from (spec 2026-10-17 §2.1): the
+// running configuration merged with the pushed template, kept as template.xml;
+// the running configuration of a device without a template, with no note (C7);
+// or the export of a device that refuses show config running, with its note. A
+// template lost to the network makes the fetch incomplete.
+func TestFetchRecordsTheConfigSource(t *testing.T) {
+	t.Parallel()
+	template := read(t, fixture("firewall-lab-template.xml"))
+	for name, tc := range map[string]struct {
+		device func(d *fakepanos.Device)
+		code   int
+		source string
+		note   string
+		file   bool
+	}{
+		"template":    {func(d *fakepanos.Device) { d.Template = template }, 0, "running+template", "", true},
+		"no template": {func(*fakepanos.Device) {}, 0, "running", "", false},
+		"refused": {func(d *fakepanos.Device) {
+			d.Ops[fakepanos.RunningConfigCmd] = fakepanos.Refusal("17", "show -> config is unexpected")
+		}, 0, "export", "note.config-not-running", false},
+		"dropped": {func(d *fakepanos.Device) {
+			d.Template = template
+			d.DropCmd = map[string]int{fakepanos.PushedTemplateCmd: 2}
+		}, exitIncomplete, "running", "", false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			d := lab(t)
+			tc.device(d)
+			c := newCLI(t)
+			c.inventory(inventoryFor(d.Start(t)))
+			out := c.want(tc.code, "fetch", "fw01", "--output", "json")
+			var notes []string
+			for _, n := range fetchNotes(t, out) {
+				if n.Code != "note.tls-off" {
+					notes = append(notes, string(n.Code))
+				}
+			}
+			if got := strings.Join(notes, ","); got != tc.note {
+				t.Errorf("notes %s, want %q", got, tc.note)
+			}
+			sn, err := store.At(c.env["PROTEUS_STORE"]).Latest("fw01")
+			if err != nil {
+				t.Fatal(err)
+			}
+			b, err := os.ReadFile(filepath.Join(sn.Dir, "meta.json"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if sn.Meta.ConfigSource != tc.source || !strings.Contains(string(b), `"config_source": "`+tc.source+`"`) {
+				t.Errorf("source %q, meta.json:\n%s", sn.Meta.ConfigSource, b)
+			}
+			if _, err := os.Stat(sn.Path(fetch.PushedTemplate.Name)); (err == nil) != tc.file {
+				t.Errorf("template.xml: %v, want stored %v", err, tc.file)
+			}
+		})
+	}
+}
+
 // cli runs proteus against a temporary inventory and store.
 type cli struct {
 	t       *testing.T
@@ -437,7 +498,7 @@ func TestSnapshotRowsSkipAPrunedSnapshot(t *testing.T) {
 		t.Fatal(err)
 	}
 	st = st.WithClock(func() time.Time { return time.Date(2026, 9, 28, 10, 0, 0, 0, time.UTC) })
-	sn, err := st.Write(store.Meta{Device: "fw01"}, map[string][]byte{store.ConfigDoc: []byte("<config/>")}, 20)
+	sn, err := st.Write(store.Meta{Device: "fw01"}, map[string][]byte{store.ConfigDoc: []byte("<config/>")}, nil, 20)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -733,7 +794,7 @@ func TestSimulatePolicy(t *testing.T) {
 		}
 	}
 	if err := json.Unmarshal([]byte(out), &env); err != nil || len(env.Results) != 1 || env.Results[0].FirstMatch == nil ||
-		env.Results[0].FirstMatch.Name != "from-inside" || len(env.Results[0].Stages) != 9 || env.Results[0].Fidelity.Level == "" {
+		env.Results[0].FirstMatch.Name != "from-inside" || len(env.Results[0].Stages) != 10 || env.Results[0].Fidelity.Level == "" {
 		t.Errorf("json: %v %s", err, out)
 	}
 }
@@ -865,21 +926,39 @@ func TestAgo(t *testing.T) {
 	}
 }
 
-func TestSearchWithAUserSnapshot(t *testing.T) {
+// identityFile copies the User-ID fixture configuration into a directory of
+// the harness and returns its path; with data, the identity fixture lies
+// beside it as identity.json.gz (spec 2026-10-17 §7).
+func (c *cli) identityFile(data bool) string {
+	c.t.Helper()
+	dir, err := os.MkdirTemp(c.dir, "file-")
+	if err != nil {
+		c.t.Fatal(err)
+	}
+	path := filepath.Join(dir, "config.xml")
+	if err := os.WriteFile(path, []byte(read(c.t, "../../testdata/config/firewall-identity.xml")), 0o600); err != nil {
+		c.t.Fatal(err)
+	}
+	if data {
+		testconfig.Identity(c.t, filepath.Join(dir, identity.FileName))
+	}
+	return path
+}
+
+// search --file reads identity.json.gz beside the configuration: carol
+// reaches the rule of her XML API group, and the note names the file.
+// Without the file, the group is unknown.
+func TestSearchWithTheIdentityFile(t *testing.T) {
 	t.Parallel()
 	c := newCLI(t)
-	file := "../../testdata/config/firewall-users.xml"
-	if out := c.want(0, "search", `ACME\carol`, "--file", file); strings.Contains(out, "engineering-allowed") {
-		t.Errorf("without PROTEUS_USERS carol reaches nothing:\n%s", out)
+	if out := c.want(0, "search", `example.com\carol`, "--file", c.identityFile(false)); strings.Contains(out, "u-xmlapi") {
+		t.Errorf("without the identity file carol reaches nothing:\n%s", out)
 	}
-	c.env["PROTEUS_USERS"] = "../../testdata/users-snapshot.json"
-	if out := c.want(0, "search", `ACME\carol`, "--file", file); !strings.Contains(out, "engineering-allowed") {
-		t.Errorf("with PROTEUS_USERS carol reaches engineering-allowed:\n%s", out)
+	file := c.identityFile(true)
+	out := c.want(0, "search", `example.com\carol`, "--file", file)
+	if !strings.Contains(out, "u-xmlapi") || !strings.Contains(out, filepath.Join(filepath.Dir(file), identity.FileName)) {
+		t.Errorf("with the identity file carol reaches u-xmlapi:\n%s", out)
 	}
-	c.env["PROTEUS_USERS"] = "../../testdata/missing.json"
-	c.want(1, "search", "x", "--file", file)
-	c.env["PROTEUS_USERS"] = "../../testdata/config/firewall-lab.xml"
-	c.want(1, "search", "x", "--file", file)
 }
 
 // Every run writes a log with its command, settings, snapshots and exit; a run that
@@ -1028,28 +1107,33 @@ func TestSearchRefusesAnUnknownKind(t *testing.T) {
 // device stored, and TestMain's leak check proves no goroutine is left behind.
 func TestACancelledFanOutEndsPromptly(t *testing.T) {
 	t.Parallel()
-	hung := lab(t)
-	hung.Stall = "export"
-	inv, err := inventory.Parse(strings.NewReader(inventoryFor(lab(t).Start(t), hung.Start(t))))
-	if err != nil {
-		t.Fatal(err)
-	}
-	st, err := store.Open(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-	start := time.Now()
-	out, err := fetchText(ctx, fetcher{inv: inv, st: st, getenv: getenv}, "fw01", "fw02")
-	if elapsed := time.Since(start); elapsed > 20*time.Second {
-		t.Fatalf("the fan-out took %s after its context ended", elapsed)
-	}
-	if !errors.Is(err, errIncomplete) {
-		t.Errorf("one device stored and one cancelled is an incomplete fetch, got %v\n%s", err, out)
-	}
-	if _, err := st.Latest("fw01"); err != nil {
-		t.Errorf("the device that answered must be stored: %v", err)
+	for _, stall := range []string{fakepanos.RunningConfigCmd, fakepanos.PushedTemplateCmd} {
+		t.Run(stall, func(t *testing.T) {
+			t.Parallel()
+			hung := lab(t)
+			hung.Stall = stall
+			inv, err := inventory.Parse(strings.NewReader(inventoryFor(lab(t).Start(t), hung.Start(t))))
+			if err != nil {
+				t.Fatal(err)
+			}
+			st, err := store.Open(t.TempDir())
+			if err != nil {
+				t.Fatal(err)
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			start := time.Now()
+			out, err := fetchText(ctx, fetcher{inv: inv, st: st, getenv: getenv}, "fw01", "fw02")
+			if elapsed := time.Since(start); elapsed > 20*time.Second {
+				t.Fatalf("the fan-out took %s after its context ended", elapsed)
+			}
+			if !errors.Is(err, errIncomplete) {
+				t.Errorf("one device stored and one cancelled is an incomplete fetch, got %v\n%s", err, out)
+			}
+			if _, err := st.Latest("fw01"); err != nil {
+				t.Errorf("the device that answered must be stored: %v", err)
+			}
+		})
 	}
 }
 
@@ -1093,10 +1177,14 @@ func TestFetchWhyShowsTheStages(t *testing.T) {
 	c := newCLI(t)
 	c.inventory(inventoryFor(lab(t).Start(t)))
 	out := c.want(0, "fetch", "fw01", "--why")
-	for _, slug := range []string{"resolve", "login", "ha", "documents", "applications", "store"} {
+	for _, slug := range []string{"resolve", "login", "ha", "documents", "template", "applications", "identity", "store"} {
 		if !strings.Contains(out, "  "+slug+" ") {
 			t.Errorf("missing stage %s:\n%s", slug, out)
 		}
+	}
+	// The command's help lists the stages in the order they run.
+	if long := newApp(nil, nil, getenv, nil).fetchCmd().Long; !strings.Contains(long, "documents, template, applications, identity, store") {
+		t.Errorf("fetch help: %s", long)
 	}
 }
 
@@ -1380,5 +1468,61 @@ func TestFetchPrunesContentOnce(t *testing.T) {
 	}
 	if n := strings.Count(c.logFile(), "pruned the content files"); n != 1 {
 		t.Errorf("pruned %d times:\n%s", n, c.logFile())
+	}
+}
+
+// The snapshot keeps the identity data of the device as identity.json.gz,
+// mode 0600, and meta.json says so (spec 2026-10-17 §4.1).
+func TestFetchStoresTheIdentityFile(t *testing.T) {
+	t.Parallel()
+	c := newCLI(t)
+	c.inventory(inventoryFor(lab(t).Start(t)))
+	c.want(0, "fetch", "fw01")
+	sn, raw := metaJSON(t, c, "fw01")
+	fi, err := os.Stat(sn.IdentityPath())
+	if err != nil || fi.Mode().Perm() != 0o600 || filepath.Base(sn.IdentityPath()) != identity.FileName {
+		t.Fatalf("identity file: %v, %v", fi, err)
+	}
+	if !strings.Contains(raw, `"identity": true`) {
+		t.Errorf("meta.json:\n%s", raw)
+	}
+	d, err := identity.Load(sn.IdentityPath())
+	if err != nil || d.Counts().Users != 4 || len(d.PartsMissing()) != 0 {
+		t.Errorf("identity data %+v, %v", d, err)
+	}
+}
+
+// identity: false on a device keeps the identity data out of its snapshot:
+// no file, no key in meta.json, a note, and the fetch is complete (spec
+// 2026-10-17 D4).
+func TestFetchWithIdentityOffStoresNoFile(t *testing.T) {
+	t.Parallel()
+	c := newCLI(t)
+	c.inventory(strings.Replace(inventoryFor(lab(t).Start(t)), "    labels: {site: s1}\n", "    labels: {site: s1}\n    identity: false\n", 1))
+	out := c.want(0, "fetch", "fw01", "--output", "json")
+	sn, raw := metaJSON(t, c, "fw01")
+	if _, err := os.Stat(filepath.Join(sn.Dir, identity.FileName)); !errors.Is(err, os.ErrNotExist) || sn.IdentityPath() != "" || strings.Contains(raw, `"identity"`) {
+		t.Errorf("identity file: %v\nmeta.json:\n%s", err, raw)
+	}
+	if !slices.ContainsFunc(fetchNotes(t, out), func(n note) bool { return n.Code == "note.identity-off" }) {
+		t.Errorf("no note:\n%s", out)
+	}
+}
+
+// A transport error while the identity data arrives stores the snapshot
+// without the file, and the fetch exits 3 (spec 2026-10-17 §3.4, PD4).
+func TestFetchIdentityTransportFailureExits3(t *testing.T) {
+	t.Parallel()
+	c := newCLI(t)
+	d := lab(t)
+	d.DropCmd = map[string]int{fakepanos.UserIDsCmd: 2}
+	c.inventory(inventoryFor(d.Start(t)))
+	out := c.want(exitIncomplete, "fetch", "fw01")
+	sn, raw := metaJSON(t, c, "fw01")
+	if _, err := os.Stat(filepath.Join(sn.Dir, identity.FileName)); !errors.Is(err, os.ErrNotExist) || sn.IdentityPath() != "" || strings.Contains(raw, `"identity": true`) {
+		t.Errorf("identity file: %v\nmeta.json:\n%s", err, raw)
+	}
+	if !strings.Contains(out, "identity") || !strings.Contains(out, "FAILED") || !strings.Contains(raw, `"name": "identity"`) {
+		t.Errorf("the failed identity data must be named:\n%s\nmeta.json:\n%s", out, raw)
 	}
 }

@@ -2,12 +2,14 @@
 // fetch, so any analysis can be repeated later against exactly what the device said.
 //
 //	<root>/<device>/<timestamp>/<document>.xml
+//	<root>/<device>/<timestamp>/identity.json.gz
 //	<root>/<device>/<timestamp>/meta.json
 //	<root>/<device>/latest -> <timestamp>
 //	<root>/.content/<app-version>.v<trim>.xml.gz
 //
 // Spec: docs/specs/2026-09-27-panos-analyst-scope.md §8. The App-ID content
-// files: docs/specs/2026-10-16-app-id-design.md §3.
+// files: docs/specs/2026-10-16-app-id-design.md §3. The identity file:
+// docs/specs/2026-10-17-user-id-design.md §4.1.
 package store
 
 import (
@@ -22,6 +24,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kaisero/proteus/internal/identity"
 	"github.com/kaisero/proteus/internal/inventory"
 )
 
@@ -42,7 +45,7 @@ type Store struct {
 	root string
 	now  func() time.Time
 	// step, when set, runs at the named points of Write, so a test can put a
-	// second writer between them.
+	// second writer, or a file in the way, between them.
 	step func(name string)
 	// chtimes, when set, replaces os.Chtimes in HaveContent, so a test can make
 	// it fail.
@@ -103,6 +106,15 @@ type Meta struct {
 	// active peer of a device found passive.
 	FetchedFrom string   `json:"fetched_from,omitempty"`
 	Notes       []string `json:"notes,omitempty"`
+	// ConfigSource names where config.xml came from: "running+template",
+	// "running", "export+template" or "export" (spec 2026-10-17 §2.1). It is
+	// empty when the configuration did not arrive, and in a snapshot from
+	// before the switch, which exported its configuration.
+	ConfigSource string `json:"config_source,omitempty"`
+	// Identity reports that the snapshot holds identity.json.gz, the User-ID
+	// data of the device (spec 2026-10-17 §4.1). Write sets it; the key is
+	// left out when the snapshot holds no identity file.
+	Identity bool `json:"identity,omitempty"`
 }
 
 // DocumentMeta is what happened to one document.
@@ -121,7 +133,11 @@ type DocumentMeta struct {
 // down to keep with a configuration and keep without. meta.Documents may list
 // documents that failed; Write adds an entry for every document in docs that meta
 // does not already name.
-func (s *Store) Write(meta Meta, docs map[string][]byte, keep int) (Snapshot, error) {
+//
+// identityFile is the device's identity file; it is nil or empty when the fetch
+// has none. Write stores it as identity.json.gz beside the documents, and
+// meta.Identity says whether it did (spec 2026-10-17 §4.1).
+func (s *Store) Write(meta Meta, docs map[string][]byte, identityFile []byte, keep int) (Snapshot, error) {
 	if !inventory.ValidName(meta.Device) {
 		return Snapshot{}, fmt.Errorf("store: device name %q is not safe as a directory name", meta.Device)
 	}
@@ -176,6 +192,13 @@ func (s *Store) Write(meta Meta, docs map[string][]byte, keep int) (Snapshot, er
 			return Snapshot{}, fmt.Errorf("store: %w", err)
 		}
 		meta.Documents = recordFile(meta.Documents, n, file, len(docs[n]))
+	}
+	s.at("documents")
+	meta.Identity = len(identityFile) > 0
+	if meta.Identity {
+		if err := writeFile(filepath.Join(tmp, identity.FileName), identityFile); err != nil {
+			return Snapshot{}, fmt.Errorf("store: %w", err)
+		}
 	}
 	mb, err := json.MarshalIndent(meta, "", "  ")
 	if err != nil {

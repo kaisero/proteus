@@ -6,8 +6,8 @@
 // answer (spec 2026-10-09 §3.7).
 //
 // R12: query imports the simulations, estate, store, inventory, search,
-// drift, card, resolve, index, config, appid, runlog and reason. It does not
-// import fetch, cli, mcp, Cobra or a terminal package.
+// drift, card, resolve, index, config, appid, identity, runlog and reason. It
+// does not import fetch, cli, mcp, Cobra or a terminal package.
 package query
 
 import (
@@ -44,10 +44,6 @@ type Env struct {
 	// CanonicalName gives an FQDN's canonical name, trailing dot trimmed, as
 	// this machine's resolver reports it. Nil gives none.
 	CanonicalName func(ctx context.Context, name string) (string, error)
-	// Users reads the user directory a configuration does not hold. It is read
-	// only when a query needs it, so its error comes where it did on the
-	// command line. Nil is no directory.
-	Users func() (index.UserDirectory, error)
 	// Log is the run log; nil logs nothing.
 	Log *runlog.Logger
 	// Ops reads the devices' operational data: HA state, interfaces, FIB and
@@ -63,6 +59,11 @@ type Env struct {
 	// server shares a cache here. Either way a question loads each file
 	// once (spec 2026-10-16 D11).
 	Apps estate.AppSource
+	// Identity loads the identity files of the snapshots and of a --file
+	// configuration. Nil loads them from disk; a server shares a cache here.
+	// Either way a question loads each file once, and only when it needs it
+	// (spec 2026-10-17 §4.2, PD10).
+	Identity estate.IdentitySource
 	// Fresh fetches devices before a query reads them and returns the notes
 	// each device's fetch left, by device: TLS verification off, a failed
 	// document, a failed fetch. Nil takes no fresh fetch.
@@ -83,14 +84,6 @@ func (e Env) configs() estate.ConfigSource {
 		return estate.DiskConfigs{}
 	}
 	return e.Configs
-}
-
-// users is the user directory, or none.
-func (e Env) users() (index.UserDirectory, error) {
-	if e.Users == nil {
-		return nil, nil
-	}
-	return e.Users()
 }
 
 // Envelope is the answer of one command. In and Res are the command's typed

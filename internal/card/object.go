@@ -64,14 +64,24 @@ func Object(cfg *config.Config, idx *index.Index, o resolve.Object) Card {
 }
 
 // Kinds lists what lookup can find: security rules, every object kind a rule
-// can name that the configuration can define (K10), and the application
-// containers, which only the App-ID content data defines (spec 2026-10-16 §5.2).
+// can name that the configuration can define (K10), the application
+// containers, which only the App-ID content data defines (spec 2026-10-16
+// §5.2), and the identity users and groups, which only the identity data
+// defines (spec 2026-10-17 §6.2).
 func Kinds(cfg *config.Config) []string {
 	kinds := resolve.ObjectKinds(cfg)
-	if i, found := slices.BinarySearch(kinds, KindContainer); !found {
-		kinds = slices.Insert(kinds, i, KindContainer)
+	for _, k := range []string{KindContainer, KindIdentityGroup, KindIdentityUser} {
+		if i, found := slices.BinarySearch(kinds, k); !found {
+			kinds = slices.Insert(kinds, i, k)
+		}
 	}
 	return append([]string{KindRule}, kinds...)
+}
+
+// identityKind reports whether lookup finds a kind in the identity data
+// (FindIdentity), not in the configuration.
+func identityKind(kind string) bool {
+	return kind == KindIdentityUser || kind == KindIdentityGroup
 }
 
 // Find returns a card for every element of that name visible in the index's scope,
@@ -80,7 +90,8 @@ func Kinds(cfg *config.Config) []string {
 // apps is the App-ID content data, or nil. With it, Find also finds the
 // predefined applications and the containers, and a filter card lists the
 // applications the filter selects (spec 2026-10-16 §5.2). A custom
-// application has its application card either way.
+// application has its application card either way. The identity kinds pass
+// the kind check, and FindIdentity finds them.
 func Find(cfg *config.Config, idx *index.Index, apps *appid.Data, name, kind string) ([]Card, error) {
 	kinds := Kinds(cfg)
 	if kind != "" && !slices.Contains(kinds, kind) {
@@ -97,7 +108,7 @@ func Find(cfg *config.Config, idx *index.Index, apps *appid.Data, name, kind str
 	}
 	b := newBuilder(cfg, idx)
 	for _, k := range kinds[1:] {
-		if kind != "" && kind != k {
+		if kind != "" && kind != k || identityKind(k) {
 			continue
 		}
 		switch o, ok := b.object(k, name); {

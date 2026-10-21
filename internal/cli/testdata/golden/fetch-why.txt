@@ -1,5 +1,5 @@
 fw01: TLS certificate verification OFF (insecure_tls: true)
-  config      2993 bytes
+  config      2992 bytes
   system-info 252 bytes
   interfaces  7786 bytes
   fib         7295 bytes
@@ -10,6 +10,8 @@ fw01: TLS certificate verification OFF (insecure_tls: true)
   resolve      ok      127.0.0.1:PORT, TLS verification off
   login        ok      logged in as reader
   ha           skipped HA is not enabled
-  documents    ok      7 of 7 documents
+  documents    ok      8 of 8 documents
+  template     ok      no template pushed to the device
   applications ok      content 8000-1000, 4 applications, 1 container
+  identity     ok      9 calls: 4 users, 8 groups, 6 mappings in 1 page, 2 sources
   store        ok      fw01@2026-09-28T10-00-00Z

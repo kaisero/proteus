@@ -114,7 +114,7 @@ func build(cfg *config.Config, edges edgeList, sc config.Scope, rb resolve.Ruleb
 		addrRes,
 		newURLResolver(cats),
 		newServiceResolver(svcs, ri),
-		newUserResolver(localUsers, userGroups, dynUsers),
+		newUserResolver(sc, localUsers, userGroups, dynUsers, rules),
 		newZoneResolver(sc, zones, ifAddrs, routes, resolve.DynamicRoutingProtocols(cfg)),
 		newAppResolver(apps, appFilters, appTags, appContainers),
 	} {

@@ -87,7 +87,9 @@ var ruleFields = []struct {
 	{"qos", notMatching},
 }
 
-// doubtLabel is how a doubt names a field no stage evaluates.
+// doubtLabel is how a doubt names a field no stage evaluates. source-user is
+// doubtful: without identity data no stage evaluates it, and with the data
+// match-user does (spec 2026-10-17 §5.5).
 var doubtLabel = map[string]string{"source-user": "user"}
 
 // doubtCodes gives each doubtful field its code (spec §3.1, §12 C7, C8). A
@@ -167,6 +169,13 @@ func (s *state) doubts() []Doubt {
 				case m.negated.Contains(uint32(r.Position - 1)): //nolint:gosec // as above
 					add(reason.New("doubt.fqdn-resolution", fmt.Sprintf(
 						"%s: %s excluded from the negated field only through an FQDN object; the firewall resolves this object itself; its addresses can differ from ours", f.name, m.name)))
+				}
+			case f.name == "source-user" && s.userEvaluated:
+				// With identity data, only a rule that match-user kept for a
+				// member the data cannot judge has a doubt (spec 2026-10-17
+				// §5.5); without it, the field keeps its old doubt below.
+				if why := s.userDoubts[uint32(r.Position-1)]; len(why) > 0 { //nolint:gosec // as above
+					add(why...)
 				}
 			case f.class != doubtful:
 			case f.name == "schedule":

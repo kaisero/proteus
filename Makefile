@@ -14,10 +14,11 @@ DIGEST_DIR := internal/config/schemadigest
 # The digest records it; proteus reads every version with the one digest.
 PANOS_VERSION ?=
 
-# The lab device of make app-lab, by its inventory name, and the file that holds
-# its API key header (one line: X-PAN-KEY: <key>).
+# The lab device of make app-lab and make uid-lab, by its inventory name, and the
+# file that holds its API key header (one line: X-PAN-KEY: <key>).
 DEVICE            ?=
 APPLAB_KEY_HEADER ?=
+UIDLAB_KEY_HEADER ?=
 
 # Pinned dev-tool versions (CI installs the same ones; keep in sync with .github).
 GOLANGCI_VERSION    := v2.14.0
@@ -34,7 +35,7 @@ GOVULNCHECK := $(GOBIN)/govulncheck
 
 .PHONY: help tools fmt fmt-check vet lint test test-race cover test-cov \
         bench-check vuln vuln-tool tidy-check gate ci build build-local schema-digest context context-check \
-        schema-pull app-lab docs docs-serve release-build hooks clean
+        schema-pull app-lab uid-lab docs docs-serve release-build hooks clean
 
 help: ## Show this help
 	@grep -hE '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | sort | \
@@ -124,6 +125,10 @@ release-build: ## Build the release archives and SHA256SUMS into dist/ (version 
 app-lab: ## Compare proteus with the lab device (DEVICE=…), not in CI
 	@test -n "$(DEVICE)" || { echo "usage: make app-lab DEVICE=fw02 APPLAB_KEY_HEADER=<file>"; exit 1; }
 	go run ./internal/tools/applab -device '$(DEVICE)' -key-header '$(APPLAB_KEY_HEADER)'
+
+uid-lab: ## Compare proteus's User-ID answers with the lab device (DEVICE=…), not in CI
+	@test -n "$(DEVICE)" || { echo "usage: make uid-lab DEVICE=fw01 UIDLAB_KEY_HEADER=<file>"; exit 1; }
+	go run ./internal/tools/uidlab -device '$(DEVICE)' -key-header '$(UIDLAB_KEY_HEADER)'
 
 ## --- docs ---
 

@@ -27,19 +27,21 @@ A loaded index is immutable once built. A reload produces a new index and
 replaces the pointer.
 
 The fetcher is the one package of proteus that talks to a device. It asks for an
-API key, runs `<show>` commands and exports the configuration; `fetch.Client`
-refuses any other op command before it reaches the device, and has no method for
-anything else.
+API key and runs `<show>` commands, among them `show config running` and
+`show config pushed-template`; it exports the configuration only when the device
+refuses `show config running`. `fetch.Client` refuses any other op command before
+it reaches the device, and has no method for anything else.
 
-One lab tool also talks to a device, by owner decision (spec 2026-10-16 §9.1,
-plan C7): `internal/tools/applab`, which `make app-lab` runs by hand, never in CI.
-It sends only `<show>` and `<test><security-policy-match>` op commands; a function
-refuses any other command before it is sent. It never asks for a key, configures,
-or commits.
+Two lab tools also talk to a device, by owner decision (spec 2026-10-16 §9.1,
+plan C7, spec 2026-10-17 §10.3): `internal/tools/applab` and
+`internal/tools/uidlab`, which `make app-lab` and `make uid-lab` run by hand,
+never in CI. They send through `internal/tools/labkit`, which sends only `<show>`
+and `<test><security-policy-match>` op commands and refuses any other command
+before it is sent. They never ask for a key, configure, or commit.
 
 Check: `go test ./internal/archtest -run TestPublicAPIIsReadOnly`
 Check: `go test ./internal/fetch -run TestOnlyReadCalls`
-Check: `go test ./internal/tools/applab -run TestOnlyShowAndPolicyMatch`
+Check: `go test ./internal/tools/labkit -run TestOnlyShowAndPolicyMatch`
 
 ## R3 — Nothing is dropped silently
 
@@ -159,8 +161,10 @@ Check: `go test ./internal/index -run TestClosureRepresentation`
 
 `config`, `resolve` and `index` import no `net`, `net/http`, `net/url` or `os/exec`,
 and no package of this module except each other, `internal/schema`,
-`internal/digest`, `internal/appid` and `internal/reason`. `internal/appid` owns the
-App-ID content file; it imports only the standard library and `internal/reason`.
+`internal/digest`, `internal/appid`, `internal/identity` and `internal/reason`.
+`internal/appid` owns the App-ID content file; it imports only the standard library
+and `internal/reason`. `internal/identity` owns the identity file; it imports only
+the standard library and `internal/reason`.
 `index` does not import `simulate`. `fetch` imports neither `simulate` nor `estate`. `store` does not import `fetch`. `search`
 and `drift` answer from one configuration and import none of `fetch`, `store` or
 `estate`. `card` builds lookup's cards from one configuration and imports none of
@@ -171,7 +175,7 @@ simulation implementation and none of `estate`, `store`, `fetch`, `search` or
 `search` or `drift`, and no I/O package: every device's data reaches it through
 `simulate.Network`. `internal/task` runs staged operations for the command line; it
 imports no I/O package and no package of this module except `internal/runlog` and
-`internal/reason`. `fetch` may import `task`. What the simulations share lives in
+`internal/reason`. `fetch` may import `task` and `internal/identity`. What the simulations share lives in
 the leaf packages `internal/simulate/topology` (interfaces, forwarding tables,
 placement) and `internal/simulate/rulebase` (rulebase matching, PBF), which import
 no simulation and no I/O package. `internal/simulate/nat` is also the NAT engine:
@@ -182,8 +186,8 @@ I/O. `internal/simulate/pathpolicy` answers a flow along its path: it may import
 `store`, `fetch`, `search`, `drift`, `card`, and no I/O package. `internal/query`
 answers the questions for every front end: it may import the simulations, `estate`,
 `store`, `inventory`, `search`, `drift`, `card`, `resolve`, `index`, `config`, `appid`,
-`runlog` and `reason`, and reaches none of `fetch`, `cli`, `mcp`, Cobra or a
-terminal package; `cli` imports it. `internal/reason` names the reason codes answers
+`identity`, `runlog` and `reason`, and reaches none of `fetch`, `cli`, `mcp`, Cobra or
+a terminal package; `cli` imports it. `internal/reason` names the reason codes answers
 carry. It imports only the standard library, and every package may import it: each
 rule above allows it. The test helpers `internal/fakepanos`,
 `internal/simulate/pathlab` and `internal/testconfig` import `testing`; only tests

@@ -135,12 +135,8 @@ func Policy(ctx context.Context, env Env, in PolicyInput) (Envelope[PolicyInput,
 	if err != nil {
 		return none, err
 	}
-	users, err := env.users()
-	if err != nil {
-		return none, err
-	}
 	sim := es.simEnv(env)
-	sim.Load = storeLoader(es.st, es.when, es.network, users, flow.Application != "")
+	sim.Load = storeLoader(es.st, es.when, es.network, flow.Application != "", flow.User != "")
 	if in.Flow.NoDNS {
 		sim.Resolve = nil // NAT does not resolve a translated FQDN either
 	}
@@ -213,7 +209,7 @@ func PolicyFile(ctx context.Context, env Env, in PolicyFileInput) (Envelope[Poli
 	}
 	t := ts[0]
 	withApps := flow.Application != ""
-	sim, err := fileEnv(env, t, in.Flow.NoDNS, withApps)
+	sim, err := fileEnv(env, t, in.Flow.NoDNS, withApps, flow.User != "")
 	if err != nil {
 		return none, err
 	}
@@ -278,27 +274,31 @@ func givenZones(ts []estate.Target, flow simulate.Flow) ([]estate.Target, []esta
 }
 
 // fileEnv is the simulation environment for one target read from a file: its
-// configuration and the user directory. A file has no stored tables, so zones
-// derive from the configuration. With withApps, the target carries the
-// App-ID content data beside the file and the notes of appsOf (spec
-// 2026-10-16 §6).
-func fileEnv(env Env, t estate.Target, noDNS, withApps bool) (*simulate.Env, error) {
-	users, err := env.users()
+// configuration and its index. A file has no stored tables, so zones derive
+// from the configuration. With withApps, the target carries the App-ID
+// content data beside the file and the notes of appsOf (spec 2026-10-16 §6).
+// With withUser, or a rule of the vsys that names a user, it carries the
+// identity data beside the file and the notes of identityFor (spec 2026-10-17
+// §4.2, §7).
+func fileEnv(env Env, t estate.Target, noDNS, withApps, withUser bool) (*simulate.Env, error) {
+	set := index.NewSet(t.Config)
+	idx, err := set.Index(t.Scope, resolve.Security)
 	if err != nil {
 		return nil, err
 	}
-	set := index.NewSet(t.Config)
-	providers, notes := index.Providers{Users: users}, t.Notes
+	var providers index.Providers
+	notes := t.Notes
 	if withApps {
 		var more simulate.Reasons
 		providers.Apps, more = appsOf(t)
 		notes = append(slices.Clone(notes), more...)
 	}
+	if withUser || namesUser(idx.Rules()) {
+		var more simulate.Reasons
+		providers.Users, more = identityFor(t, env.MaxAge, env.now())
+		notes = append(slices.Clone(notes), more...)
+	}
 	sim := &simulate.Env{Log: env.Log, Load: func(string, string) (simulate.Target, error) {
-		// Built here, so a failed build is the load's error.
-		if _, err := set.Index(t.Scope, resolve.Security); err != nil {
-			return simulate.Target{}, err
-		}
 		return simulate.Target{
 			Config: t.Config, Indexes: set.Provider(t.Scope),
 			Providers: providers, Notes: notes,
@@ -555,7 +555,9 @@ type Security struct {
 	// Doubts names the candidates that set a matching field no stage evaluates.
 	Doubts []securitypolicy.Doubt        `json:"doubts" jsonschema:"rules that may match first, with the reasons the answer cannot rule them out"`
 	Zones  securitypolicy.ZoneDerivation `json:"zones" jsonschema:"the zones used and where they came from"`
-	Stages []Stage                       `json:"stages" jsonschema:"the run's stages: what each one did, its fidelity and its candidate count"`
+	// User is set when the target has identity data (spec 2026-10-17 §5.1).
+	User   *securitypolicy.FlowUser `json:"user,omitempty" jsonschema:"the flow's user and where it came from: the mapping of the source address or the user given"`
+	Stages []Stage                  `json:"stages" jsonschema:"the run's stages: what each one did, its fidelity and its candidate count"`
 }
 
 // securityOf is a security answer. v is nil when the check did not run.
@@ -583,6 +585,7 @@ func securityOf(v *securitypolicy.Verdict, verdict string, why simulate.Reasons,
 	out.Default, out.DefaultAction, out.DefaultSource = v.Default, v.DefaultAction, v.DefaultSource
 	out.Zones = v.Zones
 	out.Zones.From, out.Zones.To = nonNil(v.Zones.From), nonNil(v.Zones.To)
+	out.User = v.User
 	return out
 }
 

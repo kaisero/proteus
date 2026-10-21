@@ -1,5 +1,5 @@
 ‹head›fw01‹/›: TLS certificate verification ‹warn›OFF‹/› (insecure_tls: true)
-  config      2993 bytes
+  config      2992 bytes
   system-info 252 bytes
   interfaces  7786 bytes
   fib         7295 bytes

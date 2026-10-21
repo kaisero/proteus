@@ -1,7 +1,8 @@
 // Package fakepanos is a stand-in PAN-OS XML API for tests. It answers keygen, a
-// fixed set of show commands, the predefined services, the App-ID data and a
-// configuration export over TLS on 127.0.0.1, and records every request so a test can check what was
-// sent and what was not.
+// fixed set of show commands, the running configuration, the pushed template,
+// the predefined services, the App-ID data, the User-ID data and a
+// configuration export over TLS on 127.0.0.1, and records every request so a
+// test can check what was sent and what was not.
 package fakepanos
 
 import (
@@ -20,16 +21,25 @@ type Device struct {
 	// Ops maps a show command to the full response body the device returns for it.
 	// A command not listed gets the device's syntax-error refusal.
 	Ops map[string]string
-	// Config is the body of a configuration export.
+	// Config is the configuration: the body of an export, and the config
+	// element of the answer to RunningConfigCmd, unless Ops names the command.
 	Config string
+	// Template is the template element of the answer to PushedTemplateCmd,
+	// unless Ops names the command. Empty answers NoTemplate, as a device
+	// without a template does.
+	Template string
 	// DropFirst closes the connection without an answer on the first N requests,
 	// which a client sees as a transport error.
 	DropFirst int
+	// DropCmd maps an op command to the number of its requests to drop without
+	// an answer, which a client sees as a transport error.
+	DropCmd map[string]int
 	// TruncateFirst promises a longer body than it sends on the first N
 	// requests, then closes the connection, which a client sees while reading.
 	TruncateFirst int
-	// Stall names a request type, such as "export", that the device never answers:
-	// it waits until the client gives up, as a hung device does.
+	// Stall names a request type, such as "export", or an op command that the
+	// device never answers: it waits until the client gives up, as a hung
+	// device does.
 	Stall string
 
 	mu       sync.Mutex
@@ -80,12 +90,158 @@ const Containers = `<response status="success"><result><application-container>` 
 	`<member>office-docs</member><member>office-mail</member></functions></entry>` +
 	`</application-container></result></response>`
 
+// RunningConfigCmd and PushedTemplateCmd ask a device for its running
+// configuration and for the template that Panorama pushed to it (spec
+// 2026-10-17 C9, C12).
+const (
+	RunningConfigCmd  = "<show><config><running/></config></show>"
+	PushedTemplateCmd = "<show><config><pushed-template/></config></show>"
+)
+
+// NoTemplate is the answer to PushedTemplateCmd of a device without a
+// template, as fw02 gave it on PAN-OS 12.2.3 (spec 2026-10-17 C7).
+const NoTemplate = `<response status="success"><result>No template pushed to device</result></response>`
+
+// The User-ID commands of a fetch, each a show command (spec 2026-10-17 §3.2:
+// U3, U5–U9).
+const (
+	GroupMappingStatsCmd = "<show><user><group-mapping><statistics/></group-mapping></user></show>"
+	GroupMappingStateCmd = "<show><user><group-mapping><state>all</state></group-mapping></user></show>"
+	CIEStatusCmd         = "<show><user><cloud-identity-engine><status><all/></status></cloud-identity-engine></user></show>"
+	UserIDsCmd           = "<show><user><user-ids><all/></user-ids></user></show>"
+	UserAttributesCmd    = "<show><user><user-attributes><user>all</user></user-attributes></user></show>"
+	GroupListCmd         = "<show><user><group><list/></group></user></show>"
+	DUGListCmd           = `<show><user><group><list><entry name="dynamic"/></list></group></user></show>`
+	RegisteredUsersCmd   = "<show><object><registered-user><all/></registered-user></object></show>"
+)
+
+// MappingPageCmd asks a page of the user-to-IP mapping table: limit entries
+// from the entry start (spec 2026-10-17 U1).
+func MappingPageCmd(limit, start int) string {
+	return fmt.Sprintf("<show><user><ip-user-mapping-mp><all/><limit>%d</limit><start-point>%d</start-point></ip-user-mapping-mp></user></show>", limit, start)
+}
+
+// The User-ID answers of every fake device, unless Ops names the command:
+// dummy data in the layouts of spec 2026-10-17 X1. Two group-mapping
+// profiles; no CIE profile, so a configuration needs no CIE domain and a
+// fetch misses no part (§3.4, SG2); three users of U3 with eight groups among
+// them, and dave in U8 alone; two DUGs; the tags of two users; and six
+// mappings in the first page of a fetch, 10,000 entries from entry 1.
+const (
+	GroupMappingStats = `<response status="success"><result>` +
+		`<entry><name>example.com</name><vsys>vsys1</vsys><groups>3</groups><last>60 secs ago(took 0 secs)</last><next>In 3540 secs</next></entry>` + "\n" +
+		`<entry><name>branch</name><vsys>vsys1</vsys><groups>1</groups><last>60 secs ago(took 0 secs)</last><next>In 3540 secs</next></entry>` + "\n" +
+		`</result></response>`
+
+	GroupMappingState = `<response status="success"><result><![CDATA[` + "\n\n" +
+		"Group Mapping(vsys1, type: active-directory): example.com \n" +
+		"\tBind DN    : svc-ldap@example.com\n" +
+		"\tBase       : dc=example,dc=com\n" +
+		"\tGroup Filter: (None)\n" +
+		"\tUser Filter: (None)\n" +
+		"\tServers    : configured 1 servers\n" +
+		"\t\t192.0.2.53(389)\n" +
+		"\t\t\tLast Action Time: 60 secs ago(took 0 secs)\n" +
+		"\t\t\tNext Action Time: In 3540 secs\n" +
+		"\tNumber of Groups: 3\n" +
+		"\tcn=domain users,cn=users,dc=example,dc=com\n" +
+		"\tcn=payroll,ou=groups,dc=example,dc=com\n" +
+		"\tcn=empty,ou=groups,dc=example,dc=com\n" +
+		"\n" +
+		"Group Mapping(vsys1, type: active-directory): branch \n" +
+		"\tBind DN    : svc-ldap@example.com\n" +
+		"\tBase       : ou=branch,dc=example,dc=com\n" +
+		"\tGroup Filter: (None)\n" +
+		"\tUser Filter: (None)\n" +
+		"\tServers    : configured 1 servers\n" +
+		"\t\t192.0.2.54(389)\n" +
+		"\t\t\tLast Action Time: 60 secs ago(took 0 secs)\n" +
+		"\t\t\tNext Action Time: In 3540 secs\n" +
+		"\tNumber of Groups: 1\n" +
+		"\tcn=branch staff,ou=branch,dc=example,dc=com\n" +
+		"\n]]></result></response>"
+
+	CIEStatus = `<response status="success"><result>` +
+		"Name\t\tVsys\tGroups\t\tLast-Action\t\tNext-Action\n" +
+		"------------------------------------------------------------------------------\n" +
+		`</result></response>`
+
+	UserIDs = `<response status="success"><result><![CDATA[` + "\n" +
+		"User Name                         Vsys    Groups\n" +
+		"------------------------------------------------------------------\n" +
+		"example.com\\alice                 vsys1                           cn=domain users,cn=users,dc=example,dc=com \n" +
+		"                                                                cn=payroll,ou=groups,dc=example,dc=com \n" +
+		"example.com\\bob                   vsys1                           cn=domain users,cn=users,dc=example,dc=com \n" +
+		"                                                                cn=branch staff,ou=branch,dc=example,dc=com \n" +
+		"                                                                team-x \n" +
+		"example.com\\carol                 vsys1                           cn=domain users,cn=users,dc=example,dc=com \n" +
+		"                                                                engineering \n" +
+		"                                                                dug-a \n" +
+		"                                                                dug-ab \n" +
+		"\nTotal: 3\n* : Custom Group\n\n]]></result></response>"
+
+	UserAttributes = `<response status="success"><result>` + "\n" +
+		"Primary: example.com\\alice\tEmail: alice@example.com\n" +
+		"Alt User Names: \n" +
+		"1) alice@example.com\n" +
+		"\n" +
+		"Primary: example.com\\bob\tEmail: robert@example.com\n" +
+		"Alt User Names: \n" +
+		"1) bob@example.com\n" +
+		"\n" +
+		"Primary: example.com\\carol\t\n" +
+		"\n" +
+		"Primary: example.com\\dave\t\n" +
+		"Alt User Names: \n" +
+		"1) dave@example.com\n" +
+		`</result></response>`
+
+	GroupList = `<response status="success"><result><![CDATA[` + "\n" +
+		"cn=domain users,cn=users,dc=example,dc=com \n" +
+		"cn=payroll,ou=groups,dc=example,dc=com \n" +
+		"cn=empty,ou=groups,dc=example,dc=com \n" +
+		"cn=branch staff,ou=branch,dc=example,dc=com \n" +
+		"engineering \n" +
+		"team-x \n" +
+		"dug-a \n" +
+		"dug-ab \n" +
+		"\nTotal: 8\n* : Custom Group\n\n]]></result></response>"
+
+	DUGList = `<response status="success"><result><![CDATA[` + "\n" +
+		"dug-a \n" +
+		"dug-ab \n" +
+		"\nTotal: 2\n* : Custom Group\n\n]]></result></response>"
+
+	RegisteredUsers = `<response status="success"><result>` +
+		`<entry user="example.com\carol">` + "\n<tag>\n<member>tag-a</member>\n<member>tag-b</member>\n</tag>\n</entry>\n" +
+		`<entry user="example.com\dave">` + "\n<tag>\n<member>tag-a</member>\n</tag>\n</entry>\n" +
+		"<count>2</count>\n</result></response>"
+
+	Mappings = `<response status="success"><result>` +
+		`<entry><ip>198.51.100.11</ip><vsys>vsys1</vsys><type>XMLAPI</type><user>example.com\alice</user><timeout>14400</timeout><origin>203.0.113.5</origin></entry>` + "\n" +
+		`<entry><ip>198.51.100.10</ip><vsys>vsys1</vsys><type>XMLAPI</type><user>example\alice</user><timeout>14400</timeout><origin>203.0.113.5</origin></entry>` + "\n" +
+		`<entry><ip>198.51.100.13</ip><vsys>vsys1</vsys><type>XMLAPI</type><user>example.com\carol</user><timeout>14400</timeout><origin>203.0.113.5</origin></entry>` + "\n" +
+		`<entry><ip>198.51.100.12</ip><vsys>vsys1</vsys><type>XMLAPI</type><user>other\ghost</user><timeout>14400</timeout><origin>203.0.113.5</origin></entry>` + "\n" +
+		`<entry><ip>2001:db8::11</ip><vsys>vsys1</vsys><type>XMLAPI</type><user>example.com\bob</user><timeout>14400</timeout><origin>203.0.113.5</origin></entry>` + "\n" +
+		`<entry><ip>198.51.100.14</ip><vsys>vsys1</vsys><type>XMLAPI</type><user>example.com\dave</user><timeout>14400</timeout><origin>203.0.113.5</origin></entry>` + "\n" +
+		"<count>6</count>\n<total>6</total>\n</result></response>"
+)
+
 // defaults are the answers every fake device gives unless Ops names the
 // command.
 var defaults = map[string]string{
-	PredefinedCmd:   PredefinedServices,
-	ApplicationsCmd: Applications,
-	ContainersCmd:   Containers,
+	PredefinedCmd:            PredefinedServices,
+	ApplicationsCmd:          Applications,
+	ContainersCmd:            Containers,
+	GroupMappingStatsCmd:     GroupMappingStats,
+	GroupMappingStateCmd:     GroupMappingState,
+	CIEStatusCmd:             CIEStatus,
+	UserIDsCmd:               UserIDs,
+	UserAttributesCmd:        UserAttributes,
+	GroupListCmd:             GroupList,
+	DUGListCmd:               DUGList,
+	RegisteredUsersCmd:       RegisteredUsers,
+	MappingPageCmd(10000, 1): Mappings,
 }
 
 // Success wraps a result the way PAN-OS does.
@@ -123,9 +279,13 @@ func (d *Device) serve(w http.ResponseWriter, r *http.Request) {
 		Method: r.Method, Type: r.Form.Get("type"), Cmd: r.Form.Get("cmd"),
 		Key: r.Header.Get("X-PAN-KEY"), RawQuery: r.URL.RawQuery, Body: string(body),
 	})
+	cmd := r.Form.Get("cmd")
 	drop := d.DropFirst > 0
 	if drop {
 		d.DropFirst--
+	} else if d.DropCmd[cmd] > 0 {
+		d.DropCmd[cmd]--
+		drop = true
 	}
 	truncate := !drop && d.TruncateFirst > 0
 	if truncate {
@@ -133,7 +293,7 @@ func (d *Device) serve(w http.ResponseWriter, r *http.Request) {
 	}
 	d.mu.Unlock()
 
-	if d.Stall != "" && r.Form.Get("type") == d.Stall {
+	if d.Stall != "" && (r.Form.Get("type") == d.Stall || cmd == d.Stall) {
 		<-r.Context().Done()
 		return
 	}
@@ -174,9 +334,9 @@ func (d *Device) serve(w http.ResponseWriter, r *http.Request) {
 	}
 	switch r.Form.Get("type") {
 	case "op":
-		resp, ok := d.Ops[r.Form.Get("cmd")]
+		resp, ok := d.Ops[cmd]
 		if !ok {
-			resp, ok = defaults[r.Form.Get("cmd")]
+			resp, ok = d.answer(cmd)
 		}
 		if !ok {
 			_, _ = io.WriteString(w, Refusal("17", "show -> invalid syntax"))
@@ -194,4 +354,20 @@ func (d *Device) serve(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		_, _ = io.WriteString(w, Refusal("400", "unsupported type"))
 	}
+}
+
+// answer is the device's own answer to an op command that Ops does not name:
+// the running configuration, the pushed template, or a default.
+func (d *Device) answer(cmd string) (string, bool) {
+	switch cmd {
+	case RunningConfigCmd:
+		return Success(d.Config), true
+	case PushedTemplateCmd:
+		if d.Template == "" {
+			return NoTemplate, true
+		}
+		return Success(d.Template), true
+	}
+	resp, ok := defaults[cmd]
+	return resp, ok
 }

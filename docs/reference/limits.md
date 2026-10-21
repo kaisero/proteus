@@ -25,20 +25,42 @@ entry. The sections below group the limits by command.
   to the configuration keeps a rule that names one, or a service group that
   holds one, in doubt.
 - **External dynamic lists.** The firewall fetches their contents at runtime.
-- **User-to-group mapping.** It comes from User-ID. Give Proteus a
-  [user snapshot](configuration.md#the-user-snapshot).
+- **Users, groups and mappings come from the device.** The user-to-group and
+  user-to-address mappings come from User-ID. `fetch` stores them with each
+  snapshot of a single-vsys firewall, and `--file` reads `identity.json.gz` beside
+  the configuration. Without the data, a rule that names a user or a group stays
+  in doubt. See [Users](#users).
+- **Template values come from the pushed template.** The running configuration
+  does not hold the values of a Panorama template. `fetch` merges them from
+  `show config pushed-template` by the schema's template-object mark, and a local
+  value wins, as on the firewall. A template that pushes an interface, and a
+  template with variables, were not seen on a device.
+
+## Fetch
+
+- **A firewall that refuses `show config running` gives the export.** The snapshot
+  then holds the configuration export, which can hold uncommitted changes, with
+  `note.config-not-running`.
+- **The configuration switch was measured on fw01.** On fw01 (PAN-OS 11.2.5),
+  2026-10-18, the stored configuration held none of 3 uncommitted changes, and the
+  export held all 3. Every leaf of the running configuration stayed unchanged.
+  Against the firewall's own effective running configuration, only the expected
+  classes differed, such as Panorama device-group content. 15 of 15 interfaces
+  with a zone agreed. Across the switch, `snapshot diff` showed 44 template values
+  as added and 1 empty element as removed.
 
 ## simulate policy
 
 - **No return path.** Only the forward path is checked. Asymmetric routing is not
   detected.
 - **Doubtful rules can leave a hop undecided.** Absent services, predefined
-  services the snapshot does not hold, user, HIP, schedule, PAN-DB URL categories,
+  services the snapshot does not hold, HIP, schedule, PAN-DB URL categories,
   regions, external dynamic lists and dynamic address groups are not evaluated. A
   rule that names one of them before the match makes the hop undecided, unless it
   has the same action as the match. The application and `application-default` are
   evaluated with `--application` and App-ID data; see
-  [Applications](#applications).
+  [Applications](#applications). The source user is evaluated with User-ID data;
+  see [Users](#users).
 - **Default-rule overrides that disagree.** When the local and the pushed override
   of a default rule have different actions, the hop is undecided. The precedence is
   not verified on a Panorama-managed firewall.
@@ -130,6 +152,78 @@ evaluated:
 `test security-policy-match`, flow by flow. On fw02 (PAN-OS 12.2.3), 2026-10-17,
 all 108 flows agreed: the rule, the action and the implicit marker. See
 `docs/lab/app-id-lab.md`.
+
+## Users
+
+`simulate policy` matches the `source-user` of each rule against the user of the
+flow, with the User-ID data of the snapshot. These cases stay in doubt or are not
+evaluated:
+
+- **No User-ID data.** A snapshot without `identity.json.gz`, or `--file` without
+  the file beside the configuration, keeps a rule that names a user or a group in
+  doubt. A file that Proteus cannot read gives `gap.no-user-directory` with the
+  cause, and the answer is the same.
+- **A firewall with several vsys.** `fetch` stores no User-ID data for it, with
+  `note.identity-multi-vsys`. The User-ID hub is not modelled.
+- **Cloud Identity Engine groups.** A rule that names a CIE group stays a candidate
+  with `doubt.user-cie-group`. It never decides. The lab profiles never synced, so
+  no CIE group was seen on a device.
+- **Dynamic user groups.** Their members come from the firewall's own user list.
+  A user that the list does not show is in no dynamic user group. Proteus does not
+  evaluate the tag filter of a group.
+- **No user.** A flow without `--user` and without a mapping matches `any` and
+  `unknown`, and not `known-user`, as the PAN-OS admin guide defines them. The
+  firewall's `test security-policy-match` matches `known-user` here, and no traffic
+  test confirms `unknown`. The answer is `inferred` when a candidate names a user.
+- **`pre-logon`.** `--user pre-logon` matches a `pre-logon` rule only, and neither
+  `known-user` nor `unknown`. No traffic test confirms it, so the answer is
+  `inferred` when a candidate names a user.
+- **An email as `--user`.** Proteus reads it as the primary name of its user. An
+  email that is no alternate name of the user makes the answer `inferred`: on the
+  lab firewall each email was also an alternate name, so no device was seen to
+  resolve an email. An email that is also an alternate name, such as the UPN,
+  stays `exact`. An email in a rule matches no user.
+- **A short name in doubt.** A rule that names a short name `<domain>\<cn>`,
+  when the data cannot resolve it to one group, stays a candidate with
+  `doubt.user-data-missing`. This happens when the domain of the group-mapping
+  profile is not known, when two groups have that cn, or when `sources.ldap` is
+  missing. A user of the same text does not decide the rule either. No device
+  showed two groups with one cn (`docs/todo.md` item 82).
+- **A local user group as `--user`.** Proteus matches a rule that names the group
+  by its text. No device fact shows what the firewall does.
+- **A hop after NAT.** In path mode, a hop after source NAT looks up the
+  translated address in its own mappings. No lab path with NAT and User-ID showed
+  this, so a hop that judges a user is `inferred`.
+- **Policy-based forwarding.** A PBF rule that names a user stays in doubt.
+- **The age of a mapping.** A mapping is as old as its snapshot. A user can log
+  off or log in after the fetch. The stored timeout is the login timeout, and it
+  does not count down.
+- **A missing or partial part.** When the firewall refused a command, or Proteus
+  could not read an answer, that part of the data is missing. A rule member that
+  the part would decide stays in doubt (`doubt.user-data-missing`). A mapping
+  table that `fetch` cut or read while it changed makes a source without a
+  mapping a user in doubt: the answer is `inferred`, with
+  `note.identity-part-missing`.
+- **Nested groups.** Proteus takes the groups of a user as the firewall lists
+  them, nested groups included. The lab directory showed nesting only with the
+  Active Directory default, where the builtin Users group holds Domain Users.
+- **An XML API group message.** After a User-ID `<groups>` message, the firewall
+  shows its members without alternate names and email until the next
+  group-mapping refresh. A snapshot of that time cannot read a UPN of those users
+  as their primary name.
+
+### Measured agreement on fw01
+
+`make uid-lab` compares the User-ID answers of Proteus with the device's own
+answers, case by case. On fw01 (PAN-OS 11.2.5), 2026-10-19, all 56 cases passed:
+
+- 45 policy flows. 41 agreed by rule and action. One of them agreed on its second
+  try, because the device applies new User-ID data late. For 4 flows the check
+  records the device answer only: 3 flows with no user, which Proteus marks
+  `inferred`, and 1 rule with a CIE group, which Proteus keeps in doubt.
+- 3 users: the primary name, the alternate names and the groups agreed.
+- 4 addresses: the mapped user and its type, or no mapping, agreed.
+- 4 groups: the source and the members agreed.
 
 ## simulate nat
 
@@ -237,3 +331,9 @@ categories only.
 ## Memory
 
 A parsed configuration uses about ten times the size of the file.
+
+A configuration of a firewall that Panorama manages holds the template values
+too, so it is larger than the export. The answer of `show config running` is
+indented, so each file holds more bytes than the compact export for the same
+tree. A snapshot then takes more disk, more memory and more load time than one
+of an older release.

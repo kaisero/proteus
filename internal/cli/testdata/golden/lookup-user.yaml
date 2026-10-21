@@ -1,0 +1,62 @@
+format: 2
+command: lookup
+detail: full
+input:
+  expand: false
+  full: false
+  kind: identity-user
+  limit: 0
+  name: alice@example.com
+  selection:
+    file: TMP
+results:
+  - answer: 'file/vsys1: identity-user example.com\alice'
+    device: file
+    vsys: vsys1
+    scope: vsys:vsys1
+    card:
+      kind: identity-user
+      name: example.com\alice
+      sections:
+        - title: primary
+          rows:
+            - label: ""
+              text: example.com\alice
+        - title: alternate names
+          rows:
+            - label: ""
+              items:
+                - name: alice@example.com
+        - title: email
+          rows:
+            - label: ""
+              text: alice@example.com
+        - title: groups
+          rows:
+            - label: ""
+              items:
+                - name: cn=domain users,cn=users,dc=example,dc=com
+                  value: ldap:example.com
+                - name: cn=payroll,ou=groups,dc=example,dc=com
+                  value: ldap:example.com
+        - title: mapped addresses
+          rows:
+            - label: ""
+              items:
+                - name: 198.51.100.11
+                  value: XMLAPI, timeout 14400 s
+        - title: tags
+          rows: []
+summary:
+  answer: 1 with it, 0 without, 0 holes
+  found: 1
+  with: 1
+  without: 0
+  omitted: 0
+holes: []
+unresolved: []
+notes:
+  - device: file
+    vsys: vsys1
+    code: note.identity-file
+    text: identity data taken 2026-10-17T20:00:00Z from TMP

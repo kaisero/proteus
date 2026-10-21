@@ -23,7 +23,7 @@ func appStore(t *testing.T) *store.Store {
 	}
 	st = st.WithClock(func() time.Time { return t0 })
 	for _, m := range []store.Meta{{Device: "fw01", AppVersion: "8000-1000"}, {Device: "fw02"}} {
-		if _, err := st.Write(m, map[string][]byte{store.ConfigDoc: fixture(t, "firewall-zones.xml")}, 20); err != nil {
+		if _, err := st.Write(m, map[string][]byte{store.ConfigDoc: fixture(t, "firewall-zones.xml")}, nil, 20); err != nil {
 			t.Fatal(err)
 		}
 	}

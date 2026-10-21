@@ -28,20 +28,25 @@ simulate routing <src> <dst>                the firewalls a packet crosses, hop 
 simulate nat <src> <dst> --device <fw>      the NAT rule and the translated packet
 ```
 
-- **Two question verbs.** `search` answers "where does this appear" in five stages:
-  objects by value, objects by name, groups, references, literals. Rules whose field
+- **Two question verbs.** `search` answers "where does this appear" in its stages:
+  objects by value, objects by name, identity (with User-ID data), groups,
+  references, literals. Rules whose field
   is `any` are not in it; `simulate` answers "what would this traffic hit".
 - **Selectors** on `search`, `lookup` and `snapshot`: `--device`, `--label k=v`
   (AND), `--vsys`, `--at <time>`, `--fresh`, `--file <config.xml>`. No selector means
   every device. The `simulate` commands take their own subsets (below).
 - **Search modes:** the term's type sets the match (address covers, prefix overlaps,
   port covers, URL by tokens, else exact); `--exact`, `--within`, `--contains`
-  override. Filters: `--kind`, `--field`, `--show objects,groups,refs,literals`,
-  `--direct`.
+  override. Filters: `--kind`, `--field`, `--show objects,identity,groups,refs,literals`,
+  `--direct`. With User-ID data, a user term (primary name, UPN, email) gives the
+  user's groups, the rules that name them and its mapped addresses; one address
+  gives its mapped user.
 - **`lookup <name>`** prints a rule as the rule editor lays it out, or an object
   with its value, members and holding groups; with App-ID data also a predefined
   application, a container, and a filter with the applications it selects (20 in
-  text, all with `--full`; `--kind application`). The kind is inferred; a name several
+  text, all with `--full`; `--kind application`); with User-ID data also a user
+  (`--kind identity-user`) and a group with its members (`--kind identity-group`,
+  20 in text, all with `--full`). The kind is inferred; a name several
   kinds share exits 2 until `--kind` picks one; found nowhere exits 0 with empty
   `results`. `--expand`
   shows values in parentheses and groups as trees (three levels); lists stop at five
@@ -71,6 +76,12 @@ simulate nat <src> <dst> --device <fw>      the NAT rule and the translated pack
   the header prints `Verdict.Protocol`; `simulate routing` and `nat` keep `tcp`.
   An unknown or container application exits 2 with `--file` (up to five
   suggestions) and leaves the hop undecided in path mode.
+  **`--user`** (spec 2026-10-17 §5) is evaluated with User-ID data: path mode
+  reads each hop's snapshot data, `--file` reads `identity.json.gz` beside the
+  configuration (`note.identity-file`). The mapping of the source address wins over
+  `--user`; the text adds a `user` row (`userLine`) per check, in path mode a
+  `user` row per hop box. `--user any|known-user|unknown` exits 2; a hop after
+  source NAT that judges a user is `inferred` (`note.user-after-nat`).
   Its text ends with `first match: <rule> (<action>)` or `first certain match:` and
   `undecided:`. Both modes share one JSON security block (`securityJSON`).
   `scripts/device-probe.sh <config> <vsys>` reads the `--file` text;
@@ -139,14 +150,14 @@ simulate nat <src> <dst> --device <fw>      the NAT rule and the translated pack
   sets the exit from the qualifiers. It also needs a row in `contractRows`
   (`contract_test.go`) and goldens.
 - **`fetch --why`** prints each device's stages, `resolve`, `login`, `ha`,
-  `documents`, `applications`, `store`, with status (`ok`, `partial`, `skipped`, `failed`) and
+  `documents`, `template`, `applications`, `identity`, `store`, with status (`ok`, `partial`, `skipped`, `failed`) and
   detail; JSON always carries them as `stages`. On a terminal a progress line per
   finished stage goes to stderr.
 - **Settings**, rising precedence default < inventory `defaults:` < `PROTEUS_*` <
   flag: inventory path, store root, `max_snapshot_age`, output, color, and the run log's
-  `log_level`, `log_dir`, `log_keep` (plus `--verbose`). `PROTEUS_USERS` names a user
-  snapshot, read per command run, and once at start by `proteus mcp` (a bad file
-  exits 2); a stored forwarding table supplies zones.
+  `log_level`, `log_dir`, `log_keep` (plus `--verbose`). The User-ID data comes
+  with each snapshot, or from `identity.json.gz` beside a `--file` configuration;
+  `PROTEUS_USERS` is gone. A stored forwarding table supplies zones.
 - **Run log:** one file per run under `log_dir`, `<time> [<LEVEL>] [<TAG>] <msg>`,
   tags `RUN`, `API`, `SNAP`, `FIND`, `STEP`; secrets redacted; the path is printed
   when a run exits non-zero. Help, completion and a bare group write no log and

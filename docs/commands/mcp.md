@@ -16,8 +16,8 @@ proteus mcp --http [flags]
 | `simulate_policy` | Does the estate allow this flow, and which rule decides on each hop? | [`simulate policy`](simulate-policy.md) |
 | `simulate_routing` | Which firewalls does this packet cross? | [`simulate routing`](simulate-routing.md) |
 | `simulate_nat` | Which NAT rule does this packet hit on one firewall, and how is it translated? | [`simulate nat`](simulate-nat.md) |
-| `search` | Where does this address, prefix, port or name appear? | [`search`](search.md) |
-| `lookup` | What does this rule or object contain? | [`lookup`](lookup.md) |
+| `search` | Where does this address, prefix, port, name, user or group appear? | [`search`](search.md) |
+| `lookup` | What does this rule, object, user or group contain? | [`lookup`](lookup.md) |
 | `snapshot_diff` | What changed on a device between two snapshots? | [`snapshot diff`](snapshot.md) |
 
 The server reads the snapshot store only, so `simulate policy --file` has no tool.
@@ -42,13 +42,15 @@ before `at`. A date in `at` means the end of that day.
 | `protocol` left out in `simulate_policy` without `application` | no default; a rule that needs the protocol holds the answer back, and `needs` asks for it |
 | `application` | a predefined or custom application, matched with the App-ID data of each hop's snapshot; see [simulate policy](simulate-policy.md#applications) |
 | `application` that a hop's data does not hold | that hop stays undecided |
+| `user` | the source user: a primary name such as `example.com\alice`, a UPN or an email, matched with the User-ID data of each hop's snapshot; the mapping of the source address wins; `any`, `known-user` and `unknown` are refused; see [simulate policy](simulate-policy.md#users) |
 | `device` | an enum of the exported devices; the client sees the names in the input schema, and the server refuses any other name |
 | `detail` | `summary` (the default) or `full` |
 | `limit` | 1 or more, with no default; it keeps the first N results over all devices together |
 
 `search` and `lookup` find applications, filters and containers with the App-ID
-data, as the command line does. The input schema of each tool describes what
-Proteus evaluates for each input.
+data, and users, groups and mapped addresses with the User-ID data, as the
+command line does. The input schema of each tool describes what Proteus
+evaluates for each input.
 
 A result for `limit` is a finding for `search`, a card for `lookup`, and a single
 change for `snapshot_diff`. In `snapshot_diff`, the scope where the limit falls
@@ -311,10 +313,6 @@ lists every key, its variable and its flag.
 | `--max-loads` | `2` | snapshot loads and index builds at once |
 | `--max-cache` | `2048` | the cache of loaded snapshots, in MB |
 
-The server reads the [user snapshot](../reference/configuration.md#the-user-snapshot)
-that `PROTEUS_USERS` names once, at start. Every call answers from that copy, so a
-changed file needs a server restart.
-
 SIGTERM stops new calls and lets the running calls answer. An answer is written at
 most `call_timeout` + `max_wait` + 10 s after its request. The whole stop ends
 within that time, also when a call's work does not return or a client keeps its
@@ -332,8 +330,11 @@ The cache keeps each loaded snapshot and its indexes. It counts these items:
 | a loaded configuration | 32 MB plus 13 times its file size |
 | the schema digest | 10 MB, once |
 | an App-ID content version | 12 MB; the devices with one content version share its item |
+| the User-ID data of a snapshot | 12 KB, plus 80 bytes per mapping, 456 bytes per user and per group, and 40 bytes per membership: a user–group pair or a user–tag pair |
 
-The cache frees an old content version as it frees an old snapshot. Size
+The cache frees an old content version as it frees an old snapshot. It loads the
+User-ID data of a snapshot only for a question that needs it, and frees it as
+it frees an old snapshot. Size
 `--max-cache` with that model and the number of devices. For example, 20 devices
 with 8 MB configurations and two content versions need about
 20 × (32 + 13 × 8) + 10 + 2 × 12 = 2,754 MB.
@@ -347,6 +348,8 @@ shapes at about 4 and 8 MB:
 | four vsys with nested groups and NAT and PBF rules | 0.35 MB plus 12.7 bytes per file byte |
 | the schema digest | about 9 MB; the benchmark fails above 10 MB |
 | one content version of 5,552 applications | about 9 MB; the benchmark fails above 12 MB |
+| User-ID data of 1,000 users with 20 groups each and 10,000 mappings | about 2.0 MB |
+| User-ID data of 10,000 users with 50 groups each and 100,000 mappings | about 25 MB |
 
 The model takes the larger value of each part, rounded up, so it overstates most
 configurations: a small one by up to 32 MB.
@@ -363,7 +366,6 @@ The server checks its setup before it answers, and a failed check stops it:
 | 2 | the export holds a credential, cannot be parsed, or has no device |
 | 2 | `--http` without a token, with a token shorter than 32 bytes, or without `audit_log` |
 | 2 | `audit_log: -` over stdio, where standard output carries MCP |
-| 2 | the `PROTEUS_USERS` file is missing, cannot be read, or is not a valid user snapshot |
 | 130 | Ctrl-C |
 | 143 | SIGTERM, after the running calls answer |
 

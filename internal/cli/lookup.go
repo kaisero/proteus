@@ -14,12 +14,14 @@ import (
 )
 
 // Limits of a rendered card (spec §16 K3, K5). A filter card shows the first
-// 20 applications the filter selects (spec 2026-10-16 §5.2, C5). --full lifts
-// each limit; JSON always carries the whole card.
+// 20 applications the filter selects (spec 2026-10-16 §5.2, C5), and a group
+// card of the identity data the first 20 members (spec 2026-10-17 §6.2).
+// --full lifts each limit; JSON always carries the whole card.
 const (
-	maxItems      = 5
-	maxDepth      = 3
-	maxFilterApps = 20
+	maxItems        = 5
+	maxDepth        = 3
+	maxFilterApps   = 20
+	maxGroupMembers = 20
 )
 
 // lookupOptions are lookup's flags.
@@ -39,10 +41,13 @@ func (a *app) lookupCmd() *cobra.Command {
 		Long: "Lookup prints the element a search result points to: a security rule laid out\n" +
 			"like the firewall's rule editor, or an object with its value, its members and the\n" +
 			"groups holding it. With the device's App-ID data, it also prints a predefined\n" +
-			"application, an application container, and the applications a filter selects.\n\n" +
+			"application, an application container, and the applications a filter selects.\n" +
+			"With the device's identity data, it prints a user with its groups, mapped\n" +
+			"addresses and tags, and a group with its source and members.\n\n" +
 			"The kind is inferred from the name. When several kinds share the name, --kind\n" +
 			"picks one. --expand shows each name's value and every group's members; --full\n" +
-			"lifts the five-item limit on lists and the 20-application limit of a filter.",
+			"lifts the five-item limit on lists, the 20-application limit of a filter and\n" +
+			"the 20-member limit of a group of the identity data.",
 		Args: args(cobra.ExactArgs(1)),
 		RunE: func(c *cobra.Command, argv []string) error {
 			o.name = argv[0]
@@ -51,7 +56,7 @@ func (a *app) lookupCmd() *cobra.Command {
 	}
 	o.sel.bind(cmd, selectOpts{file: true, at: true, fresh: true})
 	f := cmd.Flags()
-	f.StringVar(&o.kind, "kind", "", "the kind of element: security-rule, application or another object kind")
+	f.StringVar(&o.kind, "kind", "", "the kind of element: security-rule, application, identity-user, identity-group or another object kind")
 	f.BoolVar(&o.expand, "expand", false, "show each name's value and every group's members")
 	f.BoolVar(&o.full, "full", false, "show every item of a list")
 	bindLimit(cmd, &o.limit)
@@ -156,6 +161,10 @@ func (r renderer) card(c card.Card) {
 		}
 	}
 	fmt.Fprintln(r.w)
+	if c.Kind == card.KindIdentityUser || c.Kind == card.KindIdentityGroup {
+		r.identitySections(c)
+		return
+	}
 	for _, s := range c.Sections {
 		limit := maxItems
 		if c.Kind == card.KindFilter && s.Title == "applications" {
@@ -167,6 +176,47 @@ func (r renderer) card(c card.Card) {
 				title = s.Title
 			}
 			r.row(title, row, c.Kind != card.KindRule, limit)
+		}
+	}
+}
+
+// identityTitleWidth is the title column of an identity card: "mapped
+// addresses ".
+const identityTitleWidth = 17
+
+// identitySections writes the sections of an identity card, one line per
+// item, with its value in parentheses: a group DN holds commas, so a list on
+// one line would not read. A group card cuts its members at maxGroupMembers
+// unless --full (spec 2026-10-17 §6.2). An empty section reads none.
+func (r renderer) identitySections(c card.Card) {
+	for _, s := range c.Sections {
+		var lines []string
+		for _, row := range s.Rows {
+			if row.Text != "" {
+				lines = append(lines, row.Text)
+				continue
+			}
+			items, more := row.Items, 0
+			if c.Kind == card.KindIdentityGroup && s.Title == "members" {
+				items, more = r.cutAt(items, maxGroupMembers)
+			}
+			for _, it := range items {
+				l := it.Name
+				if it.Value != "" {
+					l += " (" + it.Value + ")"
+				}
+				lines = append(lines, l)
+			}
+			if more > 0 {
+				lines = append(lines, fmt.Sprintf("… (+%d more)", more))
+			}
+		}
+		if len(lines) == 0 {
+			lines = []string{"none"}
+		}
+		fmt.Fprintf(r.w, "  %-*s%s\n", identityTitleWidth, s.Title, lines[0])
+		for _, l := range lines[1:] {
+			fmt.Fprintf(r.w, "  %*s%s\n", identityTitleWidth, "", l)
 		}
 	}
 }

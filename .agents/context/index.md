@@ -59,11 +59,13 @@ Repo map:
   `filter.go` (tag filters), `urlpattern.go`, `profiles.go`, `zones.go`.
 - `internal/index/` — `index.go` (build + cache), `candidates.go` (the driver),
   `resolver*.go` (one file per value space), `closure.go`, `cidr.go`, `rules.go`,
-  `refs.go`, `profileuse.go`, `snapshot.go`, `intern.go`.
+  `refs.go`, `profileuse.go`, `zonesnapshot.go`, `intern.go`.
 - `internal/schema`, `internal/digest` — schema parsing and the digest format;
   `internal/tools/schemadigest` — the dev tool that writes a digest. `internal/archtest` — the R12 import check.
 - `internal/reason/` — reason codes: `{code, text}` and the closed registry; stdlib only.
 - `internal/appid/` — the App-ID content file: `format.go` (`Trim`, `Encode`, `TrimVersion`, `FileName`), `parse.go` (`Parse`, `Load`, `Data`, `CustomDefault`), `filter.go` (`Filter.Selects`), `ports.go` (`Default.Match`, `ProtocolNumber`); stdlib and `reason` only. `internal/tools/applab` — the App-ID lab check, `make app-lab`, never in CI.
+- `internal/identity/` — the identity file of a snapshot (User-ID data): `format.go` (`File`, `Encode`, `Read`, `Load`, the parts, `FileName`), `parse.go` (the parsers of the device answers), `assemble.go` (`Assemble`, `Classify`), `data.go` (`Data`: `Resolve`, `User`, `Member`, `InGroup`, `Mapping`, `Counts`), `diff.go` (`Diff`); stdlib and `reason` only.
+- `internal/tools/labkit` — the device side of the lab tools: the guarded client (`<show>` and `<test><security-policy-match>` only), the variables, the key header, the snapshot copy, the lab-data check. `internal/tools/uidlab` — the User-ID lab check, `make uid-lab`, never in CI; it reads the tracked placeholder files `docs/lab/user-id-*`.
 - `internal/task/` — staged operations: `Run` runs named steps in order, records
   each step's status, detail and time, logs them, and stops at the first error.
   `fetch` uses it per device.
@@ -71,7 +73,7 @@ Repo map:
 - `internal/mcp/` — the MCP server: six tools over `query`, schemas generated at start (the same generator writes `schemas/out/`, `go test ./internal/mcp -update`), device enum from the exported inventory, resources and instructions, and a receiving middleware that audits each call and turns a panic into `call.internal` (it panics on in a test binary). `Serve(ctx, Options, transport)`, `Streams(r, w)` for stdio, `ServeHTTP` (bearer token, Host check when `allowed_hosts` is set, `/healthz`, refusals counted by status in the process log); every tool annotated read-only; a snapshot cache with a load semaphore, a call limiter, the audit (a file rotated by size and count, or a stream such as standard output) and per-call run logs buffered in memory and written only for `internal` and `timeout` calls, or every call at debug. The only importer of the SDK and jsonschema-go. User docs: `docs/commands/mcp.md`.
 - `internal/estate/` — selectors and a time to targets and holes; `internal/search/` — five-stage findings for one term; `internal/card/` — the whole element behind one name, for `lookup`; `internal/drift/` — changes between two configurations.
 - `internal/inventory/` — the YAML device list and credentials; `internal/fetch/` — the read-only XML
-  API client and the `Document` list; `internal/store/` — timestamped snapshots, `latest`.
+  API client, the `Document` list, the template merge (`MergeTemplate`) and the identity step; `internal/store/` — timestamped snapshots, `latest`.
 - `cmd/proteus` — `main` only; the commands (fetch, snapshots, search, lookup,
   simulate) live in `internal/cli`.
 - `scripts/` — `coverage-gate.sh`, `device-probe.sh`, `context-api.py`.
@@ -98,6 +100,9 @@ Hard invariants:
 - [app-id](app-id.md): `internal/appid`, the App-ID content file per content
   version, how fetch stores it, and how the simulator, search, lookup and MCP use
   it.
+- [identity](identity.md): `internal/identity`, the User-ID data per snapshot,
+  how fetch reads it, the source of a group, the name rules, and how the
+  simulator, search, lookup, diff and MCP use it.
 - [simulator](simulator.md): `simulate`, `internal/simulate/securitypolicy`, `internal/simulate/routing`, `internal/simulate/nat`, `internal/simulate/topology`, `internal/simulate/rulebase`, `runlog` — the staged simulator, fidelity, the routing path, NAT, and the run log.
 - [questions](questions.md): `estate`, `search`, `card`, `drift` — how a question becomes targets, findings, cards and changes.
 - [fetch-and-store](fetch-and-store.md): the inventory, the read-only fetcher, and
@@ -107,7 +112,7 @@ Hard invariants:
 - [reporting](reporting.md): `Report`, `Hit`, `Unresolved`, and the difference
   between recognised-and-unmatched and not-recognised.
 - [providers](providers.md): facts a configuration does not hold, the `View`, and
-  the user snapshot format.
+  the identity data in `Providers.Users`.
 - [schema-digest](schema-digest.md): the digest, where it comes from, and the
   reference census.
 - [commands](commands.md): `proteus` and its subcommands.

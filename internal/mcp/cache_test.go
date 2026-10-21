@@ -17,9 +17,11 @@ import (
 	"github.com/kaisero/proteus/internal/appid"
 	"github.com/kaisero/proteus/internal/config"
 	"github.com/kaisero/proteus/internal/estate"
+	"github.com/kaisero/proteus/internal/identity"
 	"github.com/kaisero/proteus/internal/resolve"
 	"github.com/kaisero/proteus/internal/simulate/pathlab"
 	"github.com/kaisero/proteus/internal/store"
+	"github.com/kaisero/proteus/internal/testconfig"
 )
 
 // cacheLab is the lab's two snapshots and a cache over them whose loads are
@@ -31,6 +33,7 @@ type cacheLab struct {
 	cache    *Cache
 	loads    atomic.Int32
 	appLoads atomic.Int32 // of content files
+	idLoads  atomic.Int32 // of identity files
 }
 
 func newCacheLab(t *testing.T, maxBytes int64) *cacheLab {
@@ -42,11 +45,28 @@ func newCacheLab(t *testing.T, maxBytes int64) *cacheLab {
 // "" for none.
 func cacheLabOf(t *testing.T, apps string, maxBytes int64) *cacheLab {
 	t.Helper()
-	env := labEnvApps(t, apps, snap{pathlab.FW01, pathlab.ConfigFile(pathlab.FW01)}, snap{pathlab.FW02, pathlab.ConfigFile(pathlab.FW02)})
+	return cacheLabWith(t, apps, nil, maxBytes)
+}
+
+// identityLab is a cache lab whose snapshots each hold the identity fixture.
+func identityLab(t *testing.T, maxBytes int64) *cacheLab {
+	t.Helper()
+	return cacheLabWith(t, "", pathlab.Read(t, identityFixture(t)), maxBytes)
+}
+
+// cacheLabWith is cacheLabOf whose snapshots each hold the identity file ids;
+// nil for none.
+func cacheLabWith(t *testing.T, apps string, ids []byte, maxBytes int64) *cacheLab {
+	t.Helper()
+	env := labEnvWith(t, apps, ids, snap{pathlab.FW01, pathlab.ConfigFile(pathlab.FW01)}, snap{pathlab.FW02, pathlab.ConfigFile(pathlab.FW02)})
 	l := &cacheLab{st: env.Store, cache: newCache(maxBytes, 2, 4, true)}
 	l.cache.loadApps = func(path string) (*appid.Data, error) {
 		l.appLoads.Add(1)
 		return appid.Load(path)
+	}
+	l.cache.loadIdentity = func(path string) (*identity.Data, error) {
+		l.idLoads.Add(1)
+		return identity.Load(path)
 	}
 	var err error
 	if l.fw01, err = env.Store.Latest(pathlab.FW01); err != nil {
@@ -684,4 +704,112 @@ func TestAMissingContentFileThroughTheEntry(t *testing.T) {
 	if n := l.appLoads.Load(); n != 2 {
 		t.Errorf("%d loads, want 2: the failed one and one for all callers", n)
 	}
+}
+
+// identityOf is a snapshot's identity data as a call reads it: through the
+// loader of its configuration.
+func identityOf(t *testing.T, cc *callCache, sn store.Snapshot) *identity.Data {
+	t.Helper()
+	ld, err := cc.Config(sn)
+	if err != nil || ld.Identity == nil {
+		t.Fatalf("%s: %v, loader %v", sn.Device, err, ld.Identity != nil)
+	}
+	d, err := ld.Identity()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return d
+}
+
+// identityItem is the cache key of a snapshot's identity file.
+func identityItem(sn store.Snapshot) itemKey {
+	return itemKey{kind: "identity", member: sn.Device, id: sn.ID}
+}
+
+// Two calls on one snapshot load its identity file once: the file is one
+// cache item, keyed by the device and the snapshot id, and both calls get one
+// value. Another snapshot is another item. A snapshot without the file has no
+// loader, and a file that does not exist is not kept (spec 2026-10-17 §4.2,
+// §8).
+func TestIdentityIsOneItemPerSnapshot(t *testing.T) {
+	t.Parallel()
+	l := identityLab(t, 1<<30)
+	k := identityItem(l.fw01)
+	if got := identityKey(l.fw01.IdentityPath()); got != k {
+		t.Errorf("identityKey = %+v, want %+v", got, k)
+	}
+	a := identityOf(t, l.cache.bind(context.Background()), l.fw01)
+	b := identityOf(t, l.cache.bind(context.Background()), l.fw01)
+	if a != b || l.idLoads.Load() != 1 || a.Counts().Users != 4 {
+		t.Errorf("%d loads; the same value %v", l.idLoads.Load(), a == b)
+	}
+	if v := l.cached(k); v != a {
+		t.Errorf("the item under %+v is %v", k, v)
+	}
+	cc := l.cache.bind(context.Background())
+	if d, err := cc.Identity(l.fw01.IdentityPath()); d != a || err != nil || l.idLoads.Load() != 1 {
+		t.Errorf("Identity: %v, %d loads", err, l.idLoads.Load())
+	}
+	if d := identityOf(t, cc, l.fw02); d == a || l.idLoads.Load() != 2 || l.cached(identityItem(l.fw02)) != d {
+		t.Errorf("fw02: the same value %v, %d loads", d == a, l.idLoads.Load())
+	}
+	plain := newCacheLab(t, 1<<30)
+	if ld, err := plain.cache.bind(context.Background()).Config(plain.fw01); err != nil || ld.Identity != nil {
+		t.Errorf("a snapshot without an identity file: %v, loader %v", err, ld.Identity != nil)
+	}
+	gone := filepath.Join(t.TempDir(), "fw01", "20261018T000000Z", identity.FileName)
+	if _, err := cc.Identity(gone); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("a missing file: %v", err)
+	}
+	if l.cached(identityKey(gone)) != nil {
+		t.Error("a missing file was kept")
+	}
+}
+
+// The identity item counts in the size with its estimate: past the limit,
+// the least recently used identity item goes first, before a newer one and
+// before newer configurations (spec 2026-10-17 §8).
+func TestIdentityGoesWhenOld(t *testing.T) {
+	t.Parallel()
+	l := identityLab(t, 0)
+	one, two := l.configSizes()
+	fix, err := identity.Load(identityFixture(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ids := identityBytes(fix.Counts())
+	l.cache.max = digestBytes + one + two + 2*ids - 1
+	cc := l.cache.bind(context.Background())
+	old := identityOf(t, cc, l.fw01)
+	for _, sn := range []store.Snapshot{l.fw01, l.fw02} { // the configurations are now used after it
+		if _, err := cc.Config(sn); err != nil {
+			t.Fatal(err)
+		}
+	}
+	newer := identityOf(t, cc, l.fw02)
+	if l.cached(identityItem(l.fw01)) != nil {
+		t.Error("the old identity item stayed")
+	}
+	if l.cached(identityItem(l.fw02)) != newer || newer == old {
+		t.Error("the newer identity item went")
+	}
+	for _, sn := range []store.Snapshot{l.fw01, l.fw02} {
+		if l.cached(itemKey{kind: "config", member: sn.Device, id: sn.ID}) == nil {
+			t.Errorf("%s: the configuration went", sn.Device)
+		}
+	}
+	l.cache.mu.Lock()
+	size := l.cache.size
+	l.cache.mu.Unlock()
+	if size != one+two+ids {
+		t.Errorf("size %d, want %d", size, one+two+ids)
+	}
+}
+
+// identityFixture is the path of a copy of the identity fixture, gzipped.
+func identityFixture(t *testing.T) string {
+	t.Helper()
+	p := filepath.Join(t.TempDir(), identity.FileName)
+	testconfig.Identity(t, p)
+	return p
 }

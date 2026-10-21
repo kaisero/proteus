@@ -1,6 +1,6 @@
 # lookup
 
-What does a rule, an object or an application behind a name contain?
+What does a rule, an object, an application, a user or a group behind a name contain?
 
 ## Synopsis
 
@@ -193,6 +193,61 @@ A filter shows its criteria, the number of applications it selects, and the
 groups that hold it. The count includes custom applications and the tags that
 `application-tag` adds.
 
+### Show a user
+
+```text
+$ proteus lookup 'example.com\carol' --file users/config.xml
+file / vsys1   users/config.xml
+  note: application data of content 8000-1000 from users/apps.xml.gz
+  note: identity data taken 2026-10-19T02:00:00Z from users/identity.json.gz
+  file/vsys1: identity-user example.com\carol
+identity user  example.com\carol            vsys:vsys1
+
+  primary          example.com\carol
+  alternate names  none
+  email            none
+  groups           cn=domain users,cn=users,dc=example,dc=com (ldap:example.com)
+                   engineering (xmlapi)
+                   dug-a (dug)
+                   dug-ab (dug)
+  mapped addresses 198.51.100.13 (XMLAPI, timeout 14400 s)
+  tags             tag-a
+                   tag-b
+
+1 with it, 0 without, 0 holes
+```
+
+With the device's User-ID data, lookup shows a user: the primary name, the
+alternate names, the email, the groups with their source, the mapped addresses,
+and the tags that User-ID registered for the user. The name can be the primary
+name, a UPN, an alternate name or an email, in any case. The data comes from the
+snapshot, or with `--file` from `identity.json.gz` beside the configuration (see
+[User-ID data](../concepts/snapshots.md#user-id-data)).
+
+### Show a group
+
+```text
+$ proteus lookup 'cn=domain users,cn=users,dc=example,dc=com' --file users/config.xml
+file / vsys1   users/config.xml
+  note: application data of content 8000-1000 from users/apps.xml.gz
+  note: identity data taken 2026-10-19T02:00:00Z from users/identity.json.gz
+  file/vsys1: identity-group cn=domain users,cn=users,dc=example,dc=com
+identity group  cn=domain users,cn=users,dc=example,dc=com vsys:vsys1
+
+  source           ldap:example.com
+  members          3 members
+                   example.com\alice
+                   example.com\bob
+                   example.com\carol
+
+1 with it, 0 without, 0 holes
+```
+
+A group shows its source and its members. The name takes any case, and the short
+name `example.com\domain users` names the same group. A dynamic user group of
+the configuration shows as its configuration object; `--kind identity-group`
+shows its members.
+
 ## Reading the output
 
 Each block is one device and one vsys, with the answer line of the element
@@ -229,6 +284,28 @@ Without App-ID data, lookup finds no predefined application and no container. A
 filter shows its criteria, and its applications read
 `unknown: no application data`. The note `note.app-data-missing` says so.
 
+### User and group cards
+
+| Element | The card shows |
+| --- | --- |
+| user (`identity-user`) | the primary name, the alternate names, the email, the groups and dynamic user groups with their source, the mapped addresses with their type and timeout, and the registered tags; an empty section reads `none` |
+| group (`identity-group`) | the source, the member count, and the first 20 members; `--full` shows every member |
+
+The source of a group follows from its name:
+
+| Source | Group |
+| --- | --- |
+| `ldap:<profile>` | a directory group of that group-mapping profile; `ldap` alone when the profile is not known |
+| `xmlapi` | a group that the User-ID XML API defines |
+| `dug` | a dynamic user group |
+| `cie:<profile>` | a Cloud Identity Engine group of that profile; `cie` alone when the profile is not known |
+
+lookup reads the User-ID data for `--kind identity-user` and
+`--kind identity-group`. Without `--kind`, it reads the data only when the name
+names no element of the configuration and no application. A configuration object
+of the name, such as a local user or a dynamic user group, therefore wins without
+`--kind`.
+
 ### Names that match no element or several kinds
 
 A name that lookup finds nowhere is an empty answer. Lookup prints
@@ -253,14 +330,14 @@ Lookup takes the selection flags `--device`, `--label`, `--vsys`, `--at`,
 
 | Flag | Default | Description |
 | --- | --- | --- |
-| `--kind <kind>` | inferred from the name | the kind of element: `security-rule`, `application` or another object kind |
+| `--kind <kind>` | inferred from the name | the kind of element: `security-rule`, `application`, `identity-user`, `identity-group` or another object kind |
 | `--expand` | off | shows each name's value and every group's members |
-| `--full` | off | shows every item of a list, and every application of a filter |
+| `--full` | off | shows every item of a list, every application of a filter, and every member of a group of the User-ID data |
 | `--limit N` | every card | keeps the first N cards (see [Results](../reference/output.md#results)) |
 | `--detail` | `full` | with `--output json` or `yaml`, see [Detail](../reference/output.md#detail) |
 
 `--output json` and `--output yaml` return the whole element and never cut a
-list. They hold every application of a filter.
+list. They hold every application of a filter and every member of a group.
 
 `--limit N` helps when a name is on many devices. The summary line then ends
 with `; 1 of 2 shown, narrow by device or vsys`, and `summary.omitted` in JSON
@@ -272,13 +349,16 @@ and YAML counts the cards left out.
   no application of a filter.
 - Lookup does not check that `apps.xml.gz` beside a `--file` configuration has
   the device's content version.
+- Without User-ID data, lookup shows no directory user and no group members.
 
-See [Limits](../reference/limits.md#applications).
+See [Limits: applications](../reference/limits.md#applications) and
+[Limits: users](../reference/limits.md#users).
 
 ## See also
 
 - [search](search.md)
 - [simulate policy](simulate-policy.md)
 - [App-ID data](../concepts/snapshots.md#app-id-data)
+- [User-ID data](../concepts/snapshots.md#user-id-data)
 - [Scope](../concepts/scope.md)
 - [Output and exit codes](../reference/output.md)

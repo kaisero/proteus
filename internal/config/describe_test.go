@@ -86,7 +86,11 @@ func TestLoadCountsOneUndescribedElement(t *testing.T) {
 func TestLoadFixturesUntyped(t *testing.T) {
 	t.Parallel()
 	known := map[string][]string{
-		"firewall-apps.xml":             {"/config/devices/localhost.localdomain/vsys/vsys1/application-container"},
+		"firewall-apps.xml": {"/config/devices/localhost.localdomain/vsys/vsys1/application-container"},
+		// A pushed template can hold a plugin the digest does not describe
+		// (spec 2026-10-17 C3); the template and the merge hold one.
+		"firewall-lab-template.xml":     {"/config/devices/localhost.localdomain/deviceconfig/plugins/example_plugin"},
+		"firewall-lab-merged.xml":       {"/config/devices/localhost.localdomain/deviceconfig/plugins/example_plugin"},
 		"firewall-nat-shapes.xml":       {"/config/devices/localhost.localdomain/vsys/vsys1/rulebase/nat/rules/future/source-translation/magic-ip"},
 		"firewall-nat-translations.xml": {"/config/devices/localhost.localdomain/vsys/vsys1/rulebase/nat/rules/magic/source-translation/magic-ip"},
 		"firewall-version-newfield.xml": {

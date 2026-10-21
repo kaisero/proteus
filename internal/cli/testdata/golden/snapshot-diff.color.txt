@@ -9,4 +9,6 @@
     ‹warn›changed‹/› security rule dc-to-home
       disabled: (unset) -> yes
     ‹ok›added‹/›   security rule new-rule  allow application=dns destination=any source=net-home
+  identity   no changes
+    fw01/identity: 0 added, 0 removed, 0 changed
 1 with changes, 0 without, 0 holes

@@ -1,0 +1,3 @@
+<response status="success"><result><entry><name>example.com</name><vsys>vsys1</vsys><groups>4</groups><last>60 secs ago(took 0 secs)</last><next>In 3540 secs</next></entry>
+<entry><name>branch</name><vsys>vsys1</vsys><groups>1</groups><last>60 secs ago(took 0 secs)</last><next>In 3540 secs</next></entry>
+</result></response>

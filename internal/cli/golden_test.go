@@ -13,6 +13,9 @@ import (
 	"testing"
 
 	"github.com/kaisero/proteus/internal/estate"
+	"github.com/kaisero/proteus/internal/fakepanos"
+	"github.com/kaisero/proteus/internal/simulate/pathpolicy"
+	"github.com/kaisero/proteus/internal/simulate/securitypolicy"
 	"github.com/kaisero/proteus/internal/testconfig"
 )
 
@@ -364,6 +367,142 @@ func TestGoldenApp(t *testing.T) {
 			goldenFile(t, g.name+".yaml", appPolicy(t, g.code, append(g.args, "--output", "yaml")...))
 			goldenText(t, g.name, appPolicy(t, g.code, append(g.args, "--why")...))
 		})
+	}
+}
+
+// userConfig is the User-ID fixture with its identity file beside it.
+func userConfig(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.xml")
+	if err := os.WriteFile(path, []byte(read(t, fixture("firewall-identity.xml"))), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	testconfig.Identity(t, filepath.Join(dir, estate.IdentityFile))
+	return path
+}
+
+// simulate policy with the identity data on a file (spec 2026-10-17 §5.1,
+// §5.4): a user from the mapping of the source, a UPN given as --user, and
+// no user.
+func TestGoldenUser(t *testing.T) {
+	t.Parallel()
+	for _, g := range []struct {
+		name string
+		args []string
+	}{
+		{"simulate-policy-user", []string{"198.51.100.11", "192.0.2.10"}},
+		{"simulate-policy-user-given", []string{"203.0.113.5", "192.0.2.11", "--user", "alice@example.com"}},
+		{"simulate-policy-user-none", []string{"203.0.113.5", "192.0.2.14"}},
+	} {
+		t.Run(g.name, func(t *testing.T) {
+			t.Parallel()
+			args := append([]string{"simulate", "policy"}, g.args...)
+			args = append(args, "--port", "443", "--from-zone", "inside", "--to-zone", "outside", "--file", userConfig(t))
+			golden(t, g.name, newCLI(t).want(0, append(args, "--output", "json")...))
+			goldenFile(t, g.name+".yaml", newCLI(t).want(0, append(args, "--output", "yaml")...))
+			goldenText(t, g.name, newCLI(t).want(0, append(args, "--why")...))
+		})
+	}
+}
+
+// A rule keyword as --user is a usage error (spec 2026-10-17 §5.2, PD17):
+// --user known-user exits 2 with the reason and prints no answer.
+func TestAUserKeywordExitsTwo(t *testing.T) {
+	t.Parallel()
+	out, errOut, code := newCLI(t).run("simulate", "policy", "203.0.113.5", "192.0.2.11", "--user", "known-user",
+		"--port", "443", "--from-zone", "inside", "--to-zone", "outside", "--file", userConfig(t))
+	if code != exitUsage || out != "" || !strings.Contains(errOut, "--user known-user is a rule keyword, not a user") {
+		t.Errorf("exit %d, want 2\nstdout:\n%s\nstderr:\n%s", code, out, errOut)
+	}
+}
+
+// search and lookup with the identity data on a file (spec 2026-10-17 §6.1,
+// §6.2): a UPN with its groups, rules and address, the mapped user of an
+// address, the card of a user and the card of a group.
+func TestGoldenUserFind(t *testing.T) {
+	t.Parallel()
+	for _, g := range []struct {
+		name string
+		args []string
+	}{
+		// With --why, so the JSON twin's answers are lines of the text.
+		{"search-user", []string{"search", "alice@example.com", "--why"}},
+		{"search-mapping", []string{"search", "198.51.100.10", "--why"}},
+		{"lookup-user", []string{"lookup", "alice@example.com", "--kind", "identity-user"}},
+		{"lookup-group", []string{"lookup", "cn=domain users,cn=users,dc=example,dc=com"}},
+	} {
+		t.Run(g.name, func(t *testing.T) {
+			t.Parallel()
+			args := append(slices.Clone(g.args), "--file", userConfig(t))
+			golden(t, g.name, newCLI(t).want(0, append(args, "--output", "json")...))
+			goldenFile(t, g.name+".yaml", newCLI(t).want(0, append(args, "--output", "yaml")...))
+			goldenText(t, g.name, newCLI(t).want(0, args...))
+		})
+	}
+}
+
+// identityChanged is the fake device after a change of its identity data:
+// alice joins team-x, the profile example.com counts 4 groups, and carol's
+// address moves. The mapping change shows nowhere (spec 2026-10-17 §6.3, D9).
+func identityChanged(d *fakepanos.Device) {
+	payroll := "cn=payroll,ou=groups,dc=example,dc=com \n"
+	cont := strings.Repeat(" ", 64)
+	d.Ops[fakepanos.UserIDsCmd] = strings.Replace(fakepanos.UserIDs, payroll, payroll+cont+"team-x \n", 1)
+	d.Ops[fakepanos.GroupMappingStatsCmd] = strings.Replace(fakepanos.GroupMappingStats, "<groups>3</groups>", "<groups>4</groups>", 1)
+	d.Ops[fakepanos.MappingPageCmd(10000, 1)] = strings.Replace(fakepanos.Mappings, "198.51.100.13", "198.51.100.15", 1)
+}
+
+// snapshot diff of two fetches whose identity data differ: one result of the
+// scope identity, with a user and a source change.
+func TestGoldenIdentityDiff(t *testing.T) {
+	t.Parallel()
+	d := lab(t)
+	c := newCLI(t)
+	c.inventory(inventoryFor(d.Start(t)))
+	c.want(0, "fetch", "fw01")
+	identityChanged(d)
+	c.want(0, "fetch", "fw01")
+	args := []string{"snapshot", "diff", "--vsys", "vsys1"}
+	golden(t, "snapshot-diff-identity", c.want(0, append(args, "--output", "json")...))
+	goldenFile(t, "snapshot-diff-identity.yaml", c.want(0, append(args, "--output", "yaml")...))
+	goldenText(t, "snapshot-diff-identity", c.want(0, args...))
+}
+
+// The user line names where the user came from, and a path hop with a user
+// gets a user row (spec 2026-10-17 §5.1).
+func TestUserLine(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		u    securitypolicy.FlowUser
+		want string
+	}{
+		{securitypolicy.FlowUser{From: "none"}, "none"},
+		{securitypolicy.FlowUser{Name: `example.com\alice`, From: "mapping", IP: "198.51.100.11"}, `example.com\alice (from the mapping of 198.51.100.11)`},
+		{
+			securitypolicy.FlowUser{Name: `example.com\alice`, From: "mapping", IP: "198.51.100.11", Given: `example.com\bob`},
+			`example.com\alice (from the mapping of 198.51.100.11, which wins over --user example.com\bob)`,
+		},
+		{securitypolicy.FlowUser{Name: `example.com\alice`, From: "given"}, `example.com\alice (from --user)`},
+		{securitypolicy.FlowUser{Name: `example.com\alice`, From: "given", Given: "alice@example.com"}, `example.com\alice (from --user alice@example.com)`},
+	} {
+		if got := userLine(tc.u); got != tc.want {
+			t.Errorf("%+v: %s, want %s", tc.u, got, tc.want)
+		}
+	}
+	check := func(u *securitypolicy.FlowUser) pathpolicy.Hop {
+		return pathpolicy.Hop{Checks: []pathpolicy.CheckResult{{
+			Name: "security", Verdict: pathpolicy.Pass, Rule: "r1", Security: &securitypolicy.Verdict{User: u},
+		}}}
+	}
+	rows := policyRows(check(&securitypolicy.FlowUser{Name: `example.com\alice`, From: "given"}))
+	if len(rows) != 2 || rows[1] != [2]string{"user", `example.com\alice (from --user)`} {
+		t.Errorf("rows %v", rows)
+	}
+	for _, u := range []*securitypolicy.FlowUser{nil, {From: "none"}} {
+		if rows := policyRows(check(u)); len(rows) != 1 {
+			t.Errorf("%+v: rows %v", u, rows)
+		}
 	}
 }
 

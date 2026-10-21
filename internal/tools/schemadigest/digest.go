@@ -38,6 +38,9 @@ func runDigest(schemaDir, outDir, version string) error {
 	if err := assertSecretsFound(root, in); err != nil {
 		return err
 	}
+	if err := assertTemplateObjectsFound(root, in); err != nil {
+		return err
+	}
 
 	//nolint:gosec // G301: schemadigest holds committed repository files, so it
 	// must be group and world readable like any other source directory.
@@ -87,6 +90,24 @@ func assertSecretsFound(root *schema.Node, path string) error {
 	if count == 0 {
 		return fmt.Errorf("%s parsed but marked no element encrypted; the parser is "+
 			"dropping encrypt=\"yes\", and secrets would be shown", path)
+	}
+	return nil
+}
+
+// assertTemplateObjectsFound guards the template-object mark the same way: a
+// schema that parses with no tlo="yes" element means the parser lost the
+// attribute, and the merge of a pushed template would then take each template
+// object by its children (spec 2026-10-17 C11).
+func assertTemplateObjectsFound(root *schema.Node, path string) error {
+	count := 0
+	root.Walk(func(n *schema.Node) {
+		if n.TemplateObject {
+			count++
+		}
+	})
+	if count == 0 {
+		return fmt.Errorf("%s parsed but marked no element a template object; the parser is "+
+			"dropping tlo=\"yes\", and a template would merge into each local object", path)
 	}
 	return nil
 }

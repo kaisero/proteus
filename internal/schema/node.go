@@ -50,6 +50,10 @@ type Node struct {
 	// Encrypted is set where the schema marks the element encrypt="yes": a key,
 	// password or secret the device stores encrypted. Its value is never shown.
 	Encrypted bool `json:"enc,omitempty"`
+	// TemplateObject is set where the schema marks the element tlo="yes": a
+	// local copy replaces the template copy whole (as observed on fw01, PAN-OS
+	// 11.2.5, spec 2026-10-17 C11).
+	TemplateObject bool `json:"tlo,omitempty"`
 
 	EnumValues []string `json:"ev,omitempty"` // permitted values, when Type is enum
 	MemberOf   []string `json:"mo,omitempty"` // reference targets declared here

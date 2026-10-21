@@ -144,8 +144,11 @@ func showOnly(cmd string) error {
 	return nil
 }
 
-// ExportConfig returns the running configuration as
-// type=export&category=configuration returns it: a bare <config> element.
+// ExportConfig returns the configuration as type=export&category=configuration
+// returns it: a bare <config> element. The export holds the candidate
+// configuration, which can hold changes that are not committed yet, so the
+// fetch reads show config running and exports only when the device refuses
+// that command (as observed on fw01, PAN-OS 11.2.5, spec 2026-10-17 C12).
 func (c *Client) ExportConfig(ctx context.Context) ([]byte, error) {
 	return c.do(ctx, url.Values{"type": {"export"}, "category": {"configuration"}}, true)
 }

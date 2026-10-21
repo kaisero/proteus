@@ -1,0 +1,20 @@
+<response status="success"><result>
+Primary: example.com\alice	Email: alice@example.com
+Alt User Names: 
+1) Alice@example.com
+2) example.com\alice
+
+Primary: example.com\bob	Email: robert@example.com
+Alt User Names: 
+1) bob@example.com
+
+Primary: example\carol	
+
+Primary: example.com\dave	
+Alt User Names: 
+1) dave@example.com
+
+Primary: other\ghost	
+
+Primary: example.com\pc01$	
+</result></response>

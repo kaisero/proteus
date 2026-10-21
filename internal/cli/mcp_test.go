@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"maps"
 	"net"
 	"net/http"
 	"os"
@@ -457,72 +456,64 @@ func (s *stdioServer) end() int {
 	}
 }
 
-// The server reads PROTEUS_USERS once at start: every call answers from that
-// snapshot, also after the file changed (spec C12). A file that does not
-// read stops the start with exit 2, naming the variable and the file.
-func TestMCPReadsTheUsersOnce(t *testing.T) {
+// searchCall is a tools/call of search for a value, as a JSON-RPC line.
+func searchCall(id int, value string) string {
+	args, err := json.Marshal(map[string]string{"value": value})
+	if err != nil {
+		panic(err)
+	}
+	return fmt.Sprintf(`{"jsonrpc":"2.0","id":%d,"method":"tools/call","params":{"name":"search","arguments":%s}}`, id, args)
+}
+
+// The server answers a user from the identity data of the snapshot: carol
+// reaches the rule of her XML API group (spec 2026-10-17 §4.2, §8).
+func TestMCPReadsTheSnapshotIdentity(t *testing.T) {
 	t.Parallel()
 	c := newCLI(t)
 	d := lab(t)
-	d.Config = read(t, "../../testdata/config/firewall-users.xml")
+	d.Config = read(t, "../../testdata/config/firewall-identity.xml")
 	c.inventory(exporting(inventoryFor(d.Start(t))))
 	c.want(0, "fetch", "fw01")
 	if err := os.Remove(c.cfgPath); err != nil {
 		t.Fatal(err)
 	}
 	c.env["PROTEUS_MCP_LOG_DIR"] = filepath.Join(c.dir, "mcp-log")
-	users := filepath.Join(c.dir, "users.json")
-	write := func(body string) {
-		t.Helper()
-		if err := os.WriteFile(users, []byte(body), 0o600); err != nil {
-			t.Fatal(err)
-		}
-	}
-	write(read(t, "../../testdata/users-snapshot.json"))
-	c.env["PROTEUS_USERS"] = users
 	s := c.stdio(t)
-	call := `{"jsonrpc":"2.0","id":%d,"method":"tools/call","params":{"name":"search","arguments":{"value":"ACME\\carol"}}}`
-	s.send(fmt.Sprintf(call, 2))
-	if r := mustJSON(t, s.wait("2")["result"]); !strings.Contains(r, "engineering-allowed") || strings.Contains(r, `"isError":true`) {
-		t.Errorf("with the users file: %s", r)
-	}
-	// A changed file does not reach the running server.
-	write("not json")
-	s.send(fmt.Sprintf(call, 3))
-	if r := mustJSON(t, s.wait("3")["result"]); !strings.Contains(r, "engineering-allowed") || strings.Contains(r, `"isError":true`) {
-		t.Errorf("after the file changed: %s", r)
+	s.send(searchCall(2, `example.com\carol`))
+	if r := mustJSON(t, s.wait("2")["result"]); !strings.Contains(r, "u-xmlapi") || strings.Contains(r, `"isError":true`) {
+		t.Errorf("carol: %s", r)
 	}
 	if code := s.end(); code != 0 {
 		t.Errorf("exit %d", code)
 	}
-	// A bad file stops the start: missing, unreadable or invalid.
-	dir := filepath.Join(c.dir, "users-dir")
-	if err := os.Mkdir(dir, 0o700); err != nil {
-		t.Fatal(err)
+}
+
+// PROTEUS_USERS is gone: a missing file that it names changes nothing, for
+// search and for the MCP server (spec 2026-10-17 D8).
+func TestProteusUsersIsIgnored(t *testing.T) {
+	t.Parallel()
+	c := newCLI(t)
+	file := c.identityFile(true)
+	want := c.want(0, "search", `example.com\carol`, "--file", file)
+	c.env["PROTEUS_USERS"] = filepath.Join(c.dir, "no-such-users.json")
+	if got := c.want(0, "search", `example.com\carol`, "--file", file); got != want {
+		t.Errorf("search with PROTEUS_USERS:\n%s\nwithout:\n%s", got, want)
 	}
-	cases := []struct {
-		name, path, msg string
-	}{
-		{"missing", filepath.Join(c.dir, "none.json"), "PROTEUS_USERS: open " + filepath.Join(c.dir, "none.json")},
-		{"a directory", dir, "PROTEUS_USERS: " + dir + ": user snapshot"},
-		{"invalid", users, "PROTEUS_USERS: " + users + ": user snapshot"},
+
+	m := mcpLab(t, "")
+	m.env["PROTEUS_USERS"] = filepath.Join(m.dir, "no-such-users.json")
+	// The start comes first: a server that refuses to start reads no input.
+	var errOut bytes.Buffer
+	if code := m.serveMCP(context.Background(), strings.NewReader(""), io.Discard, &errOut); code != 0 {
+		t.Fatalf("start: exit %d, stderr:\n%s", code, errOut.String())
 	}
-	if os.Geteuid() != 0 {
-		// root reads a file of mode 0000.
-		locked := filepath.Join(c.dir, "locked.json")
-		if err := os.WriteFile(locked, []byte(read(t, "../../testdata/users-snapshot.json")), 0o000); err != nil {
-			t.Fatal(err)
-		}
-		cases = append(cases, struct{ name, path, msg string }{"unreadable", locked, "PROTEUS_USERS: open " + locked + ": permission denied"})
+	s := m.stdio(t)
+	s.send(searchCall(2, "198.18.10.100"))
+	if r := mustJSON(t, s.wait("2")["result"]); strings.Contains(r, `"isError":true`) || strings.Contains(r, "PROTEUS_USERS") {
+		t.Errorf("search over MCP: %s", r)
 	}
-	for _, tc := range cases {
-		cc := *c
-		cc.env = maps.Clone(c.env)
-		cc.env["PROTEUS_USERS"] = tc.path
-		var errOut bytes.Buffer
-		if code := cc.serveMCP(context.Background(), strings.NewReader(""), io.Discard, &errOut); code != 2 || !strings.Contains(errOut.String(), tc.msg) {
-			t.Errorf("%s: exit %d, stderr:\n%s", tc.name, code, errOut.String())
-		}
+	if code := s.end(); code != 0 {
+		t.Errorf("exit %d", code)
 	}
 }
 

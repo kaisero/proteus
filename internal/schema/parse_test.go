@@ -2,6 +2,7 @@ package schema
 
 import (
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -68,6 +69,44 @@ func TestParseEncrypted(t *testing.T) {
 	}
 	if IsSecret(nil) {
 		t.Error("nil is not a secret")
+	}
+}
+
+// The schema marks a template object tlo="yes": a local copy of it replaces the
+// template copy whole (spec 2026-10-17 C11). The parser reads the mark as it
+// reads encrypt; a node without the attribute, or with another value, has none.
+func TestParseReadsTheTemplateObjectMark(t *testing.T) {
+	t.Parallel()
+	root := load(t)
+	shared := root.Child("shared")
+	address := shared.Child("address").EntrySequence()
+	for name, n := range map[string]*Node{
+		"shared/address/entry":                  address,
+		"shared/local-user-database/user/entry": shared.Child("local-user-database").Child("user").EntrySequence(),
+		"readonly":                              root.Child("readonly"),
+	} {
+		if !n.TemplateObject {
+			t.Errorf("%s: tlo=\"yes\" sets no mark", name)
+		}
+	}
+	for name, n := range map[string]*Node{
+		"config":                    root,
+		"shared":                    shared,
+		"shared/address":            shared.Child("address"),
+		"devices/entry":             root.Child("devices").EntrySequence(),
+		"address/entry/description": address.Child("description"),
+	} {
+		if n == nil || n.TemplateObject {
+			t.Errorf("%s: no tlo attribute, but a mark", name)
+		}
+	}
+	other, err := Parse(strings.NewReader(`<sequence name="config"><sequence name="a" tlo="no"/>` +
+		`<sequence name="b" tlo="identifier based on regex"/></sequence>`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if other.Child("a").TemplateObject || other.Child("b").TemplateObject {
+		t.Error("only tlo=\"yes\" is a mark")
 	}
 }
 

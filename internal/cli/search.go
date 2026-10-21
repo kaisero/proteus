@@ -3,13 +3,11 @@ package cli
 import (
 	"context"
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/spf13/cobra"
 
 	"github.com/kaisero/proteus/internal/estate"
-	"github.com/kaisero/proteus/internal/index"
 	"github.com/kaisero/proteus/internal/query"
 )
 
@@ -47,7 +45,7 @@ func (a *app) searchCmd() *cobra.Command {
 	cmd.MarkFlagsMutuallyExclusive("exact", "within", "contains")
 	f.StringSliceVar(&o.kinds, "kind", nil, "only objects and groups of these kinds")
 	f.StringSliceVar(&o.fields, "field", nil, "only references and literals from these fields")
-	f.StringSliceVar(&o.show, "show", nil, "only these stages: objects, groups, refs, literals")
+	f.StringSliceVar(&o.show, "show", nil, "only these stages: objects, identity, groups, refs, literals")
 	f.BoolVar(&o.direct, "direct", false, "groups one level up only")
 	bindLimit(cmd, &o.limit)
 	bindWhy(cmd, &o.why)
@@ -131,27 +129,6 @@ func (s searchAnswer) Text(t *textOut) error {
 	printQualifiers(t, s.Qualifiers(), leftNotes(s.e.Targets, func(i int) bool { return len(byTarget[i]) > 0 })...)
 	fmt.Fprintln(t, s.e.Summary.Answer)
 	return t.err
-}
-
-// userSnapshot reads PROTEUS_USERS, the user-to-group mapping a configuration does
-// not hold. None set is no mapping. An error names the variable and the file.
-// A command reads it on each run; the MCP server reads it once at start.
-func (a *app) userSnapshot() (index.UserDirectory, error) {
-	path := a.getenv("PROTEUS_USERS")
-	if path == "" {
-		return nil, nil
-	}
-	f, err := os.Open(path)
-	if err != nil {
-		// The error names the file.
-		return nil, fmt.Errorf("PROTEUS_USERS: %w", err)
-	}
-	defer func() { _ = f.Close() }()
-	snap, err := index.LoadUserSnapshot(f)
-	if err != nil {
-		return nil, fmt.Errorf("PROTEUS_USERS: %s: %w", path, err)
-	}
-	return snap, nil
 }
 
 // header names a target: device, vsys, and where its configuration came from.

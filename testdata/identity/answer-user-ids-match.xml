@@ -1,0 +1,13 @@
+<response status="success"><result><![CDATA[
+User Name                         Vsys    Groups
+------------------------------------------------------------------
+example.com\carol                 vsys1                           cn=domain users,cn=users,dc=example,dc=com 
+                                                                engineering 
+                                                                dug-a 
+                                                                dug-ab 
+                                                                custom-a * 
+
+Total: 5
+* : Custom Group
+
+]]></result></response>

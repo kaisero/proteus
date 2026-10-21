@@ -105,6 +105,9 @@ type Device struct {
 	// HAPeer is the reachable host of the device's HA peer, for when the address
 	// the device reports is not reachable from here.
 	HAPeer string `yaml:"ha_peer,omitempty"`
+	// Identity set to false turns off the fetch of the device's User-ID data
+	// (spec 2026-10-17 D4). Without the key, the data is fetched.
+	Identity *bool `yaml:"identity,omitempty"`
 }
 
 // Target is one device with every default applied and its password read.
@@ -118,6 +121,7 @@ type Target struct {
 	SnapshotKeep int
 	Labels       map[string]string
 	HAPeer       string
+	Identity     bool // fetch the User-ID data: true unless the device sets identity: false
 }
 
 var nameRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
@@ -348,6 +352,7 @@ func (inv *Inventory) resolve(d Device, getenv func(string) string) (Target, err
 		SnapshotKeep: DefaultSnapshotKeep,
 		Labels:       d.Labels,
 		HAPeer:       d.HAPeer,
+		Identity:     d.Identity == nil || *d.Identity,
 	}
 	if t.Username == "" {
 		t.Username = def.Username

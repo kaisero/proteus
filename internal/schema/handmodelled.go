@@ -39,7 +39,9 @@ var handModelled = []HandModel{
 			"matches a flow on it nor whether the security check evaluates it; the check classifies " +
 			"every child, and a candidate that sets a matching field no stage evaluates has a doubt; " +
 			"the application is evaluated with the device's App-ID content data, and without a flow " +
-			"application or without that data a rule that names one has a doubt (spec 2026-10-16 §4)",
+			"application or without that data a rule that names one has a doubt (spec 2026-10-16 §4); " +
+			"the user is evaluated with the device's identity data, and without that data a rule that " +
+			"names one has a doubt (spec 2026-10-17 §5)",
 		Owner: "internal/simulate/securitypolicy",
 	},
 	{

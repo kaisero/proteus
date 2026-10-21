@@ -15,7 +15,7 @@ flowchart LR
 | --- | --- |
 | `exact` | The device computes the same result. |
 | `overmatch` | The answer can hold rules that the device does not match. A candidate list stays safe. |
-| `inferred` | The answer uses data that the device may not use, for example a zone derived from a route. |
+| `inferred` | The answer uses data that the device may not use, for example a zone derived from a route, a flow without a user when a rule names a user, or a hop after NAT that looks up its user. |
 | `undermatch` | The answer can miss rules that the device matches. |
 
 `--why` shows each stage with its fidelity. The stages of each simulation are

@@ -3,6 +3,7 @@ package inventory
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -76,6 +77,35 @@ func TestBuiltInDefaults(t *testing.T) {
 	}
 	if !got.InsecureTLS || got.Timeout != 60*time.Second || got.SnapshotKeep != 20 || got.Password != "p" {
 		t.Errorf("defaults = %+v", got)
+	}
+}
+
+// A device without the key gets its User-ID data fetched (spec 2026-10-17 D4).
+func TestIdentityIsOnByDefault(t *testing.T) {
+	t.Parallel()
+	inv, err := Parse(strings.NewReader("version: 1\ndevices:\n  - name: a\n    host: h\n    username: u\n    password: p\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := inv.Resolve("a", env(nil))
+	if err != nil || !got.Identity {
+		t.Errorf("identity %v, %v; want true", got.Identity, err)
+	}
+}
+
+// identity: false turns the User-ID data off for that device only (D4).
+func TestIdentityOffPerDevice(t *testing.T) {
+	t.Parallel()
+	inv, err := Parse(strings.NewReader("version: 1\ndefaults: {username: u, password: p}\ndevices:\n" +
+		"  - {name: fw01, host: h, identity: false}\n  - {name: fw02, host: h, identity: true}\n  - {name: fw03, host: h}\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, want := range map[string]bool{"fw01": false, "fw02": true, "fw03": true} {
+		got, err := inv.Resolve(name, env(nil))
+		if err != nil || got.Identity != want {
+			t.Errorf("%s: identity %v, %v; want %v", name, got.Identity, err, want)
+		}
 	}
 }
 
@@ -182,6 +212,8 @@ func TestLoadRefusesAReadableFile(t *testing.T) {
 }
 
 // The template is a working inventory, and it states the TLS choice explicitly.
+// It names identity: false in a comment, so its device keeps the User-ID data
+// on (spec 2026-10-17 D4).
 func TestTemplateParsesAndShowsTheTLSChoice(t *testing.T) {
 	t.Parallel()
 	inv, err := Parse(strings.NewReader(Template))
@@ -194,8 +226,13 @@ func TestTemplateParsesAndShowsTheTLSChoice(t *testing.T) {
 	if !strings.Contains(Template, "insecure_tls: false") {
 		t.Error("the template must say how to opt in to verification")
 	}
-	if _, err := inv.Resolve(inv.Names()[0], env(map[string]string{"PANOS_PASSWORD": "x"})); err != nil {
+	got, err := inv.Resolve(inv.Names()[0], env(map[string]string{"PANOS_PASSWORD": "x"}))
+	if err != nil {
 		t.Errorf("the template's device does not resolve: %v", err)
+	}
+	commented := func(l string) bool { return strings.HasPrefix(strings.TrimSpace(l), "# identity: false") }
+	if !slices.ContainsFunc(strings.Split(Template, "\n"), commented) || !got.Identity {
+		t.Errorf("the template must name identity: false in a comment, and leave it on: identity %v", got.Identity)
 	}
 }
 

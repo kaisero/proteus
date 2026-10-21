@@ -213,6 +213,9 @@ func policyRows(h pathpolicy.Hop) [][2]string {
 			label = "policy"
 		}
 		rows = append(rows, [2]string{label, s})
+		if c.Security != nil && c.Security.User != nil && c.Security.User.Name != "" {
+			rows = append(rows, [2]string{"user", userLine(*c.Security.User)})
+		}
 	}
 	for _, d := range h.Doubts {
 		rows = append(rows, [2]string{"doubt", d.Text})

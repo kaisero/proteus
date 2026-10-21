@@ -7,8 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net/http"
-	"net/http/httptest"
 	"net/netip"
 	"os"
 	"os/exec"
@@ -16,28 +14,13 @@ import (
 	"regexp"
 	"slices"
 	"strings"
-	"sync/atomic"
 	"testing"
+
+	"github.com/kaisero/proteus/internal/tools/labkit"
 )
 
 // root is the repository root, seen from this package.
 const root = "../../.."
-
-func TestReadVars(t *testing.T) {
-	t.Parallel()
-	vars, err := ReadVars(strings.NewReader("# a comment\n\nSRC_1=198.18.0.1\n DST_1 = 198.18.1.1 \n"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if vars["SRC_1"] != "198.18.0.1" || vars["DST_1"] != "198.18.1.1" || len(vars) != 2 {
-		t.Errorf("vars = %v", vars)
-	}
-	for _, bad := range []string{"SRC_1 198.18.0.1\n", "=198.18.0.1\n", "src-1=x\n", "SRC_1=a\nSRC_1=b\n"} {
-		if _, err := ReadVars(strings.NewReader(bad)); err == nil {
-			t.Errorf("ReadVars(%q) gave no error", bad)
-		}
-	}
-}
 
 const header = "case\tfact\tfrom\tto\tsource\tdestination\tprotocol\tport\tapplication\texpected\n"
 
@@ -84,17 +67,6 @@ func TestReadFlowsFillsPlaceholders(t *testing.T) {
 	}
 }
 
-func TestFill(t *testing.T) {
-	t.Parallel()
-	got, err := Fill("a ${SRC_1} b ${SRC_1}", map[string]string{"SRC_1": "${X}"})
-	if err != nil || got != "a ${X} b ${X}" {
-		t.Errorf("Fill = %q, %v", got, err)
-	}
-	if _, err := Fill("${NOPE}", nil); err == nil || !strings.Contains(err.Error(), "NOPE") {
-		t.Errorf("Fill of an unknown placeholder: %v", err)
-	}
-}
-
 func TestDeviceCmdUsesPortOne(t *testing.T) {
 	t.Parallel()
 	f := Flow{From: "lab-zone-in", To: "lab-zone-out", Source: "198.18.0.1", Destination: "198.18.1.1", Protocol: "89", Port: 1, Application: "ospf"}
@@ -115,7 +87,7 @@ func TestDeviceCmdUsesPortOne(t *testing.T) {
 	if cmd := DeviceCmd(f); strings.Contains(cmd, "<application>") || !strings.Contains(cmd, "<from>a&amp;b</from>") {
 		t.Errorf("DeviceCmd = %s", cmd)
 	}
-	if err := checkOp(DeviceCmd(f)); err != nil {
+	if err := labkit.CheckOp(DeviceCmd(f)); err != nil {
 		t.Errorf("the guard refuses the device command: %v", err)
 	}
 }
@@ -137,97 +109,6 @@ func TestProteusArgs(t *testing.T) {
 	got = ProteusArgs(f, "c", "vsys1")
 	if slices.Contains(got, "--port") || slices.Contains(got, "--application") {
 		t.Errorf("args = %q", got)
-	}
-}
-
-// matchAnswer is a test security-policy-match answer in the XML API shape,
-// with dummy values.
-const matchAnswer = `<response status="success"><result><rules>
-<entry name="lab-rule-i1">
-  <index>1</index>
-  <from>lab-zone-in</from>
-  <source>198.18.0.20</source>
-  <to>lab-zone-out</to>
-  <destination>any</destination>
-  <category>any</category>
-  <application>ssl/application-default(implicit)</application>
-  <action>allow</action>
-  <terminal>yes</terminal>
-</entry>
-</rules></result></response>`
-
-func TestParseDeviceReadsTheImplicitMarker(t *testing.T) {
-	t.Parallel()
-	a, err := ParseDevice([]byte(matchAnswer), nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if a != (Answer{Rule: "lab-rule-i1", Action: "allow", Implicit: true}) {
-		t.Errorf("answer = %+v", a)
-	}
-	explicit := strings.Replace(matchAnswer, "(implicit)", "", 1)
-	if a, err := ParseDevice([]byte(explicit), nil); err != nil || a.Implicit {
-		t.Errorf("explicit answer = %+v, %v", a, err)
-	}
-	// The older answer gives the rule as text.
-	old := `<response status="success"><result><rules><entry>lab-rule-p1; index: 3<action>deny</action></entry></rules></result></response>`
-	if a, err := ParseDevice([]byte(old), nil); err != nil || a.Rule != "lab-rule-p1" || a.Action != "deny" {
-		t.Errorf("text answer = %+v, %v", a, err)
-	}
-	if _, err := ParseDevice([]byte(`<response status="success"><result><rules><entry name="r"/></rules></result></response>`), nil); err == nil {
-		t.Error("an answer without an action gave no error")
-	}
-}
-
-// fw02Answer is the shape of a test security-policy-match answer on fw02,
-// PAN-OS 12.2.3, with dummy values: the winner comes first, and an
-// <Implicit> element stands right before an entry that matches through
-// implicit use. %s is the element before the first entry.
-const fw02Answer = `<response cmd="status" status="success"><result><rules>
-%s<entry name='lab-rule-a'>
-<index>2</index>
-<from>lab-zone-in</from>
-<source>198.18.0.21</source>
-<to>lab-zone-out</to>
-<application_service><member>0:app-a/tcp/any/443</member></application_service>
-<application_service_implicit_><member>0:ssl/tcp/any/443</member></application_service_implicit_>
-<action>allow</action>
-<terminal>yes</terminal>
-</entry>
-<Implicit>rule matched</Implicit>
-<entry name='lab-rule-b'>
-<index>1</index>
-<application_service_implicit_><member>0:ssl/tcp/any/443</member></application_service_implicit_>
-<action>allow</action>
-</entry>
-</rules>
-</result></response>`
-
-func TestParseDeviceReadsTheImplicitElement(t *testing.T) {
-	t.Parallel()
-	// An explicit winner: no <Implicit> before it, even when the entry lists
-	// implicit applications and a later entry is implicit.
-	a, err := ParseDevice([]byte(fmt.Sprintf(fw02Answer, "")), nil)
-	if err != nil || a != (Answer{Rule: "lab-rule-a", Action: "allow"}) {
-		t.Errorf("explicit answer = %+v, %v", a, err)
-	}
-	// An implicit winner.
-	a, err = ParseDevice([]byte(fmt.Sprintf(fw02Answer, "<Implicit>rule matched</Implicit>\n")), nil)
-	if err != nil || a != (Answer{Rule: "lab-rule-a", Action: "allow", Implicit: true}) {
-		t.Errorf("implicit answer = %+v, %v", a, err)
-	}
-}
-
-func TestParseDeviceNoRule(t *testing.T) {
-	t.Parallel()
-	for _, b := range []string{
-		`<response status="success"><result/></response>`,
-		`<response status="success"><result><rules/></result></response>`,
-	} {
-		a, err := ParseDevice([]byte(b), nil)
-		if err != nil || a != (Answer{}) {
-			t.Errorf("%s: answer = %+v, %v", b, a, err)
-		}
 	}
 }
 
@@ -350,177 +231,14 @@ func TestAnswerString(t *testing.T) {
 	}
 }
 
-func TestOnlyShowAndPolicyMatch(t *testing.T) {
-	t.Parallel()
-	var calls atomic.Int32
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		calls.Add(1)
-		if r.Header.Get("X-PAN-KEY") != "dummy-key" || r.FormValue("type") != "op" {
-			w.WriteHeader(http.StatusForbidden)
-			return
-		}
-		fmt.Fprint(w, `<response status="success"><result/></response>`)
-	}))
-	defer srv.Close()
-	d := newDevice(strings.TrimPrefix(srv.URL, "https://"), true, 0, "X-PAN-KEY", "dummy-key")
-
-	for _, cmd := range []string{
-		"<show><system><info/></system></show>",
-		"<test><security-policy-match><from>a</from><to>b</to></security-policy-match></test>",
-	} {
-		if _, err := d.op(context.Background(), cmd); err != nil {
-			t.Errorf("%s: %v", cmd, err)
-		}
-	}
-	if calls.Load() != 2 {
-		t.Fatalf("the device saw %d calls, want 2", calls.Load())
-	}
-	for _, cmd := range []string{
-		"<request><restart><system/></restart></request>",
-		"<test><nat-policy-match><from>a</from></nat-policy-match></test>",
-		"<test><security-policy-match/><nat-policy-match/></test>",
-		"<show><system><info/></system></show><request><restart><system/></restart></request>",
-		"<commit/>",
-		"<set><system/></set>",
-		"<clear><session><all/></session></clear>",
-		" <show/>",
-		"<show>",
-		"",
-		"text",
-	} {
-		if _, err := d.op(context.Background(), cmd); err == nil {
-			t.Errorf("%q: the guard let it pass", cmd)
-		}
-	}
-	if calls.Load() != 2 {
-		t.Errorf("a refused command reached the device: %d calls", calls.Load())
-	}
-}
-
-func TestDeviceStopsOnForbidden(t *testing.T) {
-	t.Parallel()
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusForbidden)
-		fmt.Fprint(w, `<response status="error"><msg>Invalid credentials.</msg></response>`)
-	}))
-	defer srv.Close()
-	d := newDevice(strings.TrimPrefix(srv.URL, "https://"), true, 0, "X-PAN-KEY", "dummy-key")
-	_, err := d.op(context.Background(), "<show><system><info/></system></show>")
-	if !errors.Is(err, errForbidden) || strings.Contains(err.Error(), "dummy-key") {
-		t.Errorf("err = %v", err)
-	}
-
-	bad := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusBadRequest)
-		fmt.Fprint(w, `<response status="error"><msg>Unrecognized application</msg></response>`)
-	}))
-	defer bad.Close()
-	d = newDevice(strings.TrimPrefix(bad.URL, "https://"), true, 0, "X-PAN-KEY", "dummy-key")
-	b, err := d.op(context.Background(), "<show><system><info/></system></show>")
-	if err == nil || errors.Is(err, errForbidden) || !bytes.Contains(b, []byte("Unrecognized")) {
-		t.Errorf("400: %q, %v", b, err)
-	}
-
-	// A device that does not answer is a transport error, without the key.
-	d = newDevice("127.0.0.1:1", true, 0, "X-PAN-KEY", "dummy-key")
-	if _, err := d.op(context.Background(), "<show/>"); err == nil || strings.Contains(err.Error(), "dummy-key") {
-		t.Errorf("no device: %v", err)
-	}
-}
-
-func TestReadKeyHeader(t *testing.T) {
-	t.Parallel()
-	name, value, err := ReadKeyHeader(strings.NewReader("X-PAN-KEY: dummy-key\n"))
-	if err != nil || name != "X-PAN-KEY" || value != "dummy-key" {
-		t.Errorf("got %q %q %v", name, value, err)
-	}
-	for _, bad := range []string{"", "dummy-key\n", "X-PAN-KEY:\n", "X-PAN-KEY: a\nX-PAN-KEY: b\n", "Bad Name: a\n"} {
-		// The error is one fixed text, so it cannot show the file.
-		_, _, err := ReadKeyHeader(strings.NewReader(bad))
-		if err == nil || err.Error() != "the key header file must hold one line: X-PAN-KEY: <key>" {
-			t.Errorf("%q: %v", bad, err)
-		}
-	}
-}
-
-func TestInsideRepo(t *testing.T) {
-	t.Parallel()
-	for dir, want := range map[string]bool{
-		"/r/repo":        true,
-		"/r/repo/docs":   true,
-		"/r/repo-out":    false,
-		"/tmp/applab-1":  false,
-		"/r":             false,
-		"/r/repo/../out": false,
-	} {
-		if got := insideRepo(dir, "/r/repo"); got != want {
-			t.Errorf("insideRepo(%q) = %v, want %v", dir, got, want)
-		}
-	}
-}
-
-// fakeSnapshot writes a store with one snapshot of device fw-test and its
-// content file, in the layout of internal/store.
-func fakeSnapshot(t *testing.T, content bool) string {
-	t.Helper()
-	st := t.TempDir()
-	id := "2026-10-17T10-00-00Z"
-	dir := filepath.Join(st, "fw-test", id)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	files := map[string]string{
-		filepath.Join(dir, "config.xml"):     "<config/>",
-		filepath.Join(dir, "predefined.xml"): "<predefined/>",
-		filepath.Join(dir, "meta.json"):      `{"device":"fw-test","id":"` + id + `","app_version":"8000-1000","documents":[]}`,
-	}
-	if content {
-		files[filepath.Join(st, ".content", "8000-1000.v1.xml.gz")] = "gz"
-	}
-	for p, s := range files {
-		if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(p, []byte(s), 0o600); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if err := os.Symlink(id, filepath.Join(st, "fw-test", "latest")); err != nil {
-		t.Fatal(err)
-	}
-	return st
-}
-
-func TestCopySnapshot(t *testing.T) {
-	t.Parallel()
-	st := fakeSnapshot(t, true)
-	dst := t.TempDir()
-	ver, err := copySnapshot(st, "fw-test", dst)
-	if err != nil || ver != "8000-1000" {
-		t.Fatalf("copySnapshot = %q, %v", ver, err)
-	}
-	for name, want := range map[string]string{"config.xml": "<config/>", "predefined.xml": "<predefined/>", "apps.xml.gz": "gz"} {
-		b, err := os.ReadFile(filepath.Join(dst, name))
-		if err != nil || string(b) != want {
-			t.Errorf("%s: %q, %v", name, b, err)
-		}
-	}
-	if _, err := copySnapshot(fakeSnapshot(t, false), "fw-test", t.TempDir()); err == nil || !strings.Contains(err.Error(), "content") {
-		t.Errorf("no content file: %v", err)
-	}
-	if _, err := copySnapshot(t.TempDir(), "fw-test", t.TempDir()); err == nil {
-		t.Error("an empty store gave no error")
-	}
-}
-
 // fakeDevice answers each command from a map keyed by the flow's source.
 type fakeDevice struct {
 	answers map[string]string
 	err     error
 }
 
-func (f fakeDevice) op(_ context.Context, cmd string) ([]byte, error) {
-	if err := checkOp(cmd); err != nil {
+func (f fakeDevice) Op(_ context.Context, cmd string) ([]byte, error) {
+	if err := labkit.CheckOp(cmd); err != nil {
 		return nil, err
 	}
 	if f.err != nil {
@@ -579,8 +297,8 @@ func TestCheckFlows(t *testing.T) {
 	}
 
 	// A 403 stops the run.
-	_, err = checkFlows(context.Background(), io.Discard, t.TempDir(), fakeDevice{err: errForbidden}, run, flows, "c", "vsys1")
-	if !errors.Is(err, errForbidden) {
+	_, err = checkFlows(context.Background(), io.Discard, t.TempDir(), fakeDevice{err: labkit.ErrForbidden}, run, flows, "c", "vsys1")
+	if !errors.Is(err, labkit.ErrForbidden) {
 		t.Errorf("403: %v", err)
 	}
 	// Another device error counts as a difference and the run goes on.
@@ -668,9 +386,9 @@ func readSetFile(t *testing.T) []setEntry {
 		if !ok {
 			t.Fatalf("set line %d has no tab", i+1)
 		}
-		kind, ok := strings.CutPrefix(xpath, vsysXPath+"/")
+		kind, ok := strings.CutPrefix(xpath, labkit.VsysXPath+"/")
 		if !ok {
-			t.Fatalf("set line %d: xpath %s is not below %s", i+1, xpath, vsysXPath)
+			t.Fatalf("set line %d: xpath %s is not below %s", i+1, xpath, labkit.VsysXPath)
 		}
 		var n node
 		if err := xml.Unmarshal([]byte(elem), &n); err != nil {
@@ -771,6 +489,9 @@ func TestLabConfigIsIsolated(t *testing.T) {
 	}
 }
 
+// placeholder is ${KEY} in a lab file, as labkit.Fill reads it.
+var placeholder = regexp.MustCompile(`\$\{([A-Z][A-Z0-9_]*)\}`)
+
 // labFlows reads the flow list with each placeholder filled by itself.
 func labFlows(t *testing.T) []Flow {
 	t.Helper()
@@ -867,44 +588,12 @@ var exampleNets = []netip.Prefix{
 	netip.MustParsePrefix("203.0.113.0/24"), netip.MustParsePrefix("198.18.0.0/15"),
 }
 
-var (
-	ipv4   = regexp.MustCompile(`\b[0-9]{1,3}(\.[0-9]{1,3}){3}\b`)
-	serial = regexp.MustCompile(`\b[0-9]{12,}\b`)
-)
-
-// labDataIn returns what in a file's text looks like lab data: an address
-// outside the documentation ranges, or a serial number.
-func labDataIn(text string) []string {
-	var out []string
-	for _, s := range ipv4.FindAllString(text, -1) {
-		a, err := netip.ParseAddr(s)
-		if err != nil {
-			continue
-		}
-		if !slices.ContainsFunc(exampleNets, func(p netip.Prefix) bool { return p.Contains(a) }) {
-			out = append(out, "address "+s)
-		}
-	}
-	for _, s := range serial.FindAllString(text, -1) {
-		out = append(out, "serial "+s)
-	}
-	return out
-}
-
-func TestLabDataInCatchesLabData(t *testing.T) {
-	t.Parallel()
-	got := labDataIn("src 198.18.0.1 and 192.0.2.7, not 10.1.2.3 or 012345678901")
-	if !slices.Equal(got, []string{"address 10.1.2.3", "serial 012345678901"}) {
-		t.Errorf("labDataIn = %q", got)
-	}
-}
-
 // The lab files hold placeholders, never a lab address or serial
 // (spec 2026-10-16 §9.2), and the variables file stays out of git.
 func TestLabFilesHoldNoLabData(t *testing.T) {
 	t.Parallel()
 	for _, name := range labDataFiles {
-		for _, bad := range labDataIn(labFile(t, name)) {
+		for _, bad := range labkit.LabDataIn(labFile(t, name), exampleNets) {
 			t.Errorf("docs/lab/%s holds %s", name, bad)
 		}
 	}

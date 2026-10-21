@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
+	"strings"
 
 	"github.com/kaisero/proteus/internal/reason"
 	"github.com/kaisero/proteus/internal/runlog"
@@ -22,6 +24,17 @@ type Document struct {
 	// Optional is set for a document a device may refuse, such as one an older
 	// release does not know; nil makes the document required.
 	Optional *Optional
+	// Fallback runs when the device refuses Fetch: an *APIError, or an answer
+	// without the document (errNoConfig). A transport failure takes no
+	// fallback: a device that is not answering will not answer it either.
+	Fallback *Fallback
+}
+
+// Fallback is a second way to read a document, and the note that says the
+// snapshot holds what it read.
+type Fallback struct {
+	Fetch func(ctx context.Context, c *Client) ([]byte, error)
+	Note  reason.Reason
 }
 
 // Optional says what a device's refusal of an optional document means.
@@ -62,10 +75,37 @@ func OpDocument(name string, cmds ...string) Document {
 
 // The documents every fetch collects.
 var (
-	// RunningConfig is the running configuration, exported.
-	RunningConfig = Document{Name: "config", Fetch: func(ctx context.Context, c *Client) ([]byte, error) {
-		return c.ExportConfig(ctx)
-	}}
+	// RunningConfig is the running configuration, from show config running: it
+	// holds no uncommitted change, while the export holds the candidate (as
+	// observed on fw01, PAN-OS 11.2.5, spec 2026-10-17 C12). The config element
+	// of the answer is the document, byte for byte (PD2). A device that refuses
+	// the command, or answers without the element, is exported instead, with a
+	// note (PD1).
+	RunningConfig = Document{
+		Name: "config",
+		Fetch: func(ctx context.Context, c *Client) ([]byte, error) {
+			b, err := c.Op(ctx, runningConfigCmd)
+			if err != nil {
+				return nil, err
+			}
+			return unwrapConfig(b)
+		},
+		Fallback: &Fallback{
+			Fetch: func(ctx context.Context, c *Client) ([]byte, error) { return c.ExportConfig(ctx) },
+			Note:  configNotRunning,
+		},
+	}
+
+	// PushedTemplate is the template that Panorama pushed to the device, which
+	// the configuration does not hold (as observed on fw01, PAN-OS 11.2.5, spec
+	// 2026-10-17 C1, C9). The template step merges it into the configuration
+	// and keeps its config element as the document. A device that Panorama
+	// does not manage answers that it has none, which is no refusal (C7).
+	PushedTemplate = Document{
+		Name:     "template",
+		Fetch:    OpDocument("template", pushedTemplateCmd).Fetch,
+		Optional: &Optional{Refused: configNoTemplate, Check: holdsTemplate},
+	}
 
 	// SystemInfo carries the serial and the software version.
 	SystemInfo = OpDocument("system-info", "<show><system><info/></system></show>")
@@ -142,8 +182,100 @@ const RoutingRIBCmd = "<show><advanced-routing><route><afi>ipv4</afi></route></a
 const haStateCmd = "<show><high-availability><state/></high-availability></show>"
 
 // Documents is what every fetch collects, in order. The configuration comes first
-// because nothing can be analysed without it.
-var Documents = []Document{RunningConfig, SystemInfo, Interfaces, RoutingFIB, RoutingRIB, HAState, Predefined}
+// because nothing can be analysed without it, and the pushed template right
+// after it, because the template step merges the two (PD1).
+var Documents = []Document{RunningConfig, PushedTemplate, SystemInfo, Interfaces, RoutingFIB, RoutingRIB, HAState, Predefined}
+
+// The show commands of the configuration and of the pushed template (spec
+// 2026-10-17 C9, C12).
+const (
+	runningConfigCmd  = "<show><config><running/></config></show>"
+	pushedTemplateCmd = "<show><config><pushed-template/></config></show>"
+)
+
+// noTemplateText is the whole result of a device without a template: no
+// template, and no note (as observed on fw02, PAN-OS 12.2.3, spec 2026-10-17
+// C7).
+const noTemplateText = "No template pushed to device"
+
+// The notes of a configuration that is not the running configuration and the
+// template (spec 2026-10-17 §2.1).
+var (
+	configNotRunning = reason.New("note.config-not-running",
+		"the device refused show config running, so the snapshot holds the configuration export, which can hold uncommitted changes")
+	configNoTemplate = reason.New("note.config-no-template",
+		"the device did not return its pushed template, so the snapshot holds its base configuration without the template values")
+)
+
+var (
+	errNoConfig   = errors.New("the answer holds no response/result/config element")
+	errNoTemplate = errors.New("the answer holds no response/result/template/config element")
+)
+
+// unwrapConfig returns the config element of the answer to show config
+// running, byte for byte: with its attributes version, detail-version and
+// urldb, and with its indent (C12, PD2).
+func unwrapConfig(b []byte) ([]byte, error) {
+	return element(b, errNoConfig, "response", "result", "config")
+}
+
+// unwrapTemplate returns the config element of the answer to show config
+// pushed-template, byte for byte. It sits in a template element, after the
+// name of the template stack (C9, PD2).
+func unwrapTemplate(b []byte) ([]byte, error) {
+	return element(b, errNoTemplate, "response", "result", "template", "config")
+}
+
+// holdsTemplate returns why an answer is neither a template nor the answer of
+// a device without one (C7), or nil.
+func holdsTemplate(b []byte) error {
+	_, err := unwrapTemplate(b)
+	if err != nil && isNoTemplate(b) {
+		return nil
+	}
+	return err
+}
+
+// isNoTemplate reports whether an answer is that of a device without a
+// template: a response whose result is noTemplateText (C7).
+func isNoTemplate(b []byte) bool {
+	var r struct {
+		XMLName xml.Name `xml:"response"`
+		Result  string   `xml:"result"`
+	}
+	return xml.Unmarshal(b, &r) == nil && strings.TrimSpace(r.Result) == noTemplateText
+}
+
+// element returns the element at the path from the root, from its start tag
+// to its end tag, as the answer holds it; missing, wrapped, when the answer
+// holds no such element or is no XML.
+func element(b []byte, missing error, path ...string) ([]byte, error) {
+	dec := xml.NewDecoder(bytes.NewReader(b))
+	var open []string
+	start := int64(-1)
+	for {
+		off := dec.InputOffset()
+		tok, err := dec.Token()
+		if errors.Is(err, io.EOF) {
+			return nil, missing
+		}
+		if err != nil {
+			return nil, fmt.Errorf("%w: %w", missing, err)
+		}
+		switch t := tok.(type) {
+		case xml.StartElement:
+			open = append(open, t.Name.Local)
+			if start < 0 && slices.Equal(open, path) {
+				start = off
+			}
+		case xml.EndElement:
+			if start >= 0 && len(open) == len(path) {
+				return b[start:dec.InputOffset()], nil
+			}
+			open = open[:len(open)-1]
+		}
+	}
+}
 
 // System is what a snapshot records from show system info.
 type System struct {

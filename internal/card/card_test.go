@@ -10,6 +10,7 @@ import (
 
 	"github.com/kaisero/proteus/internal/appid"
 	"github.com/kaisero/proteus/internal/config"
+	"github.com/kaisero/proteus/internal/identity"
 	"github.com/kaisero/proteus/internal/index"
 	"github.com/kaisero/proteus/internal/resolve"
 	"github.com/kaisero/proteus/internal/testconfig"
@@ -608,5 +609,133 @@ func TestKindsNameTheContainer(t *testing.T) {
 	kinds := Kinds(cfg)
 	if !slices.Contains(kinds, KindContainer) || !slices.IsSorted(kinds[1:]) || kinds[0] != KindRule {
 		t.Errorf("kinds = %v", kinds)
+	}
+}
+
+// identityData is the identity fixture as Data.
+func identityData(t *testing.T) *identity.Data {
+	t.Helper()
+	p := filepath.Join(t.TempDir(), identity.FileName)
+	testconfig.Identity(t, p)
+	d, err := identity.Load(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return d
+}
+
+// sections renders a card's sections as title: row | row, a row as its text
+// or its items, to compare a whole card at once.
+func sections(c Card) []string {
+	var out []string
+	for _, s := range c.Sections {
+		var rows []string
+		for _, r := range s.Rows {
+			if r.Text != "" {
+				rows = append(rows, r.Text)
+				continue
+			}
+			rows = append(rows, flat(r.Items))
+		}
+		out = append(out, s.Title+": "+strings.Join(rows, " | "))
+	}
+	return out
+}
+
+// The user card has every section of spec 2026-10-17 §6.2: the primary name,
+// the alternate names, the email, the groups with their source, the mapped
+// addresses with type and timeout, and the tags. A UPN names the user (N2);
+// an empty section has no row.
+func TestLookupUserCard(t *testing.T) {
+	t.Parallel()
+	d := identityData(t)
+	cs := FindIdentity(d, "alice@example.com", KindIdentityUser)
+	if len(cs) != 1 || cs[0].Kind != KindIdentityUser || cs[0].Name != `example.com\alice` {
+		t.Fatalf("cards = %+v", cs)
+	}
+	want := []string{
+		`primary: example.com\alice`,
+		"alternate names: alice@example.com",
+		"email: alice@example.com",
+		"groups: cn=domain users,cn=users,dc=example,dc=com(ldap:example.com), cn=payroll,ou=groups,dc=example,dc=com(ldap:example.com)",
+		"mapped addresses: 198.51.100.11(XMLAPI, timeout 14400 s)",
+		"tags: ",
+	}
+	if got := sections(cs[0]); !slices.Equal(got, want) {
+		t.Errorf("alice:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+	carol := FindIdentity(d, `EXAMPLE.COM\Carol`, "")
+	if len(carol) != 1 || !slices.Contains(sections(carol[0]), "tags: tag-a, tag-b") ||
+		!slices.Contains(sections(carol[0]), "groups: cn=domain users,cn=users,dc=example,dc=com(ldap:example.com), engineering(xmlapi), dug-a(dug), dug-ab(dug)") {
+		t.Errorf("carol: %+v", carol)
+	}
+	for _, s := range cs[0].Sections {
+		if s.Rows == nil {
+			t.Errorf("section %s: rows nil, want empty", s.Title)
+		}
+	}
+}
+
+// The group card has the source and the members: a count row, then the
+// names (§6.2). A DN in another case and the short name name the group (M11,
+// M12).
+func TestLookupGroupCard(t *testing.T) {
+	t.Parallel()
+	d := identityData(t)
+	want := []string{
+		"source: ldap:example.com",
+		`members: 3 members | example.com\alice, example.com\bob, example.com\carol`,
+	}
+	for _, name := range []string{"cn=domain users,cn=users,dc=example,dc=com", "CN=Domain Users,CN=Users,DC=example,DC=com", `example.com\domain users`} {
+		cs := FindIdentity(d, name, "")
+		if len(cs) != 1 || cs[0].Kind != KindIdentityGroup || cs[0].Name != "cn=domain users,cn=users,dc=example,dc=com" {
+			t.Fatalf("%s: cards = %+v", name, cs)
+		}
+		if got := sections(cs[0]); !slices.Equal(got, want) {
+			t.Errorf("%s:\n%s\nwant:\n%s", name, strings.Join(got, "\n"), strings.Join(want, "\n"))
+		}
+	}
+	if cs := FindIdentity(d, "dug-a", KindIdentityGroup); len(cs) != 1 || !slices.Equal(sections(cs[0]), []string{"source: dug", `members: 1 member | example.com\carol`}) {
+		t.Errorf("dug-a: %+v", cs)
+	}
+	if cs := FindIdentity(d, "cn=empty,ou=groups,dc=example,dc=com", ""); len(cs) != 1 || !slices.Equal(sections(cs[0]), []string{"source: ldap:example.com", "members: 0 members"}) {
+		t.Errorf("an empty group: %+v", cs)
+	}
+}
+
+// FindIdentity finds nothing without data, for another kind, and for a name
+// the data does not know; a group does not answer for the user kind.
+func TestFindIdentityNeedsTheKindAndTheData(t *testing.T) {
+	t.Parallel()
+	d := identityData(t)
+	for _, tc := range []struct {
+		data       *identity.Data
+		name, kind string
+	}{
+		{nil, `example.com\alice`, ""},
+		{d, `example.com\alice`, KindRule},
+		{d, `example.com\alice`, KindIdentityGroup},
+		{d, "team-x", KindIdentityUser},
+		{d, `example\alice`, ""},
+		{d, "nobody", ""},
+	} {
+		if cs := FindIdentity(tc.data, tc.name, tc.kind); cs != nil {
+			t.Errorf("%s %q: %+v", tc.name, tc.kind, cs)
+		}
+	}
+	cfg, _, err := config.Load("../../testdata/config/firewall-identity.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	kinds := Kinds(cfg)
+	if !slices.Contains(kinds, KindIdentityUser) || !slices.Contains(kinds, KindIdentityGroup) || !slices.IsSorted(kinds[1:]) {
+		t.Errorf("kinds = %v", kinds)
+	}
+	idx, err := index.New(cfg, config.Scope{Sort: config.ScopeVsys, Name: "vsys1"}, resolve.Security)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cs, err := Find(cfg, idx, nil, `example.com\alice`, KindIdentityUser); err != nil || len(cs) != 0 {
+		t.Errorf("Find takes the kind and leaves it to FindIdentity: %v, %v", cs, err)
 	}
 }

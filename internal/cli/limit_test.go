@@ -106,8 +106,9 @@ func TestSnapshotDiffLimit(t *testing.T) {
 		sum.Results[1].Added != 1 || sum.Results[1].Removed != 1 || sum.Results[1].Changed != 2 {
 		t.Errorf("summary counts every change: %v %+v", err, sum)
 	}
+	// shared, vsys1, vsys2 and the identity data of both snapshots.
 	out = c.want(0, "snapshot", "diff", "--output", "json")
-	if err := json.Unmarshal([]byte(out), &env); err != nil || env.Input.Limit != 0 || env.Summary.Omitted != 0 || len(env.Results) != 3 {
+	if err := json.Unmarshal([]byte(out), &env); err != nil || env.Input.Limit != 0 || env.Summary.Omitted != 0 || len(env.Results) != 4 {
 		t.Errorf("no limit: %v %+v", err, env)
 	}
 }

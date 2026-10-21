@@ -141,6 +141,8 @@ func newNode(kind Kind, t xml.StartElement) *Node {
 			n.memberOfTarget = a.Value
 		case "encrypt":
 			n.Encrypted = a.Value == "yes"
+		case "tlo":
+			n.TemplateObject = a.Value == "yes"
 		}
 	}
 	return n

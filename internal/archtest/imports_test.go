@@ -25,10 +25,14 @@ const reasonPkg = "internal/reason"
 // and reason, so the core may import it (spec 2026-10-16 §8).
 const appidPkg = "internal/appid"
 
+// identityPkg owns the identity file. It imports only the standard library and
+// reason, so the core may import it (spec 2026-10-17 §9).
+const identityPkg = "internal/identity"
+
 // core is the read-only core, plus the schema substrate config decodes, the
-// App-ID content data and the reason codes. It is the only part of this module
-// the core may import.
-var core = []string{"internal/config", "internal/resolve", "internal/index", "internal/schema", "internal/digest", appidPkg, reasonPkg}
+// App-ID content data, the identity data and the reason codes. It is the only
+// part of this module the core may import.
+var core = []string{"internal/config", "internal/resolve", "internal/index", "internal/schema", "internal/digest", appidPkg, identityPkg, reasonPkg}
 
 // rule forbids one package from reaching a set of packages, directly or through
 // any package of this module it imports.
@@ -81,6 +85,7 @@ var rules = []rule{
 	{from: "internal/task", forbid: ioPackages, allowIn: []string{"internal/runlog", reasonPkg}},
 	{from: reasonPkg, stdlib: true},
 	{from: appidPkg, stdlib: true, allowIn: []string{reasonPkg}, forbid: ioPackages},
+	{from: identityPkg, stdlib: true, allowIn: []string{reasonPkg}, forbid: ioPackages},
 	{from: "internal/query", forbid: queryForbids, direct: queryImports},
 }
 
@@ -91,7 +96,7 @@ var queryImports = []string{
 	"internal/simulate/nat", "internal/simulate/pathpolicy", "internal/simulate/topology",
 	"internal/simulate/rulebase", "internal/estate", "internal/store", "internal/inventory",
 	"internal/search", "internal/drift", "internal/card", "internal/resolve", "internal/index",
-	"internal/config", appidPkg, "internal/runlog", reasonPkg,
+	"internal/config", appidPkg, identityPkg, "internal/runlog", reasonPkg,
 }
 
 // queryForbids are the front ends and the fetcher: the query layer serves the
@@ -217,23 +222,25 @@ func TestViolationsCatchesABreach(t *testing.T) {
 		t.Errorf("violations:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
 
-	// appid imports the standard library and reason only: index and roaring
-	// are violations, reason is not.
-	graph = map[string][]string{
-		module + "/internal/appid": {"fmt", module + "/internal/index", "github.com/RoaringBitmap/roaring/v2", module + "/" + reasonPkg},
-		module + "/internal/index": {"fmt"},
-		module + "/" + reasonPkg:   {"fmt"},
-	}
-	got = violations(graph, rules)
-	want = []string{
-		"internal/appid imports " + module + "/internal/index, outside the standard library",
-		"internal/appid imports github.com/RoaringBitmap/roaring/v2, outside the standard library",
-		"internal/appid reaches " + module + "/internal/index, outside the read-only core",
-	}
-	slices.Sort(got)
-	slices.Sort(want)
-	if strings.Join(got, "\n") != strings.Join(want, "\n") {
-		t.Errorf("appid violations:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	// appid and identity import the standard library and reason only: index
+	// and roaring are violations, reason is not.
+	for _, leaf := range []string{appidPkg, identityPkg} {
+		graph = map[string][]string{
+			module + "/" + leaf:        {"fmt", module + "/internal/index", "github.com/RoaringBitmap/roaring/v2", module + "/" + reasonPkg},
+			module + "/internal/index": {"fmt"},
+			module + "/" + reasonPkg:   {"fmt"},
+		}
+		got = violations(graph, rules)
+		want = []string{
+			leaf + " imports " + module + "/internal/index, outside the standard library",
+			leaf + " imports github.com/RoaringBitmap/roaring/v2, outside the standard library",
+			leaf + " reaches " + module + "/internal/index, outside the read-only core",
+		}
+		slices.Sort(got)
+		slices.Sort(want)
+		if strings.Join(got, "\n") != strings.Join(want, "\n") {
+			t.Errorf("%s violations:\n%s\nwant:\n%s", leaf, strings.Join(got, "\n"), strings.Join(want, "\n"))
+		}
 	}
 }
 
@@ -307,6 +314,16 @@ func TestImportDirection(t *testing.T) {
 	}
 	for _, v := range violations(graph, rules) {
 		t.Error(v)
+	}
+	// query loads the identity file and passes its data in, so it imports
+	// identity directly (spec 2026-10-17 §9).
+	direct := map[string][]string{
+		module + "/internal/query": {module + "/" + identityPkg},
+		module + "/" + identityPkg: {"fmt", module + "/" + reasonPkg},
+		module + "/" + reasonPkg:   {"fmt"},
+	}
+	for _, v := range violations(direct, rules) {
+		t.Errorf("query may import identity: %s", v)
 	}
 }
 

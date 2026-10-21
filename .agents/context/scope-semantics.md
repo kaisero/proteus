@@ -93,9 +93,11 @@ possibly a zone of its own.
 ```go
 type Application struct{ ... }
 type ApplicationFilter struct{ ... }
+type CloudIdentityEngine struct{ ... }
 type DefaultRule struct{ ... }
 type DestinationTranslation struct{ ... }
 type FIBRoute struct{ ... }
+type GroupMapping struct{ ... }
 type HAState struct{ ... }
 type InterfaceAddress struct{ ... }
 type InterfaceState struct{ ... }
@@ -135,7 +137,9 @@ func (t *Target) Vsys() string
 func ApplicationFilters(cfg *config.Config, sc config.Scope) []ApplicationFilter
 func ApplicationTags(cfg *config.Config, sc config.Scope) map[string][]string
 func Applications(cfg *config.Config, sc config.Scope) []Application
+func CloudIdentityEngines(cfg *config.Config, sc config.Scope) []CloudIdentityEngine
 func DynamicRoutingProtocols(cfg *config.Config) []string
+func GroupMappings(cfg *config.Config, sc config.Scope) []GroupMapping
 func InterfaceAddresses(cfg *config.Config) []InterfaceAddress
 func Namesakes(kind string) []string
 func ObjectKinds(cfg *config.Config) []string

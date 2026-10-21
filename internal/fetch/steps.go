@@ -9,6 +9,7 @@ import (
 	"github.com/kaisero/proteus/internal/inventory"
 	"github.com/kaisero/proteus/internal/reason"
 	"github.com/kaisero/proteus/internal/runlog"
+	"github.com/kaisero/proteus/internal/schema"
 	"github.com/kaisero/proteus/internal/task"
 )
 
@@ -25,6 +26,15 @@ type State struct {
 	HaveApps func(version string) bool
 	Result   Result
 	client   *Client // the device's, or the active peer's after the ha step
+	// fellBack names each document that its fallback read.
+	fellBack []string
+	// schemaRoot gives the root of the schema digest to the template step;
+	// nil is config.SchemaRoot. A test makes it fail.
+	schemaRoot func() (*schema.Node, error)
+	// mappingPage and mappingCap are the page size of the mapping table and
+	// the most entries the identity step keeps; 0 uses the constants. A test
+	// sets small ones.
+	mappingPage, mappingCap int
 }
 
 // NewState starts a device's fetch.
@@ -36,16 +46,21 @@ func NewState(t inventory.Target, docs []Document, opts ActiveOptions, log *runl
 }
 
 // Steps are the device-side steps of a fetch: log in, follow the active HA peer,
-// fetch the documents, fetch the application data. A failed login fails the
+// fetch the documents, merge the pushed template into the configuration, fetch
+// the application data, fetch the identity data. A failed login fails the
 // device, because nothing can be read without a key; a failed document is
-// recorded and the rest still arrive (spec S10). The application data comes
-// last: it needs the content version of the system info.
+// recorded and the rest still arrive (spec S10). The application data needs
+// the content version of the system info, and the identity data comes after
+// it (spec 2026-10-17 §3.1): it needs the system info and the merged
+// configuration.
 func Steps() []task.Step[State] {
 	return []task.Step[State]{
 		{Name: "log in", Slug: "login", Do: loginStep},
 		{Name: "follow the active HA peer", Slug: "ha", Do: haStep},
 		{Name: "fetch the documents", Slug: "documents", Do: documentsStep},
+		{Name: "merge the pushed template", Slug: "template", Do: templateStep},
 		{Name: "fetch the application data", Slug: "applications", Do: applicationsStep},
+		{Name: "fetch the identity data", Slug: "identity", Do: identityStep},
 	}
 }
 
@@ -119,6 +134,13 @@ func (s *State) stay(note reason.Reason) (task.Result, error) {
 	return task.Result{Detail: "fetched this device as it is", Notes: []reason.Reason{note}}, nil
 }
 
+// fallsBack reports whether an error is a refusal that a document's fallback
+// answers: the device refused the command, or answered without the document.
+func fallsBack(err error) bool {
+	_, refused := errors.AsType[*APIError](err)
+	return refused || errors.Is(err, errNoConfig)
+}
+
 // refusal returns why an optional document counts as refused, or nil: the device
 // refused the command, or its answer failed the document's check.
 func refusal(d Document, b []byte, err error) error {
@@ -137,12 +159,25 @@ func refusal(d Document, b []byte, err error) error {
 // documentsStep fetches every document. A failed document is recorded and makes
 // the step partial. An optional document the device refuses, or answers in a
 // shape its check rejects, is not recorded as a document: it adds its note, and
-// the step stays complete.
+// the step stays complete. A document the device refuses is read by its
+// fallback, if it has one, and the fallback's note says so.
 func documentsStep(ctx context.Context, s *State) (task.Result, error) {
 	failed := 0
 	var r task.Result
 	for _, d := range s.Docs {
 		b, err := d.Fetch(ctx, s.client)
+		if d.Fallback != nil && fallsBack(err) {
+			s.Log.Warnf(runlog.TagAPI, "%s: %s: %s (%v)", s.Target.Name, d.Name, d.Fallback.Note.Text, err)
+			fb, ferr := d.Fallback.Fetch(ctx, s.client)
+			if ferr != nil {
+				err = fmt.Errorf("%w; the fallback: %w", err, ferr)
+			} else {
+				b, err = fb, nil
+				s.fellBack = append(s.fellBack, d.Name)
+				s.Result.Notes = append(s.Result.Notes, d.Fallback.Note)
+				r.Notes = append(r.Notes, d.Fallback.Note)
+			}
+		}
 		if why := refusal(d, b, err); why != nil {
 			s.Log.Warnf(runlog.TagAPI, "%s: %s refused: %v", s.Target.Name, d.Name, why)
 			s.Result.Notes = append(s.Result.Notes, d.Optional.Refused)

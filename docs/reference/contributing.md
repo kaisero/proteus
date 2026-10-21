@@ -88,11 +88,13 @@ CI never contacts a device. Run these by hand:
 
 ```bash
 PROTEUS_LIVE_CONFIG=/tmp/fw-live.xml go test -tags live -v ./internal/resolve/
-PANOS_HOST=... PANOS_API_KEY=... scripts/device-probe.sh /tmp/fw-live.xml vsys1
+PANOS_HOST=... PANOS_KEY_HEADER=/path/fw.key scripts/device-probe.sh /tmp/fw-live.xml vsys1
 ```
 
 `device-probe.sh` compares the first match of `proteus simulate policy` with the
-firewall's own `test security-policy-match`.
+firewall's own `test security-policy-match`. `PANOS_KEY_HEADER` names a file with
+the one line `X-PAN-KEY: <key>`. The script sends each call as a POST with the key
+in that header, so the key never goes in a URL.
 
 ## Update the schema digest
 

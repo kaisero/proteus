@@ -139,6 +139,9 @@ func printRun(w *textOut, run simulate.Run, t estate.Target, v securitypolicy.Ve
 		zones = fmt.Sprintf("from %s, to %s (%s)", orAny(v.Zones.From), orAny(v.Zones.To), v.Zones.Source)
 	}
 	fmt.Fprintf(w, "  zones      %s\n", zones)
+	if v.User != nil {
+		fmt.Fprintf(w, "  user       %s\n", userLine(*v.User))
+	}
 	switch {
 	case !v.Relevance.Known:
 		fmt.Fprintf(w, "  relevance  unknown: %s\n", v.Relevance.Reason.Text)
@@ -152,6 +155,22 @@ func printRun(w *textOut, run simulate.Run, t estate.Target, v securitypolicy.Ve
 		printStageTable(w, run.Stages)
 	}
 	printCandidates(w, v, why)
+}
+
+// userLine is the user of a flow and where it came from (spec 2026-10-17
+// §5.1), or none.
+func userLine(u securitypolicy.FlowUser) string {
+	switch {
+	case u.Name == "":
+		return "none"
+	case u.From == "mapping" && u.Given != "":
+		return fmt.Sprintf("%s (from the mapping of %s, which wins over --user %s)", u.Name, u.IP, u.Given)
+	case u.From == "mapping":
+		return fmt.Sprintf("%s (from the mapping of %s)", u.Name, u.IP)
+	case u.Given != "":
+		return fmt.Sprintf("%s (from --user %s)", u.Name, u.Given)
+	}
+	return u.Name + " (from --user)"
 }
 
 // printStageTable lists a security run's stages: level, candidates left, detail.
@@ -252,7 +271,7 @@ func (fl *flowFlags) bindZones(cmd *cobra.Command) {
 func (fl *flowFlags) bindL7(cmd *cobra.Command) {
 	cmd.Flags().StringVar(&fl.url, "url", "", "URL, matched against URL categories")
 	cmd.Flags().StringVar(&fl.application, "application", "", "application: a predefined or custom application")
-	cmd.Flags().StringVar(&fl.user, "user", "", "source user (not evaluated yet)")
+	cmd.Flags().StringVar(&fl.user, "user", "", "source user: a primary name such as example.com\\alice, a UPN or an email; a mapping of the source address wins")
 }
 
 // bindWhy registers --why with the one help text every command shares; a command's

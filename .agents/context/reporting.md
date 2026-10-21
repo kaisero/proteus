@@ -57,8 +57,8 @@ answer rather than discovered later:
 | zone with no interface, interface in no zone | nothing can be placed there |
 | virtual router running BGP or OSPF | routes learned at runtime are not in the file |
 | address no route covers | the arriving zone is unknown |
-| no user directory supplied | only the local database was searched |
-| stale user snapshot | membership may have changed since it was taken |
+| no identity data (`gap.no-user-directory`) | only the local database was searched; with the cause when a file does not load |
+| an identity file of a `--file` question older than `max_snapshot_age` (`gap.user-directory-stale`) | membership and mappings may have changed since the fetch |
 
 ### Deduplication
 
@@ -89,11 +89,8 @@ type Providers struct{ ... }
 type Ref struct{ ... }
 type Report struct{ ... }
 type Set struct{ ... }
-type StaleReporter interface{ ... }
 type UnparsedFilter struct{ ... }
 type Unresolved struct{ ... }
-type UserDirectory interface{ ... }
-type UserSnapshot struct{ ... }
 type View struct{ ... }
 type ZoneLocator interface{ ... }
 type ZonePlacement struct{ ... }
@@ -127,8 +124,6 @@ func (in *Interner) Name(id uint32) string
 func (s *Set) Config() *config.Config
 func (s *Set) Index(sc config.Scope, rb resolve.Rulebase) (*Index, error)
 func (s *Set) Provider(sc config.Scope) func(resolve.Rulebase) (*Index, error)
-func (s *UserSnapshot) GroupsOf(user string) []string
-func (s *UserSnapshot) Stale() (string, bool)
 func (s *ZoneSnapshot) Describe() string
 func (s *ZoneSnapshot) Routers() []string
 func (s *ZoneSnapshot) UnroutedInterfaces() []string
@@ -138,7 +133,6 @@ func (u Unresolved) Why() reason.Reason
 func (v *View) Candidates(f Field, value string) (*roaring.Bitmap, Report)
 func (v *View) Opaque(f Field) (*roaring.Bitmap, map[uint32][]reason.Reason)
 func Build(cfg *config.Config, edges *Edges, sc config.Scope, rb resolve.Rulebase) (*Index, error)
-func LoadUserSnapshot(r io.Reader) (*UserSnapshot, error)
 func LoadZoneSnapshot(r io.Reader) (*ZoneSnapshot, error)
 func New(cfg *config.Config, sc config.Scope, rb resolve.Rulebase) (*Index, error)
 func NewInterner() *Interner

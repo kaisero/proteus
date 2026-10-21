@@ -46,7 +46,18 @@ a URL. A transport error is retried once; a refusal (HTTP 4xx, or
 `status="error"` with HTTP 200) is not.
 
 A `Document` is a name and a fetch function. `Documents` lists them:
-`config` (export), `system-info`, `interfaces`, `fib`, `rib`, `ha`, `predefined`.
+`config` (`show config running`), `template` (`show config pushed-template`),
+`system-info`, `interfaces`, `fib`, `rib`, `ha`, `predefined`. `config` has a
+`Fallback`: a device that refuses `show config running`, or whose answer holds no
+`response/result/config`, is exported, with `note.config-not-running`, because the
+export holds the candidate (spec 2026-10-17 C12, PD1); a transport error fails the
+document without the fallback. `unwrapConfig` slices `response/result/config` out
+of the running answer byte for byte (PD2). `template` is optional:
+`unwrapTemplate` slices `response/result/template/config` (C9) into `template.xml`;
+the text `No template pushed to device`, or a template `config` without an
+element, is no template and no note (C7); a refusal, or a success answer with
+neither, gives `note.config-no-template`; a transport error fails the document,
+so `documents` is `partial` and the fetch exits 3.
 **Adding a fetcher is adding one `Document` value and listing it.** A document with
 `Optional` set is one a release may refuse: an API refusal, or an answer that fails
 `Optional.Check`, adds the `Optional.Refused` note to `Result.Notes`, stores
@@ -60,7 +71,18 @@ Advanced Routing device the legacy route command answers success with a deprecat
 text, so the Advanced Routing command must come first (verified on fw02).
 
 `Steps()` are a device's fetch as `internal/task` steps on a `State` (`NewState`):
-`login`, `ha`, `documents`, `applications`. The CLI runs them with `task.Run`, between its own
+`login`, `ha`, `documents`, `template`, `applications`, `identity`. The `template`
+step merges the pushed template into `config` (`MergeTemplate(base, template,
+root)`, spec 2026-10-17 §2.2: an element whose schema node has `tlo="yes"`, a leaf
+and a member list keep the base whole; any other matched element, `devices/entry`
+and `vsys/entry` too, merges by its children; a template element the base lacks is
+inserted byte for byte; no base byte changes, C11). `root` is
+`config.SchemaRoot()`. It sets `Result.ConfigSource` (`running+template`,
+`running`, `export+template`, `export`), which `meta.json` keeps as
+`config_source`; a digest or merge failure keeps the base, makes the step
+`partial`, fails the `template` outcome (exit 3) and adds
+`note.config-no-template`. The `identity` step (`identity.go`, spec 2026-10-17 §3) runs last; see
+[identity](identity.md). The CLI runs them with `task.Run`, between its own
 `resolve` and `store` steps, with the device's name as the task's kind, so every
 error starts `<device>/<step>: `. A failed document is recorded in
 `Result.Outcomes` and the rest continue (spec S10); the `documents` step is then
@@ -99,7 +121,8 @@ The step never returns an error, so the snapshot is stored in every case (D3):
 ### Store
 
 ```
-<root>/<device>/<timestamp>/<document>.xml
+<root>/<device>/<timestamp>/<document>.xml        config.xml, template.xml, system-info.xml, …
+<root>/<device>/<timestamp>/identity.json.gz
 <root>/<device>/<timestamp>/meta.json
 <root>/<device>/latest -> <timestamp>
 <root>/.content/<app-version>.v<trim>.xml.gz
@@ -107,6 +130,9 @@ The step never returns an error, so the snapshot is stored in every case (D3):
 
 The root is `$PROTEUS_STORE`, else `~/.local/share/proteus`. `Write` fills a
 hidden directory and renames it into place, so a reader never sees half a snapshot.
+The identity file that `Write` gets goes into that directory as
+`identity.FileName`, mode 0600, before `meta.json`, which then holds
+`"identity": true`; `Snapshot.IdentityPath` names it (spec 2026-10-17 §4.1).
 It makes that directory with `os.Mkdir`, so a second writer of the same id fails at
 once, and checks again for the id after the Mkdir. Only the creator removes the
 directory, and only before its rename. Each file is synced before the rename; the
@@ -176,6 +202,8 @@ type ActiveOptions struct{ ... }
 type AppData struct{ ... }
 type Client struct{ ... }
 type Document struct{ ... }
+type Fallback struct{ ... }
+type MergeStats struct{ ... }
 type Optional struct{ ... }
 type Outcome struct{ ... }
 type Result struct{ ... }
@@ -186,6 +214,7 @@ func (c *Client) ExportConfig(ctx context.Context) ([]byte, error)
 func (c *Client) Keygen(ctx context.Context, user, password string) error
 func (c *Client) Op(ctx context.Context, cmd string) ([]byte, error)
 func (e *APIError) Error() string
+func MergeTemplate(base, template []byte, root *schema.Node) ([]byte, MergeStats, error)
 func NewClient(t inventory.Target, log *runlog.Logger) *Client
 func NewState(t inventory.Target, docs []Document, opts ActiveOptions, log *runlog.Logger) State
 func OpDocument(name string, cmds ...string) Document
@@ -210,10 +239,11 @@ func (s *Store) List(device string) ([]string, error)
 func (s *Store) PruneContent() error
 func (s *Store) Resolve(ref string) (Snapshot, error)
 func (s *Store) WithClock(now func() time.Time) *Store
-func (s *Store) Write(meta Meta, docs map[string][]byte, keep int) (Snapshot, error)
+func (s *Store) Write(meta Meta, docs map[string][]byte, identityFile []byte, keep int) (Snapshot, error)
 func (s *Store) WriteContent(version string, b []byte) error
 func (sn Snapshot) ConfigPath() (string, error)
 func (sn Snapshot) ContentPath() string
+func (sn Snapshot) IdentityPath() string
 func (sn Snapshot) Path(doc string) string
 func (sn Snapshot) Zones() (*index.ZoneSnapshot, error)
 func At(root string) *Store
@@ -230,8 +260,9 @@ func Open(root string) (*Store, error)
   itself, because it cannot import `fetch` (R12). A test in `internal/cli`
   asserts they equal `fetch`'s names.
 - **Tests never touch a device.** `internal/fakepanos` serves keygen, show commands
-  and an export over TLS on 127.0.0.1, records every request, and can drop
-  connections to exercise the retry.
+  (the running configuration and the pushed template among them) and an export
+  over TLS on 127.0.0.1, records every request, and can drop connections, also
+  per command, to exercise the retry.
 - **Secrets stay out of output.** Errors never quote a password or a key; tests
   check both.
 

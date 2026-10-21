@@ -14,6 +14,7 @@ import (
 
 	"github.com/kaisero/proteus/internal/appid"
 	"github.com/kaisero/proteus/internal/config"
+	"github.com/kaisero/proteus/internal/identity"
 	"github.com/kaisero/proteus/internal/index"
 	"github.com/kaisero/proteus/internal/reason"
 	"github.com/kaisero/proteus/internal/resolve"
@@ -28,6 +29,10 @@ const FileDevice = "file"
 // AppsFile is the App-ID content file OpenFile reads in the directory of the
 // configuration (spec 2026-10-16 §6).
 const AppsFile = "apps.xml.gz"
+
+// IdentityFile is the identity file OpenFile reads in the directory of the
+// configuration (spec 2026-10-17 §7).
+const IdentityFile = identity.FileName
 
 // Target is one scope a question runs against.
 type Target struct {
@@ -47,6 +52,12 @@ type Target struct {
 	// (spec 2026-10-16 §4.1).
 	Apps     func() (*appid.Data, error) `json:"-"`
 	AppsPath string                      `json:"-"`
+	// Identity loads the target's identity data; nil when its snapshot holds
+	// no identity file. IdentityPath is the file it reads, "" for none. A
+	// question that needs no identity data never calls Identity (spec
+	// 2026-10-17 §4.2).
+	Identity     func() (*identity.Data, error) `json:"-"`
+	IdentityPath string                         `json:"-"`
 	// Notes qualify every answer from this target: a stale snapshot, a skipped document.
 	Notes simulate.Reasons
 }
@@ -112,6 +123,9 @@ type When struct {
 	// Apps loads the snapshots' App-ID content files; nil loads each from
 	// the store on every ask. A question fills it with its memo.
 	Apps AppSource
+	// Identity loads the snapshots' identity files; nil loads each from the
+	// store on every ask. A question fills it with its memo.
+	Identity IdentitySource
 }
 
 // Indexes gives a configuration's indexes: each scope's index of a rulebase.
@@ -129,6 +143,9 @@ type Loaded struct {
 	// Apps loads the snapshot's App-ID content data; nil loads it with
 	// When.Apps from the snapshot's content path.
 	Apps func() (*appid.Data, error)
+	// Identity loads the snapshot's identity data; nil loads it with
+	// When.Identity from the snapshot's identity path.
+	Identity func() (*identity.Data, error)
 }
 
 // ConfigSource loads a snapshot's configuration. The answer depends only on
@@ -162,6 +179,28 @@ type DiskApps struct{}
 
 // Apps implements AppSource.
 func (DiskApps) Apps(path string) (*appid.Data, error) { return appid.Load(path) }
+
+// IdentitySource loads an identity file. The answer depends only on the path,
+// so an implementation may cache by it. The returned data is shared: a caller
+// must not change it. A source a server shares between questions must be safe
+// for concurrent use.
+type IdentitySource interface {
+	Identity(path string) (*identity.Data, error)
+}
+
+// DiskIdentity loads each identity file from disk on every ask.
+type DiskIdentity struct{}
+
+// Identity implements IdentitySource.
+func (DiskIdentity) Identity(path string) (*identity.Data, error) { return identity.Load(path) }
+
+// identities is the source of identity files.
+func (w When) identities() IdentitySource {
+	if w.Identity == nil {
+		return DiskIdentity{}
+	}
+	return w.Identity
+}
 
 // apps is the source of content files.
 func (w When) apps() AppSource {
@@ -240,8 +279,14 @@ func openSnapshot(d string, sn store.Snapshot, err error, vsys []string, w When)
 		src := w.apps()
 		apps = func() (*appid.Data, error) { return src.Apps(path) }
 	}
+	idPath, ids := sn.IdentityPath(), l.Identity
+	if ids == nil && idPath != "" {
+		src := w.identities()
+		ids = func() (*identity.Data, error) { return src.Identity(idPath) }
+	}
 	for i := range ts {
 		ts[i].Apps, ts[i].AppsPath = apps, path
+		ts[i].Identity, ts[i].IdentityPath = ids, idPath
 	}
 	for _, h := range hs {
 		w.Log.Warnf(runlog.TagSnap, "%s/%s: hole: %s", h.Device, h.Vsys, h.Reason)
@@ -250,8 +295,9 @@ func openSnapshot(d string, sn store.Snapshot, err error, vsys []string, w When)
 }
 
 // OpenFile reads one configuration file with no inventory or store. Its
-// targets read the App-ID content data from AppsFile in the directory of the
-// file, when a question needs it (spec 2026-10-16 §6).
+// targets read the App-ID content data from AppsFile and the identity data
+// from IdentityFile in the directory of the file, when a question needs them
+// (spec 2026-10-16 §6, spec 2026-10-17 §7).
 func OpenFile(path string, vsys []string, log *runlog.Logger) ([]Target, []Hole, error) {
 	cfg, rep, err := config.Load(path)
 	if err != nil {
@@ -259,10 +305,13 @@ func OpenFile(path string, vsys []string, log *runlog.Logger) ([]Target, []Hole,
 	}
 	log.Infof(runlog.TagSnap, "file %s: PAN-OS %s", path, cfg.Version())
 	ts, hs := scopes(FileDevice, nil, cfg, rep, nil, vsys, nil)
-	apps := filepath.Join(filepath.Dir(path), AppsFile)
+	dir := filepath.Dir(path)
+	apps, ids := filepath.Join(dir, AppsFile), filepath.Join(dir, IdentityFile)
 	for i := range ts {
 		ts[i].Apps = func() (*appid.Data, error) { return DiskApps{}.Apps(apps) }
 		ts[i].AppsPath = apps
+		ts[i].Identity = func() (*identity.Data, error) { return DiskIdentity{}.Identity(ids) }
+		ts[i].IdentityPath = ids
 	}
 	return ts, hs, nil
 }

@@ -22,10 +22,12 @@ var _ Check = Security{}
 func (Security) Name() string { return checkSecurity }
 
 // decisionStages are the stages whose fidelity a hop's security answer takes: the
-// addresses, the zones, and the decision (spec §4.7, "Check fidelity"). The
-// service and URL stages say only which candidates were kept; the decision
-// already accounts for those in doubt.
-var decisionStages = []string{"resolve-source", "resolve-destination", "derive-zones", "first-match"}
+// addresses, the zones, the user and the decision (spec §4.7, "Check
+// fidelity"). The service and URL stages say only which candidates were kept;
+// the decision already accounts for those in doubt. match-user is inferred
+// when the user is: no identified user, a user in doubt, or one from an email
+// (spec 2026-10-17 §5.3, §5.4, PD12).
+var decisionStages = []string{"resolve-source", "resolve-destination", "derive-zones", "match-user", "first-match"}
 
 // Evaluate implements Check. It runs securitypolicy on the hop's device and vsys
 // with the hop's zones given, so they are single and known when the vsys defines

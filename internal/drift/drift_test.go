@@ -157,6 +157,32 @@ func TestCompareIgnoresOrderAndBookkeeping(t *testing.T) {
 	}
 }
 
+// show config running answers indented (spec 2026-10-17 C12), and the export
+// was not. The indent is no setting: across the switch nothing changes.
+func TestCompareIgnoresTheIndent(t *testing.T) {
+	t.Parallel()
+	lab, indented := load(t, "firewall-lab.xml"), load(t, "firewall-lab-indented.xml")
+	for _, sc := range []config.Scope{{Sort: config.ScopeShared}, vsys1, {Sort: config.ScopeVsys, Name: "vsys2"}} {
+		if got := Compare(lab, indented, sc); len(got) != 0 {
+			t.Errorf("%s: got %+v", sc, got)
+		}
+	}
+}
+
+// ptpl marks a template value and src a template node of a config get; they
+// carry no configuration value. An element that gains only them is no
+// change, and a member with src stays a plain member.
+func TestCompareIgnoresTemplateAttributes(t *testing.T) {
+	t.Parallel()
+	tmpl := `<config version="11.2.0"><shared/><devices><entry name="localhost.localdomain"><vsys><entry name="vsys1">
+<zone><entry name="z"%s><network%s><layer3><member%s>ethernet1/1</member></layer3></network></entry></zone></entry></vsys></entry></devices></config>`
+	before := loadXML(t, fmt.Sprintf(tmpl, "", "", ""))
+	after := loadXML(t, fmt.Sprintf(tmpl, ` ptpl="000000000001"`, ` ptpl="000000000001" src="tpl"`, ` src="tpl"`))
+	if got := Compare(before, after, vsys1); len(got) != 0 {
+		t.Errorf("got %+v", got)
+	}
+}
+
 // An added or removed entry keeps its short line; a changed one lists fields.
 func TestCompareKeepsShortLines(t *testing.T) {
 	t.Parallel()

@@ -22,14 +22,14 @@ import (
 
 // SearchInput is search: every place a value or name appears.
 type SearchInput struct {
-	Term string `json:"term" jsonschema:"the value or name to search for: an address, a prefix, a port, a name or an application"`
+	Term string `json:"term" jsonschema:"the value or name to search for: an address, a prefix, a port, a name, an application, a user or a group"`
 	// Mode overrides the match the term's type sets: exact, within or contains.
 	Mode string `json:"mode,omitempty" jsonschema:"exact, within or contains; empty lets the term's type decide"`
 	// Kinds, Fields and Show narrow the findings; Direct keeps groups one level
 	// up.
-	Kinds  []string `json:"kinds,omitempty" jsonschema:"object kinds to search; empty for every kind"`
+	Kinds  []string `json:"kinds,omitempty" jsonschema:"object kinds to search, or identity-user, identity-group and mapping for the User-ID data; empty for every kind"`
 	Fields []string `json:"fields,omitempty" jsonschema:"rule fields to search; empty for every field"`
-	Show   []string `json:"show,omitempty" jsonschema:"finding stages to show: objects, groups, refs, literals"`
+	Show   []string `json:"show,omitempty" jsonschema:"finding stages to show: objects, identity, groups, refs, literals"`
 	Direct bool     `json:"direct,omitempty" jsonschema:"follow groups one level up only"`
 	// Selection is what the search runs against.
 	Selection Selection `json:"selection" jsonschema:"the file or the devices to search"`
@@ -39,9 +39,10 @@ type SearchInput struct {
 // searchModes are the modes a search takes, by name.
 var searchModes = map[string]search.Mode{"exact": search.Exact, "within": search.Within, "contains": search.Contains}
 
-// showNames are the stages a search shows, by name (spec 2026-09-27 §15 C6).
+// showNames are the stages a search shows, by name (spec 2026-09-27 §15 C6,
+// spec 2026-10-17 §6.1).
 var showNames = map[string]search.Stage{
-	"objects": search.StageObject, "groups": search.StageGroup,
+	"objects": search.StageObject, "identity": search.StageIdentity, "groups": search.StageGroup,
 	"refs": search.StageReference, "literals": search.StageLiteral,
 }
 
@@ -56,8 +57,8 @@ func (in SearchInput) Validate() *UsageError {
 	}
 	for _, st := range in.Show {
 		if _, ok := showNames[st]; !ok {
-			return usage(fmt.Sprintf("--show %q: want objects, groups, refs or literals", st),
-				fmt.Sprintf("show %q: want objects, groups, refs or literals", st))
+			return usage(fmt.Sprintf("--show %q: want objects, identity, groups, refs or literals", st),
+				fmt.Sprintf("show %q: want objects, identity, groups, refs or literals", st))
 		}
 	}
 	if u := in.checkLimit(); u != nil {
@@ -87,12 +88,14 @@ func (sel Selection) validateFile() *UsageError {
 // checkKinds refuses a kind that no selected configuration can hold, before
 // any target runs: a misspelt kind would find nothing and read as an answer.
 // The kinds a configuration can hold come from its schema digest; with several
-// targets, a kind is valid when any of them knows it.
+// targets, a kind is valid when any of them knows it. The kinds of the stage
+// identity come from the identity data, so every target knows them (spec
+// 2026-10-17 §6.1).
 func (in SearchInput) checkKinds(ts []estate.Target) *UsageError {
 	if len(in.Kinds) == 0 || len(ts) == 0 {
 		return nil
 	}
-	known := map[string]bool{}
+	known := map[string]bool{search.KindIdentityUser: true, search.KindIdentityGroup: true, search.KindMapping: true}
 	for _, t := range ts {
 		for _, k := range resolve.ObjectKinds(t.Config) {
 			known[k] = true
@@ -175,22 +178,22 @@ func nameShaped(term string) bool {
 	return len(index.PrefixesOf(term)) == 0 && !portTerm.MatchString(term) && !strings.ContainsAny(term, "/ ")
 }
 
-// canonicalApp is the name of the application a term names in any case: the
-// custom application's name as configured, or the content name (spec
-// 2026-10-16 P14). Refs and the interner match names exactly, so the search
-// runs on it (D17). Any other term stays as it is.
-func canonicalApp(t estate.Target, apps *appid.Data, term string) string {
+// canonicalApp is the name of the application a term names in any case, and
+// whether the term names one: the custom application's name as configured, or
+// the content name (spec 2026-10-16 P14). Refs and the interner match names
+// exactly, so the search runs on it (D17). Any other term stays as it is.
+func canonicalApp(t estate.Target, apps *appid.Data, term string) (string, bool) {
 	for _, a := range resolve.Applications(t.Config, t.Scope) {
 		if strings.EqualFold(a.Name, term) {
-			return a.Name
+			return a.Name, true
 		}
 	}
 	if apps != nil {
 		if a, ok := apps.App(term); ok {
-			return a.Name
+			return a.Name, true
 		}
 	}
-	return term
+	return term, false
 }
 
 // Matching says how the term is matched: the mode asked, or what the term's type
@@ -246,10 +249,6 @@ func Search(ctx context.Context, env Env, in SearchInput) (Envelope[SearchInput,
 	if u := in.checkKinds(ts); u != nil {
 		return none, u
 	}
-	users, err := env.users()
-	if err != nil {
-		return none, err
-	}
 	e := envelope[SearchInput, Finding]("search", in)
 	e.Holes, e.Targets, e.Read, e.Summary = holes, ts, readOf(ts), &Summary{}
 	matching := in.Matching()
@@ -258,7 +257,7 @@ func Search(ctx context.Context, env Env, in SearchInput) (Envelope[SearchInput,
 		if err := ctx.Err(); err != nil {
 			return none, err
 		}
-		q.Providers = index.Providers{Users: users}
+		q.Providers = index.Providers{}
 		if t.Snapshot != nil {
 			if z, err := t.Snapshot.Zones(); err == nil {
 				q.Providers.Zones = z
@@ -275,9 +274,28 @@ func Search(ctx context.Context, env Env, in SearchInput) (Envelope[SearchInput,
 			q.Providers.Apps, notes = appsFor(t, noAppDataSearch)
 			// A copy: the target's notes may share their array with a cached load.
 			ts[i].Notes = append(slices.Clone(t.Notes), notes...)
-			q.Term = canonicalApp(t, q.Providers.Apps, in.Term)
+			q.Term, _ = canonicalApp(t, q.Providers.Apps, in.Term)
+		}
+		// The identity data loads for a term that can name a user, a group
+		// or a mapped address, and else for a term the first search finds
+		// nothing for (spec 2026-10-17 §4.2, PD10).
+		withIdentity := func() {
+			var notes simulate.Reasons
+			q.Providers.Users, notes = identityFor(t, env.MaxAge, env.now())
+			ts[i].Notes = append(slices.Clone(ts[i].Notes), notes...)
+			q.Term = userTerm(t, q.Providers.Users, q.Providers.Apps, q.Term)
+		}
+		loaded := searchNeedsIdentity(in.Term, idx.Rules())
+		if loaded {
+			withIdentity()
 		}
 		fs, un, err := search.Run(t.Config, idx, q)
+		if err == nil && len(fs) == 0 && !loaded {
+			withIdentity()
+			if q.Providers.Users != nil {
+				fs, un, err = search.Run(t.Config, idx, q)
+			}
+		}
 		if err != nil {
 			// Only a term --within cannot read is the caller's to fix.
 			if errors.Is(err, search.ErrWithinNeedsAddress) {

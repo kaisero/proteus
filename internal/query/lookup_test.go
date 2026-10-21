@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/kaisero/proteus/internal/card"
 	"github.com/kaisero/proteus/internal/simulate/pathlab"
 	"github.com/kaisero/proteus/internal/store"
 )
@@ -141,4 +142,76 @@ func sum(m map[string]int) int {
 		n += v
 	}
 	return n
+}
+
+// lookupFile looks a name up in one configuration file.
+func lookupFile(t *testing.T, env Env, path, name, kind string) Envelope[LookupInput, LookupResult] {
+	t.Helper()
+	e, err := Lookup(context.Background(), env, LookupInput{Name: name, Kind: kind, Selection: Selection{File: path}})
+	if err != nil {
+		t.Fatalf("lookup %s: %v", name, err)
+	}
+	return e
+}
+
+// lookup finds a user and a group in the identity data: by --kind, or with no
+// kind when the configuration has no element of the name (spec 2026-10-17
+// §4.2, §6.2, PD10, PD14). The card has the scope of its target.
+func TestLookupFindsTheIdentityCards(t *testing.T) {
+	t.Parallel()
+	path := identityConfig(t, "firewall-identity.xml", identityGzip(t))
+	for _, tc := range []struct{ name, kind, want, card string }{
+		{"alice@example.com", "identity-user", "identity-user", `example.com\alice`},
+		{"alice@example.com", "", "identity-user", `example.com\alice`},
+		{"cn=domain users,cn=users,dc=example,dc=com", "", "identity-group", "cn=domain users,cn=users,dc=example,dc=com"},
+		{`example.com\domain users`, "identity-group", "identity-group", "cn=domain users,cn=users,dc=example,dc=com"},
+	} {
+		src := newCountingIdentity()
+		e := lookupFile(t, Env{Identity: src}, path, tc.name, tc.kind)
+		if len(e.Results) != 1 || e.Results[0].Card.Kind != tc.want || e.Results[0].Card.Name != tc.card ||
+			e.Results[0].Scope != "vsys:vsys1" || src.total() != 1 {
+			t.Errorf("%s %q: %+v, loads %v", tc.name, tc.kind, e.Results, src.loads)
+		}
+	}
+	if e := lookupFile(t, Env{}, path, `example.com\alice`, "identity-group"); len(e.Results) != 0 {
+		t.Errorf("a user is no group: %+v", e.Results)
+	}
+	if e := lookupFile(t, Env{}, identityConfig(t, "firewall-identity.xml", nil), `example.com\alice`, "identity-user"); len(e.Results) != 0 {
+		t.Errorf("without the identity file: %+v", e.Results)
+	}
+}
+
+// A rule or an object of the configuration loads no identity file (PD10).
+func TestLookupRuleLoadsNoIdentity(t *testing.T) {
+	t.Parallel()
+	path := identityConfig(t, "firewall-identity.xml", identityGzip(t))
+	for _, name := range []string{"u-user", "web-server", "local-admins"} {
+		src := newCountingIdentity()
+		if e := lookupFile(t, Env{Identity: src}, path, name, ""); len(e.Results) != 1 || src.total() != 0 {
+			t.Errorf("%s: %+v, loads %v", name, e.Results, src.loads)
+		}
+	}
+}
+
+// needsIdentity: an identity kind, or no kind when the first look found
+// nothing.
+func TestNeedsIdentity(t *testing.T) {
+	t.Parallel()
+	rule := []card.Card{{Kind: card.KindRule}}
+	for _, tc := range []struct {
+		kind string
+		cs   []card.Card
+		want bool
+	}{
+		{"identity-user", nil, true},
+		{"identity-group", rule, true},
+		{"", nil, true},
+		{"", rule, false},
+		{"address", nil, false},
+		{card.KindRule, nil, false},
+	} {
+		if got := needsIdentity(tc.kind, tc.cs); got != tc.want {
+			t.Errorf("needsIdentity(%q, %d cards) = %v", tc.kind, len(tc.cs), got)
+		}
+	}
 }

@@ -9,7 +9,7 @@ every package follows.
 
 | Goal | What it means |
 | --- | --- |
-| Read-only | The API client sends only `<show>` commands and the configuration export. |
+| Read-only | The API client sends only `<show>` commands, such as `show config running` and `show config pushed-template`, and the configuration export as the fallback. Proteus merges the running configuration and the pushed template itself. |
 | Correct before complete | An answer that may be incomplete says so. A wrong answer that looks complete is the worst outcome. |
 | Schema first | Field knowledge comes from the PAN-OS schema. |
 | Scope-correct | Every answer is keyed by device and vsys. See [Scope](scope.md). |
@@ -72,9 +72,10 @@ Dependencies point down. The core imports no network or process package, and
 | `internal/simulate/topology` | interfaces and forwarding tables, shared by the simulations |
 | `internal/simulate/rulebase` | rulebase address matching and the PBF check |
 | `internal/appid` | the App-ID content file of one content version |
+| `internal/identity` | the User-ID data of one snapshot: the file format, the parsers of the device answers, and the user, group and mapping queries |
 | `internal/estate` | turns a selection and a time into the configurations a question reads |
 | `internal/inventory` | the device list, credentials and TLS choice |
-| `internal/fetch` | the read-only XML API client and the list of documents |
+| `internal/fetch` | the read-only XML API client, the list of documents, the template merge and the User-ID step |
 | `internal/store` | timestamped snapshots on disk, `latest` and retention |
 | `internal/task` | runs an operation as named steps and records each one |
 | `internal/reason` | the registry of reason codes that answers carry |

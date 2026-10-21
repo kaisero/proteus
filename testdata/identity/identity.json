@@ -1,0 +1,45 @@
+{
+  "format": 1,
+  "taken_at": "2026-10-17T20:00:00Z",
+  "sources": {
+    "ldap": [
+      {"name": "example.com", "domain": "example.com", "base": "dc=example,dc=com", "groups": 3}
+    ],
+    "cie": [
+      {"name": "cie-a", "domain": "example-cie", "groups": 1, "last": "120 secs ago"}
+    ]
+  },
+  "users": [
+    {"name": "example.com\\alice", "alt": ["alice@example.com"], "email": "alice@example.com",
+     "groups": ["cn=domain users,cn=users,dc=example,dc=com", "cn=payroll,ou=groups,dc=example,dc=com"]},
+    {"name": "example.com\\bob", "alt": ["bob@example.com"], "email": "robert@example.com",
+     "groups": ["cn=domain users,cn=users,dc=example,dc=com", "team-x"]},
+    {"name": "example.com\\carol",
+     "groups": ["cn=domain users,cn=users,dc=example,dc=com", "engineering", "dug-a", "dug-ab"]},
+    {"name": "example.com\\dave", "alt": ["dave@example.com"]}
+  ],
+  "groups": [
+    {"name": "cn=domain users,cn=users,dc=example,dc=com", "source": "ldap:example.com", "members": 3},
+    {"name": "cn=empty,ou=groups,dc=example,dc=com", "source": "ldap:example.com", "members": 0},
+    {"name": "cn=payroll,ou=groups,dc=example,dc=com", "source": "ldap:example.com", "members": 1},
+    {"name": "dug-a", "source": "dug", "members": 1},
+    {"name": "dug-ab", "source": "dug", "members": 1},
+    {"name": "engineering", "source": "xmlapi", "members": 1},
+    {"name": "example-cie\\cloud-team", "source": "cie:cie-a", "members": 0},
+    {"name": "team-x", "source": "xmlapi", "members": 1}
+  ],
+  "dugs": ["dug-a", "dug-ab"],
+  "tags": [
+    {"user": "example.com\\carol", "tags": ["tag-a", "tag-b"]},
+    {"user": "example.com\\dave", "tags": ["tag-a"]}
+  ],
+  "mappings": [
+    {"ip": "198.51.100.10", "user": "example\\alice", "type": "XMLAPI", "timeout": 14400},
+    {"ip": "198.51.100.11", "user": "example.com\\alice", "type": "XMLAPI", "timeout": 14400},
+    {"ip": "198.51.100.12", "user": "other\\ghost", "type": "XMLAPI", "timeout": 14400},
+    {"ip": "198.51.100.13", "user": "example.com\\carol", "type": "XMLAPI", "timeout": 14400},
+    {"ip": "198.51.100.14", "user": "example.com\\dave", "type": "XMLAPI", "timeout": 14400},
+    {"ip": "2001:db8::11", "user": "example.com\\bob", "type": "XMLAPI", "timeout": 14400}
+  ],
+  "parts_missing": []
+}

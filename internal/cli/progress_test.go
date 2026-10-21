@@ -84,7 +84,7 @@ func TestFetchProgressOnATerminal(t *testing.T) {
 		t.Fatalf("exit %d\nstdout:\n%s\nstderr:\n%s", code, out.String(), errOut.String())
 	}
 	for _, dev := range []string{"fw01", "fw02"} {
-		for _, slug := range []string{"resolve", "login", "ha", "documents", "applications", "store"} {
+		for _, slug := range []string{"resolve", "login", "ha", "documents", "template", "applications", "identity", "store"} {
 			if !strings.Contains(errOut.String(), dev+"  "+slug+" ") {
 				t.Errorf("no progress line for %s/%s:\n%s", dev, slug, errOut.String())
 			}

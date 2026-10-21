@@ -43,6 +43,7 @@ devices:
     # the management address fw01 reports. Set ha_peer when that address is not
     # reachable from here.
     # ha_peer: fw01-b.example.net
+    # identity: false   # do not fetch the User-ID data of this device
 `
 
 // WriteTemplate writes Template to path with mode 0600, creating its directory. It

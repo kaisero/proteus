@@ -1,0 +1,16 @@
+<response status="success"><result><![CDATA[
+User Name                         Vsys    Groups
+------------------------------------------------------------------
+example.com\alice                 vsys1                           cn=domain users,cn=users,dc=example,dc=com 
+example.com\bob.xxxxxxxxxxxxxxxx  vsys1                           team-x 
+example.com\carol.xxxxxxxxxxxxxxx  vsys1                           cn=domain users,cn=users,dc=example,dc=com 
+                                                                engineering 
+example.com\dave.xxxxxxxxxxxxxxxxxxxxxxx  vsys1                           team-x 
+                                                                help desk 
+                                                                dug-a 
+other\ghost.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx  vsys1                           engineering 
+
+Total: 5
+* : Custom Group
+
+]]></result></response>

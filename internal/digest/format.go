@@ -20,7 +20,11 @@ const PlatformFirewall = "firewall"
 //
 // 2 added the encrypted mark (Node.Encrypted). A digest of format 1 would read
 // as one without secrets, so it is refused rather than read.
-const formatVersion = 2
+//
+// 3 added the template-object mark (Node.TemplateObject). A digest of format 2
+// would merge each template object by its children, so it is refused (spec
+// 2026-10-17 C11).
+const formatVersion = 3
 
 // Digest is one platform's schema at one PAN-OS version.
 type Digest struct {

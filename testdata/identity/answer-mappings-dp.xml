@@ -1,0 +1,8 @@
+<response status="success"><result><entry><ip>198.51.100.12</ip><vsys>vsys1</vsys><type>XMLAPI</type><user>other\ghost</user><idle_timeout>14357</idle_timeout><timeout>14357</timeout></entry>
+<entry><ip>198.51.100.11</ip><vsys>vsys1</vsys><type>XMLAPI</type><user>example.com\alice</user><idle_timeout>14357</idle_timeout><timeout>14357</timeout></entry>
+<entry><ip>198.51.100.14</ip><vsys>vsys1</vsys><type>XMLAPI</type><user>example.com\dave</user><idle_timeout>14357</idle_timeout><timeout>14357</timeout></entry>
+<entry><ip>198.51.100.10</ip><vsys>vsys1</vsys><type>XMLAPI</type><user>example\alice</user><idle_timeout>14357</idle_timeout><timeout>14357</timeout></entry>
+<entry><ip>2001:db8::11</ip><vsys>vsys1</vsys><type>XMLAPI</type><user>example.com\bob</user><idle_timeout>14357</idle_timeout><timeout>14357</timeout></entry>
+<entry><ip>198.51.100.13</ip><vsys>vsys1</vsys><type>XMLAPI</type><user>example.com\carol</user><idle_timeout>14357</idle_timeout><timeout>14357</timeout></entry>
+<count>6</count>
+</result></response>

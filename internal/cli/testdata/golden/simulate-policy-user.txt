@@ -1,0 +1,20 @@
+198.51.100.11 -> 192.0.2.10 tcp/443
+file / vsys1   TMP
+  note: identity data taken 2026-10-17T20:00:00Z from TMP
+  note: the user example.com\alice comes from the mapping of 198.51.100.11
+  zones      from inside, to outside (given)
+  user       example.com\alice (from the mapping of 198.51.100.11)
+  relevance  unknown: no stored forwarding table
+  fidelity   exact
+  resolve-source      exact 18 198.51.100.11: 0 hits, 0 negated rules
+  resolve-destination exact 1  192.0.2.10: 0 hits, 0 negated rules
+  derive-zones        exact 1  from inside, to outside, as given
+  match-application   exact 1  no application given
+  match-user          exact 1  example.com\alice, from the mapping of 198.51.100.11; candidates that name a user: 1, kept in doubt: 0
+  match-service       exact 1  tcp/443
+  match-url           exact 1  no candidate names a URL category
+  drop-disabled       exact 1  0 disabled
+  order               exact 1  1 in order
+  first-match         exact 1  u-ldap-group (allow), position 1
+  1. u-ldap-group allow [local vsys:vsys1]
+first match: u-ldap-group (allow)

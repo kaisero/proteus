@@ -49,6 +49,7 @@ The template holds one device, `fw01`, and every default with a comment:
 | `log_keep` | `20` |
 | `log_dir`, `store`, `export_inventory` | commented out |
 | `ha_peer` on `fw01` | commented out |
+| `identity` on `fw01` | commented out; `identity: false` turns off the fetch of the device's User-ID data |
 
 [Configuration](../reference/configuration.md#the-inventory) describes every key.
 

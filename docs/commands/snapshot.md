@@ -174,6 +174,10 @@ and leaves out the changes.
 | `  <path>: <old> -> <new>` | one setting that differs in a changed entry |
 | `added <kind> <name> <short line>` | an entry in the newer snapshot only |
 | `removed <kind> <name> <short line>` | an entry in the older snapshot only |
+| `identity` | the User-ID result of the device, when both snapshots hold User-ID data, see [User-ID data](#user-id-data) |
+| `changed identity user <name>` | a user whose groups changed; a `group:` line names each group that the user gained or lost |
+| `changed identity source <name>` | an identity source whose group count changed, such as `groups: 3 -> 4` |
+| `added identity user <name>`, `removed identity source <name>` | a user or an identity source in one snapshot only |
 | `1 with changes, 0 without, 0 holes` | the devices with changes, the devices without a change, and the holes |
 
 A device without two snapshots to compare is a hole. The short line of an added
@@ -213,6 +217,14 @@ The diff skips the attributes that PAN-OS writes for its own bookkeeping: `uuid`
 
 When the App-ID content version differs between the two snapshots, the note
 `note.app-version-changed` names both versions.
+
+When the two snapshots come from different configuration sources, the note
+`note.config-source-changed` names both sources. A snapshot that an older release
+of Proteus fetched holds the configuration export. Across the change to the
+running configuration with the pushed template, the template values show as
+added once, and the uncommitted changes that the export held show as removed.
+The empty elements below `shared/content-preview` show as removed too. See
+[Snapshots](../concepts/snapshots.md#what-a-snapshot-holds).
 
 In JSON and YAML, the changes have these keys:
 
@@ -271,6 +283,60 @@ the file and how `meta.json` names its version. To fetch a file again, delete it
 To use the data with `--file`, copy the file beside the configuration file and
 name it `apps.xml.gz`.
 
+### User-ID data
+
+A configuration names users and groups, but it does not say who is in a group or
+which user an address has. The firewall's User-ID data does. For each
+single-vsys firewall, `fetch` reads the user-to-address mappings, the users with
+their groups, alternate names and emails, the groups with their source, the
+registered user tags, and the identity sources. It writes one file into the
+snapshot:
+
+```text
+<store>/<device>/<snapshot id>/identity.json.gz
+```
+
+`meta.json` then holds `"identity": true`. A snapshot without the file behaves as
+before the data: a rule that names a user or a group stays in doubt.
+[fetch](fetch.md#user-id-data) lists the cases where `fetch` writes no file or a
+file with a missing part.
+
+`snapshot diff` compares the User-ID data of the two snapshots when both hold it.
+The device then gets one more result with the scope `identity`:
+
+```text
+  identity
+    fw01/identity: 0 added, 0 removed, 2 changed
+    changed identity source ldap:example.com
+      groups: 3 -> 4
+    changed identity user   example.com\alice
+      group: (unset) -> team-x
+```
+
+| Change | What it says |
+| --- | --- |
+| `identity user` | a user that came or went, with its groups, or a user that gained or lost a group |
+| `identity source` | an identity source that came or went, or whose group count changed |
+
+The diff does not compare the mappings: they change all the time. When one of
+the two snapshots has no User-ID data, the device gets no `identity` result, and
+`note.identity-not-compared` says so. Else every user would show as added. A part
+that is missing in one of the two snapshots is not compared either, and the note
+names the part.
+
+To use the data with `--file`, copy the file beside the configuration file:
+
+```bash
+mkdir fw01
+cp ~/.local/share/proteus/fw01/latest/config.xml fw01/
+cp ~/.local/share/proteus/fw01/latest/identity.json.gz fw01/
+proteus simulate policy 198.51.100.11 192.0.2.10 --port 443 --file fw01/config.xml
+```
+
+With `PROTEUS_STORE` set, the store is that directory. The note
+`note.identity-file` names the file that a `--file` answer reads. Nothing checks
+that the file belongs to the configuration.
+
 ### Old and damaged snapshots
 
 Every question takes `--at <time>` and reads each device's newest snapshot at or
@@ -321,6 +387,8 @@ With `--detail summary`, each scope counts all of its changes.
   that the content version changed.
 - `snapshot diff` does not compare the predefined services, because they are not
   configuration.
+- `snapshot diff` does not compare the User-ID mappings, and it compares the
+  User-ID data only when both snapshots hold it.
 
 See [Limits](../reference/limits.md).
 

@@ -5,6 +5,40 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Check which rule a flow hits by its user.** `proteus simulate policy --user`
+  matches the source user and the user groups of a rule as the firewall does,
+  and the user mapped to the source address wins over the flag.
+- **Find users, groups and the user of an address.** `proteus search` and
+  `proteus lookup` show the groups and addresses of a user, the members of a
+  group and the user mapped to an address, and `proteus snapshot diff` shows
+  changed group membership.
+- **Store the User-ID data of each firewall.** `proteus fetch` keeps the users,
+  their groups and the user-to-address mappings of a single-vsys firewall with
+  its snapshot, and `proteus mcp` answers with them as the commands do.
+
+### Changed
+
+- **A snapshot holds the template values the firewall runs.** `proteus fetch`
+  merges the template that Panorama pushes into the running configuration, so
+  the first `proteus snapshot diff` after the upgrade shows those values as
+  added.
+
+### Fixed
+
+- **A snapshot no longer holds uncommitted changes.** `proteus fetch` reads the
+  running configuration of each firewall, not the configuration export that also
+  held the changes an admin had not committed yet.
+
+### Removed
+
+- **`PROTEUS_USERS` is gone.** The User-ID data that `proteus fetch` stores with
+  each snapshot replaces the hand-made user file. With `--file`, put
+  `identity.json.gz` next to the configuration.
+
 ## [0.0.1] - 2026-10-18
 
 ### Added

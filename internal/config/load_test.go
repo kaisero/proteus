@@ -1,13 +1,17 @@
 package config
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
+	"regexp"
+	"slices"
 	"strings"
 	"testing"
 	"testing/fstest"
 
 	"github.com/kaisero/proteus/internal/digest"
+	"github.com/kaisero/proteus/internal/schema"
 )
 
 func TestLoadBareConfig(t *testing.T) {
@@ -261,5 +265,161 @@ func TestReadDigestReportsAMissingOrBadFile(t *testing.T) {
 	bad := fstest.MapFS{"schemadigest/" + digest.Filename: {Data: []byte("not gzip")}}
 	if _, err := readDigest(bad); err == nil || !strings.Contains(err.Error(), digest.Filename) {
 		t.Errorf("damaged: %v", err)
+	}
+	// SchemaRoot passes the error on, and gives no root.
+	if root, err := rootOf(readDigest(fstest.MapFS{})); root != nil || err == nil {
+		t.Errorf("SchemaRoot of a missing digest: %v, %v", root, err)
+	}
+}
+
+// The embedded digest carries the template-object mark (spec 2026-10-17 C11).
+// Object entries such as a zone or a CIE profile, and nodes such as the threats
+// update schedule, have it. The device entry and the vsys entry do not, so the
+// merge of a pushed template goes on below them.
+func TestTheEmbeddedDigestMarksTemplateObjects(t *testing.T) {
+	t.Parallel()
+	root, err := SchemaRoot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	step := func(path string) *schema.Node {
+		n := root
+		for seg := range strings.SplitSeq(path, "/") {
+			n = n.Step(seg)
+		}
+		return n
+	}
+	for _, p := range []string{
+		"devices/entry/vsys/entry/zone/entry",
+		"devices/entry/vsys/entry/cloud-identity-engine/entry",
+		"devices/entry/deviceconfig/system/update-schedule/threats",
+	} {
+		if n := step(p); n == nil || !n.TemplateObject {
+			t.Errorf("%s: no template-object mark", p)
+		}
+	}
+	for _, p := range []string{"devices/entry", "devices/entry/vsys/entry"} {
+		if n := step(p); n == nil || n.TemplateObject {
+			t.Errorf("%s: want a described node without the mark", p)
+		}
+	}
+	cfg, _, err := Load("../../testdata/config/firewall-lab.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Digest() != root {
+		t.Error("SchemaRoot and a load share one decoded digest")
+	}
+}
+
+// show config running answers indented, two spaces a level (spec 2026-10-17
+// C12). The indent is whitespace only: the indented copy of a fixture loads to
+// the tree of the fixture and of its compact form, and the round trip of R3
+// holds for it.
+func TestAnIndentedConfigLoadsAsTheCompact(t *testing.T) {
+	t.Parallel()
+	lab, _, err := Load("../../testdata/config/firewall-lab.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile("../../testdata/config/firewall-lab-indented.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	indented, rep, err := Load("../../testdata/config/firewall-lab-indented.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p := treeDiff(lab.Root(), indented.Root()); p != "" {
+		t.Errorf("the indented tree differs at %s", p)
+	}
+	compact, err := parseTree(bytes.NewReader(regexp.MustCompile(`>\s+<`).ReplaceAll(raw, []byte("><"))))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p := treeDiff(compact, indented.Root()); p != "" {
+		t.Errorf("the compact tree differs at %s", p)
+	}
+	if rep.HasUnknown() || indented.Version() != lab.Version() || indented.DetailVersion() != lab.DetailVersion() {
+		t.Errorf("report %s, version %s %s", rep, indented.Version(), indented.DetailVersion())
+	}
+	if !slices.Equal(xmlEvents(t, raw), xmlEvents(t, writeTree(indented.Root()))) {
+		t.Error("the indented tree does not write back as its file (R3)")
+	}
+}
+
+// The merge of firewall-lab.xml and its pushed template loads: a firewall
+// configuration with template values is a firewall configuration, so no
+// Panorama refusal (spec 2026-10-17 §2.3). The plugin that the digest does not
+// describe counts once, at its top (R3, C3). The root keeps the base's
+// attributes, so the version reads as before (§2.1).
+func TestMergedFixtureLoads(t *testing.T) {
+	t.Parallel()
+	cfg, rep, err := Load("../../testdata/config/firewall-lab-merged.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	const plugin = "/config/devices/localhost.localdomain/deviceconfig/plugins/example_plugin"
+	if len(rep.Untyped) != 1 || rep.Untyped[0].XPath != plugin {
+		t.Errorf("untyped = %+v, want %s once", rep.Untyped, plugin)
+	}
+	if cfg.Version() != "11.2.0" || cfg.DetailVersion() != "11.2.5" || cfg.Root().Attr("ptpl") != "" {
+		t.Errorf("root: version %q, detail %q, ptpl %q", cfg.Version(), cfg.DetailVersion(), cfg.Root().Attr("ptpl"))
+	}
+	if zones := cfg.Root().Find("devices", "entry", "vsys", "entry", "zone", "entry"); len(zones) != 1 || zones[0].Attr("name") != "tpl-zone" {
+		t.Errorf("zones = %d", len(zones))
+	}
+}
+
+// Parse reads a configuration from bytes as Load reads its file: the same
+// tree, version and report. It reads no file beside it, so a predefined.xml
+// next to the file does not reach it. The fetch reads the domains of the
+// identity sources from the configuration it holds (spec 2026-10-17 §3.2).
+func TestParseReadsBytes(t *testing.T) {
+	t.Parallel()
+	raw, err := os.ReadFile("../../testdata/config/firewall-lab-merged.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	pre, err := os.ReadFile("../../testdata/predefined/predefined.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.xml")
+	if err := os.WriteFile(path, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, PredefinedFile), pre, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	loaded, loadRep, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	parsed, parseRep, err := Parse(bytes.NewReader(raw), "config")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p := treeDiff(loaded.Root(), parsed.Root()); p != "" {
+		t.Errorf("the parsed tree differs at %s", p)
+	}
+	if loaded.Predefined() == nil || parsed.Predefined() != nil {
+		t.Errorf("predefined: loaded %v, parsed %v; want only the load to read the file beside", loaded.Predefined() != nil, parsed.Predefined() != nil)
+	}
+	if parsed.Path() != "config" || parsed.Version() != loaded.Version() || parsed.DetailVersion() != loaded.DetailVersion() ||
+		parsed.Digest() != loaded.Digest() || !slices.Equal(parseRep.Untyped, loadRep.Untyped) {
+		t.Errorf("parsed %q %q %q, report %s; loaded report %s", parsed.Path(), parsed.Version(), parsed.DetailVersion(), parseRep, loadRep)
+	}
+	// It refuses what Load refuses, and names the configuration.
+	if _, _, err := Parse(strings.NewReader("<response/>"), "the-name"); err == nil || !strings.Contains(err.Error(), "the-name") {
+		t.Errorf("no config element: %v", err)
+	}
+	panorama, err := os.ReadFile("../../testdata/config/panorama-rejected.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := Parse(bytes.NewReader(panorama), "the-name"); err == nil || !strings.Contains(err.Error(), "Panorama") {
+		t.Errorf("a Panorama configuration: %v", err)
 	}
 }

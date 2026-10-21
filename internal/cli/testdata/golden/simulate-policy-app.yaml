@@ -82,6 +82,13 @@ results:
         candidates: 2
         detail: 'ssl: 1 explicit, 1 implicit, 0 kept in doubt (content 8000-1000)'
         elapsed_ms: 0
+      - slug: match-user
+        name: Match the user
+        fidelity:
+          level: exact
+        candidates: 2
+        detail: no identity data
+        elapsed_ms: 0
       - slug: match-service
         name: Match the service
         fidelity:

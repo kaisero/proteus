@@ -13,11 +13,11 @@ import (
 func TestErrorsMatchTheirKind(t *testing.T) {
 	t.Parallel()
 	s := open(t)
-	sn, err := s.Write(Meta{Device: "fw01"}, docs(t, false), 20)
+	sn, err := s.Write(Meta{Device: "fw01"}, docs(t, false), nil, 20)
 	if err != nil {
 		t.Fatal(err)
 	}
-	noConfig, err := s.Write(Meta{Device: "fw01"}, map[string][]byte{RIBDoc: []byte("<rib/>")}, 20)
+	noConfig, err := s.Write(Meta{Device: "fw01"}, map[string][]byte{RIBDoc: []byte("<rib/>")}, nil, 20)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -35,7 +35,7 @@ func TestErrorsMatchTheirKind(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(s.root, "fw03", "2026-09-28T09-00-00Z", "meta.json"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	corrupt, err := s.Write(Meta{Device: "fw04"}, docs(t, false), 20)
+	corrupt, err := s.Write(Meta{Device: "fw04"}, docs(t, false), nil, 20)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -44,11 +44,11 @@ func TestErrorsMatchTheirKind(t *testing.T) {
 	}
 	early := time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
 	// A device with snapshots, none of them with a configuration.
-	if _, err := s.Write(Meta{Device: "fw05"}, map[string][]byte{RIBDoc: []byte("<rib/>")}, 20); err != nil {
+	if _, err := s.Write(Meta{Device: "fw05"}, map[string][]byte{RIBDoc: []byte("<rib/>")}, nil, 20); err != nil {
 		t.Fatal(err)
 	}
 	// A configuration that is there but cannot be read: a link to itself.
-	looped, err := s.Write(Meta{Device: "fw06"}, map[string][]byte{RIBDoc: []byte("<rib/>")}, 20)
+	looped, err := s.Write(Meta{Device: "fw06"}, map[string][]byte{RIBDoc: []byte("<rib/>")}, nil, 20)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -136,7 +136,7 @@ func TestErrorsKeepTheCause(t *testing.T) {
 func TestZonesErrorsMatchTheirKind(t *testing.T) {
 	t.Parallel()
 	s := open(t)
-	bare, err := s.Write(Meta{Device: "fw01"}, docs(t, false), 20)
+	bare, err := s.Write(Meta{Device: "fw01"}, docs(t, false), nil, 20)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -147,7 +147,7 @@ func TestZonesErrorsMatchTheirKind(t *testing.T) {
 
 	noFIB := docs(t, true)
 	delete(noFIB, FIBDoc)
-	half, err := s.Write(Meta{Device: "fw02"}, noFIB, 20)
+	half, err := s.Write(Meta{Device: "fw02"}, noFIB, nil, 20)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -166,7 +166,7 @@ func TestZonesErrorsMatchTheirKind(t *testing.T) {
 	}
 
 	// A forwarding table that links to itself cannot be opened.
-	full, err := s.Write(Meta{Device: "fw04"}, docs(t, true), 20)
+	full, err := s.Write(Meta{Device: "fw04"}, docs(t, true), nil, 20)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -182,7 +182,7 @@ func TestZonesErrorsMatchTheirKind(t *testing.T) {
 	}
 
 	// A forwarding table that does not parse.
-	bad, err := s.Write(Meta{Device: "fw05"}, docs(t, true), 20)
+	bad, err := s.Write(Meta{Device: "fw05"}, docs(t, true), nil, 20)
 	if err != nil {
 		t.Fatal(err)
 	}

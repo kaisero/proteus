@@ -18,7 +18,7 @@ results:
       app_version: 8000-1000
     documents:
       - name: config
-        bytes: 2993
+        bytes: 2992
       - name: system-info
         bytes: 252
       - name: interfaces
@@ -50,12 +50,22 @@ results:
       - slug: documents
         name: fetch the documents
         status: ok
-        detail: 7 of 7 documents
+        detail: 8 of 8 documents
+        elapsed_ms: 0
+      - slug: template
+        name: merge the pushed template
+        status: ok
+        detail: no template pushed to the device
         elapsed_ms: 0
       - slug: applications
         name: fetch the application data
         status: ok
         detail: content 8000-1000, 4 applications, 1 container
+        elapsed_ms: 0
+      - slug: identity
+        name: fetch the identity data
+        status: ok
+        detail: '9 calls: 4 users, 8 groups, 6 mappings in 1 page, 2 sources'
         elapsed_ms: 0
       - slug: store
         name: store the snapshot

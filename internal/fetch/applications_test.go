@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"slices"
 	"strings"
 	"testing"
 
@@ -61,7 +62,8 @@ func TestParseSystemInfoReadsAppVersion(t *testing.T) {
 }
 
 // On a miss the step asks the two F1 commands in sequence, after the
-// documents, and hands over one content file with both parts (§2.1, §2.2).
+// documents and before the identity data, and hands over one content file
+// with both parts (§2.1, §2.2).
 func TestApplicationsStepMissFetchesBoth(t *testing.T) {
 	t.Parallel()
 	d := fullDevice(t)
@@ -71,13 +73,15 @@ func TestApplicationsStepMissFetchesBoth(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	last := recs[len(recs)-1]
-	if last.Slug != "applications" || last.Status != task.OK || len(last.Notes) != 0 {
-		t.Errorf("applications step = %+v", last)
+	i := slices.IndexFunc(recs, func(r task.Record) bool { return r.Slug == "applications" })
+	if i < 0 || recs[i].Status != task.OK || len(recs[i].Notes) != 0 {
+		t.Fatalf("applications step: %+v", recs)
 	}
-	reqs := d.Requests()
-	if n := len(reqs); n < 2 || reqs[n-2].Cmd != fakepanos.ApplicationsCmd || reqs[n-1].Cmd != fakepanos.ContainersCmd {
-		t.Errorf("the App-ID commands must come last, in order: %+v", reqs)
+	cmds := opCmds(d)
+	j := slices.Index(cmds, fakepanos.ApplicationsCmd)
+	if j < 0 || slices.Index(cmds, fakepanos.PredefinedCmd) > j ||
+		!slices.Equal(cmds[j:], append([]string{fakepanos.ApplicationsCmd, fakepanos.ContainersCmd}, identityCmds...)) {
+		t.Errorf("the App-ID commands must come after the documents and before the identity data, in order:\n%q", cmds)
 	}
 	if applicationsCmd != fakepanos.ApplicationsCmd || containersCmd != fakepanos.ContainersCmd {
 		t.Error("fetch and the fake device ask different commands")

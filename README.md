@@ -24,9 +24,11 @@ Empower your agents with near real-time data without hammering your devices dire
 Use Proteus to
 
 - Find every object, group, rule and profile that uses an address, prefix, port,
-  URL, user or name, across multiple firewalls
-- Show a rule or an object in full, laid out like the firewall's rule editor
-- Check which security rule a flow hits, on one firewall or along its whole path
+  URL, user, group or name, across multiple firewalls
+- Show a rule, an object, a user or a group in full, laid out like the firewall's
+  rule editor
+- Check which security rule a flow hits, on one firewall or along its whole path,
+  with its application and its user
 - Trace what NAT does to a packet and which zones the security policy must match
 - Trace the path of a packet across your whole estate
 - Compare two snapshots of a firewall to see which objects and rules changed

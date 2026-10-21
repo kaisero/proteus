@@ -16,10 +16,10 @@ import (
 
 // LookupInput is lookup: the whole rule or object a name refers to.
 type LookupInput struct {
-	Name string `json:"name" jsonschema:"the rule, object or application name"`
+	Name string `json:"name" jsonschema:"the rule, object, application, user or group name"`
 	// Kind picks one kind when several share the name: security-rule,
-	// application or another object kind.
-	Kind string `json:"kind,omitempty" jsonschema:"pick one kind when several share the name: security-rule, application or another object kind"`
+	// application, identity-user, identity-group or another object kind.
+	Kind string `json:"kind,omitempty" jsonschema:"pick one kind when several share the name: security-rule, application, identity-user, identity-group or another object kind"`
 	// Expand and Full shape the rendered card; the result always holds all of it.
 	Expand bool `json:"expand,omitempty" jsonschema:"expand groups in the text card"`
 	Full   bool `json:"full,omitempty" jsonschema:"show every field in the text card"`
@@ -51,7 +51,8 @@ type LookupResult struct {
 	TargetIndex int `json:"-"`
 }
 
-// Lookup finds the element on each selected target. A name that means
+// Lookup finds the element on each selected target, and a user or a group in
+// the target's identity data (needsIdentity). A name that means
 // different kinds on different targets is a usage error: the caller has to pick
 // one. The summary counts the cards and the targets with and without one. A
 // limit keeps the first cards over all targets.
@@ -87,6 +88,16 @@ func Lookup(ctx context.Context, env Env, in LookupInput) (Envelope[LookupInput,
 			ts[i].Notes = append(slices.Clone(t.Notes), notes...)
 			// The kind passed the first call, so this one cannot refuse it.
 			cs, _ = card.Find(t.Config, idx, apps, in.Name, in.Kind)
+		}
+		if needsIdentity(in.Kind, cs) {
+			ids, notes := identityFor(t, env.MaxAge, env.now())
+			ts[i].Notes = append(slices.Clone(ts[i].Notes), notes...)
+			// The identity data serves the vsys of the target: a device
+			// with identity data runs one vsys (spec 2026-10-17 D10).
+			for _, c := range card.FindIdentity(ids, in.Name, in.Kind) {
+				c.Scope = idx.Scope()
+				cs = append(cs, c)
+			}
 		}
 		var here []string
 		for _, cd := range cs {
@@ -126,6 +137,20 @@ func needsApps(kind string, cs []card.Card) bool {
 		return true
 	case "":
 		return len(cs) == 0 || slices.ContainsFunc(cs, func(c card.Card) bool { return c.Kind == card.KindFilter })
+	}
+	return false
+}
+
+// needsIdentity says whether a lookup loads the identity data (spec
+// 2026-10-17 §4.2, PD10): for an identity kind, or, with no kind, when the
+// first look found nothing. A rule or an object needs no data, so its lookup
+// opens no identity file.
+func needsIdentity(kind string, cs []card.Card) bool {
+	switch kind {
+	case card.KindIdentityUser, card.KindIdentityGroup:
+		return true
+	case "":
+		return len(cs) == 0
 	}
 	return false
 }

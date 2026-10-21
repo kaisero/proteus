@@ -35,7 +35,7 @@
                 },
                 "kind": {
                   "type": "string",
-                  "description": "the kind asked for; empty for any kind"
+                  "description": "the kind asked for, such as security-rule, application, identity-user or identity-group; empty for any kind"
                 },
                 "limit": {
                   "type": "integer",
@@ -43,7 +43,7 @@
                 },
                 "name": {
                   "type": "string",
-                  "description": "the rule or object name looked up"
+                  "description": "the rule, object, application, user or group name looked up"
                 },
                 "selection": {
                   "type": "object",
@@ -343,7 +343,7 @@
                 },
                 "kind": {
                   "type": "string",
-                  "description": "the kind asked for; empty for any kind"
+                  "description": "the kind asked for, such as security-rule, application, identity-user or identity-group; empty for any kind"
                 },
                 "limit": {
                   "type": "integer",
@@ -351,7 +351,7 @@
                 },
                 "name": {
                   "type": "string",
-                  "description": "the rule or object name looked up"
+                  "description": "the rule, object, application, user or group name looked up"
                 },
                 "selection": {
                   "type": "object",

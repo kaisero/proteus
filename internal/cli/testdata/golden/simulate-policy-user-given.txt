@@ -1,0 +1,20 @@
+203.0.113.5 -> 192.0.2.11 tcp/443
+file / vsys1   TMP
+  note: identity data taken 2026-10-17T20:00:00Z from TMP
+  note: the given user alice@example.com is read as its primary name example.com\alice
+  zones      from inside, to outside (given)
+  user       example.com\alice (from --user alice@example.com)
+  relevance  unknown: no stored forwarding table
+  fidelity   exact
+  resolve-source      exact 18 203.0.113.5: 0 hits, 0 negated rules
+  resolve-destination exact 1  192.0.2.11: 0 hits, 0 negated rules
+  derive-zones        exact 1  from inside, to outside, as given
+  match-application   exact 1  no application given
+  match-user          exact 1  example.com\alice, given as alice@example.com; candidates that name a user: 1, kept in doubt: 0
+  match-service       exact 1  tcp/443
+  match-url           exact 1  no candidate names a URL category
+  drop-disabled       exact 1  0 disabled
+  order               exact 1  1 in order
+  first-match         exact 1  u-user (allow), position 2
+  2. u-user allow [local vsys:vsys1]
+first match: u-user (allow)

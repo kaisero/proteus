@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/kaisero/proteus/internal/config"
+	"github.com/kaisero/proteus/internal/identity"
 	"github.com/kaisero/proteus/internal/resolve"
 	"github.com/kaisero/proteus/internal/store"
 	"github.com/kaisero/proteus/internal/testconfig"
@@ -77,6 +78,89 @@ func contentRetained(tb testing.TB, path string) uint64 {
 	return after.HeapAlloc - before.HeapAlloc
 }
 
+// identityRetained loads an identity file through a new cache and returns
+// the bytes that stay live while the cache holds it, and the counts of the
+// data.
+func identityRetained(tb testing.TB, path string) (uint64, identity.Counts) {
+	tb.Helper()
+	var before, after runtime.MemStats
+	runtime.GC()
+	runtime.ReadMemStats(&before)
+
+	c := newCache(1<<40, 1, 1, true)
+	d, err := c.bind(context.Background()).Identity(path)
+	if err != nil {
+		tb.Fatal(err)
+	}
+	counts := d.Counts()
+
+	runtime.GC()
+	runtime.ReadMemStats(&after)
+	runtime.KeepAlive(c)
+	if after.HeapAlloc < before.HeapAlloc {
+		return 0, counts
+	}
+	return after.HeapAlloc - before.HeapAlloc, counts
+}
+
+// identityShape is a generated identity file: its users, the groups of each
+// user and its mappings (testconfig.IdentityFile).
+type identityShape struct{ users, groups, mappings int }
+
+// identityShapes are the two files that spec 2026-10-17 §8 names: 1,000
+// users with 20 groups each and 10,000 mappings, and 10,000 users with 50
+// groups each and 100,000 mappings.
+var identityShapes = []identityShape{{1000, 20, 10000}, {10000, 50, 100000}}
+
+// writeIdentity writes the generated identity file of a shape to a new
+// directory and returns its path.
+func writeIdentity(tb testing.TB, s identityShape) string {
+	tb.Helper()
+	path := filepath.Join(tb.TempDir(), identity.FileName)
+	if err := os.WriteFile(path, testconfig.IdentityFile(tb, s.users, s.groups, s.mappings), 0o600); err != nil {
+		tb.Fatal(err)
+	}
+	return path
+}
+
+// identityFit is what one identity shape retains, and the parts of the
+// estimate it gives: the fixed part, and the parts per mapping, per user and
+// group, and per membership.
+type identityFit struct {
+	shape                                     identityShape
+	counts                                    identity.Counts
+	retained                                  uint64
+	fixed, perMapping, perUser, perMembership float64
+}
+
+// identityFiles are the files that fit the parts of one shape: the shape, an
+// empty file, the shape's mappings alone and its users and groups alone.
+type identityFiles struct {
+	shape                         identityShape
+	whole, empty, mappings, users string
+}
+
+// fit measures the files of a shape. The empty file gives the fixed part; the
+// mappings alone give the part per mapping; the users and groups alone the
+// part per user and group, with the tag of each user; and what the whole file
+// keeps beyond those three, the part per membership. The parts sum to what the
+// whole file retains.
+func (f identityFiles) fit(tb testing.TB) identityFit {
+	tb.Helper()
+	whole, counts := identityRetained(tb, f.whole)
+	empty, _ := identityRetained(tb, f.empty)
+	mappings, _ := identityRetained(tb, f.mappings)
+	users, uc := identityRetained(tb, f.users)
+	r0, rm, ru, rw := float64(empty), float64(mappings), float64(users), float64(whole)
+	return identityFit{
+		shape: f.shape, counts: counts, retained: whole,
+		fixed:         r0,
+		perMapping:    (rm - r0) / float64(counts.Mappings),
+		perUser:       (ru - r0) / float64(uc.Users+uc.Groups),
+		perMembership: (rw - ru - rm + r0) / float64(counts.Memberships),
+	}
+}
+
 // snapshotOf stores a configuration file as a device's snapshot.
 func snapshotOf(tb testing.TB, st *store.Store, device, path string) (store.Snapshot, int64) {
 	tb.Helper()
@@ -85,7 +169,7 @@ func snapshotOf(tb testing.TB, st *store.Store, device, path string) (store.Snap
 		tb.Fatal(err)
 	}
 	sn, err := st.Write(store.Meta{Device: device, Host: device + ".example.test", Serial: "000000000001"},
-		map[string][]byte{store.ConfigDoc: doc}, 1)
+		map[string][]byte{store.ConfigDoc: doc}, nil, 1)
 	if err != nil {
 		tb.Fatal(err)
 	}
@@ -208,13 +292,16 @@ type retentionSample struct {
 // <shape>-B/file-B.
 //
 // It also measures what the schema digest keeps, once per process, reported
-// as digest-B, and what one App-ID content version of 5552 applications
-// keeps, reported as content-B (spec 2026-10-16 §7).
+// as digest-B, what one App-ID content version of 5552 applications
+// keeps, reported as content-B (spec 2026-10-16 §7), and what the two
+// identity files of spec 2026-10-17 §8 keep, with the parts of their estimate
+// (reportIdentity).
 //
 // It fails when the cache's estimate falls short of what any sample retains,
 // the multi-vsys fixture included, when the digest keeps more than
-// digestBytes, or when the content keeps more than contentBytes, so
-// bench-check catches a figure that no longer holds.
+// digestBytes, when the content keeps more than contentBytes, or when
+// identityBytes falls short of what an identity file keeps, so bench-check
+// catches a figure that no longer holds.
 func BenchmarkCacheRetention(b *testing.B) {
 	digest := digestRetained(b)
 	if digest > digestBytes {
@@ -228,6 +315,14 @@ func BenchmarkCacheRetention(b *testing.B) {
 	apps := filepath.Join(b.TempDir(), "8000-1000.v1.xml.gz")
 	if err := os.WriteFile(apps, testconfig.AppContent(b, contentApps), 0o600); err != nil {
 		b.Fatal(err)
+	}
+	var idFiles []identityFiles
+	for _, s := range identityShapes {
+		idFiles = append(idFiles, identityFiles{
+			shape: s, whole: writeIdentity(b, s), empty: writeIdentity(b, identityShape{}),
+			mappings: writeIdentity(b, identityShape{mappings: s.mappings}),
+			users:    writeIdentity(b, identityShape{users: s.users}),
+		})
 	}
 	tiny, tinyBytes := snapshotOf(b, st, "fixture", multiVsysFixture)
 	retained(b, tiny) // warm the process-wide digest and schema tables
@@ -247,8 +342,13 @@ func BenchmarkCacheRetention(b *testing.B) {
 	var samples []retentionSample
 	var content uint64
 	fixed, perByte := map[string]float64{}, map[string]float64{}
+	var fits []identityFit
 	for b.Loop() {
 		content = contentRetained(b, apps)
+		fits = fits[:0]
+		for _, f := range idFiles {
+			fits = append(fits, f.fit(b))
+		}
 		samples = []retentionSample{{"multi-vsys fixture", tinyBytes, retained(b, tiny)}}
 		for _, s := range shapes {
 			rs, rl := retained(b, s.small), retained(b, s.large)
@@ -264,6 +364,7 @@ func BenchmarkCacheRetention(b *testing.B) {
 		b.Errorf("a content version of %d applications retains %d, above the estimate contentBytes %d",
 			contentApps, content, contentBytes)
 	}
+	reportIdentity(b, fits)
 	for _, s := range shapes {
 		b.ReportMetric(fixed[s.name], s.name+"-fixed-B")
 		b.ReportMetric(perByte[s.name], s.name+"-B/file-B")
@@ -274,6 +375,30 @@ func BenchmarkCacheRetention(b *testing.B) {
 				s.what, s.fileBytes, s.retained, est, configFixedBytes, configPerByte, fitted(fixed, perByte))
 		}
 	}
+}
+
+// reportIdentity reports what each identity shape retains, as
+// identity-<users>u-B, and the largest of each part over the shapes, as
+// identity-fixed-B, identity-B/mapping, identity-B/user and
+// identity-B/membership. It fails when identityBytes falls short of what a
+// shape retains (spec 2026-10-17 §8).
+func reportIdentity(b *testing.B, fits []identityFit) {
+	var fixed, perMapping, perUser, perMembership float64
+	for _, f := range fits {
+		b.ReportMetric(float64(f.retained), fmt.Sprintf("identity-%du-B", f.shape.users))
+		fixed, perMapping = max(fixed, f.fixed), max(perMapping, f.perMapping)
+		perUser, perMembership = max(perUser, f.perUser), max(perMembership, f.perMembership)
+		if est := identityBytes(f.counts); uint64(est) < f.retained {
+			b.Errorf("%d users with %d groups each and %d mappings retain %d, above the estimate %d; "+
+				"measured %.0f fixed + %.1f per mapping + %.1f per user and group + %.1f per membership",
+				f.shape.users, f.shape.groups, f.shape.mappings, f.retained, est,
+				f.fixed, f.perMapping, f.perUser, f.perMembership)
+		}
+	}
+	b.ReportMetric(fixed, "identity-fixed-B")
+	b.ReportMetric(perMapping, "identity-B/mapping")
+	b.ReportMetric(perUser, "identity-B/user")
+	b.ReportMetric(perMembership, "identity-B/membership")
 }
 
 // multiVsysFixture is the committed configuration that the retention checks
@@ -362,6 +487,20 @@ func TestCacheEstimateCoversTheMeasurements(t *testing.T) {
 		if configFixedBytes < m.fixed || configPerByte < m.perByte {
 			t.Errorf("%s: measured %.0f fixed + %.2f per byte, above the estimate %d + %d",
 				m.shape, m.fixed, m.perByte, configFixedBytes, configPerByte)
+		}
+	}
+	// The parts of the identity estimate: the larger shape's of each.
+	for _, p := range []struct {
+		part          string
+		est, measured float64
+	}{
+		{"fixed", identityFixedBytes, 9_808},
+		{"per mapping", identityPerMapping, 74.7},
+		{"per user and group", identityPerUser, 452.2},
+		{"per membership", identityPerMembership, 36.1},
+	} {
+		if p.est < p.measured {
+			t.Errorf("identity %s: measured %.1f, above the estimate %.0f", p.part, p.measured, p.est)
 		}
 	}
 	st, err := store.Open(t.TempDir())

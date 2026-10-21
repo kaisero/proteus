@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/kaisero/proteus/internal/config"
+	"github.com/kaisero/proteus/internal/identity"
 	"github.com/kaisero/proteus/internal/index"
 	"github.com/kaisero/proteus/internal/reason"
 	"github.com/kaisero/proteus/internal/resolve"
@@ -67,6 +68,9 @@ type lab struct {
 	// predefined puts the device's predefined services (testdata/predefined)
 	// next to each configuration.
 	predefined bool
+	// users is the identity data of each device, by device; a device
+	// without an entry has none.
+	users map[string]*identity.Data
 }
 
 func (l lab) env(t testing.TB) *simulate.Env {
@@ -105,7 +109,7 @@ func (l lab) env(t testing.TB) *simulate.Env {
 		if _, err := set.Index(sc, resolve.Security); err != nil {
 			return simulate.Target{}, err
 		}
-		return simulate.Target{Config: cfg, Indexes: set.Provider(sc)}, nil
+		return simulate.Target{Config: cfg, Indexes: set.Provider(sc), Providers: index.Providers{Users: l.users[device]}}, nil
 	}
 	return &simulate.Env{Network: l.net, Load: load}
 }
@@ -576,5 +580,116 @@ func TestEachTargetLoadsOnce(t *testing.T) {
 	}
 	if len(loads) != 2 {
 		t.Errorf("loads = %v", loads)
+	}
+}
+
+// translated is the address fw02 translates the lab source to (natUser).
+const translated = "203.0.113.250"
+
+// natUser is fw02 with the default rules allowing and a NAT rule from home to
+// labor that translates the source to translated.
+func natUser(t testing.TB) []byte {
+	t.Helper()
+	rule := `<entry name="snat"><from><member>home</member></from><to><member>labor</member></to>` +
+		`<source><member>any</member></source><destination><member>any</member></destination>` +
+		`<service>any</service><source-translation><static-ip><translated-address>` + translated +
+		`</translated-address></static-ip></source-translation></entry>`
+	b := pathlab.Config(t, pathlab.FW02, pathlab.Defaults{Local: pathlab.Entry(pathlab.Interzone, "allow")})
+	return bytes.Replace(b, []byte("<rulebase>"), []byte("<rulebase><nat><rules>"+rule+"</rules></nat>"), 1)
+}
+
+// userRuleOn is fw01 with one security rule from transport to server that
+// names a source-user; its default rules are the built-in ones.
+func userRuleOn(t testing.TB, user string) []byte {
+	t.Helper()
+	rule := `<rulebase><security><rules><entry name="u-rule">` +
+		`<from><member>transport</member></from><to><member>server</member></to>` +
+		`<source><member>any</member></source><destination><member>any</member></destination>` +
+		`<source-user><member>` + user + `</member></source-user><application><member>any</member></application>` +
+		`<service><member>any</member></service><action>allow</action></entry></rules></security></rulebase>`
+	return bytes.Replace(pathlab.Config(t, pathlab.FW01, pathlab.Defaults{}), []byte("</zone>"), []byte("</zone>"+rule), 1)
+}
+
+// natUsers is fw01's identity data: the translated source maps to alice, and
+// the lab source to bob.
+func natUsers() *identity.Data {
+	return identity.New(identity.File{
+		Format: identity.Format,
+		Users:  []identity.User{{Name: `example.com\alice`}, {Name: `example.com\bob`}},
+		Mappings: []identity.Mapping{
+			{IP: netip.MustParseAddr(translated), User: `example.com\alice`, Type: "XMLAPI", Timeout: 14400},
+			{IP: netip.MustParseAddr(pathlab.Source), User: `example.com\bob`, Type: "XMLAPI", Timeout: 14400},
+		},
+	})
+}
+
+// D11, O2 (owner decision): a hop after a source NAT looks the translated
+// address up in its own firewall's mappings, and its answer is inferred: no
+// lab path with NAT and User-ID exists.
+func TestAHopAfterNATIsInferred(t *testing.T) {
+	t.Parallel()
+	l := lab{
+		config: map[string][]byte{pathlab.FW02: natUser(t), pathlab.FW01: userRuleOn(t, `example.com\alice`)},
+		users:  map[string]*identity.Data{pathlab.FW01: natUsers()},
+	}
+	r := runLab(t, l, pathlab.Destination)
+	if want := "allowed | 1 fw02/vsys1 security=pass:interzone-default | 2 fw01/vsys1 security=pass:u-rule"; summary(r) != want {
+		t.Fatalf("got  %s\nwant %s", summary(r), want)
+	}
+	c := r.Hops[1].Checks[0]
+	if c.Fidelity.Level() != "inferred" || r.Fidelity.Level() != "inferred" {
+		t.Errorf("hop 2 %s, path %s", c.Fidelity, r.Fidelity)
+	}
+	if c.Security.User == nil || c.Security.User.Name != `example.com\alice` || c.Security.User.IP != translated {
+		t.Errorf("user %+v", c.Security.User)
+	}
+	if !slices.ContainsFunc(c.Notes, func(n reason.Reason) bool {
+		return n.Code == "note.user-after-nat" && strings.Contains(n.Text, translated)
+	}) {
+		t.Errorf("notes %v", codeTexts(c.Notes))
+	}
+	if slices.ContainsFunc(r.Hops[0].Checks[0].Notes, func(n reason.Reason) bool { return n.Code == "note.user-after-nat" }) {
+		t.Errorf("hop 1 notes %v", codeTexts(r.Hops[0].Checks[0].Notes))
+	}
+	// A hop whose candidates name no user keeps its fidelity (SG6).
+	l.config[pathlab.FW01] = withRule(t, pathlab.FW01, "any-user", "allow")
+	l.config[pathlab.FW01] = bytes.ReplaceAll(l.config[pathlab.FW01], []byte("<member>home</member>"), []byte("<member>transport</member>"))
+	l.config[pathlab.FW01] = bytes.ReplaceAll(l.config[pathlab.FW01], []byte("<member>labor</member>"), []byte("<member>server</member>"))
+	r = runLab(t, l, pathlab.Destination)
+	if c := r.Hops[1].Checks[0]; c.Rule != "any-user" || c.Fidelity.Level() != "exact" ||
+		slices.ContainsFunc(c.Notes, func(n reason.Reason) bool { return n.Code == "note.user-after-nat" }) {
+		t.Errorf("no user rule: %s %s, notes %v", c.Rule, c.Fidelity, codeTexts(c.Notes))
+	}
+}
+
+// §5.1: a hop without identity data keeps today's doubt, also after NAT.
+func TestAHopWithoutIdentityDataKeepsTheDoubt(t *testing.T) {
+	t.Parallel()
+	l := lab{config: map[string][]byte{pathlab.FW02: natUser(t), pathlab.FW01: userRuleOn(t, `example.com\alice`)}}
+	r := runLab(t, l, pathlab.Destination)
+	c := r.Hops[1].Checks[0]
+	if c.Verdict != Undecided || c.Security.User != nil || !slices.ContainsFunc(c.Reason, func(n reason.Reason) bool { return n.Code == "doubt.not-evaluated.user" }) {
+		t.Errorf("hop 2: %s, reasons %v, user %+v", c.Verdict, codeTexts(c.Reason), c.Security.User)
+	}
+	if slices.ContainsFunc(c.Notes, func(n reason.Reason) bool { return n.Code == "note.user-after-nat" }) {
+		t.Errorf("notes %v", codeTexts(c.Notes))
+	}
+}
+
+// An earlier hop translated the source when its post-NAT flow holds another
+// source address.
+func TestSourceTranslated(t *testing.T) {
+	t.Parallel()
+	a, b := simulate.Addr(netip.MustParseAddr(pathlab.Source)), simulate.Addr(netip.MustParseAddr(translated))
+	same := simulate.Flow{Source: a}
+	other := simulate.Flow{Source: b}
+	p := routing.Path{Hops: []routing.Hop{{Flow: same, PostNAT: &same}, {Flow: same, PostNAT: &other}, {Flow: other}, {Flow: other}}}
+	for n, want := range map[int]bool{1: false, 2: false, 3: true, 4: true} {
+		if got := sourceTranslated(p, n); got != want {
+			t.Errorf("hop %d: %v", n, got)
+		}
+	}
+	if sourceTranslated(routing.Path{Hops: []routing.Hop{{Flow: same}, {Flow: same}}}, 2) {
+		t.Error("no NAT")
 	}
 }

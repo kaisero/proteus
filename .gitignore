@@ -22,6 +22,11 @@ config.yaml
 
 # The real values of the App-ID lab placeholders: lab addresses stay out of git.
 /docs/lab/app-id-lab.vars
+# The real values of every other lab, such as the configuration switch and the
+# User-ID lab: lab users, groups and addresses stay out of git too.
+/docs/lab/*.vars
+# The real values of the User-ID lab placeholders, named for its lab check.
+/docs/lab/user-id-lab.vars
 
 # Zensical build output.
 /site/

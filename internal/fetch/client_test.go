@@ -3,6 +3,7 @@ package fetch
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"reflect"
@@ -25,7 +26,8 @@ func device() *fakepanos.Device {
 	return &fakepanos.Device{
 		User: testUser, Password: testPass, Key: testKey,
 		Ops: map[string]string{
-			"<show><system><info/></system></show>": fakepanos.Success("<system><hostname>lab</hostname><app-version>8000-1000</app-version></system>"),
+			"<show><system><info/></system></show>": fakepanos.Success(
+				"<system><hostname>lab</hostname><app-version>8000-1000</app-version><multi-vsys>off</multi-vsys></system>"),
 		},
 		Config: `<config version="11.2.0"><devices/></config>`,
 	}
@@ -34,7 +36,7 @@ func device() *fakepanos.Device {
 func target(host string) inventory.Target {
 	return inventory.Target{
 		Name: "lab", Host: host, Username: testUser, Password: testPass,
-		InsecureTLS: true, Timeout: 5 * time.Second,
+		InsecureTLS: true, Timeout: 5 * time.Second, Identity: true,
 	}
 }
 
@@ -225,6 +227,18 @@ func TestOnlyReadCalls(t *testing.T) {
 	}
 	if n := len(d.Requests()); n != 1 {
 		t.Errorf("a refused command reached the device: %d requests", n)
+	}
+	// The configuration, the pushed template and the identity data are read
+	// by show commands (spec 2026-10-17 §2.1, §3.2), so the guard lets them
+	// through.
+	cmds := []string{runningConfigCmd, pushedTemplateCmd, fmt.Sprintf(mappingPageCmd, mappingPage, 1)}
+	for _, c := range identityCalls {
+		cmds = append(cmds, c.cmd)
+	}
+	for _, cmd := range cmds {
+		if err := showOnly(cmd); err != nil {
+			t.Errorf("showOnly(%q): %v", cmd, err)
+		}
 	}
 	var methods []string
 	ty := reflect.TypeFor[*Client]()
